@@ -1,0 +1,13 @@
+{
+  "name": "mbs-website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Modern Building Solutions website with Mr. Fixit",
+  "type": "module",
+  "engines": { "node": ">=20.6" },
+  "scripts": {
+    "start": "node --env-file=.env local-server.mjs",
+    "check": "node --env-file=.env tools/check-setup.mjs",
+    "jobs": "node tools/jobs.mjs"
+  }
+}

@@ -1,0 +1,19 @@
+# Netlify settings for the MBS website
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Keep server-only files out of the public site
+[[redirects]]
+  from = "/netlify/*"
+  to = "/404"
+  status = 404
+  force = true
+[[redirects]]
+  from = "/.env*"
+  to = "/404"
+  status = 404
+  force = true
