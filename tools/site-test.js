@@ -59,7 +59,7 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
 
   // KB project photos + every image file referenced in fixit-kb.js
   const kb = await (await p.request.get(`${BASE}/assets/fixit-kb.js`)).text();
-  const kbImgs = [...new Set(kb.match(/images\/work\/[a-z0-9\/-]+\.jpg/g) || [])];
+  const kbImgs = [...new Set(kb.match(/images\/work\/[a-z0-9\/-]+\.(jpg|webp)/g) || [])];
   bad = [];
   for (const u of kbImgs) { const r = await p.request.get(`${BASE}/${u}`); if (r.status() !== 200) bad.push(u); }
   ok('Links', `all ${kbImgs.length} Mr. Fixit project photos exist`, bad.length === 0, bad.join(', '));

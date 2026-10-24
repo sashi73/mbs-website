@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-24 v19 (owner photos in high resolution, recent jobs, 8 before & after, 59 owner photos, hero slideshow; accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3)';
+const VERSION = '2026-10-24 v19b (web-optimised WebP photos; owner photos in high resolution, recent jobs, 8 before & after, 59 owner photos, hero slideshow; accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3)';
 const NEEDS = [
   ['netlify/lib/store.mjs', 'nextReference'],
   ['netlify/lib/shared.mjs', 'sendTelegramPhotos'],
@@ -63,9 +63,12 @@ const NEEDS = [
   ['assets/fixit-kb.js', 'projectSectors'],
   ['assets/site.js', 'ba-frame'],
   ['assets/style.css', '.ba-frame'],
-  ['index.html', 'images/work/park-royal-1.jpg'],
+  ['index.html', 'hero-slides'],
+  ['assets/fixit.js', 'var items = projectsFor'],
+  ['netlify.toml', '/deploy/*'],
   ['netlify/lib/shared.mjs', 'since 2012'],
-  ['images/work/park-royal-1.jpg', ''],
+  ['images/work/park-royal-1.webp', ''],
+  ['images/work/m/poolside-1.webp', ''],
   ['assets/style.css', '.creds-grid'],
   ['assets/badges/iso-9001.png', '']
 ];
