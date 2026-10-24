@@ -629,7 +629,7 @@
     var src = (document.currentScript && document.currentScript.src) || '';
     return src ? src.replace(/fixit\.js(\?.*)?$/, 'suburbs-sydney.json') : 'assets/suburbs-sydney.json';
   })();
-  var SUBURBS = null, suburbsLoading = null;
+  var SUBURBS = null, suburbsLoading = null, autoPickTimer = null;
   function loadSuburbs() {
     if (SUBURBS || suburbsLoading) return suburbsLoading;
     suburbsLoading = fetch(SUBURB_URL).then(function (r) { return r.json(); })
@@ -653,9 +653,36 @@
     });
     return a.concat(b, c).slice(0, max || 6);
   }
-  function suburbChips(q) {
-    return matchSuburbs(q).map(function (s) { return { label: s[0] + ' ' + s[1], act: 'suburb_pick', sub: s }; })
-      .concat([{ label: 'Cancel', act: 'cancel' }]);
+  function suburbChips(q, list) {
+    return (list || matchSuburbs(q)).map(function (s, i) { return { label: s[0] + ' ' + s[1], act: 'suburb_pick', sub: s, primary: i === 0 }; });
+  }
+  function askSuburb() {
+    S.flow.step = 'suburb'; save();
+    loadSuburbs();
+    input.placeholder = 'Start typing your suburb, e.g. Box Hill';
+    return say('Which suburb is the property in? Type the first 3 letters and I’ll find it.', []);
+  }
+  // after the suburb: the quote asks urgency next, the repair question goes to the phone number
+  function afterSuburb() {
+    var d = S.flow.data;
+    if (S.flow.type === 'concern') {
+      S.flow.step = 'phone'; save();
+      return say('Great. What’s the best phone number to reach you, ' + firstName(d) + '?', []);
+    }
+    return ask(d.urgency ? 'name' : 'urgency');
+  }
+  function suburbInput(d, t) {
+    var all = matchSuburbs(t, 12), lower = t.toLowerCase().replace(/\s+nsw\b/, '').replace(/\s+/g, ' ').trim();
+    var exact = all.filter(function (x) { var n = x[0].toLowerCase(); return n === lower || n + ' ' + x[1] === lower || x[1] === lower; });
+    if (exact.length === 1) { setSuburb(d, exact[0]); return afterSuburb(); }
+    if (exact.length > 1) return say('Which one is it?', suburbChips('', exact));
+    if (all.length === 1) { setSuburb(d, all[0]); return afterSuburb(); }
+    if (all.length > 1) return say('Which one is it?', suburbChips('', all.slice(0, 6)));
+    // not in our list (or the list didn't load): keep what they typed
+    d.suburb = t.replace(/\b\w/g, function (c) { return c.toUpperCase(); }).slice(0, 60);
+    var pcm = t.match(/\b(2\d{3})\b/); if (pcm) d.postcode = pcm[1];
+    input.placeholder = 'Type your question…';
+    return afterSuburb();
   }
   function setSuburb(d, s) {
     d.suburb = s[0]; d.postcode = s[1]; d.lat = s[2]; d.lng = s[3];
@@ -663,7 +690,7 @@
   }
 
   /* ---- name and service area: asked first, before any job details go to the team ---- */
-  var AREA_CHIPS = [{ label: 'Yes', act: 'answer', primary: true }, { label: 'No', act: 'answer' }, { label: 'Cancel', act: 'cancel' }];
+  var AREA_CHIPS = [{ label: 'Yes', act: 'answer', primary: true }, { label: 'No', act: 'answer' }];
   function cleanName(t) {
     return t.replace(/^(hi|hello|hey)[,!.\s]+/i, '').replace(/^(i'?m|i am|my name is|my name'?s|it'?s|this is|name is)\s+/i, '')
       .replace(/[.!]+$/, '').replace(/\b\w/g, function (c) { return c.toUpperCase(); }).slice(0, 60);
@@ -695,7 +722,7 @@
     S.flow.opts = { details: opts.details || '', ask: opts.ask || '' };
     if (!S.flow.data.name) {
       S.flow.step = 'who'; save();
-      return say(['Great, let’s get this to the team. It only takes a minute.', 'First, what’s your name?'], [{ label: 'Cancel', act: 'cancel' }]);
+      return say(['Great, let’s get this to the team. It only takes a minute.', 'First, what’s your name?'], []);
     }
     if (!S.flow.data.inArea) { S.flow.step = 'area'; save(); return askArea(S.flow.data); }
     return startJob();
@@ -712,20 +739,17 @@
     var q = opts.ask || (S.flow.data.service === 'Leak'
       ? 'Where is the leak, and when does it happen? (For example: ceiling in the lounge, after heavy rain)'
       : 'Tell me a bit about the job: what needs doing and where in the home?');
-    say(['Great, ' + firstName(S.flow.data) + ', you’re in our area.', q], [{ label: 'Cancel', act: 'cancel' }]);
+    say(['Great, ' + firstName(S.flow.data) + ', you’re in our area.', q], []);
   }
 
   function ask(step) {
     var d = S.flow.data;
     S.flow.step = step;
     switch (step) {
-      case 'suburb':
-        loadSuburbs();
-        input.placeholder = 'Start typing your suburb, e.g. Box Hill';
-        return say('Which suburb is the property in? Type the first 3 letters and pick it from the list.', [{ label: 'Cancel', act: 'cancel' }]);
+      case 'suburb':  return askSuburb();
       case 'urgency': return say('How soon do you need it done?', URGENCY_CHIPS);
       case 'name':    if (d.name) return ask('phone'); return say('Thanks. What’s your name?', []);
-      case 'who':     return say('What’s your name?', [{ label: 'Cancel', act: 'cancel' }]);
+      case 'who':     return say('What’s your name?', []);
       case 'area':    return askArea(d);
       case 'phone':   return say('And the best phone number for the team to call, ' + d.name.split(' ')[0] + '?', []);
       case 'email':   return say('Would you like a copy by email? Type your email, or skip.', [{ label: 'Skip', act: 'answer' }]);
@@ -880,7 +904,7 @@
     S.sent = false; S.lead = null;
     S.flow = { type: 'concern', step: 'name', data: { question: S.lastQ || '' } };
     save();
-    say(['Happy to. I just need a few details so the team can get back to you.', 'What’s your name?'], [{ label: 'Cancel', act: 'cancel' }]);
+    say(['Happy to. I just need a few details so the team can get back to you.', 'What’s your name?'], []);
   }
 
   function concernInput(t) {
@@ -888,7 +912,7 @@
     switch (step) {
       case 'name':
         d.name = cleanName(t);
-        if (!d.name) return say('What’s your name?', [{ label: 'Cancel', act: 'cancel' }]);
+        if (!d.name) return say('What’s your name?', []);
         S.flow.step = 'area'; save();
         return askArea(d);
       case 'area':
@@ -896,8 +920,9 @@
         if (inSyd === false) return outOfArea(d, false);
         if (inSyd === null) return say('Sorry, I didn’t catch that. Is the property in Sydney or a nearby suburb? Just tap Yes or No.', AREA_CHIPS);
         d.inArea = true;
-        S.flow.step = 'phone'; save();
-        return say('Great. What’s the best phone number to reach you, ' + firstName(d) + '?', []);
+        return askSuburb();
+      case 'suburb':
+        return suburbInput(d, t);
       case 'phone':
         var p = phoneOk(t);
         if (!p) return say('Hmm, that doesn’t look like an Australian number. Could you check it? For example 0412 345 678.', []);
@@ -925,9 +950,10 @@
   function sendConcern() {
     var d = S.flow.data;
     var q = d.question ? '“' + d.question + '”' : 'a repair question';
-    S.lead = { name: d.name, phone: d.phone, email: d.email || '', suburb: '', service: 'Repair question (Ask Mr. Fixit)',
+    S.lead = { name: d.name, phone: d.phone, email: d.email || '', suburb: d.suburb || '', postcode: d.postcode || '',
+      lat: d.lat === undefined ? '' : d.lat, lng: d.lng === undefined ? '' : d.lng, service: 'Repair question (Ask Mr. Fixit)',
       details: d.question || '', urgency: '', best_time: '',
-      summary: d.name + ' asked Mr. Fixit ' + q + ' and would like the team to follow up.' + (d.copy ? ' Customer asked for a copy of the conversation.' : '') };
+      summary: d.name + (d.suburb ? ' in ' + d.suburb + (d.postcode ? ' ' + d.postcode : '') : '') + ' asked Mr. Fixit ' + q + ' and would like the team to follow up.' + (d.copy ? ' Customer asked for a copy of the conversation.' : '') };
     S.busy = true; S.chips = []; mood('thinking'); render();
     var info = { status: 0, reasons: null, saved: false };
     fetch(API + '/lead', {
@@ -998,18 +1024,7 @@
       case 'photos':
         if (/^(no|nah|nope|skip|done|continue|no thanks|that'?s it)/i.test(t)) return photoDone();
         return say('Tap “Add a photo” to choose one from your phone or computer, or carry on without one.', photoChips());
-      case 'suburb':
-        var all = matchSuburbs(t, 12), lower = t.toLowerCase().replace(/\s+nsw\b/, '').replace(/\s+/g, ' ').trim();
-        var exact = all.filter(function (s) { var n = s[0].toLowerCase(); return n === lower || n + ' ' + s[1] === lower || s[1] === lower; });
-        if (exact.length === 1) setSuburb(d, exact[0]);
-        else if (exact.length > 1 || (all.length && all.length <= 6 && /^\d{4}$/.test(lower))) {
-          return say('Which one is it?', (exact.length > 1 ? exact : all).map(function (s) { return { label: s[0] + ' ' + s[1], act: 'suburb_pick', sub: s }; }).concat([{ label: 'Cancel', act: 'cancel' }]));
-        } else {
-          d.suburb = t.replace(/\b\w/g, function (c) { return c.toUpperCase(); }).slice(0, 60);
-          var pcm = t.match(/\b(2\d{3})\b/); if (pcm) d.postcode = pcm[1];
-          input.placeholder = 'Type your question…';
-        }
-        return ask(d.urgency ? 'name' : 'urgency');
+      case 'suburb': return suburbInput(d, t);
       case 'urgency': d.urgency = t.slice(0, 40); return ask('name');
       case 'name':
         d.name = t.replace(/^(i'?m|my name is|it'?s|this is)\s+/i, '').replace(/\b\w/g, function (c) { return c.toUpperCase(); }).slice(0, 60);
@@ -1192,8 +1207,9 @@
       case 'suburb_pick':
         if (!S.flow || !c.sub) return;
         S.log.push({ who: 'me', text: c.label }); input.value = ''; save();
+        clearTimeout(autoPickTimer);
         setSuburb(S.flow.data, c.sub);
-        return ask(S.flow.data.urgency ? 'name' : 'urgency');
+        return afterSuburb();
       case 'scope_skip':
         S.log.push({ who: 'me', text: c.label }); save();
         return S.flow && S.flow.step === 'scope' ? scopeDone() : null;
@@ -1254,7 +1270,15 @@
     // live suburb suggestions while the customer types
     if (S.flow && S.flow.step === 'suburb' && !S.busy) {
       var v = input.value;
-      var show = function () { if (S.flow && S.flow.step === 'suburb' && !S.busy && input.value === v) { S.chips = v.trim().length >= 3 ? suburbChips(v) : [{ label: 'Cancel', act: 'cancel' }]; renderChips(); } };
+      var show = function () {
+        if (!(S.flow && S.flow.step === 'suburb' && !S.busy && input.value === v)) return;
+        var found = v.trim().length >= 3 ? matchSuburbs(v) : [];
+        S.chips = suburbChips('', found); renderChips();
+        clearTimeout(autoPickTimer);
+        if (found.length === 1) autoPickTimer = setTimeout(function () {   // only one suburb fits: pick it for them
+          if (S.flow && S.flow.step === 'suburb' && !S.busy && input.value === v) { input.value = ''; pick(S.chips[0]); }
+        }, 900);
+      };
       if (SUBURBS) show(); else { var p = loadSuburbs(); if (p) p.then(show); }
     }
   });

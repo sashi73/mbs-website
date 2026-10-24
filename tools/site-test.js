@@ -303,6 +303,44 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     await cx.close();
   }
 
+
+  // 9. Repair question -> "send it to the team": same steps as a quote (name, Sydney, suburb), no Cancel buttons
+  {
+    const { cx, q } = await chatPage();
+    const seen = [];
+    const note = async () => seen.push(...(await chipList(q)));
+    await tap(q, 'Ask a repair question'); await q.waitForTimeout(1200);
+    await type(q, 'Why is my paint peeling in the bathroom?'); await q.waitForTimeout(1500); await settle(q);
+    await tap(q, 'Yes, send it to the team'); await note();
+    ok('Repair question', 'sending a repair question asks the name first', /What.s your name\?/.test(await chatText(q)));
+    await type(q, 'Alex Chen'); await note();
+    ok('Repair question', 'then asks if the property is in Sydney (Yes / No)', /Thanks Alex! Is the property in Sydney/.test(await chatText(q)) && (await chipList(q)).join() === 'Yes,No', (await chipList(q)).join(' | '));
+    await tap(q, 'Yes'); await note();
+    ok('Repair question', 'then asks for the suburb', /Which suburb is the property in\?/.test(await chatText(q)));
+    await q.fill('.fx-input', ''); await q.type('.fx-input', 'castle h', { delay: 60 });
+    await q.waitForTimeout(2600); await settle(q); await note();
+    const t5 = await chatText(q);
+    ok('Repair question', 'suburb is picked automatically when only one matches ("castle h" -> Castle Hill 2154)', /Castle Hill 2154/.test(t5) && /best phone number to reach you, Alex\?/.test(t5));
+    await type(q, '0412 345 678'); await note();
+    for (let i = 0; i < 4; i++) {
+      const cs = await chipList(q);
+      const c = cs.find(x => /^(No photo, continue|Skip|No thanks)$/.test(x));
+      if (!c) break;
+      await tap(q, c); await note();
+    }
+    await q.waitForTimeout(2500);
+    const t6 = await chatText(q);
+    ok('Repair question', 'the question is sent to the team (or the friendly "call us" message without keys)', /sent your question to our team/.test(t6) || /couldn.t reach the team/.test(t6));
+    ok('Repair question', 'no Cancel button anywhere in the send steps', !seen.includes('Cancel'), [...new Set(seen)].join(' | '));
+    await cx.close();
+  }
+  {
+    const { cx, q } = await chatPage();
+    await tap(q, 'Get a free quote');
+    ok('Chat area check', 'quote steps have no Cancel button', !(await chipList(q)).includes('Cancel'));
+    await cx.close();
+  }
+
   ok('Smoke', 'no JavaScript errors on any page', errors.length === 0, errors.slice(0, 5).join(' || '));
   await b.close();
 
