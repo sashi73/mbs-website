@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-24 v18d (accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3; server-ready; Past projects in Mr. Fixit)';
+const VERSION = '2026-10-24 v19 (owner photos in high resolution, recent jobs, 8 before & after, 59 owner photos, hero slideshow; accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3)';
 const NEEDS = [
   ['netlify/lib/store.mjs', 'nextReference'],
   ['netlify/lib/shared.mjs', 'sendTelegramPhotos'],

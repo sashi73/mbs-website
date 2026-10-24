@@ -682,3 +682,14 @@ img.ilogo{display:block;width:min(320px,64vw);height:auto;background:none;color:
   .plaque-name{font-size:11px}
 }
 /* ========== /ACCREDITATIONS ========== */
+
+/* ========== V19 PHOTOS ========== */
+.hero-slides img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;animation:heroFade calc(var(--n) * 7s) linear infinite both;animation-delay:calc(var(--i) * 7s - 1s)}
+.hero-slides img:first-child{opacity:1}
+@keyframes heroFade{0%{opacity:0}5%{opacity:1}25%{opacity:1}30%{opacity:0}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.hero-slides img{animation:none;opacity:0}.hero-slides img:first-child{opacity:1}}
+.sectors{grid-template-columns:repeat(3,minmax(0,1fr))}
+.sector{min-height:380px}
+@media (max-width:700px){.sectors{grid-template-columns:repeat(2,minmax(0,1fr))}.sector{min-height:260px}}
+@media (max-width:420px){.sectors{grid-template-columns:1fr}}
+/* ========== /V19 PHOTOS ========== */

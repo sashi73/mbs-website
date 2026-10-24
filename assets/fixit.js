@@ -373,10 +373,10 @@
     return c;
   }
   function showProjects(sector, id) {
-    var list = projectsFor({ sector: sector, id: id });
+    var items = projectsFor({ sector: sector, id: id });   // (was named "list", which hid the chat list below)
     var intro = id ? 'Here it is:' :
-      sector && sector !== 'All' ? 'Our ' + sector.toLowerCase() + ' projects (' + list.length + '). Swipe across, and tap one to see all its photos:' :
-      'Here are ' + list.length + ' jobs from our capability statement. Swipe across, and tap one to see all its photos:';
+      sector && sector !== 'All' ? 'Our ' + sector.toLowerCase() + ' projects (' + items.length + '). Swipe across, and tap one to see all its photos:' :
+      'Here are ' + items.length + ' of our jobs, from big commercial sites to family homes. Swipe across, and tap one to see all its photos:';
     var after = [{ label: 'Other projects', act: 'projects' }, { label: 'Get a free quote', act: 'flow', primary: true }, { label: 'Main menu', act: 'more' }];
     say(intro, after, function () {
       S.log.push({ who: 'projects', sector: sector || 'All', id: id || '' }); save(); render();
@@ -1042,7 +1042,7 @@
         return say('Sure, what would you like to know?', START_CHIPS);
       case 'projects':
         S.log.push({ who: 'me', text: c.label }); S.mode = null; save();
-        return say('Since 2012 we’ve worked on hotels, strata buildings, heritage landmarks, government sites, aged care and commercial properties. Which would you like to see?',
+        return say('Since 2012 we’ve worked on hotels, strata buildings, heritage landmarks, government sites, aged care, commercial properties and family homes. Which would you like to see?',
           sectorChips('none'));
       case 'proj_sector':
         S.log.push({ who: 'me', text: c.label }); save();
