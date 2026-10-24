@@ -10,9 +10,9 @@ window.MBS_KB = {
   // Set these when confirmed, e.g. 'Sydney and surrounding suburbs' / 'Monday to Saturday, 7am to 5pm'.
   // While empty, Mr. Fixit avoids making claims about them.
   area: 'Sydney and surrounding suburbs',
-  hours: '',
+  hours: 'anytime (24 hours)',
   since: '2012',
-  accreditations: ['ISO 9001', 'Cm3', 'NSW Government accreditation', 'Dulux Accredited Painter', 'Dulux Acratex', 'Ardex'],
+  accreditations: ['ISO 9001', 'Cm3', 'NSW Government', 'NSW Government Education', 'AIB (The Australian Institute of Building)', 'Ardex', 'Fatra'],
 
   // Past projects, from the MBS capability statement (Word document). Shown by Mr. Fixit under "Past projects".
   projectSectors: ["Hotels", "Strata & apartments", "Heritage & government", "Aged care", "Commercial"],
@@ -53,7 +53,7 @@ window.MBS_KB = {
       keys: ['rendering', 'render repair', 'drummy', 'bagging', 'cracked render'] },
     { group: 'Remedial & waterproofing', name: 'Fire protection upgrades', desc: 'Fire-resistant shutters and fire-resistant mesh installed.',
       keys: ['fire shutter', 'fire rated', 'fire resistant', 'fire protection', 'fire door'] },
-    { group: 'Painting & finishes', name: 'Commercial and strata painting', desc: 'Dulux accredited painting for hotels, strata buildings, aged care and commercial sites.',
+    { group: 'Painting & finishes', name: 'Commercial and strata painting', desc: 'Painting for hotels, strata buildings, aged care and commercial sites.',
       keys: ['strata', 'body corporate', 'apartment block', 'commercial paint', 'hotel', 'aged care', 'whole building'] },
     { group: 'Painting & finishes', name: 'Peel Away paint removal', desc: 'Old paint layers stripped back safely before repainting.',
       keys: ['peel away', 'paint removal', 'strip paint', 'stripping paint', 'remove old paint'] },

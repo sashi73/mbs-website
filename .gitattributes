@@ -1,0 +1,6 @@
+# Line endings: shell scripts must stay LF so they run on the Linux server,
+# Windows batch files stay CRLF.
+*.sh      text eol=lf
+*.command text eol=lf
+*.mjs     text eol=lf
+*.bat     text eol=crlf

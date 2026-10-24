@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-23 v18b (Mr. Fixit: Past projects from the capability statement; real projects and photos, before & after, track record, sectors; voice in 10 languages)';
+const VERSION = '2026-10-24 v18d (accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3; server-ready; Past projects in Mr. Fixit)';
 const NEEDS = [
   ['netlify/lib/store.mjs', 'nextReference'],
   ['netlify/lib/shared.mjs', 'sendTelegramPhotos'],
@@ -58,6 +58,8 @@ const NEEDS = [
   ['assets/style.css', '.trustbar'],
   ['projects.html', 'ba-frame'],
   ['assets/fixit.js', 'proj_sector'],
+  ['local-server.mjs', 'overLimit'],
+  ['deploy/setup-server.sh', 'Caddy'],
   ['assets/fixit-kb.js', 'projectSectors'],
   ['assets/site.js', 'ba-frame'],
   ['assets/style.css', '.ba-frame'],
@@ -77,6 +79,35 @@ async function oldFiles() {
 
 const FUNCTIONS = { chat: './netlify/functions/chat.mjs', lead: './netlify/functions/lead.mjs', tts: './netlify/functions/tts.mjs' };
 
+// Per-visitor limits, so nobody can run up AI costs or flood staff with fake enquiries once the site is public.
+// [requests allowed, per this many minutes]. Change in .env, e.g. LIMIT_CHAT=60/10
+function limitOf(name, def) {
+  const m = String(process.env['LIMIT_' + name.toUpperCase()] || def).match(/^(\d+)\/(\d+)$/);
+  return m ? [Number(m[1]), Number(m[2]) * 60000] : [Infinity, 60000];
+}
+const LIMITS = { chat: limitOf('chat', '40/10'), tts: limitOf('tts', '80/10'), lead: limitOf('lead', '8/60') };
+const hits = new Map();
+function clientIp(req) {
+  const peer = req.socket.remoteAddress || '';
+  const local = peer === '127.0.0.1' || peer === '::1' || peer === '::ffff:127.0.0.1';
+  // Behind Caddy (same machine) the visitor's address arrives in X-Forwarded-For
+  const fwd = local && req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']).split(',')[0].trim() : '';
+  return fwd || peer;
+}
+function overLimit(name, ip) {
+  const [max, win] = LIMITS[name] || [Infinity, 60000];
+  if (!Number.isFinite(max)) return false;
+  const key = name + '|' + ip, now = Date.now();
+  const list = (hits.get(key) || []).filter((t) => now - t < win);
+  if (list.length >= max) { hits.set(key, list); return true; }
+  list.push(now); hits.set(key, list);
+  return false;
+}
+setInterval(() => {                                  // forget old visitors
+  const now = Date.now();
+  for (const [k, list] of hits) if (!list.some((t) => now - t < 3600000)) hits.delete(k);
+}, 600000).unref();
+
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -84,6 +115,12 @@ createServer(async (req, res) => {
     // Server functions
     const fn = url.pathname.match(/^\/\.netlify\/functions\/([a-z]+)$/);
     if (fn && FUNCTIONS[fn[1]]) {
+      if (req.method === 'POST' && overLimit(fn[1], clientIp(req))) {
+        console.log(`[${new Date().toLocaleTimeString()}] Limit reached: ${fn[1]} from ${clientIp(req)}`);
+        res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '600' });
+        res.end(JSON.stringify({ error: 'Too many requests. Please call 0420 494 990.', reason: 'Too many requests from this device, please wait a few minutes' }));
+        return;
+      }
       const chunks = [];
       let size = 0;
       for await (const c of req) {
@@ -104,7 +141,7 @@ createServer(async (req, res) => {
     }
 
     // Never serve secrets or server code
-    if (/^\/(\.env|\.git|netlify\/|tools\/|leads\/|data\/|database\/|local-server|package\.json|start-|check-setup|netlify\.toml)/i.test(url.pathname)) { res.writeHead(404).end('Not found'); return; }
+    if (/^\/(\.env|\.git|netlify\/|tools\/|leads\/|data\/|database\/|deploy\/|local-server|package\.json|start-|check-setup|netlify\.toml|README)/i.test(url.pathname)) { res.writeHead(404).end('Not found'); return; }
 
     // Static files
     let path = decodeURIComponent(url.pathname);

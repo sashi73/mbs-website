@@ -57,6 +57,8 @@ WHAT'S IN THIS FOLDER
   local-server.mjs              the local web server (reads .env)
   tools/check-setup.mjs         the setup check
   .env / .env.example           your keys / a blank copy for reference
+  deploy/README-SERVER.txt      putting the site online on a free Oracle Cloud server (step by step)
+  deploy/setup-server.sh        the one-time server setup script it uses
 
 HOW MR. FIXIT WORKS
   - Most questions are answered instantly from assets/fixit-kb.js (no AI cost).

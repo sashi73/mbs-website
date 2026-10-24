@@ -12,7 +12,7 @@ export const BUSINESS = {
   email: env('PUBLIC_CONTACT_EMAIL', 'mbs.pty.ltd@gmail.com'),
   licence: '267071C',
   area: env('SERVICE_AREA', 'Sydney and surrounding suburbs'),
-  hours: env('BUSINESS_HOURS', 'Monday to Saturday, 7am to 5pm'),
+  hours: env('BUSINESS_HOURS', 'Anytime (24 hours)'),
   services: {
     'Construction & repairs': [
       'Construction', 'Home upgrades and renovations', 'Wall removal and relocation',
@@ -29,7 +29,7 @@ export const BUSINESS = {
       'Contract project management', 'New buildings (commercial and residential)', 'Extensions', 'Heritage building renovations',
       'Government properties', 'Remedial work', 'Concrete cancer and spalling repair', 'Balcony reconstruction', 'Roof works',
       'Carpentry', 'Floor levelling and floor panels', 'Aluminium cladding installation', 'Rendering and render repair',
-      'Commercial and strata painting', 'Acratex and special effect finishes', 'Peel Away paint removal', 'Fire-resistant shutters and mesh'
+      'Commercial and strata painting', 'Special effect finishes', 'Peel Away paint removal', 'Fire-resistant shutters and mesh'
     ]
   }
 };
@@ -47,7 +47,7 @@ ABOUT THE BUSINESS
 - Hours: ${BUSINESS.hours}
 - Free, no-obligation quotes after a site visit. Personal service, one person manages the whole job.
 - Family business, building across Sydney since 2012. Sites run to European standards of management and quality.
-- Accreditations: ISO 9001, Cm3, NSW Government accreditation, Dulux Accredited Painter, Dulux Acratex, Ardex.
+- Accreditations and partners: ISO 9001, Cm3, NSW Government, NSW Government Education, AIB (The Australian Institute of Building), Ardex, Fatra.
 - Past projects include the Park Royal Hotel, Hotel Bondi, the Sebel Hotel & Resort, heritage ceilings at Central Station, Yass Court House, the Department of Defence Military Police Station, Montefiore Aged Care, Henry Kendall Village, a 20-unit and 4-shop building at Five Dock, and remedial work on 178 lots at 25-33 Allen St, Waterloo.
 - Services:
 ${serviceList}
