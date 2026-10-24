@@ -618,21 +618,57 @@
   var URGENCY_CHIPS = ['Emergency', 'This week', 'This month', 'Flexible'].map(function (u) { return { label: u, act: 'answer' }; });
   var TIME_CHIPS = ['Right now', 'This morning', 'This afternoon', 'After 5pm', 'Tomorrow'].map(function (u) { return { label: u, act: 'answer' }; });
 
+  /* ---- name and service area: asked first, before any job details go to the team ---- */
+  var AREA_CHIPS = [{ label: 'Yes', act: 'answer', primary: true }, { label: 'No', act: 'answer' }, { label: 'Cancel', act: 'cancel' }];
+  function cleanName(t) {
+    return t.replace(/^(hi|hello|hey)[,!.\s]+/i, '').replace(/^(i'?m|i am|my name is|my name'?s|it'?s|this is|name is)\s+/i, '')
+      .replace(/[.!]+$/, '').replace(/\b\w/g, function (c) { return c.toUpperCase(); }).slice(0, 60);
+  }
+  function firstName(d) { return d && d.name ? d.name.split(' ')[0] : ''; }
+  function askArea(d) {
+    return say('Thanks ' + firstName(d) + '! Is the property in Sydney or one of the nearby suburbs?', AREA_CHIPS);
+  }
+  // Yes -> true, No -> false, anything else -> null (ask again)
+  function areaAnswer(t) {
+    if (/^(y|yes|yeah|yep|yup|sure|correct|it is|i am|we are)\b/i.test(t) || /\bsydney\b/i.test(t) && !/\b(not|no|outside)\b/i.test(t)) return true;
+    if (/^(n|no|nope|nah|not)\b/i.test(t) || /\b(outside|not in|interstate)\b/i.test(t)) return false;
+    return null;
+  }
+  function outOfArea(d, emergency) {
+    var name = firstName(d);
+    S.flow = null; clearPhotos(); save();
+    var lines = ['I’m really sorry' + (name ? ', ' + name : '') + '. We currently only work in Sydney and the surrounding suburbs, so we’re not able to help with this job. Please accept our apologies, and thank you for thinking of Modern Building Solutions.'];
+    if (emergency) lines.push('If anyone is in danger, or there’s a gas smell, smoke or fire, please call 000 now.');
+    lines.push('Is there anything else I can help you with?');
+    return say(lines, START_CHIPS);
+  }
+
   function startFlow(opts) {
     opts = opts || {};
     S.sent = false;
     S.lead = null;
-    S.flow = { step: 'details', data: { service: opts.service || '', urgency: opts.urgency || '' } };
+    S.flow = { step: 'details', data: { service: opts.service || '', urgency: opts.urgency || '', name: opts.name || '', inArea: !!opts.inArea } };
+    S.flow.opts = { details: opts.details || '', ask: opts.ask || '' };
+    if (!S.flow.data.name) {
+      S.flow.step = 'who'; save();
+      return say(['Great, let’s get this to the team. It only takes a minute.', 'First, what’s your name?'], [{ label: 'Cancel', act: 'cancel' }]);
+    }
+    if (!S.flow.data.inArea) { S.flow.step = 'area'; save(); return askArea(S.flow.data); }
+    return startJob();
+  }
+  function startJob() {
+    var opts = S.flow.opts || {};
+    S.flow.step = 'details';
     if (opts.details) {
       // The customer already told us the job: go straight to the quote questions
       S.flow.data.details = opts.details;
       return say(['Great, let’s get you a free quote. It only takes a minute.'], [],
         function () { if (S.flow.data.urgency !== 'Emergency') startScope(); else afterDetails(); });
     }
-    var q = opts.ask || (opts.service === 'Leak'
+    var q = opts.ask || (S.flow.data.service === 'Leak'
       ? 'Where is the leak, and when does it happen? (For example: ceiling in the lounge, after heavy rain)'
       : 'Tell me a bit about the job: what needs doing and where in the home?');
-    say(['Great, let’s get this to the team. It only takes a minute.', q], [{ label: 'Cancel', act: 'cancel' }]);
+    say(['Great, ' + firstName(S.flow.data) + ', you’re in our area.', q], [{ label: 'Cancel', act: 'cancel' }]);
   }
 
   function ask(step) {
@@ -641,7 +677,9 @@
     switch (step) {
       case 'suburb':  return say('Which suburb is the property in?', [{ label: 'Cancel', act: 'cancel' }]);
       case 'urgency': return say('How soon do you need it done?', URGENCY_CHIPS);
-      case 'name':    return say('Thanks. What’s your name?', []);
+      case 'name':    if (d.name) return ask('phone'); return say('Thanks. What’s your name?', []);
+      case 'who':     return say('What’s your name?', [{ label: 'Cancel', act: 'cancel' }]);
+      case 'area':    return askArea(d);
       case 'phone':   return say('And the best phone number for the team to call, ' + d.name.split(' ')[0] + '?', []);
       case 'email':   return say('Would you like a copy by email? Type your email, or skip.', [{ label: 'Skip', act: 'answer' }]);
       case 'time':
@@ -801,9 +839,17 @@
     var d = S.flow.data, step = S.flow.step;
     switch (step) {
       case 'name':
-        d.name = t.replace(/^(i'?m|my name is|it'?s|this is)\s+/i, '').replace(/\b\w/g, function (c) { return c.toUpperCase(); }).slice(0, 60);
-        S.flow.step = 'phone';
-        return say('Thanks ' + d.name.split(' ')[0] + '. What’s the best phone number to reach you?', []);
+        d.name = cleanName(t);
+        if (!d.name) return say('What’s your name?', [{ label: 'Cancel', act: 'cancel' }]);
+        S.flow.step = 'area'; save();
+        return askArea(d);
+      case 'area':
+        var inSyd = areaAnswer(t);
+        if (inSyd === false) return outOfArea(d, false);
+        if (inSyd === null) return say('Sorry, I didn’t catch that. Is the property in Sydney or a nearby suburb? Just tap Yes or No.', AREA_CHIPS);
+        d.inArea = true;
+        S.flow.step = 'phone'; save();
+        return say('Great. What’s the best phone number to reach you, ' + firstName(d) + '?', []);
       case 'phone':
         var p = phoneOk(t);
         if (!p) return say('Hmm, that doesn’t look like an Australian number. Could you check it? For example 0412 345 678.', []);
@@ -875,11 +921,22 @@
     if (S.flow && S.flow.type === 'concern') return concernInput(text.trim());
     var d = S.flow.data, step = S.flow.step, t = text.trim();
     // A question in the middle of the form: answer it, then carry on.
-    if (/\?\s*$/.test(t) && step !== 'details' && step !== 'scope') {
+    if (/\?\s*$/.test(t) && step !== 'details' && step !== 'scope' && step !== 'who') {
       var a = answer(t);
       if (a && a.lines.length && !a.startFlow) return say(a.lines.concat(['Now, back to your job.']), [], function () { ask(step); });
     }
     switch (step) {
+      case 'who':
+        d.name = cleanName(t);
+        if (!d.name) return ask('who');
+        S.flow.step = 'area'; save();
+        return askArea(d);
+      case 'area':
+        var inSyd = areaAnswer(t);
+        if (inSyd === false) return outOfArea(d, d.urgency === 'Emergency');
+        if (inSyd === null) return say('Sorry, I didn’t catch that. Is the property in Sydney or a nearby suburb? Just tap Yes or No.', AREA_CHIPS);
+        d.inArea = true; save();
+        return startJob();
       case 'details':
         d.details = t.slice(0, 600);
         if (!d.service) { var s = findService(norm(t)); d.service = s ? s.name : (/leak/i.test(t) ? 'Leak' : ''); }
@@ -1086,7 +1143,8 @@
         return say('No problem, cancelled. Anything else?', START_CHIPS);
       case 'restart':
         S.log.push({ who: 'me', text: c.label }); clearPhotos(); save();
-        return startFlow({});
+        var was = S.flow && S.flow.data ? S.flow.data : {};
+        return startFlow({ name: was.name, inArea: was.inArea });
       case 'send':
         S.log.push({ who: 'me', text: c.label }); save();
         return sendLead();

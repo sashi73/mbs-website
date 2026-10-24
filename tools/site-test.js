@@ -20,7 +20,7 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
   const errors = [];
   const watch = (p, tag) => {
     p.on('pageerror', e => errors.push(`${tag}: ${e.message}`));
-    p.on('console', m => { if (m.type() === 'error' && !(tag === 'contact' && /502/.test(m.text()))) errors.push(`${tag} console: ${m.text()}`); });
+    p.on('console', m => { if (m.type() === 'error' && !(/^(contact|chat)$/.test(tag) && /50[23]/.test(m.text()))) errors.push(`${tag} console: ${m.text()}`); });
   };
 
   // 1. Smoke + 2. links/images/assets/anchors
@@ -209,6 +209,62 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
   ok('SEO', 'sitemap.xml lists all 5 pages', sm.status() === 200 && (smt.match(/<loc>/g) || []).length === 5);
   const nf = await p.request.get(`${BASE}/no-such-page.html`);
   ok('SEO', 'unknown address shows the 404 page (status 404)', nf.status() === 404 && /Page not/.test(await nf.text()), nf.status());
+
+
+  // 7. Mr. Fixit: name + Sydney check before anything goes to the team
+  const chatPage = async () => {
+    const cx = await b.newContext({ viewport: { width: 1280, height: 900 } }); const q = await cx.newPage(); watch(q, 'chat');
+    await q.goto(`${BASE}/projects.html`, { waitUntil: 'networkidle' });
+    await q.$eval('.fx-launch', e => e.click()); await q.waitForTimeout(2200);
+    return { cx, q };
+  };
+  const chatText = q => q.$eval('.fx-list', e => e.innerText);
+  const chipList = q => q.$$eval('.fx-chip', x => x.map(c => c.textContent.trim()));
+  // wait until Mr. Fixit has finished typing his reply (its buttons appear at the end)
+  const settle = async q => { await q.waitForTimeout(400); await q.waitForFunction(() => document.querySelectorAll('.fx-chip').length > 0, null, { timeout: 15000 }).catch(() => {}); await q.waitForTimeout(300); };
+  const type = async (q, t) => { await q.fill('.fx-input', t); await q.press('.fx-input', 'Enter'); await settle(q); };
+  const tap = async (q, label) => { await q.locator('.fx-chip', { hasText: new RegExp('^' + label + '$') }).last().click(); await settle(q); };
+  {
+    const { cx, q } = await chatPage();
+    await tap(q, 'Get a free quote');
+    ok('Chat area check', 'quote starts by asking the name', /First, what.s your name\?/.test(await chatText(q)));
+    await type(q, "I'm Sam Smith");
+    const t1 = await chatText(q); const c1 = await chipList(q);
+    ok('Chat area check', 'then asks if the property is in Sydney, with Yes / No', /Thanks Sam! Is the property in Sydney or one of the nearby suburbs\?/.test(t1) && c1.includes('Yes') && c1.includes('No'), c1.join(' | '));
+    await tap(q, 'No');
+    const t2 = await chatText(q); const c2 = await chipList(q);
+    ok('Chat area check', '"No" gives a polite apology', /really sorry, Sam\. We currently only work in Sydney and the surrounding suburbs/.test(t2) && /Please accept our apologies/.test(t2));
+    ok('Chat area check', '"No" goes back to the main menu', c2.includes('Past projects') && c2.includes('Get a free quote') && !c2.includes('Cancel'), c2.join(' | '));
+    await cx.close();
+  }
+  {
+    const { cx, q } = await chatPage();
+    await tap(q, 'Get a free quote');
+    await type(q, 'Jane');
+    await type(q, 'maybe');
+    ok('Chat area check', 'an unclear answer asks again', /Just tap Yes or No/.test(await chatText(q)));
+    await tap(q, 'Yes');
+    const t3 = await chatText(q);
+    ok('Chat area check', '"Yes" carries on to the job questions', /Great, Jane, you.re in our area\./.test(t3) && /Tell me a bit about the job/.test(t3));
+    await type(q, 'Water stain on the bedroom ceiling after rain');
+    for (let i = 0; i < 6 && !/Which suburb/.test(await chatText(q)); i++) {
+      const cs = await chipList(q);
+      if (cs.includes('Skip questions')) await tap(q, 'Skip questions');
+      else if (cs.some(c => /continue|without/i.test(c))) await tap(q, cs.find(c => /continue|without/i.test(c)).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      else await q.waitForTimeout(800);
+    }
+    await type(q, 'Parramatta');
+    if ((await chipList(q)).includes('This week')) await tap(q, 'This week');
+    const t4 = await chatText(q);
+    ok('Chat area check', 'name is not asked twice (goes straight to the phone number)', /best phone number for the team to call, Jane\?/.test(t4) && (t4.match(/what.s your name\?/gi) || []).length === 1);
+    await cx.close();
+  }
+  {
+    const { cx, q } = await chatPage();
+    await tap(q, 'Get a free quote'); await type(q, 'Lee'); await type(q, 'no, I live in Melbourne');
+    ok('Chat area check', 'typing "no" also works', /really sorry, Lee/.test(await chatText(q)));
+    await cx.close();
+  }
 
   ok('Smoke', 'no JavaScript errors on any page', errors.length === 0, errors.slice(0, 5).join(' || '));
   await b.close();

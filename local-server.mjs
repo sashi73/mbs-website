@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-24 v19d (solid white and yellow trades banner; SEO: titles, sitemap, robots, business details, 404 page; web-optimised WebP photos; owner photos in high resolution, recent jobs, 8 before & after, 59 owner photos, hero slideshow; accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3)';
+const VERSION = '2026-10-24 v19e (Mr. Fixit asks name and Sydney area first; solid white and yellow trades banner; SEO: titles, sitemap, robots, business details, 404 page; web-optimised WebP photos; owner photos in high resolution, recent jobs, 8 before & after, 59 owner photos, hero slideshow; accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3)';
 const NEEDS = [
   ['netlify/lib/store.mjs', 'nextReference'],
   ['netlify/lib/shared.mjs', 'sendTelegramPhotos'],
@@ -67,6 +67,7 @@ const NEEDS = [
   ['index.html', 'GeneralContractor'],
   ['sitemap.xml', 'projects.html'],
   ['assets/fixit.js', 'var items = projectsFor'],
+  ['assets/fixit.js', 'function outOfArea'],
   ['netlify.toml', '/deploy/*'],
   ['netlify/lib/shared.mjs', 'since 2012'],
   ['images/work/park-royal-1.webp', ''],
