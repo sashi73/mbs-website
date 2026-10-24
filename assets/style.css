@@ -692,4 +692,7 @@ img.ilogo{display:block;width:min(320px,64vw);height:auto;background:none;color:
 .sector{min-height:380px}
 @media (max-width:700px){.sectors{grid-template-columns:repeat(2,minmax(0,1fr))}.sector{min-height:260px}}
 @media (max-width:420px){.sectors{grid-template-columns:1fr}}
+/* scrolling trades banner: solid white and solid yellow words (easier to read than outlined) */
+.ticker b{color:#FFFFFF}
+.ticker .out{color:#E8C04A;-webkit-text-stroke:0}
 /* ========== /V19 PHOTOS ========== */

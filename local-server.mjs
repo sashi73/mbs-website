@@ -25,10 +25,10 @@ process.chdir(ROOT);
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.json': 'application/json', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-  '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain', '.ico': 'image/x-icon'
+  '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-24 v19b (web-optimised WebP photos; owner photos in high resolution, recent jobs, 8 before & after, 59 owner photos, hero slideshow; accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3)';
+const VERSION = '2026-10-24 v19d (solid white and yellow trades banner; SEO: titles, sitemap, robots, business details, 404 page; web-optimised WebP photos; owner photos in high resolution, recent jobs, 8 before & after, 59 owner photos, hero slideshow; accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3)';
 const NEEDS = [
   ['netlify/lib/store.mjs', 'nextReference'],
   ['netlify/lib/shared.mjs', 'sendTelegramPhotos'],
@@ -64,6 +64,8 @@ const NEEDS = [
   ['assets/site.js', 'ba-frame'],
   ['assets/style.css', '.ba-frame'],
   ['index.html', 'hero-slides'],
+  ['index.html', 'GeneralContractor'],
+  ['sitemap.xml', 'projects.html'],
   ['assets/fixit.js', 'var items = projectsFor'],
   ['netlify.toml', '/deploy/*'],
   ['netlify/lib/shared.mjs', 'since 2012'],
@@ -72,6 +74,10 @@ const NEEDS = [
   ['assets/style.css', '.creds-grid'],
   ['assets/badges/iso-9001.png', '']
 ];
+async function notFound(res) {
+  try { res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' }).end(await readFile(join(ROOT, '404.html'))); }
+  catch { res.writeHead(404).end('Not found'); }
+}
 async function oldFiles() {
   const out = new Set();
   for (const [f, mark] of NEEDS) {
@@ -144,7 +150,7 @@ createServer(async (req, res) => {
     }
 
     // Never serve secrets or server code
-    if (/^\/(\.env|\.git|netlify\/|tools\/|leads\/|data\/|database\/|deploy\/|local-server|package\.json|start-|check-setup|netlify\.toml|README)/i.test(url.pathname)) { res.writeHead(404).end('Not found'); return; }
+    if (/^\/(\.env|\.git|netlify\/|tools\/|leads\/|data\/|database\/|deploy\/|local-server|package\.json|start-|check-setup|netlify\.toml|README)/i.test(url.pathname)) { return notFound(res); }
 
     // Static files
     let path = decodeURIComponent(url.pathname);
@@ -155,7 +161,7 @@ createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': TYPES[extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(data);
   } catch (e) {
-    if (e.code === 'ENOENT') { res.writeHead(404).end('Not found'); return; }
+    if (e.code === 'ENOENT') { return notFound(res); }
     console.error(e);
     res.writeHead(500).end('Server error');
   }

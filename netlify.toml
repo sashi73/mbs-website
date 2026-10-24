@@ -9,76 +9,76 @@
 # Keep server-only files out of the public site
 [[redirects]]
   from = "/netlify/*"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/.env*"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/deploy/*"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/tools/*"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/database/*"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/data/*"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/leads/*"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/local-server.mjs"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/package.json"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/package-lock.json"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/README*"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/start-*"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/check-setup*"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/netlify.toml"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true
 [[redirects]]
   from = "/.git*"
-  to = "/404"
+  to = "/404.html"
   status = 404
   force = true

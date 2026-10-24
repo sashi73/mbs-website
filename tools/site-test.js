@@ -1,4 +1,4 @@
-// MBS website: automated end-to-end test (68 checks: pages, links, images, phone/tablet/desktop layouts,
+// MBS website: automated end-to-end test (90+ checks: SEO, pages, links, images, phone/tablet/desktop layouts,
 // project filters, galleries, before & after sliders, Mr. Fixit, contact form, private files blocked).
 // How to run (on your PC, in the site folder, with the site running via start-windows.bat):
 //   npm install --no-save playwright
@@ -184,6 +184,31 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
   for (const u of ['/.env', '/.env.example', '/data/mbs.db', '/deploy/setup-server.sh', '/netlify/lib/shared.mjs', '/local-server.mjs', '/package.json', '/README.txt', '/tools/jobs.mjs', '/leads/', '/../etc/passwd']) {
     const r = await p.request.get(BASE + u); ok('Security', `${u} is not public`, [403, 404].includes(r.status()), r.status());
   }
+
+
+  // 6. SEO
+  const titles = new Set();
+  for (const pg of PAGES) {
+    await p.goto(`${BASE}/${pg}.html`, { waitUntil: 'domcontentloaded' });
+    const seo = await p.evaluate(() => ({
+      title: document.title, desc: (document.querySelector('meta[name=description]') || {}).content || '',
+      canon: (document.querySelector('link[rel=canonical]') || {}).href || '', h1: document.querySelectorAll('h1').length,
+      lang: document.documentElement.lang, noalt: [...document.images].filter(i => !i.hasAttribute('alt')).length,
+      ld: [...document.querySelectorAll('script[type="application/ld+json"]')].map(s => { try { return JSON.parse(s.textContent)['@type']; } catch { return 'BROKEN'; } })
+    }));
+    titles.add(seo.title);
+    ok('SEO', `${pg}: title ${seo.title.length} chars (aim 30-65)`, seo.title.length >= 30 && seo.title.length <= 65, seo.title);
+    ok('SEO', `${pg}: description ${seo.desc.length} chars (aim 110-170)`, seo.desc.length >= 110 && seo.desc.length <= 170);
+    ok('SEO', `${pg}: canonical link, one main heading, language, all photos described`, /^https:\/\/www\.modernbuildingsolutions\.com\.au\//.test(seo.canon) && seo.h1 === 1 && seo.lang === 'en-AU' && seo.noalt === 0, `${seo.canon} h1=${seo.h1}`);
+    if (seo.ld.length) ok('SEO', `${pg}: business details for Google read correctly`, seo.ld.every(t => t === 'GeneralContractor'), seo.ld.join(','));
+  }
+  ok('SEO', 'every page has a different title', titles.size === PAGES.length);
+  const rb = await p.request.get(`${BASE}/robots.txt`); const rbt = await rb.text();
+  ok('SEO', 'robots.txt is there and points to the sitemap', rb.status() === 200 && /Sitemap: https:\/\/www\.modernbuildingsolutions\.com\.au\/sitemap\.xml/.test(rbt));
+  const sm = await p.request.get(`${BASE}/sitemap.xml`); const smt = await sm.text();
+  ok('SEO', 'sitemap.xml lists all 5 pages', sm.status() === 200 && (smt.match(/<loc>/g) || []).length === 5);
+  const nf = await p.request.get(`${BASE}/no-such-page.html`);
+  ok('SEO', 'unknown address shows the 404 page (status 404)', nf.status() === 404 && /Page not/.test(await nf.text()), nf.status());
 
   ok('Smoke', 'no JavaScript errors on any page', errors.length === 0, errors.slice(0, 5).join(' || '));
   await b.close();

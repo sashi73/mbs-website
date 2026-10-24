@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /deploy/
+Disallow: /tools/
+Disallow: /database/
+Disallow: /netlify/
+
+Sitemap: https://www.modernbuildingsolutions.com.au/sitemap.xml
