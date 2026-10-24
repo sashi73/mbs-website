@@ -329,7 +329,7 @@
 
   function summaryCard() {
     var L = S.lead;
-    var rows = [['Name', L.name], ['Phone', L.phone], ['Email', L.email], ['Suburb', L.suburb],
+    var rows = [['Name', L.name], ['Phone', L.phone], ['Email', L.email], ['Suburb', L.suburb ? L.suburb + (L.postcode ? ' ' + L.postcode : '') : ''],
       ['Job', L.service], ['Details', L.details], ['Urgency', L.urgency], ['Best time to call', L.best_time],
       ['Job scope', (L.scope || []).map(function (x) { return x.q + ' ' + x.a; }).join(' · ')],
       ['Photos', L.photos]]
@@ -401,6 +401,12 @@
     return b;
   }
 
+  function renderChips() {
+    chipsBox.innerHTML = '';
+    S.chips.forEach(function (c) {
+      chipsBox.appendChild(el('button', { type: 'button', class: 'fx-chip' + (c.primary ? ' primary' : ''), text: c.label, onclick: function () { pick(c); } }));
+    });
+  }
   function render() {
     list.innerHTML = '';
     S.log.forEach(function (m) {
@@ -618,6 +624,44 @@
   var URGENCY_CHIPS = ['Emergency', 'This week', 'This month', 'Flexible'].map(function (u) { return { label: u, act: 'answer' }; });
   var TIME_CHIPS = ['Right now', 'This morning', 'This afternoon', 'After 5pm', 'Tomorrow'].map(function (u) { return { label: u, act: 'answer' }; });
 
+  /* ---- suburb suggestions: type 3 letters (or a postcode) and pick "Box Hill 2765" ---- */
+  var SUBURB_URL = (function () {
+    var src = (document.currentScript && document.currentScript.src) || '';
+    return src ? src.replace(/fixit\.js(\?.*)?$/, 'suburbs-sydney.json') : 'assets/suburbs-sydney.json';
+  })();
+  var SUBURBS = null, suburbsLoading = null;
+  function loadSuburbs() {
+    if (SUBURBS || suburbsLoading) return suburbsLoading;
+    suburbsLoading = fetch(SUBURB_URL).then(function (r) { return r.json(); })
+      .then(function (j) { SUBURBS = (j && j.suburbs) || []; return SUBURBS; })
+      .catch(function () { SUBURBS = []; return SUBURBS; });
+    return suburbsLoading;
+  }
+  function matchSuburbs(q, max) {
+    q = String(q || '').toLowerCase().replace(/\s+nsw\b/, '').replace(/\s+/g, ' ').trim();
+    if (!SUBURBS || q.length < 3) return [];
+    var pc = (q.match(/\b(2\d{0,3})$/) || [])[1];
+    var words = pc ? q.replace(pc, '').trim() : q;
+    var a = [], b = [], c = [];
+    SUBURBS.forEach(function (s) {
+      var n = s[0].toLowerCase();
+      if (pc && s[1].indexOf(pc) !== 0) return;
+      if (!words) { a.push(s); return; }
+      if (n.indexOf(words) === 0) a.push(s);
+      else if ((' ' + n).indexOf(' ' + words) !== -1) b.push(s);
+      else if (n.indexOf(words) !== -1) c.push(s);
+    });
+    return a.concat(b, c).slice(0, max || 6);
+  }
+  function suburbChips(q) {
+    return matchSuburbs(q).map(function (s) { return { label: s[0] + ' ' + s[1], act: 'suburb_pick', sub: s }; })
+      .concat([{ label: 'Cancel', act: 'cancel' }]);
+  }
+  function setSuburb(d, s) {
+    d.suburb = s[0]; d.postcode = s[1]; d.lat = s[2]; d.lng = s[3];
+    input.placeholder = 'Type your question…';
+  }
+
   /* ---- name and service area: asked first, before any job details go to the team ---- */
   var AREA_CHIPS = [{ label: 'Yes', act: 'answer', primary: true }, { label: 'No', act: 'answer' }, { label: 'Cancel', act: 'cancel' }];
   function cleanName(t) {
@@ -675,7 +719,10 @@
     var d = S.flow.data;
     S.flow.step = step;
     switch (step) {
-      case 'suburb':  return say('Which suburb is the property in?', [{ label: 'Cancel', act: 'cancel' }]);
+      case 'suburb':
+        loadSuburbs();
+        input.placeholder = 'Start typing your suburb, e.g. Box Hill';
+        return say('Which suburb is the property in? Type the first 3 letters and pick it from the list.', [{ label: 'Cancel', act: 'cancel' }]);
       case 'urgency': return say('How soon do you need it done?', URGENCY_CHIPS);
       case 'name':    if (d.name) return ask('phone'); return say('Thanks. What’s your name?', []);
       case 'who':     return say('What’s your name?', [{ label: 'Cancel', act: 'cancel' }]);
@@ -818,11 +865,12 @@
   function buildLead() {
     var d = S.flow.data;
     var job = d.service === 'Leak' ? 'Leak repair' : (d.service || 'General enquiry');
-    var parts = [d.name + (d.suburb ? ' in ' + d.suburb : '') + ' needs help with ' + (d.service ? job.toLowerCase() : 'a job') + '.'];
+    var parts = [d.name + (d.suburb ? ' in ' + d.suburb + (d.postcode ? ' ' + d.postcode : '') : '') + ' needs help with ' + (d.service ? job.toLowerCase() : 'a job') + '.'];
     if (d.details) parts.push('Details: ' + d.details.replace(/\s*$/, '') + (/[.!?]$/.test(d.details.trim()) ? '' : '.'));
     if (d.urgency) parts.push('Urgency: ' + d.urgency + '.');
     if (d.best_time) parts.push('Best time to call: ' + d.best_time + '.');
-    return { name: d.name, phone: d.phone, email: d.email || '', suburb: d.suburb, service: job,
+    return { name: d.name, phone: d.phone, email: d.email || '', suburb: d.suburb, postcode: d.postcode || '',
+      lat: d.lat === undefined ? '' : d.lat, lng: d.lng === undefined ? '' : d.lng, service: job,
       details: d.details, urgency: d.urgency || '', best_time: d.best_time || '', summary: parts.join(' '),
       photos: PHOTOS.length ? PHOTOS.length + ' attached' : '', scope: d.scope || [] };
   }
@@ -951,7 +999,16 @@
         if (/^(no|nah|nope|skip|done|continue|no thanks|that'?s it)/i.test(t)) return photoDone();
         return say('Tap “Add a photo” to choose one from your phone or computer, or carry on without one.', photoChips());
       case 'suburb':
-        d.suburb = t.replace(/\b\w/g, function (c) { return c.toUpperCase(); }).slice(0, 60);
+        var all = matchSuburbs(t, 12), lower = t.toLowerCase().replace(/\s+nsw\b/, '').replace(/\s+/g, ' ').trim();
+        var exact = all.filter(function (s) { var n = s[0].toLowerCase(); return n === lower || n + ' ' + s[1] === lower || s[1] === lower; });
+        if (exact.length === 1) setSuburb(d, exact[0]);
+        else if (exact.length > 1 || (all.length && all.length <= 6 && /^\d{4}$/.test(lower))) {
+          return say('Which one is it?', (exact.length > 1 ? exact : all).map(function (s) { return { label: s[0] + ' ' + s[1], act: 'suburb_pick', sub: s }; }).concat([{ label: 'Cancel', act: 'cancel' }]));
+        } else {
+          d.suburb = t.replace(/\b\w/g, function (c) { return c.toUpperCase(); }).slice(0, 60);
+          var pcm = t.match(/\b(2\d{3})\b/); if (pcm) d.postcode = pcm[1];
+          input.placeholder = 'Type your question…';
+        }
         return ask(d.urgency ? 'name' : 'urgency');
       case 'urgency': d.urgency = t.slice(0, 40); return ask('name');
       case 'name':
@@ -1132,6 +1189,11 @@
       case 'photo_add':
         if (!S.flow || S.flow.step !== 'photos') return;
         return fileInput.click();
+      case 'suburb_pick':
+        if (!S.flow || !c.sub) return;
+        S.log.push({ who: 'me', text: c.label }); input.value = ''; save();
+        setSuburb(S.flow.data, c.sub);
+        return ask(S.flow.data.urgency ? 'name' : 'urgency');
       case 'scope_skip':
         S.log.push({ who: 'me', text: c.label }); save();
         return S.flow && S.flow.step === 'scope' ? scopeDone() : null;
@@ -1189,6 +1251,12 @@
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 110) + 'px';
     if (!S.busy) mood(input.value ? 'listening' : null);
+    // live suburb suggestions while the customer types
+    if (S.flow && S.flow.step === 'suburb' && !S.busy) {
+      var v = input.value;
+      var show = function () { if (S.flow && S.flow.step === 'suburb' && !S.busy && input.value === v) { S.chips = v.trim().length >= 3 ? suburbChips(v) : [{ label: 'Cancel', act: 'cancel' }]; renderChips(); } };
+      if (SUBURBS) show(); else { var p = loadSuburbs(); if (p) p.then(show); }
+    }
   });
 
   // Any element with data-chat opens Mr. Fixit

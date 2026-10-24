@@ -7,6 +7,7 @@
 
 import { env, cors, json, clean, formatLead, sendEmail, sendTelegram, sendTelegramPhotos, escapeHtml, writeBrief } from '../lib/shared.mjs';
 import { nextReference, tradeCode, parsePhotos, savePhotos, saveInquiry } from '../lib/store.mjs';
+import { customerLocation, distanceText, qrPng } from '../lib/geo.mjs';
 
 export default async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors() });
@@ -19,6 +20,12 @@ export default async (req) => {
   if (clean(body?.website)) return json(200, { ok: true });
 
   const lead = body?.lead || {};
+  // Where the job is: distance from the base, Google Maps directions and a QR code (never blocks the enquiry)
+  let loc = null, qr = null;
+  try {
+    loc = customerLocation(lead);
+    if (loc) { loc.distance = distanceText(loc); qr = qrPng(loc.mapsUrl); }
+  } catch (e) { console.error('Location/QR skipped:', e.message); }
   if (!clean(lead.phone) && !clean(lead.email)) {
     return json(400, { error: 'Please include a phone number or email.' });
   }
@@ -33,8 +40,8 @@ export default async (req) => {
   // A professional job brief for the team, written by DeepSeek from the customer's answers.
   // If the AI is unavailable, the plain summary from the website is used instead.
   const brief = await writeBrief(lead, { photos: photos.length, source });
-  const leadForTeam = brief ? { ...lead, summary: brief } : lead;
-  const { L, tg, html, text, legendHtml } = formatLead(leadForTeam, source, prejob, trade, photos.length);
+  const leadForTeam = { ...lead, ...(brief ? { summary: brief } : {}), ...(loc ? { suburb: loc.label } : {}) };
+  const { L, tg, html, text, legendHtml } = formatLead(leadForTeam, source, prejob, trade, photos.length, loc);
 
   // Optional: attach the chat transcript to the email so the owner sees the whole conversation.
   let transcriptHtml = '';
@@ -58,6 +65,11 @@ export default async (req) => {
       .then(async (r) => {
         results.telegram = r;
         // Photos follow the message, so the team sees the problem before they go out
+        // QR code of the route: show it to anyone on the team to scan, or tap the link
+        if (r.ok && qr) {
+          results.telegram_map = await sendTelegramPhotos([{ type: 'image/png', buf: qr, filename: `${prejob}-directions.png` }],
+            `🗺 <b>${escapeHtml(prejob)}</b> · Directions to ${escapeHtml(loc.label)}${loc.km !== null ? ' (about ' + loc.km + ' km)' : ''}\n<a href="${escapeHtml(loc.mapsUrl)}">Open in Google Maps</a> · or scan with another phone`);
+        }
         if (photos.length) {
           results.telegram_photos = await sendTelegramPhotos(photos, `📷 <b>${escapeHtml(prejob)}</b> · ${photos.length} photo${photos.length > 1 ? 's' : ''} from ${escapeHtml(L.name || 'customer')}${L.phone ? ' · ' + escapeHtml(L.phone) : ''}`);
         }
@@ -73,6 +85,7 @@ export default async (req) => {
       text,
       replyTo: L.email || undefined,
       attachments: photos.map((p) => ({ filename: `${prejob}-${p.filename}`, content: p.base64 }))
+        .concat(qr ? [{ filename: `${prejob}-directions-qr.png`, content: qr.toString('base64'), content_id: 'mapqr', content_type: 'image/png' }] : [])
     }).then((r) => (results.email = r)).catch(() => (results.email = { ok: false }))
   );
   await Promise.all(jobs);
@@ -137,6 +150,7 @@ export default async (req) => {
   console.log(`\n[${new Date().toLocaleTimeString()}] ${prejob}  New enquiry from ${L.name || 'customer'} (${source})`);
   console.log(line('Email   ', results.email));
   console.log(line('Telegram', results.telegram));
+  if (loc) console.log(`  Location: ${loc.label}${loc.km !== null ? ' (about ' + loc.km + ' km from ' + loc.base + ')' : ''}${qr ? ', map link + QR sent' : ''}`);
   if (photos.length) console.log(line('Photos  ', results.telegram_photos ? { ok: results.telegram_photos.ok, reason: results.telegram_photos.reason } : { ok: true }) + ` (${photos.length}, also attached to the email)`);
   if (results.customer_copy) console.log(line('Copy to customer', results.customer_copy));
   if (inDb) console.log('  Database: saved to data/mbs.db');

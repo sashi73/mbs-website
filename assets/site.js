@@ -169,6 +169,27 @@
         });
       });
 
+      // Suburb suggestions: type 3 letters, pick "Box Hill 2765" (list loads the first time the box is used)
+      var subIn = form.querySelector('[data-suburb]'), subList = document.getElementById('suburb-list'), SUBS = null;
+      if (subIn && subList) {
+        var fillSubs = function () {
+          if (SUBS) return;
+          SUBS = [];
+          fetch('assets/suburbs-sydney.json').then(function (r) { return r.json(); }).then(function (j) {
+            SUBS = j.suburbs || [];
+            subList.innerHTML = SUBS.map(function (x) { return '<option value="' + x[0].replace(/"/g, '') + ' ' + x[1] + '">'; }).join('');
+          }).catch(function () {});
+        };
+        subIn.addEventListener('focus', fillSubs);
+        subIn.addEventListener('input', fillSubs);
+      }
+      var suburbFields = function (v) {
+        var m = String(v || '').trim().match(/^(.*?)\s+(2\d{3})$/), name = m ? m[1] : String(v || '').trim(), pc = m ? m[2] : '';
+        var hit = (SUBS || []).filter(function (x) { return x[0].toLowerCase() === name.toLowerCase() && (!pc || x[1] === pc); });
+        if (hit.length === 1) return { suburb: hit[0][0], postcode: hit[0][1], lat: hit[0][2], lng: hit[0][3] };
+        return { suburb: name, postcode: pc };
+      };
+
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         var fd = new FormData(form);
@@ -192,7 +213,8 @@
             website: get('website'),
             photos: photos,
             lead: {
-              name: get('name'), phone: get('phone'), suburb: get('suburb'),
+              name: get('name'), phone: get('phone'), suburb: suburbFields(get('suburb')).suburb,
+              postcode: suburbFields(get('suburb')).postcode || '', lat: suburbFields(get('suburb')).lat, lng: suburbFields(get('suburb')).lng,
               service: get('service'), summary: get('details'), details: get('details')
             }
           })

@@ -375,7 +375,7 @@ export const TRADE_NAMES = {
   F: 'Painting & finishes', E: 'Electrical', P: 'Plumbing', S: 'Storm damage', Q: 'Repair question', M: 'General maintenance'
 };
 
-export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0) {
+export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0, loc = null) {
   const L = {
     name: clean(lead.name, 120), phone: clean(lead.phone, 40), email: clean(lead.email, 160),
     suburb: clean(lead.suburb, 80), service: clean(lead.service, 120), urgency: clean(lead.urgency, 40),
@@ -387,7 +387,8 @@ export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0
   const rows = [
     ['Reference no.', prejob],
     ['Trade code', trade ? `${trade} = ${TRADE_NAMES[trade] || ''}` : ''],
-    ['Name', L.name], ['Phone', L.phone], ['Email', L.email], ['Suburb', L.suburb],
+    ['Name', L.name], ['Phone', L.phone], ['Email', L.email], ['Suburb', loc ? loc.label : L.suburb],
+    ['Distance', loc ? loc.distance : ''],
     ['Service', L.service], ['Urgency', L.urgency], ['Best time to call', L.best_time],
     ['Photos', photoCount ? `${photoCount} attached` : '']
   ].filter(([, v]) => v);
@@ -405,6 +406,7 @@ export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0
     rows.map(([k, v]) => `<b>${k}:</b> ${escapeHtml(v)}`).join('\n') +
     (L.summary ? `\n\n<b>Job brief</b>\n${escapeHtml(L.summary)}` : '') +
     (scope.length ? `\n\n<b>Job scope</b>\n` + scope.map((x) => `• ${escapeHtml(x.q)}\n   <i>${escapeHtml(x.a)}</i>`).join('\n') : '') +
+    (loc ? `\n\n📍 <a href="${escapeHtml(loc.mapsUrl)}">Directions in Google Maps</a> (${escapeHtml(loc.base)} → ${escapeHtml(loc.label)})` : '') +
     (L.phone ? `\n\nCall: ${escapeHtml(L.phone)}` : '');
   const html =
     (prejob ? `<div style="font-family:Arial,sans-serif;display:inline-block;background:#111;color:#F2D98B;padding:10px 16px;border-radius:8px;border-left:4px solid #D4AF37">` +
@@ -423,9 +425,14 @@ export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0
         scope.map((x) => `<tr><td style="padding:4px 14px 4px 0;color:#666;vertical-align:top">${escapeHtml(x.q)}</td><td style="padding:4px 0"><b>${escapeHtml(x.a)}</b></td></tr>`).join('') +
         `</table>`
       : '') +
+    (loc ? `<table style="font-family:Arial,sans-serif;font-size:14px;margin:18px 0 6px;border-collapse:collapse"><tr>` +
+      `<td style="padding:0 18px 0 0;vertical-align:top"><img src="cid:mapqr" width="150" height="150" alt="QR code: directions in Google Maps" style="display:block;border:1px solid #ddd"></td>` +
+      `<td style="vertical-align:top"><b>Directions</b><br><span style="color:#666">${escapeHtml(loc.base)} → ${escapeHtml(loc.label)}${loc.km !== null ? ' · about ' + loc.km + ' km' : ''}</span><br><br>` +
+      `<a href="${escapeHtml(loc.mapsUrl)}" style="display:inline-block;background:#111;color:#F2D98B;padding:9px 14px;border-radius:6px;text-decoration:none;font-weight:bold">Open in Google Maps</a>` +
+      `<br><span style="color:#888;font-size:12px">On a computer? Scan the QR code with your phone to open the route there.</span></td></tr></table>` : '') +
     `<p style="font-family:Arial,sans-serif;font-size:12px;color:#888">Source: ${escapeHtml(source)}</p>`;
   const htmlLegend = legendHtml;
-  const text = rows.map(([k, v]) => `${k}: ${v}`).join('\n') + (L.summary ? `\n\n${L.summary}` : '') +
+  const text = rows.map(([k, v]) => `${k}: ${v}`).join('\n') + (loc ? `\nDirections: ${loc.mapsUrl}` : '') + (L.summary ? `\n\n${L.summary}` : '') +
     (scope.length ? '\n\nJob scope:\n' + scope.map((x) => `- ${x.q} ${x.a}`).join('\n') : '');
   return { L, tg, html, text, legendHtml: htmlLegend };
 }

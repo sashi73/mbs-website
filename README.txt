@@ -148,3 +148,7 @@ BEFORE LAUNCH
   - Set area and hours in assets/fixit-kb.js (and SERVICE_AREA / BUSINESS_HOURS in .env)
   - Replace the [bracketed] placeholders on the pages
   - Replace the sample photos in /images (keep the same file names)
+
+Credits
+- Suburb and postcode suggestions: GeoNames postal code data (geonames.org), licensed CC BY 4.0.
+- QR codes: qrcode-generator by Kazuhiko Arase (MIT licence), in netlify/lib/vendor/.

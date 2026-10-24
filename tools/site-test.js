@@ -266,6 +266,43 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     await cx.close();
   }
 
+
+  // 8. Suburb suggestions (type 3 letters) - chat and contact form
+  {
+    const { cx, q } = await chatPage();
+    await tap(q, 'Get a free quote'); await type(q, 'Kim'); await tap(q, 'Yes');
+    await type(q, 'Front fence is leaning and needs replacing');
+    for (let i = 0; i < 8 && !/Which suburb/.test(await chatText(q)); i++) {
+      const cs = await chipList(q);
+      if (cs.includes('Skip questions')) await tap(q, 'Skip questions');
+      else { const c = cs.find(x => /continue|without/i.test(x)); if (c) await tap(q, c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')); else await q.waitForTimeout(800); }
+    }
+    ok('Suburbs', 'chat asks for the suburb with a typing hint', /Type the first 3 letters/.test(await chatText(q)) && /suburb/i.test(await q.$eval('.fx-input', e => e.placeholder)));
+    await q.fill('.fx-input', ''); await q.type('.fx-input', 'box', { delay: 50 }); await q.waitForTimeout(800);
+    const sug = await chipList(q);
+    ok('Suburbs', 'typing "box" suggests "Box Hill 2765"', sug.includes('Box Hill 2765'), sug.join(' | '));
+    await q.fill('.fx-input', ''); await q.type('.fx-input', '2150', { delay: 50 }); await q.waitForTimeout(800);
+    const sug2 = await chipList(q);
+    ok('Suburbs', 'typing the postcode "2150" suggests Parramatta', sug2.some(x => /^Parramatta 2150$/.test(x)), sug2.join(' | '));
+    await q.fill('.fx-input', ''); await q.type('.fx-input', 'parr', { delay: 50 }); await q.waitForTimeout(800);
+    const sug3 = await chipList(q);
+    ok('Suburbs', 'no shopping centres or mail centres in the list', !sug3.some(x => /westfield|parliament|\bdc\b|\bmc\b/i.test(x)), sug3.join(' | '));
+    await tap(q, 'Parramatta 2150');
+    const nxt = await chipList(q);
+    ok('Suburbs', 'tapping a suggestion moves on to the next question', nxt.includes('This week') && /Parramatta 2150/.test(await chatText(q)));
+    await cx.close();
+  }
+  {
+    const cx = await b.newContext(); const c2 = await cx.newPage(); watch(c2, 'contact');
+    await c2.goto(`${BASE}/contact.html`, { waitUntil: 'networkidle' });
+    await c2.focus('input[name=suburb]'); await c2.waitForTimeout(1200);
+    const opts = await c2.$$eval('#suburb-list option', o => o.map(x => x.value));
+    ok('Suburbs', 'contact form suburb box offers suburbs with postcodes', opts.length > 1000 && opts.includes('Box Hill 2765'), `${opts.length} suburbs`);
+    const sj = await (await c2.request.get(`${BASE}/assets/suburbs-sydney.json`)).json();
+    ok('Suburbs', 'suburb list is credited (GeoNames, CC BY 4.0)', /GeoNames/.test(sj.source) && /GeoNames/.test(await c2.content()));
+    await cx.close();
+  }
+
   ok('Smoke', 'no JavaScript errors on any page', errors.length === 0, errors.slice(0, 5).join(' || '));
   await b.close();
 

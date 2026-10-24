@@ -136,7 +136,7 @@
       <div class="full"><h2 style="font-family:Archivo,sans-serif;font-weight:900;font-size:26px;margin:0 0 6px">Prefer to write? Send the details.</h2><p class="muted" style="margin:0;font-size:14px">We’ll call you back with a free quote.</p></div>
       <label>Your name<input type="text" name="name" autocomplete="name" required></label>
       <label>Phone<input type="tel" name="phone" autocomplete="tel" required></label>
-      <label>Suburb<input type="text" name="suburb"></label>
+      <label>Suburb<input type="text" name="suburb" list="suburb-list" autocomplete="off" placeholder="Start typing, e.g. Box Hill" data-suburb></label><datalist id="suburb-list"></datalist>
       <label>What do you need?
         <select name="service">
           <option>A leak or water damage</option><option>Cracks or concrete cancer</option><option>Renovation or upgrade</option>
@@ -153,6 +153,7 @@
       <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
       <p class="full muted" style="margin:0;font-size:13px">Or <a href="#" data-chat style="color:#F2D98B">chat with Mr. Fixit</a>. He’ll take your details in a minute.</p>
       <button class="btn btn-gold full" type="submit"><span>Get my free quote</span></button>
+    <p class="muted" style="font-size:11px;margin:10px 0 0;opacity:.7">Suburb suggestions use GeoNames data (CC BY 4.0).</p>
     </form>
     <div class="thanks" role="status">
       <h3 class="grad-text">Thanks, we’ve got it.</h3>
