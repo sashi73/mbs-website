@@ -977,7 +977,7 @@
           ? (res.reasons.customer_copy === 'sent' ? ' A copy of our conversation is on its way to ' + d.email + '.' : ' I couldn’t email you a copy just now, but the team has your details.')
           : '';
         say(['Thanks ' + first + '! I’ve sent your question' + (nPhotos ? ' and photo' + (nPhotos > 1 ? 's' : '') : '') + ' to our team and they’ll be in touch soon.' + (info.prejob ? ' Your reference number is ' + info.prejob + '.' : '') + copyLine,
-             'Alternatively, you can call us on ' + KB.phone + '.',
+             callLine(),
              'Is there anything else I can help you with?'],
           [{ label: 'Yes', act: 'yes_more', primary: true }, { label: 'No', act: 'no_more' }],
           function () { setTimeout(function () { mood(null); }, 2500); });
@@ -1116,7 +1116,7 @@
       .then(function (res) {
         S.busy = false;
         if (!res.ok || !res.j.reply) throw new Error('no reply');
-        if (expert) return say([res.j.reply, 'Alternatively, you can call us on ' + KB.phone + '.'], EXPERT_CHIPS);
+        if (expert) return say([res.j.reply, callLine()], EXPERT_CHIPS);
         say([res.j.reply], CALL_CHIPS);
       })
       .catch(function () {
@@ -1126,6 +1126,20 @@
         if (expert) return say(['Sorry, I can’t reach my toolbox right now, so I can’t answer that one.', 'Want one of the team to call you about it instead?'], EXPERT_CHIPS, showTip);
         say(['Good question! I’ll get one of the team to answer that properly.', 'Want them to give you a call?'], CALL_CHIPS, showTip);
       });
+  }
+
+  // a different "call us" line each time, so Mr. Fixit doesn't sound like a recording
+  var CALL_LINES = [
+    'Or if you’d rather talk it through, give us a ring on {p}.',
+    'You can always call us on {p} too.',
+    'Easier to explain on the phone? We’re on {p}.',
+    'Prefer a chat? Call {p} anytime.',
+    'If it’s getting worse, just ring us on {p}.'
+  ], lastCall = -1;
+  function callLine() {
+    var i; do { i = Math.floor(Math.random() * CALL_LINES.length); } while (i === lastCall && CALL_LINES.length > 1);
+    lastCall = i;
+    return CALL_LINES[i].replace('{p}', KB.phone);
   }
 
   function startExpert(intro) {

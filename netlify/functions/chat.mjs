@@ -4,7 +4,7 @@
 //
 // The LLM key lives in the LLM_API_KEY environment variable, never in the website.
 
-import { env, SYSTEM_PROMPT, EXPERT_PROMPT, SCOPE_PROMPT, SCOPE_MAX, stripThinking, cors, json, clean, translateText } from '../lib/shared.mjs';
+import { env, SYSTEM_PROMPT, EXPERT_PROMPT, SCOPE_PROMPT, SCOPE_MAX, stripThinking, humanise, cors, json, clean, translateText } from '../lib/shared.mjs';
 
 const MAX_TURNS = 16;      // only the most recent messages are sent to the model
 const MAX_CHARS = 1000;    // per message
@@ -51,7 +51,7 @@ export default async (req) => {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model,
-        temperature: expert ? 0.3 : 0.4,
+        temperature: expert ? 0.8 : 0.5,   // repair answers: varied, natural wording
         max_tokens: maxTokens,
         stream: false,
         messages: [{ role: 'system', content: expert ? EXPERT_PROMPT : SYSTEM_PROMPT }, ...(expert ? messages.slice(-6) : messages)]
@@ -77,7 +77,7 @@ export default async (req) => {
   console.log(`[${new Date().toLocaleTimeString()}] AI answered a ${expert ? 'repair' : 'general'} question (${model})`);
 
   // Only the final answer is used; any reasoning_content field is ignored.
-  let reply = stripThinking(data?.choices?.[0]?.message?.content ?? '');
+  let reply = humanise(stripThinking(data?.choices?.[0]?.message?.content ?? ''));
 
   // Pull out the structured lead the model adds once it has enough details.
   let lead = null;

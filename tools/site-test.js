@@ -203,6 +203,8 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     if (seo.ld.length) ok('SEO', `${pg}: business details for Google read correctly`, seo.ld.every(t => t === 'GeneralContractor'), seo.ld.join(','));
   }
   ok('SEO', 'every page has a different title', titles.size === PAGES.length);
+  const vt = await p.request.get(`${BASE}/version.txt`);
+  ok('Smoke', 'version.txt shows the live website version', vt.status() === 200 && /MBS website v\d+/.test(await vt.text()), (await vt.text()).split('\n')[0]);
   const rb = await p.request.get(`${BASE}/robots.txt`); const rbt = await rb.text();
   ok('SEO', 'robots.txt is there and points to the sitemap', rb.status() === 200 && /Sitemap: https:\/\/www\.modernbuildingsolutions\.com\.au\/sitemap\.xml/.test(rbt));
   const sm = await p.request.get(`${BASE}/sitemap.xml`); const smt = await sm.text();
@@ -311,6 +313,8 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     const note = async () => seen.push(...(await chipList(q)));
     await tap(q, 'Ask a repair question'); await q.waitForTimeout(1200);
     await type(q, 'Why is my paint peeling in the bathroom?'); await q.waitForTimeout(1500); await settle(q);
+
+    ok('Repair question', 'answers never say "nine (times) out of ten"', !/\b(nine|9)\s+(times\s+)?out\s+of\s+(ten|10)/i.test(await chatText(q)));
     await tap(q, 'Yes, send it to the team'); await note();
     ok('Repair question', 'sending a repair question asks the name first', /What.s your name\?/.test(await chatText(q)));
     await type(q, 'Alex Chen'); await note();

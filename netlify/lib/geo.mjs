@@ -1,25 +1,9 @@
-// Customer location for the team: distance from the MBS base, a Google Maps directions link,
-// and a QR code of that link (scan it from the email with a phone to open the route in Google Maps).
-//
-// Base (where the team starts from) - change in .env:
-//   BASE_LOCATION=Box Hill NSW 2765   BASE_LAT=-33.6503   BASE_LNG=150.8647
+// Customer location for the team: a Google Maps directions link to the job and a QR code of that link
+// (scan it from the email with a phone). The route always starts from YOUR CURRENT LOCATION:
+// the link has no starting point, so Google Maps uses wherever the phone is when it's opened.
 import { deflateSync } from 'node:zlib';
 import qrcode from './vendor/qrcode-generator.cjs';
-import { env, clean } from './shared.mjs';
-
-export function base() {
-  const lat = Number(env('BASE_LAT', '-33.6503'));
-  const lng = Number(env('BASE_LNG', '150.8647'));
-  return { name: env('BASE_LOCATION', 'Box Hill NSW 2765'), lat: Number.isFinite(lat) ? lat : -33.6503, lng: Number.isFinite(lng) ? lng : 150.8647 };
-}
-
-// Straight-line distance in km (Google Maps shows the real driving distance and time)
-export function distanceKm(a, b) {
-  const rad = (d) => (d * Math.PI) / 180;
-  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * 6371 * Math.asin(Math.sqrt(h));
-}
+import { clean } from './shared.mjs';
 
 // From the lead: suburb, postcode and (when picked from the suggestion list) lat/lng.
 export function customerLocation(lead) {
@@ -30,17 +14,14 @@ export function customerLocation(lead) {
   // only trust coordinates that are actually in the Sydney region of NSW
   const hasPoint = Number.isFinite(lat) && Number.isFinite(lng) && lat < -32.5 && lat > -35.5 && lng > 149.5 && lng < 152.5;
   const label = /\bNSW\b/i.test(suburb) ? suburb : `${suburb} NSW${postcode && !suburb.includes(postcode) ? ' ' + postcode : ''}`;
-  const b = base();
-  const km = hasPoint ? distanceKm(b, { lat, lng }) : null;
+  // no origin = Google Maps starts from the phone's current location
   const mapsUrl = 'https://www.google.com/maps/dir/?api=1&travelmode=driving' +
-    '&origin=' + encodeURIComponent(b.name) + '&destination=' + encodeURIComponent(label + ', Australia');
-  return { label, km: km === null ? null : Math.round(km), base: b.name, mapsUrl };
+    '&destination=' + encodeURIComponent(label + ', Australia');
+  return { label, km: null, base: 'your current location', hasPoint, mapsUrl };
 }
 
-export function distanceText(loc) {
-  if (!loc) return '';
-  return loc.km === null ? `Directions from ${loc.base}` : `about ${loc.km} km from ${loc.base} (straight line)`;
-}
+// (Distance isn't shown: Google Maps gives the real distance and drive time from where you are.)
+export function distanceText() { return ''; }
 
 // ---------- QR code as a PNG (no extra packages: qrcode-generator + Node's zlib) ----------
 const CRC = (() => {

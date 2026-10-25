@@ -68,7 +68,7 @@ export default async (req) => {
         // QR code of the route: show it to anyone on the team to scan, or tap the link
         if (r.ok && qr) {
           results.telegram_map = await sendTelegramPhotos([{ type: 'image/png', buf: qr, filename: `${prejob}-directions.png` }],
-            `🗺 <b>${escapeHtml(prejob)}</b> · Directions to ${escapeHtml(loc.label)}${loc.km !== null ? ' (about ' + loc.km + ' km)' : ''}\n<a href="${escapeHtml(loc.mapsUrl)}">Open in Google Maps</a> · or scan with another phone`);
+            `🗺 <b>${escapeHtml(prejob)}</b> · Directions to ${escapeHtml(loc.label)} from your current location\n<a href="${escapeHtml(loc.mapsUrl)}">Open in Google Maps</a> · or scan with another phone`);
         }
         if (photos.length) {
           results.telegram_photos = await sendTelegramPhotos(photos, `📷 <b>${escapeHtml(prejob)}</b> · ${photos.length} photo${photos.length > 1 ? 's' : ''} from ${escapeHtml(L.name || 'customer')}${L.phone ? ' · ' + escapeHtml(L.phone) : ''}`);
@@ -150,7 +150,7 @@ export default async (req) => {
   console.log(`\n[${new Date().toLocaleTimeString()}] ${prejob}  New enquiry from ${L.name || 'customer'} (${source})`);
   console.log(line('Email   ', results.email));
   console.log(line('Telegram', results.telegram));
-  if (loc) console.log(`  Location: ${loc.label}${loc.km !== null ? ' (about ' + loc.km + ' km from ' + loc.base + ')' : ''}${qr ? ', map link + QR sent' : ''}`);
+  if (loc) console.log(`  Location: ${loc.label}${qr ? ', map link + QR sent (route starts from your current location)' : ''}`);
   if (photos.length) console.log(line('Photos  ', results.telegram_photos ? { ok: results.telegram_photos.ok, reason: results.telegram_photos.reason } : { ok: true }) + ` (${photos.length}, also attached to the email)`);
   if (results.customer_copy) console.log(line('Copy to customer', results.customer_copy));
   if (inDb) console.log('  Database: saved to data/mbs.db');

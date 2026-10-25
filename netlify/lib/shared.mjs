@@ -72,14 +72,17 @@ HANDING OVER TO THE TEAM
 export const EXPERT_PROMPT = `You are "Mr. Fixit" from ${BUSINESS.name}, a licensed builder serving ${BUSINESS.area}. You are a seasoned Aussie tradie with decades on the tools, chatting with a homeowner about a problem in their home.
 
 HOW YOU TALK
-- Like a real professional tradie having a friendly chat: natural, confident, warm and down to earth. Plain Australian English, no jargon (explain any trade term in a few words).
-- Write ONE short paragraph only, about 70 to 110 words. No lists, no numbered steps, no headings, no bold, no bullet points.
-- Do not start with "Great question" or repeat the question back.
+- Like a real tradie chatting to a neighbour over the fence: relaxed, warm, confident and practical. Plain Australian English, everyday words, contractions ("it's", "you'll", "that's"). Explain any trade term in a few words.
+- Sound like a person, not a template. Every answer should feel freshly written for THIS question: pick up on the details they gave you (the room, the surface, the age of the house, the weather, how long it's been happening) and talk about their situation, not a generic one.
+- Vary how you start. Sometimes lead with the likely cause, sometimes with a quick reassurance, sometimes with a question you'd ask on site, sometimes with what you'd look at first. Never open the same way twice in a conversation.
+- Never use stock phrases or clichés, including: "nine times out of ten", "nine out of ten", "more often than not", "the usual suspect", "the good news is", "great question", "I hear you", "rest assured", "don't hesitate", "at the end of the day". Don't repeat the question back.
+- Be honest about uncertainty in a human way ("hard to say without seeing it, but my first guess would be...", "could be a couple of things").
+- Write ONE short paragraph only, about 60 to 110 words. No lists, no numbered steps, no headings, no bold, no bullet points, no emojis.
 
-WHAT GOES IN THE PARAGRAPH, IN THIS ORDER
-1. The most likely cause, said the way an experienced tradie would ("Nine times out of ten that's...").
-2. One or two simple, safe things they can check or do in the meantime.
-3. Always finish by recommending our team, in your own words each time, making these points: we're licensed professionals, it's exactly what we do every day, and our prices are very reasonable. End with a short question offering to pass their details to the team, for example "Want me to get one of the team to give you a call?"
+WHAT GOES IN THE PARAGRAPH
+- What's most likely going on, and why, in plain words.
+- One or two simple, safe things they can check or do in the meantime.
+- A natural, low-pressure offer of help from our team, worded differently every time. Mention just ONE of these, in your own words, and rotate between them: we're licensed, we fix this kind of thing all the time, or our prices are fair. Finish with a short, friendly question offering to have someone from the team call them (say it differently each time, e.g. "Want me to get someone to have a look?", "Happy to have one of the boys give you a ring if you like?", "Should I pass this on so someone can take a proper look?").
 
 LICENSED WORK AND SAFETY
 - Electrical, gas, most plumbing, structural, roofs and work at height, and waterproofing to the building standards need a licensed professional: say so plainly and give no DIY steps for them, only safe things to do in the meantime (switch off at the switchboard, keep clear, catch drips).
@@ -239,7 +242,7 @@ export async function writeBrief(lead, extra = {}) {
     });
     if (!r.ok) return null;
     const j = await r.json();
-    const out = stripThinking(j?.choices?.[0]?.message?.content ?? '').replace(/\s*\n+\s*/g, ' ').trim();
+    const out = humanise(stripThinking(j?.choices?.[0]?.message?.content ?? '')).replace(/\s*\n+\s*/g, ' ').trim();
     return out.length > 20 ? clean(out, 1500) : null;
   } catch {
     return null;
@@ -249,6 +252,25 @@ export async function writeBrief(lead, extra = {}) {
 }
 
 // Strip any "thinking" text some models include, so customers only see the answer.
+// Removes tired stock phrases from Mr. Fixit's answers, whatever the AI writes.
+export const SITE_VERSION = 'v19i';
+export function humanise(text) {
+  let t = String(text || '');
+  const swap = [
+    // "in 9 out of 10 cases" -> "in most cases"
+    [/\b(in\s+)?(?:nine|9)\s+(?:cases\s+)?out\s+of\s+(?:ten|10)\s+cases\b/gi, (m, i) => (i ? 'in ' : '') + 'most cases'],
+    // "nine times out of ten" / "nine out of ten times" -> "usually"
+    [/\b(?:nine|9)\s+(?:times\s+)?out\s+of\s+(?:ten|10)(?:\s+times)?\b,?/gi, 'usually'],
+    [/^\s*(?:great|good|excellent)\s+question[!.,]*\s*/i, ''],
+    [/\brest\s+assured,?\s*/gi, '']
+  ];
+  for (const [re, to] of swap) t = t.replace(re, to);
+  t = t.replace(/\busually,\s+usually\b/gi, 'usually').replace(/,\s*usually\s*,/gi, ', usually');
+  // tidy up: capital letter at the start of each sentence, no doubled spaces
+  t = t.replace(/\s{2,}/g, ' ').replace(/(^|[.!?]\s+)([a-z])/g, (m, a, b) => a + b.toUpperCase()).trim();
+  return t;
+}
+
 export function stripThinking(text) {
   return String(text || '').replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^\s*<think>[\s\S]*$/i, '').trim();
 }
@@ -406,8 +428,8 @@ export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0
     rows.map(([k, v]) => `<b>${k}:</b> ${escapeHtml(v)}`).join('\n') +
     (L.summary ? `\n\n<b>Job brief</b>\n${escapeHtml(L.summary)}` : '') +
     (scope.length ? `\n\n<b>Job scope</b>\n` + scope.map((x) => `• ${escapeHtml(x.q)}\n   <i>${escapeHtml(x.a)}</i>`).join('\n') : '') +
-    (loc ? `\n\n📍 <a href="${escapeHtml(loc.mapsUrl)}">Directions in Google Maps</a> (${escapeHtml(loc.base)} → ${escapeHtml(loc.label)})` : '') +
-    (L.phone ? `\n\nCall: ${escapeHtml(L.phone)}` : '');
+    (loc ? `\n\n📍 <a href="${escapeHtml(loc.mapsUrl)}">Directions in Google Maps</a> (from where you are → ${escapeHtml(loc.label)})` : '') +
+    (L.phone ? `\n\nCall: ${escapeHtml(L.phone)}` : '') + `\n<i>Website ${SITE_VERSION}</i>`;
   const html =
     (prejob ? `<div style="font-family:Arial,sans-serif;display:inline-block;background:#111;color:#F2D98B;padding:10px 16px;border-radius:8px;border-left:4px solid #D4AF37">` +
       `<span style="font-size:11px;letter-spacing:.14em;color:#BFA45A">REFERENCE NO.</span><br>` +
@@ -427,10 +449,10 @@ export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0
       : '') +
     (loc ? `<table style="font-family:Arial,sans-serif;font-size:14px;margin:18px 0 6px;border-collapse:collapse"><tr>` +
       `<td style="padding:0 18px 0 0;vertical-align:top"><img src="cid:mapqr" width="150" height="150" alt="QR code: directions in Google Maps" style="display:block;border:1px solid #ddd"></td>` +
-      `<td style="vertical-align:top"><b>Directions</b><br><span style="color:#666">${escapeHtml(loc.base)} → ${escapeHtml(loc.label)}${loc.km !== null ? ' · about ' + loc.km + ' km' : ''}</span><br><br>` +
+      `<td style="vertical-align:top"><b>Directions</b><br><span style="color:#666">From your current location → ${escapeHtml(loc.label)}</span><br><br>` +
       `<a href="${escapeHtml(loc.mapsUrl)}" style="display:inline-block;background:#111;color:#F2D98B;padding:9px 14px;border-radius:6px;text-decoration:none;font-weight:bold">Open in Google Maps</a>` +
-      `<br><span style="color:#888;font-size:12px">On a computer? Scan the QR code with your phone to open the route there.</span></td></tr></table>` : '') +
-    `<p style="font-family:Arial,sans-serif;font-size:12px;color:#888">Source: ${escapeHtml(source)}</p>`;
+      `<br><span style="color:#888;font-size:12px">On a computer? Scan the QR code with your phone: the route starts from wherever you are.</span></td></tr></table>` : '') +
+    `<p style="font-family:Arial,sans-serif;font-size:12px;color:#888">Source: ${escapeHtml(source)} · Website ${SITE_VERSION}</p>`;
   const htmlLegend = legendHtml;
   const text = rows.map(([k, v]) => `${k}: ${v}`).join('\n') + (loc ? `\nDirections: ${loc.mapsUrl}` : '') + (L.summary ? `\n\n${L.summary}` : '') +
     (scope.length ? '\n\nJob scope:\n' + scope.map((x) => `- ${x.q} ${x.a}`).join('\n') : '');

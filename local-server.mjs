@@ -25,10 +25,10 @@ process.chdir(ROOT);
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.json': 'application/json', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-  '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain', '.xml': 'application/xml', '.ico': 'image/x-icon'
+  '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-25 v19g (same name / Sydney / suburb steps for quotes and repair questions, suburb auto-picked; suburb + postcode suggestions, distance from Box Hill, Google Maps link and QR in alerts; Mr. Fixit asks name and Sydney area first; solid white and yellow trades banner; SEO: titles, sitemap, robots, business details, 404 page; web-optimised WebP photos; owner photos in high resolution, recent jobs, 8 before & after, 59 owner photos, hero slideshow; accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3)';
+const VERSION = '2026-10-25 v19i (stock-phrase filter, version on alerts; natural, varied repair answers; map route starts from your current location; same name / Sydney / suburb steps for quotes and repair questions, suburb auto-picked; suburb + postcode suggestions, Google Maps link (from your current location) and QR in alerts; Mr. Fixit asks name and Sydney area first; solid white and yellow trades banner; SEO: titles, sitemap, robots, business details, 404 page; web-optimised WebP photos; owner photos in high resolution, recent jobs, 8 before & after, 59 owner photos, hero slideshow; accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3)';
 const NEEDS = [
   ['netlify/lib/store.mjs', 'nextReference'],
   ['netlify/lib/shared.mjs', 'sendTelegramPhotos'],
@@ -70,6 +70,10 @@ const NEEDS = [
   ['assets/fixit.js', 'function outOfArea'],
   ['assets/fixit.js', 'suburb_pick'],
   ['assets/fixit.js', 'function afterSuburb'],
+  ['assets/fixit.js', 'function callLine'],
+  ['netlify/lib/shared.mjs', 'export function humanise'],
+  ['index.html', 'fixit.js?v=19i'],
+  ['netlify/lib/shared.mjs', 'Sound like a person, not a template'],
   ['assets/suburbs-sydney.json', 'Box Hill'],
   ['netlify/lib/geo.mjs', 'qrPng'],
   ['netlify.toml', '/deploy/*'],
