@@ -20,7 +20,7 @@ export default async (req) => {
     if (given !== secret) return new Response('Not found', { status: 404 });
     if (!env('TELEGRAM_BOT_TOKEN') || !env('TELEGRAM_CHAT_ID')) return page('Telegram bot setup', '<p>TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set in Netlify first.</p>');
     const hook = `${url.origin}/.netlify/functions/telegram`;
-    const a = await tg('setWebhook', { url: hook, secret_token: secret, allowed_updates: ['message', 'edited_message', 'callback_query'], drop_pending_updates: false });
+    const a = await tg('setWebhook', { url: hook, secret_token: secret, allowed_updates: ['message', 'edited_message', 'channel_post', 'edited_channel_post', 'callback_query'], drop_pending_updates: false });
     const b = await tg('setMyCommands', { commands: COMMANDS.map(([command, description]) => ({ command, description: description.slice(0, 256) })) });
     const c = await tg('setChatMenuButton', { menu_button: { type: 'commands' } });
     const info = await tg('getWebhookInfo', {});
@@ -43,7 +43,7 @@ export default async (req) => {
   try { await handleUpdate(update); }
   catch (e) {
     console.error('Telegram bot error:', e);
-    const chat = (update.message && update.message.chat.id) || (update.callback_query && update.callback_query.message && update.callback_query.message.chat.id);
+    const chat = (update.message && update.message.chat.id) || (update.channel_post && update.channel_post.chat.id) || (update.callback_query && update.callback_query.message && update.callback_query.message.chat.id);
     if (chat) await tg('sendMessage', { chat_id: chat, text: 'Sorry, something went wrong with that. Please try again in a moment. (' + String(e.message || e).slice(0, 120) + ')' });
   }
   return new Response('ok');   // always 200, so Telegram doesn't keep re-sending the same message

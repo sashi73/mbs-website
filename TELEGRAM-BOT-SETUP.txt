@@ -1,7 +1,16 @@
 MBS JOB TRACKER (Telegram bot) - setup, once, about 5 minutes
 ==============================================================
 Everything runs on Netlify. Jobs, reminders and photos are stored in Netlify Blobs (free, nothing to sign up for).
-Use the same Telegram bot that already sends you the website enquiries.
+Use the same Telegram bot that already sends you the website enquiries, and your Mr.FixitB channel.
+
+0. Mr.FixitB channel (skip if the enquiry alerts already arrive in it):
+   - Telegram > Mr.FixitB > channel name at the top > Administrators > Add Admin > your bot.
+     Turn ON "Post messages" (and "Edit messages of others", "Delete messages"). Save.
+   - TELEGRAM_CHAT_ID in Netlify must be the channel's ID: a number starting with -100.
+     To find it: forward any post from Mr.FixitB to @userinfobot (or @JsonDumpBot) in Telegram.
+   - Keep the channel PRIVATE: everyone in it sees customer names, phone numbers and amounts.
+   - To also use the bot in a private chat, message the bot: it replies with your Telegram ID.
+     Add that ID to TELEGRAM_ALLOWED_IDS in Netlify.
 
 1. Make up a secret (16 or more letters, numbers, - or _), for example:   mbs-bot-7Gq2xL9pR4tW8kD
    Keep it private, like a password.
@@ -16,7 +25,9 @@ Use the same Telegram bot that already sends you the website enquiries.
       https://YOUR-SITE.netlify.app/.netlify/functions/telegram?setup=YOUR-SECRET
    It should say "Telegram bot connected", and the bot sends you "MBS job tracker is connected".
 
-5. In Telegram send /help to the bot. All commands are also in the ☰ Menu button next to the message box.
+5. In Mr.FixitB post /help. Everything works in the channel: alerts with buttons, commands, reminders and the
+   Monday report. (Telegram's ☰ Menu command list shows in private chats with the bot, not inside channels;
+   in the channel, /help shows the full list.)
 
 Numbers:  new enquiry PW-261025-000012  ->  quoted W-261025-000012  ->  job won JW-261025-000012
           (the middle letter is the trade; short form: /called 12 is the same job)

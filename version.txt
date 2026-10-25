@@ -1,2 +1,2 @@
-MBS website v20 (2026-10-25)
-Telegram job tracker (PW → W → JW, reminders, reports with GST, photos) on Netlify Blobs. Call-back reminders, glowing Mr. Fixit ring, visitor counter, footer ABNs.
+MBS website v20b (2026-10-25)
+Telegram job tracker in the Mr.FixitB channel (PW → W → JW, reminders, reports with GST, photos) on Netlify Blobs. Call-back reminders, glowing Mr. Fixit ring, visitor counter, footer ABNs.

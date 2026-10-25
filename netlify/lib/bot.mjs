@@ -45,7 +45,8 @@ export function helpText() {
     '\n• Amounts are inc GST: the GST is worked out for you.' +
     '\n• Reminder times: in 2h · today 3pm · tomorrow 9am · mon 10am · 28/10 9am' +
     '\n• Send a photo with the job number as the caption to save it to that job.' +
-    '\n• Tap the ☰ Menu button next to the message box to see all commands any time.';
+    '\n• Tap the ☰ Menu button next to the message box to see all commands any time.' +
+    '\n• In the Mr.FixitB channel, post the commands as messages (e.g. /jobs) and tap the buttons under the alerts.';
 }
 
 // ---------- Telegram API ----------
@@ -189,8 +190,14 @@ async function moveStage(chat, arg, stage, by, extra = {}) {
   const renamed = r.after !== r.before ? `\nNumber changed: ${E(r.before)} → <b>${E(r.after)}</b>` : '';
   return send(chat, `${J.ICON[stage]} <b>${E(r.after)}</b> marked <b>${E(J.LABEL[stage])}</b>${extra.amount ? ` · ${J.money(extra.amount)} inc GST (GST ${J.money(J.gstOf(extra.amount))})` : ''}${renamed}`, jobButtons(r.job, true));
 }
+// Telegram channels (like Mr.FixitB) can't use "reply to this" prompts, so there we show the command to type
+const channels = new Set();
 async function askAmount(chat, kind, job) {
   const ref = J.refFor(job);
+  if (channels.has(String(chat))) {
+    const cmd = kind === 'quote' ? 'quoted' : 'invoiced';
+    return send(chat, `${kind === 'quote' ? '💬 Quote' : '🧾 Invoice'} amount for <b>${E(ref)}</b>? Post it like this (inc GST):\n<code>/${cmd} ${E(ref)} 4500</code>`);
+  }
   return send(chat, `${kind === 'quote' ? '💬 Quote' : '🧾 Invoice'} amount for ${ref}? Reply with the amount inc GST, e.g. 4500`, null,
     { reply_markup: { force_reply: true, input_field_placeholder: 'Amount inc GST, e.g. 4500' } });
 }
@@ -200,6 +207,7 @@ export async function handleUpdate(u) {
   // ----- button taps -----
   if (u.callback_query) {
     const q = u.callback_query, chat = q.message && q.message.chat.id, who = q.from.first_name || 'Owner';
+    if (q.message && q.message.chat.type === 'channel') channels.add(String(chat));
     if (!ids.has(String(q.from.id)) && !ids.has(String(chat))) { await tg('answerCallbackQuery', { callback_query_id: q.id, text: 'This bot is private.' }); return; }
     await tg('answerCallbackQuery', { callback_query_id: q.id });
     const [kind, a = '', b = ''] = String(q.data || '').split(':');   // e.g. st:called:W-261025-000012
@@ -216,10 +224,17 @@ export async function handleUpdate(u) {
     if (kind === 'ph') return command(chat, '/photos ' + a, who);
     return;
   }
-  const m = u.message || u.edited_message;
+  // private chat, group, or a channel such as Mr.FixitB (channel posts come "from the channel", not a person)
+  const m = u.message || u.edited_message || u.channel_post || u.edited_channel_post;
   if (!m) return;
-  const chat = m.chat.id, who = (m.from && m.from.first_name) || 'Owner';
+  const chat = m.chat.id, isChannel = m.chat.type === 'channel';
+  const who = (m.from && m.from.first_name) || m.author_signature || (isChannel ? m.chat.title || 'Channel' : 'Owner');
+  if (isChannel) {
+    if (!ids.has(String(chat))) return;       // some other channel: stay quiet
+    channels.add(String(chat));
+  }
   if (!ids.has(String(m.from && m.from.id)) && !ids.has(String(chat))) {
+    if (m.chat.type !== 'private') return;   // only answer strangers in a private chat
     return send(chat, `This bot is private to Modern Building Solutions.\nYour Telegram ID is <code>${E(String(m.from ? m.from.id : chat))}</code> – send it to the owner if you should have access.`);
   }
   // reply to "Quote amount for …?" / "Invoice amount for …?"

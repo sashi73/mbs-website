@@ -150,6 +150,21 @@ ok('Photos', 'a photo sent with the job number as caption is saved to the job', 
 n0 = calls.length; await tap(`ph:${core1}`);
 ok('Photos', 'the Photos button sends them as an album', since(n0).some((c) => c.method === 'sendMediaGroup'));
 
+
+// 8b. the Mr.FixitB channel: commands posted in the channel, buttons tapped there
+const post = (text, chatId = 111) => hook({ channel_post: { message_id: uid, chat: { id: chatId, type: 'channel', title: 'Mr.FixitB' }, date: 1, text } });
+n0 = calls.length; await post('/jobs');
+ok('Channel', 'a command posted in the Mr.FixitB channel is answered in the channel', since(n0).some((c) => c.method === 'sendMessage' && String(c.body.chat_id) === '111' && /Open jobs|No open jobs/.test(c.body.text)));
+n0 = calls.length; await post('/note 1 posted from the channel');
+ok('Channel', 'job updates work from the channel', /Note added/.test(lastMsg().text || '') && (await J.find('1')).notes.some((x) => /from the channel/.test(x.text) && x.by === 'Mr.FixitB'));
+n0 = calls.length;
+await hook({ callback_query: { id: 'cbch', from: { id: 555, first_name: 'Sashi' }, message: { message_id: 9, chat: { id: 111, type: 'channel' } }, data: `ask:quote:${core1}` } });
+const chAsk = since(n0).find((c) => c.method === 'sendMessage');
+ok('Channel', 'in the channel, "Quoted…" shows the command to post (no reply prompt)', chAsk && /\/quoted/.test(chAsk.body.text) && !(chAsk.body.reply_markup && chAsk.body.reply_markup.force_reply));
+n0 = calls.length; await post('/jobs', -500);
+ok('Channel', 'posts in any other channel are ignored (no reply)', !since(n0).some((c) => c.method === 'sendMessage'));
+ok('Channel', 'setup asks Telegram for channel posts too', setHook && setHook.body.allowed_updates.includes('channel_post'));
+
 // 9. numbers are never repeated: if another change lands between reading and saving, the save retries
 const kv = await import(SITE + '/netlify/lib/kv.mjs');
 const fs = await import('node:fs');
