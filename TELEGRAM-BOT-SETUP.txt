@@ -1,0 +1,31 @@
+MBS JOB TRACKER (Telegram bot) - setup, once, about 5 minutes
+==============================================================
+Everything runs on Netlify. Jobs, reminders and photos are stored in Netlify Blobs (free, nothing to sign up for).
+Use the same Telegram bot that already sends you the website enquiries.
+
+1. Make up a secret (16 or more letters, numbers, - or _), for example:   mbs-bot-7Gq2xL9pR4tW8kD
+   Keep it private, like a password.
+
+2. Netlify > your site > Site configuration > Environment variables > Add a variable:
+      TELEGRAM_WEBHOOK_SECRET = (your secret)
+   (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are already there.)
+
+3. Push this version to GitHub (or netlify.cmd deploy --prod) and wait until the deploy says Published.
+
+4. Open this address once in your browser (your site address, then your secret):
+      https://YOUR-SITE.netlify.app/.netlify/functions/telegram?setup=YOUR-SECRET
+   It should say "Telegram bot connected", and the bot sends you "MBS job tracker is connected".
+
+5. In Telegram send /help to the bot. All commands are also in the ☰ Menu button next to the message box.
+
+Numbers:  new enquiry PW-261025-000012  ->  quoted W-261025-000012  ->  job won JW-261025-000012
+          (the middle letter is the trade; short form: /called 12 is the same job)
+
+Good to know
+- Reminders are checked every 5 minutes, so they can arrive up to 5 minutes after the set time.
+- Monday 7am you get last week's report. To stop it: WEEKLY_REPORT = off in Netlify.
+- Staff later: they message the bot, it tells them their Telegram ID; add it to TELEGRAM_ALLOWED_IDS
+  (comma separated) in Netlify and redeploy.
+- If the same bot is also used by another program that "polls" Telegram (like the job-search bot on your PC),
+  that program will stop receiving messages once this is connected. Use a separate bot for each.
+- Website previews on your PC don't use the tracker; it only works on the live Netlify site.

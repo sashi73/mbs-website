@@ -85,7 +85,8 @@ export function nextReference(code) {
 
 // Job number from a reference: R-261017-000001 -> JR-261017-000001
 export function jobNumberFor(ref) {
-  return /^[A-Z]-\d{6}-\d{6}$/.test(ref) ? 'J' + ref : null;
+  const m = String(ref || '').match(/^P?([A-Z]-\d{6}-\d{6})$/);   // PW-… or W-… -> JW-…
+  return m ? 'J' + m[1] : null;
 }
 
 // Older style numbers (P-2026-0001) still work for anything created before the change

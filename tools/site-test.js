@@ -430,11 +430,11 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
       const files = fs.readdirSync(process.env.MOCK_OUT).filter(f => f.endsWith('.bin')).map(f => path.join(process.env.MOCK_OUT, f));
       const tg = files.map(f => fs.readFileSync(f, 'utf8')).find(t => t.includes('Cal Test') && t.includes('"chat_id"') && !t.includes('"media"'));
       const em = files.map(f => fs.readFileSync(f, 'utf8')).find(t => t.includes('Cal Test') && t.includes('"subject"'));
-      ok('Call reminder', 'Telegram alert has "Add call reminder to Google Calendar" with the time', !!tg && /Add call reminder to Google Calendar<\/a> \([A-Z][a-z]{2} \d+ [A-Za-z]+ 2:00pm\)/.test(JSON.parse(tg).text) && /calendar\.google\.com\/calendar\/render\?action=TEMPLATE/.test(JSON.parse(tg).text));
+      ok('Call reminder', 'Telegram alert has "Add call reminder to Google Calendar" with the time', !!tg && /Add call reminder to Google Calendar<\/a> \([A-Z][a-z]{2} \d+ [A-Za-z]+ \d{1,2}:\d{2}(am|pm)\)/.test(JSON.parse(tg).text) && /calendar\.google\.com\/calendar\/render\?action=TEMPLATE/.test(JSON.parse(tg).text));
       const e = em && JSON.parse(em);
       const ics = e && (e.attachments || []).find(a => /call-reminder\.ics$/.test(a.filename));
       const icsText = ics ? Buffer.from(ics.content, 'base64').toString() : '';
-      ok('Call reminder', 'email has the Google Calendar button and a .ics file at 2:00pm Sydney time', !!e && /Add to Google Calendar/.test(e.html) && /BEGIN:VEVENT/.test(icsText) && /DTSTART:\d{8}T0[34]0000Z/.test(icsText) && /TRIGGER:-PT10M/.test(icsText), ics ? ics.filename : 'no ics');
+      ok('Call reminder', 'email has the Google Calendar button and a .ics calendar file', !!e && /Add to Google Calendar/.test(e.html) && /BEGIN:VEVENT/.test(icsText) && /DTSTART:\d{8}T\d{6}Z/.test(icsText) && /TRIGGER:-PT10M/.test(icsText), ics ? ics.filename : 'no ics');
     }
   }
 

@@ -253,7 +253,7 @@ export async function writeBrief(lead, extra = {}) {
 
 // Strip any "thinking" text some models include, so customers only see the answer.
 // Removes tired stock phrases from Mr. Fixit's answers, whatever the AI writes.
-export const SITE_VERSION = 'v19n';
+export const SITE_VERSION = 'v20';
 export function humanise(text) {
   let t = String(text || '');
   const swap = [
@@ -299,7 +299,7 @@ export function escapeHtml(s) {
 
 // ----- outbound notifications -----
 
-export async function sendTelegram(text) {
+export async function sendTelegram(text, extra = {}) {
   const token = env('TELEGRAM_BOT_TOKEN');
   const chatId = env('TELEGRAM_CHAT_ID');
   if (!token || !chatId) return { ok: false, skipped: true, reason: `Telegram is not set up (add ${!token ? 'TELEGRAM_BOT_TOKEN' : 'TELEGRAM_CHAT_ID'} to .env)` };
@@ -308,7 +308,7 @@ export async function sendTelegram(text) {
     const r = await fetch(`${base}/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true })
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, ...extra })
     });
     if (r.ok) return { ok: true, status: r.status };
     const j = await r.json().catch(() => ({}));

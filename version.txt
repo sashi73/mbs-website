@@ -1,2 +1,2 @@
-MBS website v19n (2026-10-25)
-Call-back reminder (Add to Google Calendar) in every alert. Glowing "Need an answer? Ask me!" ring, visitor counter, footer ABNs, best time to call after the phone number.
+MBS website v20 (2026-10-25)
+Telegram job tracker (PW → W → JW, reminders, reports with GST, photos) on Netlify Blobs. Call-back reminders, glowing Mr. Fixit ring, visitor counter, footer ABNs.

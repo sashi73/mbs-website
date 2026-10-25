@@ -82,3 +82,8 @@
   to = "/404.html"
   status = 404
   force = true
+[[redirects]]
+  from = "/TELEGRAM-BOT-SETUP.txt"
+  to = "/404.html"
+  status = 404
+  force = true

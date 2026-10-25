@@ -9,6 +9,8 @@ import { env, cors, json, clean, formatLead, sendEmail, sendTelegram, sendTelegr
 import { nextReference, tradeCode, parsePhotos, savePhotos, saveInquiry } from '../lib/store.mjs';
 import { customerLocation, distanceText, qrPng } from '../lib/geo.mjs';
 import { callReminder } from '../lib/calendar.mjs';
+import * as J from '../lib/jobs.mjs';
+import { jobButtons } from '../lib/bot.mjs';
 
 export default async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors() });
@@ -36,7 +38,11 @@ export default async (req) => {
   // Reference (pre-job) number: TRADE-YYMMDD-running no., e.g. R-261017-000001.
   // Becomes a job number later with a J in front (JR-261017-000001).
   const trade = tradeCode(lead.service, `${clean(lead.details, 1500)} ${clean(lead.summary, 1500)}`);
-  const prejob = nextReference(trade);
+  // Reference: PW-261025-000001 (P = preliminary enquiry, W = trade). It becomes W-… when quoted and JW-… when the job is won.
+  // The running number is kept in Netlify Blobs (job tracker); if that isn't available, a local number is used.
+  let core = null;
+  try { core = await J.nextCore(trade); } catch (e) { console.error('Job tracker (Netlify Blobs) not available:', e.message); }
+  const prejob = 'P' + (core || nextReference(trade));
   const photos = parsePhotos(body?.photos);
   // A professional job brief for the team, written by DeepSeek from the customer's answers.
   // If the AI is unavailable, the plain summary from the website is used instead.
@@ -49,6 +55,19 @@ export default async (req) => {
       service: clean(lead.service, 120), bestTime: clean(lead.best_time, 80), summary: clean(leadForTeam.summary, 900), mapsUrl: loc ? loc.mapsUrl : '' });
   } catch (e) { console.error('Calendar reminder skipped:', e.message); }
   const { L, tg, html, text, legendHtml } = formatLead(leadForTeam, source, prejob, trade, photos.length, loc, cal);
+
+  // Job tracker (Telegram bot): save the job, its photos, and a call-back reminder at the customer's best time
+  let job = null;
+  if (core) {
+    try {
+      job = await J.create({ core, name: clean(lead.name, 120), phone: clean(lead.phone, 40), email: clean(lead.email, 160),
+        suburb: loc ? loc.label : clean(lead.suburb, 80), service: clean(lead.service, 120), best_time: clean(lead.best_time, 80),
+        summary: clean(leadForTeam.summary, 1500), mapsUrl: loc ? loc.mapsUrl : '', source });
+      if (photos.length) job = await J.savePhotos(core, photos);
+      if (cal && cal.start) await J.addReminder({ at: cal.start, core, chat: env('TELEGRAM_CHAT_ID'),
+        text: `Call ${job.name || 'the customer'}${job.phone ? ' on ' + job.phone : ''} (best time: ${job.best_time || 'anytime'})` });
+    } catch (e) { console.error('Job tracker save failed:', e.message); }
+  }
 
   // Optional: attach the chat transcript to the email so the owner sees the whole conversation.
   let transcriptHtml = '';
@@ -68,7 +87,7 @@ export default async (req) => {
   const results = {};
   const jobs = [];
   if (channels.includes('telegram')) jobs.push(
-    sendTelegram(tg)
+    sendTelegram(tg, job ? { reply_markup: { inline_keyboard: jobButtons(job) } } : {})
       .then(async (r) => {
         results.telegram = r;
         // Photos follow the message, so the team sees the problem before they go out

@@ -12,13 +12,13 @@ const TZ = 'Australia/Sydney';
 const pad = (n) => String(n).padStart(2, '0');
 
 // Sydney wall-clock parts for an instant
-function parts(ms) {
+export function parts(ms) {
   const f = new Intl.DateTimeFormat('en-AU', { timeZone: TZ, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const o = {}; for (const p of f.formatToParts(new Date(ms))) o[p.type] = p.value;
   return { y: +o.year, mo: +o.month, d: +o.day, h: +o.hour % 24, mi: +o.minute };
 }
 // the instant (UTC ms) for a Sydney wall-clock time (handles daylight saving)
-function sydneyTime(y, mo, d, h, mi) {
+export function sydneyTime(y, mo, d, h, mi) {
   let guess = Date.UTC(y, mo - 1, d, h, mi);
   for (let i = 0; i < 2; i++) {
     const p = parts(guess);
@@ -86,4 +86,47 @@ export function callReminder({ prejob, name, phone, suburb, service, bestTime, s
     'END:VEVENT', 'END:VCALENDAR', ''
   ].join('\r\n');
   return { start, when: whenText(start), url, ics };
+}
+
+// "in 2h", "in 30 min", "tomorrow", "tomorrow 2pm", "today 3:30pm", "3pm", "15:30", "mon 9am", "28/10", "28/10 10am",
+// and the best-time words ("this afternoon", "after 5pm"...). Returns a time (ms) or null. Sydney time.
+const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+export function parseWhen(text, nowMs = Date.now()) {
+  const t = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!t) return null;
+  let m = t.match(/^in (\d+(?:\.\d+)?) ?(m|min|mins|minutes?|h|hr|hrs|hours?|d|days?)$/);
+  if (m) { const n = Number(m[1]), u = m[2][0]; return roundUp5(nowMs + n * (u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000)); }
+  if (/^(right now|now|asap|this morning|morning|this afternoon|afternoon|after 5 ?pm|this evening|evening|tonight|anytime)$/.test(t)) return callTime(t, nowMs);
+  const p = parts(nowMs);
+  const dayAt = (offset, h, mi) => { const q = parts(sydneyTime(p.y, p.mo, p.d, 12, 0) + offset * 86400000); return sydneyTime(q.y, q.mo, q.d, h, mi); };
+  const clock = (s) => {                       // "3pm", "3:30pm", "9.30am", "15:30", "9"
+    const c = String(s || '').match(/^(\d{1,2})(?:[:.](\d{2}))? ?(am|pm)?$/);
+    if (!c) return null;
+    let h = Number(c[1]); const mi = Number(c[2] || 0);
+    if (c[3] === 'pm' && h < 12) h += 12; if (c[3] === 'am' && h === 12) h = 0;
+    if (!c[3] && !c[2] && h < 7) h += 12;     // "/remind ... 3" means 3pm
+    return h < 24 && mi < 60 ? [h, mi] : null;
+  };
+  m = t.match(/^(today|tomorrow|tmrw|tmr)(?: (?:at )?(.+))?$/);
+  if (m) { const c = m[2] ? clock(m[2]) : [9, 0]; if (!c) return null; return dayAt(m[1] === 'today' ? 0 : 1, c[0], c[1]); }
+  m = t.match(/^(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)[a-z]*(?: (?:at )?(.+))?$/);
+  if (m) {
+    const want = DAYS.indexOf(m[1].slice(0, 3)), c = m[2] ? clock(m[2]) : [9, 0];
+    if (!c) return null;
+    const today = new Date(sydneyTime(p.y, p.mo, p.d, 12, 0)).getUTCDay();
+    let add = (want - today + 7) % 7;
+    if (add === 0 && dayAt(0, c[0], c[1]) <= nowMs) add = 7;
+    return dayAt(add, c[0], c[1]);
+  }
+  m = t.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?: (?:at )?(.+))?$/);
+  if (m) {
+    const c = m[4] ? clock(m[4]) : [9, 0]; if (!c) return null;
+    let y = m[3] ? Number(m[3].length === 2 ? '20' + m[3] : m[3]) : p.y;
+    let at = sydneyTime(y, Number(m[2]), Number(m[1]), c[0], c[1]);
+    if (!m[3] && at < nowMs) at = sydneyTime(y + 1, Number(m[2]), Number(m[1]), c[0], c[1]);
+    return at;
+  }
+  const c = clock(t.replace(/^at /, ''));
+  if (c) { let at = dayAt(0, c[0], c[1]); if (at <= nowMs) at = dayAt(1, c[0], c[1]); return at; }
+  return null;
 }
