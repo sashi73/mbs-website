@@ -721,7 +721,7 @@ img.ilogo{display:block;width:min(320px,64vw);height:auto;background:none;color:
 /* ========== V19L ========== */
 /* Mr. Fixit's button: "NEED AN ANSWER? · ASK ME!" in a glowing ring (no text bubble) */
 .fx-tip{display:none!important}
-.fx-launch{right:44px;bottom:42px;overflow:visible;animation:fxLaunchGlow 2s ease-in-out infinite}
+.fx-launch{width:84px;height:84px;right:40px;bottom:40px;overflow:visible;animation:fxLaunchGlow 2s ease-in-out infinite}
 .fx-launch::after{display:none}
 .fx-ring{position:absolute;left:50%;top:50%;width:160%;height:160%;transform:translate(-50%,-50%);pointer-events:none;overflow:visible}
 .fx-ring-band{fill:none;stroke:rgba(10,10,10,.92);stroke-width:25}
@@ -739,7 +739,9 @@ img.ilogo{display:block;width:min(320px,64vw);height:auto;background:none;color:
   50%{box-shadow:0 10px 26px rgba(0,0,0,.5),0 0 44px 16px rgba(242,217,139,.75)}
 }
 .fx-launch:hover .fx-ring text{animation-play-state:paused}
-@media (max-width:760px){.fx-launch{right:30px;bottom:30px}}
+@media (max-width:760px){.fx-launch{width:70px;height:70px;right:32px;bottom:32px}}
+/* home page: keep the hero buttons clear of Mr. Fixit's ring */
+@media (min-width:761px){.hero .hero-in{padding-right:200px}}
 @media (prefers-reduced-motion:reduce){.fx-ring,.fx-ring text,.fx-launch{animation:none}.fx-ring{filter:drop-shadow(0 0 4px #FFF3C4) drop-shadow(0 0 16px rgba(232,192,74,.9))}.fx-launch{box-shadow:0 10px 26px rgba(0,0,0,.5),0 0 30px 10px rgba(242,217,139,.6)}}
 /* keep the footer text clear of the button and its ring */
 .fbar{padding-right:220px}

@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-25 v19l (glowing ring around Mr. Fixit instead of a bubble; glowing Mr. Fixit bubble, visitor counter, footer ABNs; best time to call asked right after the phone number; stock-phrase filter, version on alerts; natural, varied repair answers; map route starts from your current location; same name / Sydney / suburb steps for quotes and repair questions, suburb auto-picked; suburb + postcode suggestions, Google Maps link (from your current location) and QR in alerts; Mr. Fixit asks name and Sydney area first; solid white and yellow trades banner; SEO: titles, sitemap, robots, business details, 404 page; web-optimised WebP photos; owner photos in high resolution, recent jobs, 8 before & after, 59 owner photos, hero slideshow; accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3)';
+const VERSION = '2026-10-25 v19n (call-back reminder: Add to Google Calendar + .ics in alerts; ring clear of buttons and screen edges; glowing ring around Mr. Fixit instead of a bubble; glowing Mr. Fixit bubble, visitor counter, footer ABNs; best time to call asked right after the phone number; stock-phrase filter, version on alerts; natural, varied repair answers; map route starts from your current location; same name / Sydney / suburb steps for quotes and repair questions, suburb auto-picked; suburb + postcode suggestions, Google Maps link (from your current location) and QR in alerts; Mr. Fixit asks name and Sydney area first; solid white and yellow trades banner; SEO: titles, sitemap, robots, business details, 404 page; web-optimised WebP photos; owner photos in high resolution, recent jobs, 8 before & after, 59 owner photos, hero slideshow; accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3)';
 const NEEDS = [
   ['netlify/lib/store.mjs', 'nextReference'],
   ['netlify/lib/shared.mjs', 'sendTelegramPhotos'],
@@ -72,8 +72,9 @@ const NEEDS = [
   ['assets/fixit.js', 'function afterSuburb'],
   ['assets/fixit.js', 'function callLine'],
   ['netlify/lib/shared.mjs', 'export function humanise'],
-  ['index.html', 'fixit.js?v=19l'],
+  ['index.html', 'fixit.js?v=19n'],
   ['assets/fixit.js', 'fx-ring'],
+  ['netlify/lib/calendar.mjs', 'callReminder'],
   ['contact.html', 'name="best_time"'],
   ['index.html', 'data-visits'],
   ['netlify/functions/visits.mjs', 'getStore'],

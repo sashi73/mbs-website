@@ -8,6 +8,7 @@
 import { env, cors, json, clean, formatLead, sendEmail, sendTelegram, sendTelegramPhotos, escapeHtml, writeBrief } from '../lib/shared.mjs';
 import { nextReference, tradeCode, parsePhotos, savePhotos, saveInquiry } from '../lib/store.mjs';
 import { customerLocation, distanceText, qrPng } from '../lib/geo.mjs';
+import { callReminder } from '../lib/calendar.mjs';
 
 export default async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors() });
@@ -41,7 +42,13 @@ export default async (req) => {
   // If the AI is unavailable, the plain summary from the website is used instead.
   const brief = await writeBrief(lead, { photos: photos.length, source });
   const leadForTeam = { ...lead, ...(brief ? { summary: brief } : {}), ...(loc ? { suburb: loc.label } : {}) };
-  const { L, tg, html, text, legendHtml } = formatLead(leadForTeam, source, prejob, trade, photos.length, loc);
+  // Call-back reminder at the customer's best time to call (Google Calendar link + .ics file)
+  let cal = null;
+  try {
+    cal = callReminder({ prejob, name: clean(lead.name, 120), phone: clean(lead.phone, 40), suburb: loc ? loc.label : clean(lead.suburb, 80),
+      service: clean(lead.service, 120), bestTime: clean(lead.best_time, 80), summary: clean(leadForTeam.summary, 900), mapsUrl: loc ? loc.mapsUrl : '' });
+  } catch (e) { console.error('Calendar reminder skipped:', e.message); }
+  const { L, tg, html, text, legendHtml } = formatLead(leadForTeam, source, prejob, trade, photos.length, loc, cal);
 
   // Optional: attach the chat transcript to the email so the owner sees the whole conversation.
   let transcriptHtml = '';
@@ -86,6 +93,7 @@ export default async (req) => {
       replyTo: L.email || undefined,
       attachments: photos.map((p) => ({ filename: `${prejob}-${p.filename}`, content: p.base64 }))
         .concat(qr ? [{ filename: `${prejob}-directions-qr.png`, content: qr.toString('base64'), content_id: 'mapqr', content_type: 'image/png' }] : [])
+        .concat(cal ? [{ filename: `${prejob}-call-reminder.ics`, content: Buffer.from(cal.ics).toString('base64'), content_type: 'text/calendar' }] : [])
     }).then((r) => (results.email = r)).catch(() => (results.email = { ok: false }))
   );
   await Promise.all(jobs);
@@ -150,6 +158,7 @@ export default async (req) => {
   console.log(`\n[${new Date().toLocaleTimeString()}] ${prejob}  New enquiry from ${L.name || 'customer'} (${source})`);
   console.log(line('Email   ', results.email));
   console.log(line('Telegram', results.telegram));
+  if (cal) console.log(`  Reminder: ${cal.when} (Add to Google Calendar link + .ics sent)`);
   if (loc) console.log(`  Location: ${loc.label}${qr ? ', map link + QR sent (route starts from your current location)' : ''}`);
   if (photos.length) console.log(line('Photos  ', results.telegram_photos ? { ok: results.telegram_photos.ok, reason: results.telegram_photos.reason } : { ok: true }) + ` (${photos.length}, also attached to the email)`);
   if (results.customer_copy) console.log(line('Copy to customer', results.customer_copy));

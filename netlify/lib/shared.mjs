@@ -253,7 +253,7 @@ export async function writeBrief(lead, extra = {}) {
 
 // Strip any "thinking" text some models include, so customers only see the answer.
 // Removes tired stock phrases from Mr. Fixit's answers, whatever the AI writes.
-export const SITE_VERSION = 'v19l';
+export const SITE_VERSION = 'v19n';
 export function humanise(text) {
   let t = String(text || '');
   const swap = [
@@ -397,7 +397,7 @@ export const TRADE_NAMES = {
   F: 'Painting & finishes', E: 'Electrical', P: 'Plumbing', S: 'Storm damage', Q: 'Repair question', M: 'General maintenance'
 };
 
-export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0, loc = null) {
+export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0, loc = null, cal = null) {
   const L = {
     name: clean(lead.name, 120), phone: clean(lead.phone, 40), email: clean(lead.email, 160),
     suburb: clean(lead.suburb, 80), service: clean(lead.service, 120), urgency: clean(lead.urgency, 40),
@@ -411,7 +411,7 @@ export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0
     ['Trade code', trade ? `${trade} = ${TRADE_NAMES[trade] || ''}` : ''],
     ['Name', L.name], ['Phone', L.phone], ['Email', L.email], ['Suburb', loc ? loc.label : L.suburb],
     ['Distance', loc ? loc.distance : ''],
-    ['Service', L.service], ['Urgency', L.urgency], ['Best time to call', L.best_time],
+    ['Service', L.service], ['Urgency', L.urgency], ['Best time to call', L.best_time ? L.best_time + (cal ? ` (reminder: ${cal.when})` : '') : ''],
     ['Photos', photoCount ? `${photoCount} attached` : '']
   ].filter(([, v]) => v);
   // Trade code key at the bottom of every email, so staff can check the code against it
@@ -428,6 +428,7 @@ export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0
     rows.map(([k, v]) => `<b>${k}:</b> ${escapeHtml(v)}`).join('\n') +
     (L.summary ? `\n\n<b>Job brief</b>\n${escapeHtml(L.summary)}` : '') +
     (scope.length ? `\n\n<b>Job scope</b>\n` + scope.map((x) => `• ${escapeHtml(x.q)}\n   <i>${escapeHtml(x.a)}</i>`).join('\n') : '') +
+    (cal ? `\n\n📅 <a href="${escapeHtml(cal.url)}">Add call reminder to Google Calendar</a> (${escapeHtml(cal.when)})` : '') +
     (loc ? `\n\n📍 <a href="${escapeHtml(loc.mapsUrl)}">Directions in Google Maps</a> (from where you are → ${escapeHtml(loc.label)})` : '') +
     (L.phone ? `\n\nCall: ${escapeHtml(L.phone)}` : '') + `\n<i>Website ${SITE_VERSION}</i>`;
   const html =
@@ -447,6 +448,9 @@ export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0
         scope.map((x) => `<tr><td style="padding:4px 14px 4px 0;color:#666;vertical-align:top">${escapeHtml(x.q)}</td><td style="padding:4px 0"><b>${escapeHtml(x.a)}</b></td></tr>`).join('') +
         `</table>`
       : '') +
+    (cal ? `<p style="font-family:Arial,sans-serif;font-size:14px;margin:18px 0 6px"><b>Call-back reminder</b> <span style="color:#666">${escapeHtml(cal.when)} (Sydney time)</span><br><br>` +
+      `<a href="${escapeHtml(cal.url)}" style="display:inline-block;background:#D4AF37;color:#0A0A0A;padding:9px 14px;border-radius:6px;text-decoration:none;font-weight:bold">📅 Add to Google Calendar</a>` +
+      `<br><span style="color:#888;font-size:12px">Or open the attached call-reminder.ics to add it to Outlook or an iPhone calendar.</span></p>` : '') +
     (loc ? `<table style="font-family:Arial,sans-serif;font-size:14px;margin:18px 0 6px;border-collapse:collapse"><tr>` +
       `<td style="padding:0 18px 0 0;vertical-align:top"><img src="cid:mapqr" width="150" height="150" alt="QR code: directions in Google Maps" style="display:block;border:1px solid #ddd"></td>` +
       `<td style="vertical-align:top"><b>Directions</b><br><span style="color:#666">From your current location → ${escapeHtml(loc.label)}</span><br><br>` +
@@ -454,7 +458,7 @@ export function formatLead(lead, source, prejob = '', trade = '', photoCount = 0
       `<br><span style="color:#888;font-size:12px">On a computer? Scan the QR code with your phone: the route starts from wherever you are.</span></td></tr></table>` : '') +
     `<p style="font-family:Arial,sans-serif;font-size:12px;color:#888">Source: ${escapeHtml(source)} · Website ${SITE_VERSION}</p>`;
   const htmlLegend = legendHtml;
-  const text = rows.map(([k, v]) => `${k}: ${v}`).join('\n') + (loc ? `\nDirections: ${loc.mapsUrl}` : '') + (L.summary ? `\n\n${L.summary}` : '') +
+  const text = rows.map(([k, v]) => `${k}: ${v}`).join('\n') + (loc ? `\nDirections: ${loc.mapsUrl}` : '') + (cal ? `\nAdd call reminder (${cal.when}): ${cal.url}` : '') + (L.summary ? `\n\n${L.summary}` : '') +
     (scope.length ? '\n\nJob scope:\n' + scope.map((x) => `- ${x.q} ${x.a}`).join('\n') : '');
   return { L, tg, html, text, legendHtml: htmlLegend };
 }

@@ -384,12 +384,57 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     await t1.$eval('.fx-launch', e => e.click()); await t1.waitForTimeout(800);
     ok('Mr. Fixit ring', 'tapping the button opens the chat', await t1.$eval('.fx-panel', e => e.classList.contains('open')));
     await c3.close();
+
+    // nothing on any page is hidden under the ring (buttons, links, form fields), at the top of each page
+    for (const w of [390, 768, 1280, 1920]) {
+      const cw = await b.newContext({ viewport: { width: w, height: w < 500 ? 844 : 820 } }); const pw = await cw.newPage();
+      const hits = [];
+      for (const pg of PAGES) {
+        await pw.goto(`${BASE}/${pg}.html`, { waitUntil: 'networkidle' });
+        const sk = pw.locator('text=Skip intro'); if (await sk.count()) { try { await sk.first().click({ timeout: 2000 }); } catch (e) {} }
+        await pw.waitForTimeout(900);
+        const h = await pw.evaluate(() => {
+          const r = document.querySelector('.fx-ring').getBoundingClientRect(), out = [];
+          if (r.left < 2 || r.right > innerWidth - 2 || r.bottom > innerHeight - 2) out.push('ring off screen');
+          document.querySelectorAll('.hero a.btn, .hero button').forEach(e => {
+            if (e.closest('.fx-launch,.fx-panel,.trustbar,.ticker') || !e.offsetParent) return;
+            const q = e.getBoundingClientRect();
+            if (q.width && q.right > r.left + 6 && q.left < r.right - 6 && q.bottom > r.top + 6 && q.top < r.bottom - 6) out.push((e.textContent || e.name || e.tagName).trim().slice(0, 25));
+          });
+          return out;
+        });
+        h.forEach(x => hits.push(`${pg}: ${x}`));
+      }
+      ok('Mr. Fixit ring', `${w}px: the ring is fully on screen and clear of the home page buttons`, hits.length === 0, hits.slice(0, 4).join(' | '));
+      await cw.close();
+    }
     for (const w of [390, 1440]) {
       const cw = await b.newContext({ viewport: { width: w, height: 900 } }); const pw = await cw.newPage();
       await pw.goto(`${BASE}/about.html`, { waitUntil: 'networkidle' }); await pw.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await pw.waitForTimeout(800);
       const clear = await pw.evaluate(() => { const r = document.querySelector('.fx-ring').getBoundingClientRect(); return [...document.querySelectorAll('.fbar > span')].every(sp => { const q = sp.getBoundingClientRect(); return q.right <= r.left || q.left >= r.right || q.bottom <= r.top || q.top >= r.bottom; }); });
       ok('Mr. Fixit ring', `${w}px: the ring doesn't cover the footer text`, clear);
       await cw.close();
+    }
+  }
+
+
+  // 11. Call-back reminder in the alerts (Add to Google Calendar + .ics)
+  {
+    const r = await p.request.post(`${BASE}/.netlify/functions/lead`, { data: { source: 'chat', channels: ['email', 'telegram'],
+      lead: { name: 'Cal Test', phone: '0400 000 111', suburb: 'Castle Hill', postcode: '2154', lat: -33.73, lng: 151.0, service: 'Leak repair', best_time: 'This afternoon', summary: 'Calendar test' } } });
+    const j = await r.json().catch(() => ({}));
+    ok('Call reminder', 'enquiry with a best time to call goes through', r.status() === 200 || r.status() === 502, r.status());
+    if (process.env.MOCK_OUT) {
+      const fs = require('fs'), path = require('path');
+      await new Promise(res => setTimeout(res, 800));
+      const files = fs.readdirSync(process.env.MOCK_OUT).filter(f => f.endsWith('.bin')).map(f => path.join(process.env.MOCK_OUT, f));
+      const tg = files.map(f => fs.readFileSync(f, 'utf8')).find(t => t.includes('Cal Test') && t.includes('"chat_id"') && !t.includes('"media"'));
+      const em = files.map(f => fs.readFileSync(f, 'utf8')).find(t => t.includes('Cal Test') && t.includes('"subject"'));
+      ok('Call reminder', 'Telegram alert has "Add call reminder to Google Calendar" with the time', !!tg && /Add call reminder to Google Calendar<\/a> \([A-Z][a-z]{2} \d+ [A-Za-z]+ 2:00pm\)/.test(JSON.parse(tg).text) && /calendar\.google\.com\/calendar\/render\?action=TEMPLATE/.test(JSON.parse(tg).text));
+      const e = em && JSON.parse(em);
+      const ics = e && (e.attachments || []).find(a => /call-reminder\.ics$/.test(a.filename));
+      const icsText = ics ? Buffer.from(ics.content, 'base64').toString() : '';
+      ok('Call reminder', 'email has the Google Calendar button and a .ics file at 2:00pm Sydney time', !!e && /Add to Google Calendar/.test(e.html) && /BEGIN:VEVENT/.test(icsText) && /DTSTART:\d{8}T0[34]0000Z/.test(icsText) && /TRIGGER:-PT10M/.test(icsText), ics ? ics.filename : 'no ics');
     }
   }
 
