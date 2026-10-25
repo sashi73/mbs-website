@@ -1,12 +1,16 @@
 // Call-back reminder for the team: an "Add to Google Calendar" link and a calendar file (.ics),
 // at the time the customer said is best to call. All times are Sydney time.
 //
-//   Right now       -> in 15 minutes
-//   This morning    -> 9:00 am   (if it's already 9-11 am: in 15 min; after 11 am: 9:00 am tomorrow)
-//   This afternoon  -> 2:00 pm   (if it's already 2-4 pm: in 15 min; after 4 pm: 2:00 pm tomorrow)
-//   After 5pm       -> 5:30 pm   (if it's already 5:30-8 pm: in 15 min; after 8 pm: 5:30 pm tomorrow)
-//   Tomorrow        -> 9:00 am tomorrow
-//   Anytime / other -> in 30 minutes
+//   The website only offers choices that still make sense at the current Sydney time
+//   (e.g. at 5pm: This evening, Tomorrow morning, Tomorrow afternoon, Tomorrow after 5pm).
+//   Right now / Urgent      -> in 15 minutes
+//   This morning            -> 9:00 am   (already 9 am-12:30 pm: in 15 min; later: 9:00 am tomorrow)
+//   This afternoon          -> 2:00 pm   (already 2-5:30 pm: in 15 min; later: 2:00 pm tomorrow)
+//   This evening / After 5pm-> 5:30 pm   (already 5:30-8:30 pm: in 15 min; later: 5:30 pm tomorrow)
+//   Tomorrow (morning)      -> 9:00 am tomorrow
+//   Tomorrow afternoon      -> 2:00 pm tomorrow
+//   Tomorrow after 5pm      -> 5:30 pm tomorrow
+//   Anytime / other         -> in 30 minutes (between 7 am and 8 pm), otherwise 8:00 am the next morning
 
 const TZ = 'Australia/Sydney';
 const pad = (n) => String(n).padStart(2, '0');
@@ -44,12 +48,18 @@ export function callTime(bestTime, nowMs = Date.now()) {
     if (minsNow < latest) return soon(15);
     return at(1, h, mi);
   };
-  if (/right now|now|asap|urgent/.test(t)) return soon(15);
-  if (/morning/.test(t) && !/tomorrow/.test(t)) return slot(9, 0, 11 * 60);
-  if (/afternoon/.test(t) && !/tomorrow/.test(t)) return slot(14, 0, 16 * 60);
-  if (/after 5|evening|tonight|after work/.test(t)) return slot(17, 30, 20 * 60);
-  if (/tomorrow/.test(t)) return /afternoon/.test(t) ? at(1, 14, 0) : at(1, 9, 0);
-  return soon(30);
+  if (/\bnow\b|asap|urgent/.test(t)) return soon(15);
+  if (/tomorrow|tmrw/.test(t)) {
+    if (/afternoon/.test(t)) return at(1, 14, 0);
+    if (/after 5|evening|night|after work/.test(t)) return at(1, 17, 30);
+    return at(1, 9, 0);
+  }
+  // a choice picked just before its window closed still gets a call soon (30 min grace)
+  if (/morning/.test(t)) return slot(9, 0, 12 * 60 + 30);
+  if (/afternoon/.test(t)) return slot(14, 0, 17 * 60 + 30);
+  if (/after 5|evening|tonight|after work/.test(t)) return slot(17, 30, 20 * 60 + 30);
+  if (minsNow >= 7 * 60 && minsNow < 20 * 60) return soon(30);
+  return minsNow < 7 * 60 ? at(0, 8, 0) : at(1, 8, 0);
 }
 
 export function whenText(ms) {
@@ -96,7 +106,7 @@ export function parseWhen(text, nowMs = Date.now()) {
   if (!t) return null;
   let m = t.match(/^in (\d+(?:\.\d+)?) ?(m|min|mins|minutes?|h|hr|hrs|hours?|d|days?)$/);
   if (m) { const n = Number(m[1]), u = m[2][0]; return roundUp5(nowMs + n * (u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000)); }
-  if (/^(right now|now|asap|this morning|morning|this afternoon|afternoon|after 5 ?pm|this evening|evening|tonight|anytime)$/.test(t)) return callTime(t, nowMs);
+  if (/^(right now|now|asap|urgent.*|this morning|later this morning|morning|this afternoon|later this afternoon|afternoon|after 5 ?pm|this evening|evening|tonight|anytime|(tomorrow|tmrw) (morning|afternoon|evening|night|after 5 ?pm))$/.test(t)) return callTime(t, nowMs);
   const p = parts(nowMs);
   const dayAt = (offset, h, mi) => { const q = parts(sydneyTime(p.y, p.mo, p.d, 12, 0) + offset * 86400000); return sydneyTime(q.y, q.mo, q.d, h, mi); };
   const clock = (s) => {                       // "3pm", "3:30pm", "9.30am", "15:30", "9"

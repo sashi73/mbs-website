@@ -626,7 +626,27 @@
   /* ================= collecting the job ================= */
   var STEPS = ['details', 'suburb', 'urgency', 'name', 'phone', 'email', 'time', 'confirm'];
   var URGENCY_CHIPS = ['Emergency', 'This week', 'This month', 'Flexible'].map(function (u) { return { label: u, act: 'answer' }; });
-  var TIME_CHIPS = ['Right now', 'This morning', 'This afternoon', 'After 5pm', 'Tomorrow', 'Anytime'].map(function (u) { return { label: u, act: 'answer' }; });
+
+  // "Best time to call" choices that still make sense right now (Sydney time).
+  //   before 7am: Urgent, This morning, This afternoon, This evening, Anytime
+  //   7-11am:  Right now, (Later) this morning, This afternoon, This evening, Tomorrow morning, Anytime
+  //   11am-4pm: Right now, (Later) this afternoon, This evening, Tomorrow morning, Tomorrow afternoon, Anytime
+  //   4-7:30pm: Right now, This evening, Tomorrow morning, Tomorrow afternoon, Tomorrow after 5pm, Anytime
+  //   after 7:30pm: Tomorrow morning, Tomorrow afternoon, Tomorrow after 5pm, Urgent - call now
+  function callTimeChoices(now) {
+    var h = 12, m = 0;
+    try {
+      var f = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(now || new Date());
+      f.forEach(function (p) { if (p.type === 'hour') h = +p.value % 24; if (p.type === 'minute') m = +p.value; });
+    } catch (e) { var d = now || new Date(); h = d.getHours(); m = d.getMinutes(); }
+    var t = h * 60 + m;
+    if (t < 7 * 60) return ['Urgent – call now', 'This morning', 'This afternoon', 'This evening', 'Anytime'];
+    if (t < 11 * 60) return ['Right now', t >= 9 * 60 ? 'Later this morning' : 'This morning', 'This afternoon', 'This evening', 'Tomorrow morning', 'Anytime'];
+    if (t < 16 * 60) return ['Right now', t >= 14 * 60 ? 'Later this afternoon' : 'This afternoon', 'This evening', 'Tomorrow morning', 'Tomorrow afternoon', 'Anytime'];
+    if (t < 19 * 60 + 30) return ['Right now', 'This evening', 'Tomorrow morning', 'Tomorrow afternoon', 'Tomorrow after 5pm', 'Anytime'];
+    return ['Tomorrow morning', 'Tomorrow afternoon', 'Tomorrow after 5pm', 'Urgent – call now'];
+  }
+  function timeChips() { return callTimeChoices().map(function (u) { return { label: u, act: 'answer' }; }); }
 
   /* ---- suburb suggestions: type 3 letters (or a postcode) and pick "Box Hill 2765" ---- */
   var SUBURB_URL = (function () {
@@ -758,7 +778,7 @@
       case 'phone':   return say('And the best phone number for the team to call, ' + d.name.split(' ')[0] + '?', []);
       case 'email':   return say('Would you like a copy by email? Type your email, or skip.', [{ label: 'Skip', act: 'answer' }]);
       case 'time':
-        return say(['Thanks ' + d.name.split(' ')[0] + '! When’s the best time for one of our team to call you?'], TIME_CHIPS);
+        return say(['Thanks ' + d.name.split(' ')[0] + '! When’s the best time for one of our team to call you?'], timeChips());
       case 'confirm':
         S.lead = buildLead();
         return say(['Here’s what I’ll send to the team:', '__CARD__', 'All correct?'],
@@ -932,7 +952,7 @@
         if (!p) return say('Hmm, that doesn’t look like an Australian number. Could you check it? For example 0412 345 678.', []);
         d.phone = p;
         S.flow.step = 'time'; save();
-        return say('Thanks ' + firstName(d) + '! When’s the best time for one of our team to call you?', TIME_CHIPS);
+        return say('Thanks ' + firstName(d) + '! When’s the best time for one of our team to call you?', timeChips());
       case 'time':
         d.best_time = t.slice(0, 60);
         if (photoWorthy(d.question) && PHOTOS.length < MAX_PHOTOS) return askPhotos('email');
@@ -1090,7 +1110,7 @@
         if (!res.ok) throw new Error('send');
         var nPhotos = PHOTOS.length;
         S.sent = true; S.flow = null; mood('happy'); clearPhotos();
-        say(['Done! Your job' + (nPhotos ? ' and photo' + (nPhotos > 1 ? 's are' : ' is') : ' is') + ' with the MBS team, ' + S.lead.name.split(' ')[0] + '. One of our staff will call you on ' + S.lead.phone + (S.lead.best_time ? ' (' + S.lead.best_time.toLowerCase() + ')' : '') + '.' + (info.prejob ? ' Your reference number is ' + info.prejob + '.' : ''),
+        say(['Done! Your job' + (nPhotos ? ' and photo' + (nPhotos > 1 ? 's are' : ' is') : ' is') + ' with the MBS team, ' + S.lead.name.split(' ')[0] + '. One of our staff will call you on ' + S.lead.phone + (S.lead.best_time ? ' (' + S.lead.best_time.toLowerCase().replace(/^urgent – call now$/, 'as soon as possible') + ')' : '') + '.' + (info.prejob ? ' Your reference number is ' + info.prejob + '.' : ''),
              'Is there anything else I can help you with?'],
           [{ label: 'Yes', act: 'yes_more', primary: true }, { label: 'No', act: 'no_more' }],
           function () { mood('happy'); setTimeout(function () { mood(null); }, 2500); });

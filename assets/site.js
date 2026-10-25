@@ -169,6 +169,38 @@
         });
       });
 
+
+      // "Best time to call" choices that still make sense right now (Sydney time).
+      //   before 7am: Urgent, This morning, This afternoon, This evening, Anytime
+      //   7-11am:  Right now, (Later) this morning, This afternoon, This evening, Tomorrow morning, Anytime
+      //   11am-4pm: Right now, (Later) this afternoon, This evening, Tomorrow morning, Tomorrow afternoon, Anytime
+      //   4-7:30pm: Right now, This evening, Tomorrow morning, Tomorrow afternoon, Tomorrow after 5pm, Anytime
+      //   after 7:30pm: Tomorrow morning, Tomorrow afternoon, Tomorrow after 5pm, Urgent - call now
+      function callTimeChoices(now) {
+        var h = 12, m = 0;
+        try {
+          var f = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(now || new Date());
+          f.forEach(function (p) { if (p.type === 'hour') h = +p.value % 24; if (p.type === 'minute') m = +p.value; });
+        } catch (e) { var d = now || new Date(); h = d.getHours(); m = d.getMinutes(); }
+        var t = h * 60 + m;
+        if (t < 7 * 60) return ['Urgent – call now', 'This morning', 'This afternoon', 'This evening', 'Anytime'];
+        if (t < 11 * 60) return ['Right now', t >= 9 * 60 ? 'Later this morning' : 'This morning', 'This afternoon', 'This evening', 'Tomorrow morning', 'Anytime'];
+        if (t < 16 * 60) return ['Right now', t >= 14 * 60 ? 'Later this afternoon' : 'This afternoon', 'This evening', 'Tomorrow morning', 'Tomorrow afternoon', 'Anytime'];
+        if (t < 19 * 60 + 30) return ['Right now', 'This evening', 'Tomorrow morning', 'Tomorrow afternoon', 'Tomorrow after 5pm', 'Anytime'];
+        return ['Tomorrow morning', 'Tomorrow afternoon', 'Tomorrow after 5pm', 'Urgent – call now'];
+      }
+
+      // fill the "Best time to call" list for the time it is now (refreshed whenever it's opened)
+      var timeSel = form.querySelector('select[name=best_time]');
+      var fillTimes = function () {
+        if (!timeSel) return;
+        var keep = timeSel.value, list = callTimeChoices();
+        timeSel.innerHTML = '<option value="">Choose a time</option>' + list.map(function (x) { return '<option>' + x + '</option>'; }).join('');
+        if (list.indexOf(keep) >= 0) timeSel.value = keep;
+      };
+      fillTimes();
+      if (timeSel) { timeSel.addEventListener('focus', fillTimes); timeSel.addEventListener('mousedown', fillTimes); }
+
       // Suburb suggestions: type 3 letters, pick "Box Hill 2765" (list loads the first time the box is used)
       var subIn = form.querySelector('[data-suburb]'), subList = document.getElementById('suburb-list'), SUBS = null;
       if (subIn && subList) {

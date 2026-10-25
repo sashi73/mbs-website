@@ -1,2 +1,2 @@
-MBS website v20b (2026-10-25)
-Telegram job tracker in the Mr.FixitB channel (PW → W → JW, reminders, reports with GST, photos) on Netlify Blobs. Call-back reminders, glowing Mr. Fixit ring, visitor counter, footer ABNs.
+MBS website v20c (2026-10-25)
+Best-time-to-call choices now follow the Sydney clock (e.g. at 5pm: This evening, Tomorrow morning, Tomorrow afternoon, Tomorrow after 5pm). Telegram job tracker in Mr.FixitB on Netlify Blobs, call-back reminders, glowing Mr. Fixit ring, visitor counter.

@@ -1,4 +1,4 @@
-// Telegram job tracker test (42 checks), run in the site folder:  npm install  then  node tools/bot-test.mjs
+// Telegram job tracker test (48 checks), run in the site folder:  npm install  then  node tools/bot-test.mjs
 // Tests the Telegram job tracker exactly as Netlify runs it: the real function files, Netlify Blobs (official
 // local Blobs server), and a stand-in Telegram + email server that records every message the bot sends.
 import http from 'node:http';
@@ -118,6 +118,7 @@ await say('/lost 2 went with another builder'); ok('Jobs', '/lost records the re
 // 6. reminders
 await say('/remind 1 tomorrow 9am check the paint has cured'); ok('Reminders', '/remind with a job and a time', /Reminder #\d+ set for <b>\w{3} \d+ \w+ 9:00am<\/b>/.test(lastMsg().text || ''), lastMsg().text);
 await say('/remind in 2h order tiles'); ok('Reminders', '/remind without a job', /order tiles/.test(lastMsg().text || ''));
+await say('/remind 1 tomorrow afternoon call about colours'); ok('Reminders', '/remind understands "tomorrow afternoon" (2:00pm)', /set for <b>\w{3} \d+ \w+ 2:00pm<\/b>/.test(lastMsg().text || '') && /call about colours/.test(lastMsg().text || ''), lastMsg().text);
 await say('/reminders'); const rl = lastMsg().text || ''; ok('Reminders', '/reminders lists them', /order tiles/.test(rl) && /check the paint/.test(rl));
 const id = Number((rl.match(/#(\d+) · [^\n]*order tiles/) || [])[1]);
 await say('/unremind ' + id); ok('Reminders', '/unremind deletes one', /deleted/.test(lastMsg().text || ''));

@@ -1,14 +1,6 @@
-// MBS website: automated end-to-end test (90+ checks: SEO, pages, links, images, phone/tablet/desktop layouts,
-// project filters, galleries, before & after sliders, Mr. Fixit, contact form, private files blocked).
-// How to run (on your PC, in the site folder, with the site running via start-windows.bat):
-//   npm install --no-save playwright
-//   npx playwright install chromium
-//   node tools/site-test.js                      (tests http://127.0.0.1:8888)
-//   set SITE_URL=https://your-site & node tools/site-test.js    (tests another address)
-// Note: the contact-form test sends one real test enquiry named "Automated Test" when your keys are set.
-
+// MBS website v19-v20c: automated end-to-end test pass (Playwright, headless Chromium)
 const { chromium } = require('playwright');
-const BASE = (process.env.SITE_URL || 'http://127.0.0.1:8888').replace(/\/$/, '');
+const BASE = 'http://127.0.0.1:8888';
 const PAGES = ['index', 'services', 'projects', 'about', 'contact'];
 const WIDTHS = [360, 390, 768, 1024, 1440, 1920];
 const results = [];
@@ -176,7 +168,8 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
   await c.fill('textarea[name=details]', 'Automated test enquiry, please ignore.');
   await c.click('form.quote button[type=submit]'); await c.waitForTimeout(300);
   ok('Contact', 'form asks for the best time to call', /Please choose the best time for us to call you/.test(await c.$eval('form.quote', f => f.textContent)));
-  await c.selectOption('select[name=best_time]', 'This afternoon');
+  const firstTime = await c.$eval('select[name=best_time]', s => s.options[1].value);
+  await c.selectOption('select[name=best_time]', firstTime);
   await c.click('form.quote button[type=submit]'); await c.waitForTimeout(4000);
   const state = await c.evaluate(() => ({ thanks: getComputedStyle(document.querySelector('.thanks') || document.body).display === 'flex', text: document.body.innerText }));
   ok('Contact', 'a filled form is sent (thank-you + reference) or shows the friendly "call us" message', state.thanks || /didn.t send/.test(state.text),
@@ -217,8 +210,10 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
 
 
   // 7. Mr. Fixit: name + Sydney check before anything goes to the team
-  const chatPage = async () => {
-    const cx = await b.newContext({ viewport: { width: 1280, height: 900 } }); const q = await cx.newPage(); watch(q, 'chat');
+  const chatPage = async (fixedTime) => {
+    const cx = await b.newContext({ viewport: { width: 1280, height: 900 } });
+    if (fixedTime) await cx.clock.setFixedTime(new Date(fixedTime));
+    const q = await cx.newPage(); watch(q, 'chat');
     await q.goto(`${BASE}/projects.html`, { waitUntil: 'networkidle' });
     await q.$eval('.fx-launch', e => e.click()); await q.waitForTimeout(2200);
     return { cx, q };
@@ -315,8 +310,9 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
 
 
   // 9. Repair question -> "send it to the team": same steps as a quote (name, Sydney, suburb), no Cancel buttons
+  //    (run at 5:02pm Sydney time to check the call-time choices follow the clock)
   {
-    const { cx, q } = await chatPage();
+    const { cx, q } = await chatPage('2026-10-25T17:02:00+11:00');
     const seen = [];
     const note = async () => seen.push(...(await chipList(q)));
     await tap(q, 'Ask a repair question'); await q.waitForTimeout(1200);
@@ -334,8 +330,10 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     const t5 = await chatText(q);
     ok('Repair question', 'suburb is picked automatically when only one matches ("castle h" -> Castle Hill 2154)', /Castle Hill 2154/.test(t5) && /best phone number to reach you, Alex\?/.test(t5));
     await type(q, '0412 345 678'); await note();
-    ok('Repair question', 'best time question right after the phone number', /When.s the best time for one of our team to call you\?/.test((await chatText(q)).split('0412 345 678').pop()) && (await chipList(q)).includes('This afternoon'), (await chipList(q)).join(' | '));
-    await tap(q, 'This afternoon'); await note();
+    ok('Repair question', 'best time question right after the phone number', /When.s the best time for one of our team to call you\?/.test((await chatText(q)).split('0412 345 678').pop()) && (await chipList(q)).includes('This evening'), (await chipList(q)).join(' | '));
+    ok('Call times', 'chat at 5:02pm offers This evening / Tomorrow morning / Tomorrow afternoon / Tomorrow after 5pm (no "this morning" or "this afternoon")',
+      (await chipList(q)).join('|') === 'Right now|This evening|Tomorrow morning|Tomorrow afternoon|Tomorrow after 5pm|Anytime', (await chipList(q)).join(' | '));
+    await tap(q, 'This evening'); await note();
     for (let i = 0; i < 4; i++) {
       const cs = await chipList(q);
       const c = cs.find(x => /^(No photo, continue|Skip|No thanks)$/.test(x));
@@ -418,6 +416,34 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
   }
 
 
+  // 10b. Call-time choices follow the Sydney clock (contact form uses the same rules as the chat)
+  {
+    const want = {
+      '06:15': 'Urgent – call now|This morning|This afternoon|This evening|Anytime',
+      '08:30': 'Right now|This morning|This afternoon|This evening|Tomorrow morning|Anytime',
+      '10:00': 'Right now|Later this morning|This afternoon|This evening|Tomorrow morning|Anytime',
+      '12:30': 'Right now|This afternoon|This evening|Tomorrow morning|Tomorrow afternoon|Anytime',
+      '15:00': 'Right now|Later this afternoon|This evening|Tomorrow morning|Tomorrow afternoon|Anytime',
+      '17:00': 'Right now|This evening|Tomorrow morning|Tomorrow afternoon|Tomorrow after 5pm|Anytime',
+      '21:00': 'Tomorrow morning|Tomorrow afternoon|Tomorrow after 5pm|Urgent – call now'
+    };
+    for (const [hm, list] of Object.entries(want)) {
+      const cx = await b.newContext(); await cx.clock.setFixedTime(new Date(`2026-10-25T${hm}:00+11:00`));
+      const pg = await cx.newPage(); watch(pg, 'contact');
+      await pg.goto(`${BASE}/contact.html`, { waitUntil: 'networkidle' });
+      const got = (await pg.$$eval('select[name=best_time] option', o => o.map(x => x.value).filter(Boolean))).join('|');
+      ok('Call times', `contact form at ${hm} Sydney time offers the right choices`, got === list, got);
+      await cx.close();
+    }
+    // a visitor whose device is in another time zone still gets Sydney-time choices
+    const cx = await b.newContext({ timezoneId: 'Europe/London' }); await cx.clock.setFixedTime(new Date('2026-10-25T17:00:00+11:00'));
+    const pg = await cx.newPage(); watch(pg, 'contact');
+    await pg.goto(`${BASE}/contact.html`, { waitUntil: 'networkidle' });
+    const got = (await pg.$$eval('select[name=best_time] option', o => o.map(x => x.value).filter(Boolean))).join('|');
+    ok('Call times', 'a visitor overseas (London device clock) still gets Sydney-time choices', got === want['17:00'], got);
+    await cx.close();
+  }
+
   // 11. Call-back reminder in the alerts (Add to Google Calendar + .ics)
   {
     const r = await p.request.post(`${BASE}/.netlify/functions/lead`, { data: { source: 'chat', channels: ['email', 'telegram'],
@@ -444,5 +470,5 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
   const pass = results.filter(r => r.pass).length;
   for (const r of results) console.log(`${r.pass ? 'PASS' : 'FAIL'}  [${r.area}] ${r.name}${r.detail !== '' ? '  (' + r.detail + ')' : ''}`);
   console.log(`\n${pass}/${results.length} passed`);
-  require('fs').writeFileSync('site-test-results.json', JSON.stringify(results, null, 1));
+  require('fs').writeFileSync('e2e19.json', JSON.stringify(results, null, 1));
 })();
