@@ -1,2 +1,2 @@
-MBS website v19i (2026-10-25)
-Route in alerts starts from your current location. Mr. Fixit answers without stock phrases.
+MBS website v19l (2026-10-25)
+Glowing "Need an answer? Ask me!" ring around Mr. Fixit, visitor counter, footer ABNs, best time to call after the phone number.

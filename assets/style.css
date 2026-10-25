@@ -696,3 +696,52 @@ img.ilogo{display:block;width:min(320px,64vw);height:auto;background:none;color:
 .ticker b{color:#FFFFFF}
 .ticker .out{color:#E8C04A;-webkit-text-stroke:0}
 /* ========== /V19 PHOTOS ========== */
+
+/* ========== V19K ========== */
+/* Mr. Fixit's bubble: glowing gold border to catch the eye */
+.fx-tip{border:2px solid #E8C04A;padding-right:30px}
+.fx-tip.show{animation:fxTipGlow 2.2s ease-in-out infinite}
+@keyframes fxTipGlow{
+  0%,100%{box-shadow:0 12px 30px rgba(0,0,0,.45),0 0 0 0 rgba(232,192,74,0)}
+  50%{box-shadow:0 12px 30px rgba(0,0,0,.45),0 0 22px 6px rgba(242,217,139,.85)}
+}
+@media (prefers-reduced-motion:reduce){.fx-tip.show{animation:none;box-shadow:0 12px 30px rgba(0,0,0,.45),0 0 16px 4px rgba(242,217,139,.7)}}
+.fx-tip-x{position:absolute;top:4px;right:6px;width:22px;height:22px;border:0;border-radius:50%;background:transparent;color:#8A6A1F;font-size:17px;line-height:1;cursor:pointer;padding:0}
+.fx-tip-x:hover{background:rgba(138,106,31,.12)}
+/* footer: credit line and the small visitor counter */
+.fbar .fbar-credit{opacity:.85}
+.fbar .visits{font-size:11px;opacity:.75;white-space:nowrap}
+.fbar .visits b{font-weight:700;color:var(--gold-hi,#F2D98B)}
+/* keep the footer clear of Mr. Fixit's button, and fade the bubble while the footer is on screen */
+.fbar{padding-right:170px}
+.fx-tip.show.away{opacity:0;pointer-events:none}
+@media (max-width:760px){.fbar{padding-right:24px;padding-bottom:120px}}
+/* ========== /V19K ========== */
+
+/* ========== V19L ========== */
+/* Mr. Fixit's button: "NEED AN ANSWER? · ASK ME!" in a glowing ring (no text bubble) */
+.fx-tip{display:none!important}
+.fx-launch{right:44px;bottom:42px;overflow:visible;animation:fxLaunchGlow 2s ease-in-out infinite}
+.fx-launch::after{display:none}
+.fx-ring{position:absolute;left:50%;top:50%;width:160%;height:160%;transform:translate(-50%,-50%);pointer-events:none;overflow:visible}
+.fx-ring-band{fill:none;stroke:rgba(10,10,10,.92);stroke-width:25}
+.fx-ring text{fill:#FFE7A3;font-family:'Archivo',sans-serif;font-weight:900;font-size:11.5px;letter-spacing:.6px}
+.fx-ring-rim{fill:none;stroke:#E8C04A;stroke-width:1.8}
+.fx-ring{animation:fxRingGlow 2s ease-in-out infinite}
+.fx-ring text{transform-origin:80px 80px;animation:fxRingSpin 22s linear infinite}
+@keyframes fxRingSpin{to{transform:rotate(360deg)}}
+@keyframes fxRingGlow{
+  0%,100%{filter:drop-shadow(0 0 3px rgba(255,231,163,.9)) drop-shadow(0 0 10px rgba(232,192,74,.65))}
+  50%{filter:drop-shadow(0 0 5px #FFF3C4) drop-shadow(0 0 20px rgba(232,192,74,1)) drop-shadow(0 0 38px rgba(232,192,74,.7))}
+}
+@keyframes fxLaunchGlow{
+  0%,100%{box-shadow:0 10px 26px rgba(0,0,0,.5),0 0 18px 4px rgba(242,217,139,.35)}
+  50%{box-shadow:0 10px 26px rgba(0,0,0,.5),0 0 44px 16px rgba(242,217,139,.75)}
+}
+.fx-launch:hover .fx-ring text{animation-play-state:paused}
+@media (max-width:760px){.fx-launch{right:30px;bottom:30px}}
+@media (prefers-reduced-motion:reduce){.fx-ring,.fx-ring text,.fx-launch{animation:none}.fx-ring{filter:drop-shadow(0 0 4px #FFF3C4) drop-shadow(0 0 16px rgba(232,192,74,.9))}.fx-launch{box-shadow:0 10px 26px rgba(0,0,0,.5),0 0 30px 10px rgba(242,217,139,.6)}}
+/* keep the footer text clear of the button and its ring */
+.fbar{padding-right:220px}
+@media (max-width:760px){.fbar{padding-right:24px;padding-bottom:170px}}
+/* ========== /V19L ========== */

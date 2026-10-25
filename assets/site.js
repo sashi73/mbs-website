@@ -200,6 +200,7 @@
         if (!get('name')) return showErr('Please add your name.');
         var digits = get('phone').replace(/[^\d]/g, '');
         if (digits.length < 8) return showErr('Please add a phone number so we can call you back.');
+        if (!get('best_time')) return showErr('Please choose the best time for us to call you.');
 
         var btn = form.querySelector('button[type=submit]');
         if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
@@ -215,7 +216,7 @@
             lead: {
               name: get('name'), phone: get('phone'), suburb: suburbFields(get('suburb')).suburb,
               postcode: suburbFields(get('suburb')).postcode || '', lat: suburbFields(get('suburb')).lat, lng: suburbFields(get('suburb')).lng,
-              service: get('service'), summary: get('details'), details: get('details')
+              service: get('service'), best_time: get('best_time'), summary: get('details'), details: get('details')
             }
           })
         }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok && j.ok, ref: j.prejob_no || '' }; }); })
@@ -335,4 +336,25 @@
   if (document.readyState === 'complete') setTimeout(sectorFromHash, 0);
   else window.addEventListener('load', function () { setTimeout(sectorFromHash, 0); });
   window.addEventListener('hashchange', sectorFromHash);
+})();
+
+/* Visitor counter (small, at the bottom of every page): counts each visitor once a day */
+(function () {
+  var spots = document.querySelectorAll('[data-visits]');
+  if (!spots.length || !window.fetch) return;
+  var day = new Date().toISOString().slice(0, 10), seen = '';
+  try { seen = localStorage.getItem('mbs-visit-day') || ''; } catch (e) {}
+  var add = seen !== day;
+  fetch('/.netlify/functions/visits', { method: add ? 'POST' : 'GET' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      if (!j || typeof j.total !== 'number') return;
+      if (add) { try { localStorage.setItem('mbs-visit-day', day); } catch (e) {} }
+      Array.prototype.forEach.call(spots, function (n) {
+        n.querySelector('b').textContent = j.total.toLocaleString('en-AU');
+        n.lastChild.textContent = j.total === 1 ? ' visitor' : ' visitors';
+        n.hidden = false;
+      });
+    })
+    .catch(function () {});
 })();

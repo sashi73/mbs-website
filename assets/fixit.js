@@ -28,7 +28,7 @@
   function savePhotos() { try { sessionStorage.setItem(PHOTO_STORE, JSON.stringify(PHOTOS)); } catch (e) {} }
   function clearPhotos() { PHOTOS = []; try { sessionStorage.removeItem(PHOTO_STORE); } catch (e) {} }
   function save() {
-    try { sessionStorage.setItem(STORE, JSON.stringify({ log: S.log, chips: S.chips, flow: S.flow, lead: S.lead, sent: S.sent, greeted: S.greeted, mode: S.mode, lastQ: S.lastQ })); } catch (e) {}
+    try { sessionStorage.setItem(STORE, JSON.stringify({ log: S.log, chips: S.chips, flow: S.flow, lead: S.lead, sent: S.sent, greeted: S.greeted, mode: S.mode, lastQ: S.lastQ, tipClosed: S.tipClosed })); } catch (e) {}
   }
 
   /* ================= Mr. Fixit artwork ================= */
@@ -80,8 +80,13 @@
   }
 
   /* ================= UI ================= */
-  var launcher = el('button', { type: 'button', class: 'fx-launch', 'aria-label': 'Chat with Mr. Fixit', 'aria-expanded': 'false', html: fixitSVG('fx-art') });
-  var tip = el('div', { class: 'fx-tip', role: 'status' }, [el('b', { text: 'Mr. Fixit' }), ' Need a fix? Ask me!']);
+  // the round button, with "NEED AN ANSWER? · ASK ME!" glowing in a ring around it
+  var launcher = el('button', { type: 'button', class: 'fx-launch', 'aria-label': 'Need an answer? Ask Mr. Fixit', 'aria-expanded': 'false',
+    html: fixitSVG('fx-art') + '<svg class="fx-ring" viewBox="0 0 160 160" aria-hidden="true" focusable="false"><defs><path id="fxRingPath" d="M80,80 m-64,0 a64,64 0 1,1 128,0 a64,64 0 1,1 -128,0"/></defs><circle class="fx-ring-band" cx="80" cy="80" r="62"/><circle class="fx-ring-rim" cx="80" cy="80" r="75"/><text><textPath href="#fxRingPath" textLength="398" lengthAdjust="spacing">NEED AN ANSWER? · ASK ME! · NEED AN ANSWER? · ASK ME! ·</textPath></text></svg>' });
+  var tip = el('div', { class: 'fx-tip', role: 'status' }, [el('b', { text: 'Mr. Fixit' }), 'Need an answer? Ask me!',
+    el('button', { type: 'button', class: 'fx-tip-x', 'aria-label': 'Hide this message', text: '×', onclick: function (e) {
+      e.stopPropagation(); tip.classList.remove('show'); S.tipClosed = true; save();
+    } })]);
   var list = el('div', { class: 'fx-list', 'aria-live': 'polite' });
   var chipsBox = el('div', { class: 'fx-chips' });
   var input = el('textarea', { class: 'fx-input', rows: '1', placeholder: 'Type your question…', 'aria-label': 'Your message to Mr. Fixit', maxlength: '1000' });
@@ -302,7 +307,6 @@
     el('div', { class: 'fx-foot' }, ['Prefer to talk? ', el('a', { href: KB.tel, text: 'Call ' + KB.phone })])
   ]);
 
-  document.body.appendChild(tip);
   document.body.appendChild(launcher);
   document.body.appendChild(panel);
 
@@ -622,7 +626,7 @@
   /* ================= collecting the job ================= */
   var STEPS = ['details', 'suburb', 'urgency', 'name', 'phone', 'email', 'time', 'confirm'];
   var URGENCY_CHIPS = ['Emergency', 'This week', 'This month', 'Flexible'].map(function (u) { return { label: u, act: 'answer' }; });
-  var TIME_CHIPS = ['Right now', 'This morning', 'This afternoon', 'After 5pm', 'Tomorrow'].map(function (u) { return { label: u, act: 'answer' }; });
+  var TIME_CHIPS = ['Right now', 'This morning', 'This afternoon', 'After 5pm', 'Tomorrow', 'Anytime'].map(function (u) { return { label: u, act: 'answer' }; });
 
   /* ---- suburb suggestions: type 3 letters (or a postcode) and pick "Box Hill 2765" ---- */
   var SUBURB_URL = (function () {
@@ -754,7 +758,7 @@
       case 'phone':   return say('And the best phone number for the team to call, ' + d.name.split(' ')[0] + '?', []);
       case 'email':   return say('Would you like a copy by email? Type your email, or skip.', [{ label: 'Skip', act: 'answer' }]);
       case 'time':
-        return say(['Thanks ' + d.name.split(' ')[0] + '! I’ll get one of our staff to call you straight away.', 'What time works best for you?'], TIME_CHIPS);
+        return say(['Thanks ' + d.name.split(' ')[0] + '! When’s the best time for one of our team to call you?'], TIME_CHIPS);
       case 'confirm':
         S.lead = buildLead();
         return say(['Here’s what I’ll send to the team:', '__CARD__', 'All correct?'],
@@ -927,8 +931,12 @@
         var p = phoneOk(t);
         if (!p) return say('Hmm, that doesn’t look like an Australian number. Could you check it? For example 0412 345 678.', []);
         d.phone = p;
+        S.flow.step = 'time'; save();
+        return say('Thanks ' + firstName(d) + '! When’s the best time for one of our team to call you?', TIME_CHIPS);
+      case 'time':
+        d.best_time = t.slice(0, 60);
         if (photoWorthy(d.question) && PHOTOS.length < MAX_PHOTOS) return askPhotos('email');
-        S.flow.step = 'email';
+        S.flow.step = 'email'; save();
         return say('And your email address?', [{ label: 'Skip', act: 'answer' }]);
       case 'photos':
         if (/^(no|nah|nope|skip|done|continue|no thanks|that'?s it)/i.test(t)) return photoDone();
@@ -952,8 +960,8 @@
     var q = d.question ? '“' + d.question + '”' : 'a repair question';
     S.lead = { name: d.name, phone: d.phone, email: d.email || '', suburb: d.suburb || '', postcode: d.postcode || '',
       lat: d.lat === undefined ? '' : d.lat, lng: d.lng === undefined ? '' : d.lng, service: 'Repair question (Ask Mr. Fixit)',
-      details: d.question || '', urgency: '', best_time: '',
-      summary: d.name + (d.suburb ? ' in ' + d.suburb + (d.postcode ? ' ' + d.postcode : '') : '') + ' asked Mr. Fixit ' + q + ' and would like the team to follow up.' + (d.copy ? ' Customer asked for a copy of the conversation.' : '') };
+      details: d.question || '', urgency: '', best_time: d.best_time || '',
+      summary: d.name + (d.suburb ? ' in ' + d.suburb + (d.postcode ? ' ' + d.postcode : '') : '') + ' asked Mr. Fixit ' + q + ' and would like the team to follow up.' + (d.best_time ? ' Best time to call: ' + d.best_time + '.' : '') + (d.copy ? ' Customer asked for a copy of the conversation.' : '') };
     S.busy = true; S.chips = []; mood('thinking'); render();
     var info = { status: 0, reasons: null, saved: false };
     fetch(API + '/lead', {
@@ -1032,12 +1040,12 @@
       case 'phone':
         var p = phoneOk(t);
         if (!p) return say('Hmm, that doesn’t look like an Australian number. Could you check it? For example 0412 345 678.', []);
-        d.phone = p; return ask('email');
+        d.phone = p; return ask('time');
       case 'email':
-        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) { d.email = t.toLowerCase(); return ask('time'); }
-        if (/^(skip|no|nah|none|no thanks|nope)\.?$/i.test(t)) { d.email = ''; return ask('time'); }
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) { d.email = t.toLowerCase(); return ask('confirm'); }
+        if (/^(skip|no|nah|none|no thanks|nope)\.?$/i.test(t)) { d.email = ''; return ask('confirm'); }
         return say('That email doesn’t look quite right. Try again, or tap Skip.', [{ label: 'Skip', act: 'answer' }]);
-      case 'time': d.best_time = t.slice(0, 60); return ask('confirm');
+      case 'time': d.best_time = t.slice(0, 60); return ask('email');
       case 'confirm':
         if (/^y|send|correct|right|ok/i.test(t)) return sendLead();
         return ask('confirm');
@@ -1323,13 +1331,16 @@
 
   // Friendly nudge once per visit, after the intro has finished
   function nudge() {
-    if (S.greeted || S.open) return;
+    if (S.greeted || S.open || S.tipClosed) return;
     if (document.getElementById('intro')) return setTimeout(nudge, 1500);
     setTimeout(function () {
-      if (S.open || S.greeted) return;
-      tip.classList.add('show');
-      setTimeout(function () { tip.classList.remove('show'); }, 7000);
+      if (S.open || S.greeted || S.tipClosed) return;
+      tip.classList.add('show');          // stays (glowing) until they open the chat or close the bubble
     }, 2500);
+    // fade it out while the footer is on screen, so it never covers the footer text
+    var fb = document.querySelector('.fbar');
+    if (fb && window.IntersectionObserver) new IntersectionObserver(function (es) {
+      tip.classList.toggle('away', es[0].isIntersecting);
+    }).observe(fb);
   }
-  nudge();
 })();

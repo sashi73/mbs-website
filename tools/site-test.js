@@ -174,6 +174,9 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
   ok('Contact', 'empty form is stopped with "Please add your name."', /Please add your name/.test(msg));
   await c.fill('input[name=name]', 'Automated Test'); await c.fill('input[name=phone]', '0400 000 000');
   await c.fill('textarea[name=details]', 'Automated test enquiry, please ignore.');
+  await c.click('form.quote button[type=submit]'); await c.waitForTimeout(300);
+  ok('Contact', 'form asks for the best time to call', /Please choose the best time for us to call you/.test(await c.$eval('form.quote', f => f.textContent)));
+  await c.selectOption('select[name=best_time]', 'This afternoon');
   await c.click('form.quote button[type=submit]'); await c.waitForTimeout(4000);
   const state = await c.evaluate(() => ({ thanks: getComputedStyle(document.querySelector('.thanks') || document.body).display === 'flex', text: document.body.innerText }));
   ok('Contact', 'a filled form is sent (thank-you + reference) or shows the friendly "call us" message', state.thanks || /didn.t send/.test(state.text),
@@ -259,6 +262,11 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     if ((await chipList(q)).includes('This week')) await tap(q, 'This week');
     const t4 = await chatText(q);
     ok('Chat area check', 'name is not asked twice (goes straight to the phone number)', /best phone number for the team to call, Jane\?/.test(t4) && (t4.match(/what.s your name\?/gi) || []).length === 1);
+    await type(q, '0412 345 678');
+    const t4b = (await chatText(q)).split('0412 345 678').pop();
+    ok('Chat area check', 'quote: best time question right after the phone number (before email)', /When.s the best time for one of our team to call you\?/.test(t4b) && !/email/i.test(t4b) && (await chipList(q)).includes('Anytime'), (await chipList(q)).join(' | '));
+    await tap(q, 'Anytime');
+    ok('Chat area check', 'quote: then asks for an email copy', /copy by email/i.test((await chatText(q)).split('Anytime').pop()));
     await cx.close();
   }
   {
@@ -326,6 +334,8 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     const t5 = await chatText(q);
     ok('Repair question', 'suburb is picked automatically when only one matches ("castle h" -> Castle Hill 2154)', /Castle Hill 2154/.test(t5) && /best phone number to reach you, Alex\?/.test(t5));
     await type(q, '0412 345 678'); await note();
+    ok('Repair question', 'best time question right after the phone number', /When.s the best time for one of our team to call you\?/.test((await chatText(q)).split('0412 345 678').pop()) && (await chipList(q)).includes('This afternoon'), (await chipList(q)).join(' | '));
+    await tap(q, 'This afternoon'); await note();
     for (let i = 0; i < 4; i++) {
       const cs = await chipList(q);
       const c = cs.find(x => /^(No photo, continue|Skip|No thanks)$/.test(x));
@@ -343,6 +353,44 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     await tap(q, 'Get a free quote');
     ok('Chat area check', 'quote steps have no Cancel button', !(await chipList(q)).includes('Cancel'));
     await cx.close();
+  }
+
+
+  // 10. Footer, visitor counter, Mr. Fixit's glowing bubble
+  {
+    let bad = [];
+    for (const pg of PAGES) {
+      const t = await (await p.request.get(`${BASE}/${pg}.html`)).text();
+      if (!/Builder Licence 267071C · ABN 50 159 309 181/.test(t) || !/Designed by © Sashi Kumar Sivam · GKH AI Powered Business Intelligence © · ABN 38 107 769 345/.test(t) || !/tel:0493431202/.test(t)) bad.push(pg);
+    }
+    ok('Footer', 'every page: licence + MBS ABN, then the GKH credit with ABN and phone', bad.length === 0, bad.join(', '));
+    const visitsOf = async (pg) => { await pg.waitForFunction(() => { const v = document.querySelector('[data-visits]'); return v && !v.hidden; }, null, { timeout: 8000 }).catch(() => {}); return pg.$eval('[data-visits]', v => v.hidden ? null : Number(v.querySelector('b').textContent.replace(/,/g, ''))); };
+    const c1 = await b.newContext(); const v1 = await c1.newPage(); await v1.goto(`${BASE}/about.html`, { waitUntil: 'networkidle' });
+    const n1 = await visitsOf(v1);
+    ok('Visitor counter', 'small visitor count shows at the bottom of the page', typeof n1 === 'number' && n1 > 0, n1);
+    await v1.reload({ waitUntil: 'networkidle' }); const n2 = await visitsOf(v1);
+    ok('Visitor counter', 'the same visitor reloading is not counted twice', n2 === n1, `${n1} -> ${n2}`);
+    const c2 = await b.newContext(); const v2 = await c2.newPage(); await v2.goto(`${BASE}/services.html`, { waitUntil: 'networkidle' });
+    const n3 = await visitsOf(v2);
+    ok('Visitor counter', 'a new visitor adds one', n3 === n2 + 1, `${n2} -> ${n3}`);
+    await c1.close(); await c2.close();
+    const c3 = await b.newContext({ viewport: { width: 1280, height: 900 } }); const t1 = await c3.newPage(); watch(t1, 'ring');
+    await t1.goto(`${BASE}/projects.html`, { waitUntil: 'networkidle' }); await t1.waitForTimeout(2500);
+    const ring = await t1.$eval('.fx-launch .fx-ring', e => { const r = e.getBoundingClientRect(); return { text: e.textContent, glow: getComputedStyle(e).animationName, inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight }; }).catch(() => null);
+    ok('Mr. Fixit ring', '"Need an answer? Ask me!" wraps around the button and glows', ring && /NEED AN ANSWER\? · ASK ME!/.test(ring.text) && ring.glow === 'fxRingGlow', ring && ring.glow);
+    ok('Mr. Fixit ring', 'the ring is fully on screen (not cut off at the edge)', ring && ring.inside);
+    const bubble = await t1.$('.fx-tip'); const shown = bubble ? await bubble.isVisible() : false;
+    ok('Mr. Fixit ring', 'no text bubble any more', !shown);
+    await t1.$eval('.fx-launch', e => e.click()); await t1.waitForTimeout(800);
+    ok('Mr. Fixit ring', 'tapping the button opens the chat', await t1.$eval('.fx-panel', e => e.classList.contains('open')));
+    await c3.close();
+    for (const w of [390, 1440]) {
+      const cw = await b.newContext({ viewport: { width: w, height: 900 } }); const pw = await cw.newPage();
+      await pw.goto(`${BASE}/about.html`, { waitUntil: 'networkidle' }); await pw.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await pw.waitForTimeout(800);
+      const clear = await pw.evaluate(() => { const r = document.querySelector('.fx-ring').getBoundingClientRect(); return [...document.querySelectorAll('.fbar > span')].every(sp => { const q = sp.getBoundingClientRect(); return q.right <= r.left || q.left >= r.right || q.bottom <= r.top || q.top >= r.bottom; }); });
+      ok('Mr. Fixit ring', `${w}px: the ring doesn't cover the footer text`, clear);
+      await cw.close();
+    }
   }
 
   ok('Smoke', 'no JavaScript errors on any page', errors.length === 0, errors.slice(0, 5).join(' || '));
