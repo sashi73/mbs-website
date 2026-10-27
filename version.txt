@@ -1,2 +1,2 @@
-MBS website v20c (2026-10-25)
-Best-time-to-call choices now follow the Sydney clock (e.g. at 5pm: This evening, Tomorrow morning, Tomorrow afternoon, Tomorrow after 5pm). Telegram job tracker in Mr.FixitB on Netlify Blobs, call-back reminders, glowing Mr. Fixit ring, visitor counter.
+MBS website v20d (2026-10-27)
+Landing page: top bar now reads "Remedial, Waterproofing and Construction · Call 0420 494 990"; Everything we do columns reordered (Remedial, waterproofing & renovation / Painting, tiling & outdoor / Construction & project management). Includes v20c call-time choices and the Telegram job tracker.
