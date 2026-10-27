@@ -98,7 +98,7 @@ async function sendPhotos(chat, files, caption) {
 
 // ---------- who may use the bot ----------
 export function allowedIds() {
-  return new Set([env('TELEGRAM_CHAT_ID'), ...env('TELEGRAM_ALLOWED_IDS').split(',')].map((s) => String(s).trim()).filter(Boolean));
+  return new Set([env('TELEGRAM_CHAT_ID'), ...env('TELEGRAM_ALLOWED_IDS').split(','), ...env('TELEGRAM_ALERT_IDS').split(',')].map((s) => String(s).trim()).filter(Boolean));
 }
 
 // ---------- formatting ----------

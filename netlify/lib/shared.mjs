@@ -252,7 +252,7 @@ export async function writeBrief(lead, extra = {}) {
 
 // Strip any "thinking" text some models include, so customers only see the answer.
 // Removes tired stock phrases from Mr. Fixit's answers, whatever the AI writes.
-export const SITE_VERSION = 'v20e';
+export const SITE_VERSION = 'v20f';
 export function humanise(text) {
   let t = String(text || '');
   const swap = [
@@ -298,9 +298,28 @@ export function escapeHtml(s) {
 
 // ----- outbound notifications -----
 
-export async function sendTelegram(text, extra = {}) {
+// Everyone who gets the job alerts: TELEGRAM_CHAT_ID, plus anyone in TELEGRAM_ALERT_IDS (comma separated).
+// Each person must open the bot and press Start once, or Telegram won't let the bot message them.
+export function alertChats() {
+  return [...new Set([env('TELEGRAM_CHAT_ID'), ...env('TELEGRAM_ALERT_IDS').split(',')].map((x) => String(x || '').trim()).filter(Boolean))];
+}
+
+// Sends to all alert recipients. ok = at least one person got it; problems with the others are listed in "failed".
+async function toAll(fn) {
+  const chats = alertChats();
+  if (!env('TELEGRAM_BOT_TOKEN') || !chats.length) return fn(chats[0] || '');
+  const all = await Promise.all(chats.map((c) => fn(c).then((r) => ({ chat: c, ...r }))));
+  const good = all.filter((r) => r.ok);
+  const failed = all.filter((r) => !r.ok && !r.skipped).map((r) => ({ chat: r.chat, reason: r.reason }));
+  if (failed.length) console.warn('Telegram: not delivered to', failed.map((f) => `${f.chat} (${f.reason})`).join(', '));
+  return good.length ? { ...good[0], delivered: good.length, of: chats.length, failed } : { ...all[0], delivered: 0, of: chats.length, failed };
+}
+
+export async function sendTelegram(text, extra = {}) { return toAll((chat) => sendTelegramTo(chat, text, extra)); }
+export async function sendTelegramPhotos(photos, caption = '') { return toAll((chat) => sendTelegramPhotosTo(chat, photos, caption)); }
+
+export async function sendTelegramTo(chatId, text, extra = {}) {
   const token = env('TELEGRAM_BOT_TOKEN');
-  const chatId = env('TELEGRAM_CHAT_ID');
   if (!token || !chatId) return { ok: false, skipped: true, reason: `Telegram is not set up (add ${!token ? 'TELEGRAM_BOT_TOKEN' : 'TELEGRAM_CHAT_ID'} to .env)` };
   const base = env('TELEGRAM_API_BASE', 'https://api.telegram.org');
   try {
@@ -318,9 +337,8 @@ export async function sendTelegram(text, extra = {}) {
 }
 
 // Send the customer's photos to the Telegram chat (one album, caption on the first photo)
-export async function sendTelegramPhotos(photos, caption = '') {
+export async function sendTelegramPhotosTo(chatId, photos, caption = '') {
   const token = env('TELEGRAM_BOT_TOKEN');
-  const chatId = env('TELEGRAM_CHAT_ID');
   if (!photos.length) return { ok: true, skipped: true };
   if (!token || !chatId) return { ok: false, reason: 'Telegram is not set up' };
   const base = env('TELEGRAM_API_BASE', 'https://api.telegram.org');

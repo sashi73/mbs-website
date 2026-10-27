@@ -1,2 +1,2 @@
-MBS website v20e (2026-10-27)
-Past projects removed from Mr. Fixit (the Projects page is unchanged). Landing page top bar and service columns (v20d), call-time choices that follow the Sydney clock (v20c), Telegram job tracker.
+MBS website v20f (2026-10-27)
+Job alerts, call-back reminders and the weekly report can go to several private chats (TELEGRAM_ALERT_IDS). Past projects removed from Mr. Fixit (v20e), landing page changes (v20d), Sydney-clock call times (v20c).

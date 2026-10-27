@@ -1,6 +1,6 @@
 // Runs on Netlify every 5 minutes (scheduled function): sends reminders that are due,
 // and the weekly report on Monday at 7am Sydney time (turn off with WEEKLY_REPORT=off).
-import { env, escapeHtml } from '../lib/shared.mjs';
+import { env, escapeHtml, alertChats } from '../lib/shared.mjs';
 import * as J from '../lib/jobs.mjs';
 import * as kv from '../lib/kv.mjs';
 import { send, jobCard, jobButtons, reportText } from '../lib/bot.mjs';
@@ -12,7 +12,11 @@ export async function runReminders(now = Date.now()) {
   if (!env('TELEGRAM_BOT_TOKEN') || !owner) return sent;
   for (const r of await J.takeDue(now)) {
     const job = r.core ? await J.find(r.core) : null;
-    await send(r.chat || owner, `⏰ <b>Reminder</b> (${whenText(r.at)}): ${escapeHtml(r.text)}` + (job ? '\n\n' + jobCard(job, false) : ''), job ? jobButtons(job, true) : null);
+    const to = !r.chat || r.chat === 'alerts' ? alertChats() : [r.chat];
+    for (const chat of to) {
+      try { await send(chat, `⏰ <b>Reminder</b> (${whenText(r.at)}): ${escapeHtml(r.text)}` + (job ? '\n\n' + jobCard(job, false) : ''), job ? jobButtons(job, true) : null); }
+      catch (e) { console.warn('Reminder not delivered to', chat, e.message); }
+    }
     sent.push(r.id);
   }
   // weekly report: Monday 7:00-7:59am Sydney, once
@@ -21,7 +25,11 @@ export async function runReminders(now = Date.now()) {
     const tag = `${p.y}-${p.mo}-${p.d}`;
     let first = false;
     await kv.update('weekly', (w) => { first = w.last !== tag; return { last: tag }; }, () => ({ last: '' }));
-    if (first) { await send(owner, '☀️ <b>Good morning! Here’s last week.</b>\n\n' + await reportText('lastweek', now)); sent.push('weekly'); }
+    if (first) {
+      const text = '☀️ <b>Good morning! Here’s last week.</b>\n\n' + await reportText('lastweek', now);
+      for (const chat of alertChats()) { try { await send(chat, text); } catch (e) { console.warn('Weekly report not delivered to', chat, e.message); } }
+      sent.push('weekly');
+    }
   }
   return sent;
 }

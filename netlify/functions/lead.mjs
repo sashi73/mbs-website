@@ -64,7 +64,7 @@ export default async (req) => {
         suburb: loc ? loc.label : clean(lead.suburb, 80), service: clean(lead.service, 120), best_time: clean(lead.best_time, 80),
         summary: clean(leadForTeam.summary, 1500), mapsUrl: loc ? loc.mapsUrl : '', source });
       if (photos.length) job = await J.savePhotos(core, photos);
-      if (cal && cal.start) await J.addReminder({ at: cal.start, core, chat: env('TELEGRAM_CHAT_ID'),
+      if (cal && cal.start) await J.addReminder({ at: cal.start, core, chat: 'alerts',
         text: `Call ${job.name || 'the customer'}${job.phone ? ' on ' + job.phone : ''} (best time: ${job.best_time || 'anytime'})` });
     } catch (e) { console.error('Job tracker save failed:', e.message); }
   }

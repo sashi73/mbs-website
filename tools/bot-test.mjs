@@ -1,4 +1,4 @@
-// Telegram job tracker test (48 checks), run in the site folder:  npm install  then  node tools/bot-test.mjs
+// Telegram job tracker test (53 checks), run in the site folder:  npm install  then  node tools/bot-test.mjs
 // Tests the Telegram job tracker exactly as Netlify runs it: the real function files, Netlify Blobs (official
 // local Blobs server), and a stand-in Telegram + email server that records every message the bot sends.
 import http from 'node:http';
@@ -26,6 +26,7 @@ const mock = http.createServer((req, res) => {
     const raw = Buffer.concat(chunks), method = req.url.split('/').pop();
     let body = null; try { body = JSON.parse(raw.toString()); } catch { body = raw.toString('latin1'); }
     calls.push({ url: req.url, method, body });
+    if (body && typeof body === 'object' && String(body.chat_id) === '333') return res.writeHead(403, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ok: false, error_code: 403, description: "Forbidden: bot can't initiate conversation with a user" }));
     if (req.url.startsWith('/file/')) return res.writeHead(200, { 'Content-Type': 'image/jpeg' }).end(JPEG);
     const result = method === 'getFile' ? { file_path: 'photos/file_1.jpg' } : method === 'getWebhookInfo' ? { url: 'x' } : { message_id: calls.length };
     res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ok: true, id: 'e1', result }));
@@ -183,6 +184,26 @@ const res = await kv.update('seq', (s) => {
 }, () => ({ run: 0 }));
 ok('Numbers', 'a clash between two enquiries is detected and retried (no number used twice)', res.run === before + 6 && calls1 === 2, `before ${before}, got ${res.run}, tries ${calls1}`);
 ok('Numbers', 'any form of the number finds the job (PW, W, JW, or just 1)', (await J.find('p' + core1.toLowerCase())).core === core1 && (await J.find('1')).core === core1 && (await J.find('J' + core1)).core === core1);
+
+// 9. Several recipients: owner + partner get every alert; someone who never pressed Start doesn't break anything
+process.env.TELEGRAM_ALERT_IDS = '222, 333';
+n0 = calls.length;
+r = await lead(new Request('https://mbs.example/.netlify/functions/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+  source: 'form', channels: ['email', 'telegram'], photos: [{ name: 'b.jpg', data: photo }],
+  lead: { name: 'Tom Lee', phone: '0400 111 222', suburb: 'Kellyville', postcode: '2155', lat: -33.7, lng: 150.95, service: 'Painting', best_time: 'Tomorrow morning', summary: 'Repaint the lounge' } }) }));
+j = await r.json();
+const toChats = (m) => since(n0).filter((c) => c.method === m).map((c) => typeof c.body === 'object' ? String(c.body.chat_id) : ((c.body.match(/name="chat_id"\r\n\r\n(\d+)/) || [])[1] || ''));
+const alertTo = since(n0).filter((c) => c.method === 'sendMessage' && /Tom Lee/.test(c.body.text || '')).map((c) => String(c.body.chat_id));
+ok('Several recipients', 'the job alert goes to both private chats (owner and partner)', alertTo.includes('111') && alertTo.includes('222'), alertTo.join(','));
+const photoTo = [...toChats('sendPhoto'), ...toChats('sendMediaGroup')];
+ok('Several recipients', 'map QR and customer photos go to both as well', photoTo.filter((c) => c === '111').length >= 2 && photoTo.filter((c) => c === '222').length >= 2, photoTo.join(','));
+ok('Several recipients', 'someone who never pressed Start does not stop the enquiry', r.status === 200 && alertTo.includes('111') && alertTo.includes('222'), r.status);
+n0 = calls.length; await say('/jobs', 222);
+ok('Several recipients', 'the partner can use the bot commands', /Tom Lee/.test(lastMsg().text || '') && String(lastMsg().chat_id) === '222', (lastMsg().text || '').slice(0, 80));
+n0 = calls.length; await remMod.runReminders(Date.now() + 3 * 86400000);
+const remTo = since(n0).filter((c) => c.method === 'sendMessage' && /Call Tom Lee/.test(c.body.text || '')).map((c) => String(c.body.chat_id));
+ok('Several recipients', 'the call-back reminder goes to both', remTo.includes('111') && remTo.includes('222'), remTo.join(','));
+delete process.env.TELEGRAM_ALERT_IDS;
 
 await blobs.stop(); mock.close();
 let pass = 0;
