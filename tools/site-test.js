@@ -54,7 +54,7 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
   const kbImgs = [...new Set(kb.match(/images\/work\/[a-z0-9\/-]+\.(jpg|webp)/g) || [])];
   bad = [];
   for (const u of kbImgs) { const r = await p.request.get(`${BASE}/${u}`); if (r.status() !== 200) bad.push(u); }
-  ok('Links', `all ${kbImgs.length} Mr. Fixit project photos exist`, bad.length === 0, bad.join(', '));
+  ok('Links', `all ${kbImgs.length} Mr. Fixit photos exist`, bad.length === 0, bad.join(', '));
 
   // 3. Responsive: every page x every width: no sideways scroll, every image decodes
   for (const w of WIDTHS) {
@@ -138,24 +138,11 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
   await p.$eval('.fx-launch', e => e.click()); await p.waitForTimeout(2500);
   const menu = await p.$$eval('.fx-chip', x => x.map(c => c.textContent.trim()));
   ok('Mr. Fixit', 'opens with a menu', menu.length > 3, menu.slice(0, 6).join(' | '));
-  await p.locator('.fx-chip', { hasText: 'Past projects' }).first().click(); await p.waitForTimeout(1500);
-  const sect = await p.$$eval('.fx-chip', x => x.map(c => c.textContent.trim()));
-  ok('Mr. Fixit', 'Past projects offers all 6 sectors', ['Hotels', 'Strata & apartments', 'Heritage & government', 'Aged care', 'Commercial', 'Homes'].every(s => sect.includes(s)), sect.join(' | '));
-  await p.locator('.fx-chip', { hasText: 'All projects' }).last().click(); await p.waitForTimeout(1300);
-  const allCards = await p.$$eval('.fx-projs', x => x[x.length - 1].querySelectorAll('.fx-proj').length);
-  ok('Mr. Fixit', '"All projects" shows all 23 jobs', allCards === 23, allCards);
-  for (const s of ['Hotels', 'Strata & apartments', 'Heritage & government', 'Aged care', 'Commercial', 'Homes']) {
-    await p.locator('.fx-chip', { hasText: /^(Other projects|Past projects)$/ }).last().click(); await p.waitForTimeout(1200);
-    const before = await p.$$eval('.fx-projs', x => x.length);
-    await p.locator('.fx-chip', { hasText: s }).last().click(); await p.waitForTimeout(1300);
-    const n = await p.$$eval('.fx-projs', x => x.length ? x[x.length - 1].querySelectorAll('.fx-proj').length : 0);
-    const after = await p.$$eval('.fx-projs', x => x.length);
-    ok('Mr. Fixit', `sector "${s}" lists its projects`, after > before && n > 0, `${n} cards`);
-  }
-  const scrolled = await p.evaluate(() => { const l = document.querySelector('.fx-list'); const c = [...document.querySelectorAll('.fx-projs')].pop(); return l && c ? Math.abs(l.scrollTop - (c.offsetTop - 12)) < 40 || l.scrollTop + l.clientHeight >= l.scrollHeight - 4 : false; });
-  ok('Mr. Fixit', 'chat scrolls to the newest project cards', scrolled);
-  const pics = await p.$$eval('.fx-proj img', x => x.filter(i => i.complete && i.naturalWidth === 0).map(i => i.getAttribute('src')));
-  ok('Mr. Fixit', 'every project card photo displays in the chat', pics.length === 0, pics.join(', '));
+  ok('Mr. Fixit', 'main menu no longer has "Past projects"', !menu.includes('Past projects'), menu.join(' | '));
+  await p.fill('.fx-input', 'Can I see your past projects?'); await p.press('.fx-input', 'Enter'); await p.waitForTimeout(2500);
+  const projReply = await p.$eval('.fx-list', e => e.innerText);
+  ok('Mr. Fixit', 'asking about past projects points to the Projects page (no project cards in the chat)',
+    /Projects page/.test(projReply) && (await p.$$('.fx-projs, .fx-proj')).length === 0, projReply.split('\n').slice(-3).join(' / '));
 
   // 4b. Contact form
   const c = await ctx.newPage(); watch(c, 'contact');
@@ -234,7 +221,7 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     await tap(q, 'No');
     const t2 = await chatText(q); const c2 = await chipList(q);
     ok('Chat area check', '"No" gives a polite apology', /really sorry, Sam\. We currently only work in Sydney and the surrounding suburbs/.test(t2) && /Please accept our apologies/.test(t2));
-    ok('Chat area check', '"No" goes back to the main menu', c2.includes('Past projects') && c2.includes('Get a free quote') && !c2.includes('Cancel'), c2.join(' | '));
+    ok('Chat area check', '"No" goes back to the main menu', c2.includes('Ask a repair question') && c2.includes('Get a free quote') && !c2.includes('Cancel'), c2.join(' | '));
     await cx.close();
   }
   {

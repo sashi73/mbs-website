@@ -48,7 +48,6 @@ ABOUT THE BUSINESS
 - Free, no-obligation quotes after a site visit. Personal service, one person manages the whole job.
 - Family business, building across Sydney since 2012. Sites run to European standards of management and quality.
 - Accreditations and partners: ISO 9001, Cm3, NSW Government, NSW Government Education, AIB (The Australian Institute of Building), Ardex, Fatra.
-- Past projects include the Park Royal Hotel, Hotel Bondi, the Sebel Hotel & Resort, heritage ceilings at Central Station, Yass Court House, the Department of Defence Military Police Station, Montefiore Aged Care, Henry Kendall Village, a 20-unit and 4-shop building at Five Dock, and remedial work on 178 lots at 25-33 Allen St, Waterloo.
 - Services:
 ${serviceList}
 - Also: "everything else needed to keep your home in good condition". If a job is not listed, say the owner will confirm whether MBS can help.
@@ -253,7 +252,7 @@ export async function writeBrief(lead, extra = {}) {
 
 // Strip any "thinking" text some models include, so customers only see the answer.
 // Removes tired stock phrases from Mr. Fixit's answers, whatever the AI writes.
-export const SITE_VERSION = 'v20d';
+export const SITE_VERSION = 'v20e';
 export function humanise(text) {
   let t = String(text || '');
   const swap = [

@@ -346,57 +346,6 @@
     ]);
   }
 
-  /* ---- Past projects (from the capability statement, in fixit-kb.js) ---- */
-  var PROJECTS = KB.projects || [];
-  function projectsFor(m) {
-    if (m.id) return PROJECTS.filter(function (p) { return p.id === m.id; });
-    if (m.sector && m.sector !== 'All') return PROJECTS.filter(function (p) { return p.sector === m.sector; });
-    return PROJECTS;
-  }
-  function projectCards(m) {
-    var wrap = el('div', { class: 'fx-projs', role: 'list', 'aria-label': 'Past projects' });
-    projectsFor(m).forEach(function (p) {
-      var meta = p.sector + (p.duration ? ' · ' + p.duration : '');
-      wrap.appendChild(el('a', { class: 'fx-proj', role: 'listitem', href: 'projects.html#p-' + p.id }, [
-        el('span', { class: 'fx-proj-pic' }, [el('img', { src: p.photo, alt: p.title }),
-          p.photos > 1 ? el('span', { class: 'fx-proj-n', text: p.photos + ' photos' }) : null].filter(Boolean)),
-        el('b', { text: p.title }),
-        el('small', { text: meta }),
-        el('span', { class: 'fx-proj-txt', text: p.scope }),
-        el('span', { class: 'fx-proj-go', text: 'See the photos →' })
-      ]));
-    });
-    return wrap;
-  }
-  function sectorChips(except) {
-    var c = (KB.projectSectors || []).filter(function (x) { return x !== except; })
-      .map(function (x) { return { label: x, act: 'proj_sector', sector: x }; });
-    if (except !== 'All') c.push({ label: 'All projects', act: 'proj_sector', sector: 'All' });
-    c.push({ label: 'Get a free quote', act: 'flow', primary: true });
-    c.push({ label: 'Main menu', act: 'more' });
-    return c;
-  }
-  function showProjects(sector, id) {
-    var items = projectsFor({ sector: sector, id: id });   // (was named "list", which hid the chat list below)
-    var intro = id ? 'Here it is:' :
-      sector && sector !== 'All' ? 'Our ' + sector.toLowerCase() + ' projects (' + items.length + '). Swipe across, and tap one to see all its photos:' :
-      'Here are ' + items.length + ' of our jobs, from big commercial sites to family homes. Swipe across, and tap one to see all its photos:';
-    var after = [{ label: 'Other projects', act: 'projects' }, { label: 'Get a free quote', act: 'flow', primary: true }, { label: 'Main menu', act: 'more' }];
-    say(intro, after, function () {
-      S.log.push({ who: 'projects', sector: sector || 'All', id: id || '' }); save(); render();
-      var cards = list.querySelectorAll('.fx-projs');
-      var lastCards = cards[cards.length - 1];
-      if (lastCards) setTimeout(function () { list.scrollTop = lastCards.offsetTop - 12; }, 60);
-    });
-  }
-  function findProject(t) {
-    for (var i = 0; i < PROJECTS.length; i++) {
-      var k = PROJECTS[i].keys || [];
-      for (var j = 0; j < k.length; j++) if (t.indexOf(k[j]) !== -1) return PROJECTS[i];
-    }
-    return null;
-  }
-
   function photoBubble(m) {
     var shown = PHOTOS.slice(m.from || 0, m.to || PHOTOS.length);
     var b = el('div', { class: 'fx-msg me fx-photos' });
@@ -416,7 +365,7 @@
     S.log.forEach(function (m) {
       if (m.who === 'card') { if (S.lead) list.appendChild(summaryCard()); }
       else if (m.who === 'photos') list.appendChild(photoBubble(m));
-      else if (m.who === 'projects') list.appendChild(projectCards(m));
+      else if (m.who === 'projects') { /* project cards were removed in v20e */ }
       else if (m.who === 'note') list.appendChild(el('div', { class: 'fx-setup fx-note', role: 'note', text: m.text }));
       else if (m.who === 'tip') list.appendChild(el('div', { class: 'fx-setup', role: 'note', text: m.text }));
       else list.appendChild(bubble(m));
@@ -470,7 +419,6 @@
   ];
   var START_CHIPS = [
     { label: 'Ask a repair question', act: 'expert' },
-    { label: 'Past projects', act: 'projects' },
     { label: 'I have a leak', act: 'text' }, { label: 'Something else is broken', act: 'text' },
     { label: 'Get a free quote', act: 'flow', primary: true },
     { label: 'What do you do?', act: 'text' }, { label: 'How much does it cost?', act: 'text' }
@@ -490,19 +438,10 @@
   function answer(raw) {
     var t = norm(raw);
 
-    if (PROJECTS.length) {
-      var named = findProject(t);
-      if (named && !has(t, [' quote', ' leak', ' broken'])) return { lines: [], projects: { id: named.id } };
-      if (has(t, [' past project', ' previous project', ' projects', ' portfolio', ' your work', ' previous work', ' past work', ' examples',
-                  ' jobs you', ' work you have done', ' what have you done', ' references', ' case stud', ' capability'])) {
-        var sec = null;
-        if (has(t, [' hotel'])) sec = 'Hotels';
-        else if (has(t, [' strata', ' apartment', ' unit', ' units '])) sec = 'Strata & apartments';
-        else if (has(t, [' heritage', ' government', ' council', ' defence', ' court'])) sec = 'Heritage & government';
-        else if (has(t, [' aged care', ' nursing', ' retirement'])) sec = 'Aged care';
-        else if (has(t, [' commercial', ' office', ' warehouse', ' industrial'])) sec = 'Commercial';
-        return { lines: [], projects: { sector: sec || 'All' } };
-      }
+    if (has(t, [' past project', ' previous project', ' projects', ' portfolio', ' your work', ' previous work', ' past work',
+                ' jobs you', ' work you have done', ' what have you done', ' case stud'])) {
+      return { lines: ['You can see photos of our work on the Projects page (in the menu at the top).', 'Would you like a free quote for your own job?'],
+        chips: [{ label: 'Get a free quote', act: 'flow', primary: true }, { label: 'Main menu', act: 'more' }] };
     }
 
     if (has(t, [' emergenc', ' urgent', ' flooding', ' flooded', ' burst', ' collaps', ' sagging', ' dangerous', ' water pouring', ' right now', ' asap '])) {
@@ -1196,7 +1135,6 @@
       return askServer(text, 'expert');
     }
     var a = answer(text);
-    if (a && a.projects) return showProjects(a.projects.sector, a.projects.id);
     if (a && a.startFlow) return startFlow(a.startFlow);
     if (a) return say(a.lines, a.chips);
     askServer(text);
@@ -1211,13 +1149,6 @@
       case 'more':
         S.log.push({ who: 'me', text: c.label }); save();
         return say('Sure, what would you like to know?', START_CHIPS);
-      case 'projects':
-        S.log.push({ who: 'me', text: c.label }); S.mode = null; save();
-        return say('Since 2012 we’ve worked on hotels, strata buildings, heritage landmarks, government sites, aged care, commercial properties and family homes. Which would you like to see?',
-          sectorChips('none'));
-      case 'proj_sector':
-        S.log.push({ who: 'me', text: c.label }); save();
-        return showProjects(c.sector);
       case 'expert':
         S.log.push({ who: 'me', text: c.label }); save();
         return startExpert();
