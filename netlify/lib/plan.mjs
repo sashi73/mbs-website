@@ -5,7 +5,7 @@ import * as kv from './kv.mjs';
 import * as J from './jobs.mjs';
 import { parseWhen, whenText, sydneyTime } from './calendar.mjs';
 import { env } from './shared.mjs';
-import { llmJson, usage, checkLimit, llmSetup } from './ai.mjs';
+import { llmJson, usage, checkLimit, llmSetup, sydToday } from './ai.mjs';
 import * as INV from './inventory.mjs';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -300,6 +300,37 @@ export async function buildAiPlan({ core, describe, scope, type, start }, by) {
     assumptions: txt(o.assumptions, 800), tips: list(o.tips, 8, 240), tasks, risks }, tokens: used, today };
 }
 
+// ---------- dashboard pipeline board: New enquiry > Called > Site visit & quoted > Job won > Planning > In progress > Completed > Invoiced > Closed ----------
+export const BOARD_COLS = ['new', 'called', 'visit', 'won', 'planning', 'progress', 'completed', 'invoiced', 'closed'];
+const VISIT_RE = /site visit|inspect|measure|look at|on site|quote visit|visit/i;
+export async function pipelineBoard(body = {}) {
+  const now = Date.now(), today = /^\d{4}-\d{2}-\d{2}$/.test(String(body.today || '')) ? body.today : sydToday(now);
+  const days = int(body.closedDays, 0, 3650, 30);
+  const [list, planKeys, rems] = await Promise.all([J.all(), kv.keys('plan:'), J.reminders()]);
+  const planned = new Set(planKeys.map((k) => k.slice(5)));
+  const closedAt = (j) => j.paid_at || j.lost_at || j.updated || j.created || 0;
+  const keep = list.filter((j) => J.OPEN.includes(j.stage) || (['paid', 'lost'].includes(j.stage) && (!days || closedAt(j) >= now - days * 864e5)));
+  const [full, plans] = await Promise.all([kv.getMany(keep.map((j) => 'job:' + j.core)), kv.getMany(keep.filter((j) => planned.has(j.core)).map((j) => 'plan:' + j.core))]);
+  const planOf = Object.fromEntries(plans.filter(Boolean).map((p) => [p.core, p]));
+  const remOf = {};
+  for (const r of rems) if (r.core && r.at >= now - 864e5 && (!remOf[r.core] || r.at < remOf[r.core].at)) remOf[r.core] = r;
+  const cards = keep.map((ix, i) => {
+    const j = full[i] || ix, p = planOf[j.core] || null, rem = remOf[j.core] || null;
+    const visit = rem && VISIT_RE.test(rem.text || '') ? rem : null;
+    let R = null;
+    if (p && p.tasks && p.tasks.length) { try { R = rollup(JSON.parse(JSON.stringify(p)), today); } catch { R = null; } }
+    const started = !!(p && p.tasks && p.tasks.some((t) => (t.pct || 0) > 0 || ['doing', 'review', 'done'].includes(t.status)));
+    const col = j.stage === 'new' ? 'new' : j.stage === 'called' ? (visit ? 'visit' : 'called') : j.stage === 'quoted' ? 'visit'
+      : j.stage === 'won' ? (!p ? 'won' : started ? 'progress' : 'planning') : j.stage === 'completed' ? 'completed' : j.stage === 'invoiced' ? 'invoiced' : 'closed';
+    const since = { new: j.created, called: j.called_at, quoted: j.quoted_at, won: j.won_at, completed: j.completed_at, invoiced: j.invoiced_at, paid: j.paid_at, lost: j.lost_at }[j.stage] || j.updated || j.created;
+    return { core: j.core, ref: J.refFor(j), name: j.name || 'Customer', suburb: j.suburb || '', title: jobTitle(j), kind: jobKind(j), stage: j.stage, col, since: since || 0,
+      value: j.invoice ? j.invoice.amount : j.quote ? j.quote.amount : 0, valueKind: j.invoice ? 'invoice' : j.quote ? 'quote' : '', source: j.source || '', photos: (j.photos || []).length,
+      next: rem ? { at: rem.at, text: String(rem.text || '').slice(0, 120), when: whenText(rem.at) } : null, visit: !!visit,
+      plan: p ? { name: p.name, pct: R ? R.pct : 0, SPI: R ? R.SPI : null, CPI: R ? R.CPI : null, start: R ? R.start : '', finish: R ? R.finish : '', late: R ? R.late : 0, done: R ? R.done : 0, total: R ? R.total : 0, highRisks: R ? R.highRisks : 0, openIssues: R ? R.openIssues : 0 } : null };
+  });
+  return { cards, cols: BOARD_COLS, closedDays: days, at: now, today };
+}
+
 export async function planPost(action, body, { who, by, audit }) {
   const core = str(body.core, 40);
   if (action === 'planList') {
@@ -327,6 +358,9 @@ export async function planPost(action, body, { who, by, audit }) {
     let low = [];
     try { low = await INV.syncPlan(core, before, r.plan, by); } catch (e) { console.error('Stock update from plan failed:', e.message); }
     return out(200, { plan: r.plan, low });
+  }
+  if (action === 'pipelineBoard') {   // the dashboard's big Kanban: every open job (and recently closed ones) in its pipeline column
+    const out2 = await pipelineBoard(body); return out(200, out2);
   }
   if (action === 'planJobs') {   // open jobs without a plan, labelled "Customer: what the job is"
     const [list, keys] = await Promise.all([J.all(), kv.keys('plan:')]);

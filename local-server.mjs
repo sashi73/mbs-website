@@ -28,8 +28,11 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-29 v25e (planner: jobs listed by the actual work)';
+const VERSION = '2026-10-29 v26 (dashboard pipeline board)';
 const NEEDS = [
+  ['netlify/lib/plan.mjs', 'pipelineBoard'],
+  ['admin/admin-board.js', 'pipelineBoard'],
+  ['admin/admin.js', 'dashMode'],
   ['netlify/lib/plan.mjs', 'privateOut'],
   ['netlify/functions/lead.mjs', 'details: clean(lead.details'],
   ['admin/admin-plan.js', 'jobPeek'],

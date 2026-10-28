@@ -88,12 +88,25 @@
   window.addEventListener('hashchange', route);
 
   /* ---------------- dashboard ---------------- */
+  // Dashboard: summary (figures) or the pipeline board (every job in its column). The choice is remembered.
+  function dashMode(m) { try { if (m) localStorage.setItem('mbsDash', m); return localStorage.getItem('mbsDash') || 'summary'; } catch (e) { return m || 'summary'; } }
+  function modeTabs(m) {
+    return '<div class="tabs dashmode" style="margin:0"><button class="tab' + (m === 'summary' ? ' on' : '') + '" data-dash="summary">📊 Summary</button><button class="tab' + (m === 'board' ? ' on' : '') + '" data-dash="board">▦ Pipeline board</button></div>';
+  }
+  function bindMode() { view.querySelectorAll('[data-dash]').forEach(function (b) { b.onclick = function () { dashMode(b.getAttribute('data-dash')); dashboard(); }; }); }
   function dashboard() {
+    var mode = dashMode();
+    if (mode === 'board' && window.MBS && window.MBS.board) {
+      view.innerHTML = '<div class="row" style="margin-bottom:12px">' + modeTabs('board') + '<span class="sp"></span><span class="muted" style="font-size:13px">Every job, from the first enquiry to closed</span></div><div id="boardHost"></div>';
+      bindMode();
+      return window.MBS.board.render($('#boardHost'));
+    }
+    if (window.MBS && window.MBS.board) window.MBS.board.full(false);
     var per = sessionStorage.getItem('mbs-per') || 'month';
     return api('dashboard', { period: per }).then(function (d) {
       var r = d.report, pipeTotal = OPEN.reduce(function (a, s) { return a + (r.pipeline[s] || 0); }, 0) || 1;
       view.innerHTML =
-        '<div class="row" style="margin-bottom:14px"><div class="tabs" style="margin:0">' +
+        '<div class="row" style="margin-bottom:14px">' + modeTabs('summary') + '<div class="tabs" style="margin:0">' +
           ['week', 'month', 'fy', 'all'].map(function (p) { return '<button class="tab' + (p === per ? ' on' : '') + '" data-per="' + p + '">' + { week: 'This week', month: 'This month', fy: 'Financial year', all: 'All time' }[p] + '</button>'; }).join('') +
         '</div><span class="sp"></span><span class="muted">Showing ' + esc(d.period) + '</span></div>' +
         '<div class="grid kpis">' +
@@ -113,6 +126,7 @@
             (d.reminders.length ? '<div class="list">' + d.reminders.map(remItem).join('') + '</div>' : '<div class="empty">No reminders coming up.</div>') + '</div>' +
         '</div>';
       view.querySelectorAll('[data-per]').forEach(function (b) { b.onclick = function () { sessionStorage.setItem('mbs-per', b.getAttribute('data-per')); dashboard(); }; });
+      bindMode();
       bindRows();
     });
   }
