@@ -28,8 +28,10 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-28 v22b (fix: fresh Netlify Blobs token on every request)';
+const VERSION = '2026-10-28 v23 (MBS Console: SQL wizard, charts and AI reports)';
 const NEEDS = [
+  ['admin/admin-sql.js', 'useTemplate'],
+  ['netlify/lib/admin-sql.mjs', 'sqlPost'],
   ['netlify/lib/accounts.mjs', 'profitAndLoss'],
   ['admin/admin-acct.js', 'expenseForm'],
   ['netlify/functions/admin.mjs', 'readSession'],
@@ -74,7 +76,7 @@ const NEEDS = [
   ['assets/fixit.js', 'function afterSuburb'],
   ['assets/fixit.js', 'function callLine'],
   ['netlify/lib/shared.mjs', 'export function humanise'],
-  ['index.html', 'fixit.js?v=22b'],
+  ['index.html', 'fixit.js?v=23'],
   ['assets/fixit.js', 'fx-ring'],
   ['netlify/lib/calendar.mjs', 'callReminder'],
   ['netlify/lib/bot.mjs', 'handleUpdate'],

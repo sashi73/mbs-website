@@ -1,2 +1,2 @@
-MBS website v22b (2026-10-28)
-Fix: "Netlify Blobs ... Token expired" (a fresh database token on every request). Includes v22 accounts (quotes, tax invoices, payments, expenses, BAS) and the v21 console.
+MBS website v23 (2026-10-28)
+MBS Console SQL wizard: quick numbers (today / week / month / date range), report templates, drag-and-drop query builder, SQL editor with auto-complete, table / record / chart views, AI-written PDF reports (DeepSeek). Accounts (v22), Blobs token fix (v22b).

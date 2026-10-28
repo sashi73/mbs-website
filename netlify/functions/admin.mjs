@@ -9,6 +9,7 @@ import { period } from '../lib/bot.mjs';
 import { parseWhen, whenText } from '../lib/calendar.mjs';
 import { tradeCode } from '../lib/store.mjs';
 import { acctGet, acctPost } from '../lib/admin-acct.mjs';
+import { sqlPost } from '../lib/admin-sql.mjs';
 
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' };
 const out = (status, body, extra = {}) => new Response(JSON.stringify(body), { status, headers: { ...H, ...extra } });
@@ -204,7 +205,7 @@ export default async (req) => {
       }
       case 'log': return out(200, { log: await A.auditLog() });
       default: {
-        const a = await acctPost(action, body, { who, by });
+        const a = (await acctPost(action, body, { who, by })) || (await sqlPost(action, body, { who, by }));
         return a || bad('Unknown action');
       }
     }
