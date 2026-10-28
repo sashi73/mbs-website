@@ -49,6 +49,20 @@
       pct: T.length ? Math.round(T.reduce(function (a, t) { return a + Math.max(1, t.dur) * (t.pct || 0); }, 0) / durW) : 0 };
   }
   var pl = function (n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); };
+  // SPI / CPI colours: green 1.00 or more, yellow 0.90-0.99 (watch), red below 0.90 (act), grey = not enough data yet
+  var evRag = function (v) { return rag(v, 1, 0.9); };
+  var EV_WORD = { green: 'On track', amber: 'Watch', red: 'Act now', grey: 'No data yet' };
+  function evChip(kind, v) {
+    var c = evRag(v), what = kind === 'SPI' ? { green: 'on or ahead of schedule', amber: 'slightly behind schedule', red: 'behind schedule', grey: 'no work due or done yet' } : { green: 'on or under budget', amber: 'slightly over budget', red: 'over budget', grey: 'no actual costs recorded yet' };
+    return '<span class="rag ev rag-' + c + '" title="' + kind + ' ' + (v == null ? '–' : v.toFixed(2)) + ': ' + what[c] + '"><i class="evdot"></i>' + (v == null ? '–' : v.toFixed(2)) + '</span><small class="evword ev-' + c + '">' + EV_WORD[c] + '</small>';
+  }
+  function evLegend() {
+    return '<div class="evkey"><b>SPI</b> (schedule) = work done ÷ work planned by today. <b>CPI</b> (cost) = value of work done ÷ actual cost.' +
+      '<span><i class="evdot g"></i><b>1.00 or more</b>: on or ahead of schedule / on or under budget</span>' +
+      '<span><i class="evdot y"></i><b>0.90 – 0.99</b>: slightly behind / slightly over. Watch it</span>' +
+      '<span><i class="evdot r"></i><b>below 0.90</b>: behind schedule / over budget. Act now</span>' +
+      '<span><i class="evdot n"></i><b>–</b>: not enough progress or actual costs recorded yet</span></div>';
+  }
   var rag = function (v, g, a) { return v == null ? 'grey' : v >= g ? 'green' : v >= a ? 'amber' : 'red'; };
 
   /* ---------- templates (example rates: change them to yours) ---------- */
@@ -282,15 +296,14 @@
       return api('planJobs', {}).then(function (j) {
         var avail = j.jobs;
         V().innerHTML = '<div class="card"><div class="card-h"><h2>Project plans (' + d.plans.length + ')</h2>' +
-          '<div class="row"><select id="newPlanJob" style="width:auto"><option value="">Plan a job…</option>' + avail.map(function (x) { return '<option value="' + esc(x.core) + '">' + esc(x.ref + ' · ' + x.name + ': ' + x.title + (x.kind && x.title.toLowerCase().indexOf(x.kind.toLowerCase()) < 0 ? ' (' + x.kind + ')' : '') + (x.suburb ? ' · ' + x.suburb : '')) + '</option>'; }).join('') + '</select><button class="btn btn-gold btn-sm" id="newPlanGo">＋ Start a plan</button></div></div>' +
-          (d.plans.length ? '<div class="table-wrap"><table><thead><tr><th>Project</th><th>Progress</th><th class="hide-sm">Finish</th><th>Time</th><th>Cost</th><th class="hide-sm">Risks</th><th class="hide-sm">Issues</th><th></th></tr></thead><tbody>' +
+          '<div class="row"><select id="newPlanJob" style="width:auto;max-width:min(760px,100%)"><option value="">Plan a job…</option>' + avail.map(function (x) { return '<option value="' + esc(x.core) + '">' + esc(jobLabel(x)) + '</option>'; }).join('') + '</select><button class="btn btn-gold btn-sm" id="newPlanGo">＋ Start a plan</button></div></div><div id="jobPeek" hidden></div>' +
+          (d.plans.length ? '<div class="table-wrap"><table><thead><tr><th>Project</th><th>Progress</th><th class="hide-sm">Finish</th><th title="Schedule Performance Index: work done ÷ work planned by today">SPI <small class="muted" style="text-transform:none;letter-spacing:0">(time)</small></th><th title="Cost Performance Index: value of work done ÷ actual cost">CPI <small class="muted" style="text-transform:none;letter-spacing:0">(cost)</small></th><th class="hide-sm">Risks</th><th class="hide-sm">Issues</th><th></th></tr></thead><tbody>' +
             d.plans.map(function (p) {
-              var tC = rag(p.SPI, 0.95, 0.85), cC = rag(p.CPI, 0.95, 0.85);
               return '<tr class="click" data-plan="' + esc(p.core) + '"><td><b>' + esc(p.name) + '</b><br><small class="muted"><span class="ref">' + esc(p.ref) + '</span> · ' + esc(p.customer) + '</small></td>' +
                 '<td style="min-width:140px"><div class="pbar"><span style="width:' + p.pct + '%"></span></div><small>' + p.pct + '% · ' + p.done + '/' + p.total + ' tasks' + (p.late ? ' · <b style="color:#C2410C">' + p.late + ' late</b>' : '') + '</small></td>' +
-                '<td class="hide-sm">' + esc(prettyY(p.finish)) + '</td><td><span class="rag rag-' + tC + '">' + (p.SPI == null ? '—' : 'SPI ' + p.SPI) + '</span></td><td><span class="rag rag-' + cC + '">' + (p.CPI == null ? '—' : 'CPI ' + p.CPI) + '</span></td>' +
+                '<td class="hide-sm">' + esc(prettyY(p.finish)) + '</td><td class="evcell">' + evChip('SPI', p.SPI) + '</td><td class="evcell">' + evChip('CPI', p.CPI) + '</td>' +
                 '<td class="hide-sm">' + p.openRisks + (p.highRisks ? ' <b style="color:#C2410C">(' + p.highRisks + ' high)</b>' : '') + '</td><td class="hide-sm">' + p.openIssues + '</td><td><button class="btn btn-sm" data-pdel="' + esc(p.core) + '" data-pname="' + esc(p.name) + '" title="Delete this plan">🗑</button></td></tr>';
-            }).join('') + '</tbody></table></div>' : '<div class="empty">No plans yet. Pick a job above, or open a job and press “Project plan”.</div>') + '</div>';
+            }).join('') + '</tbody></table></div>' + evLegend() : '<div class="empty">No plans yet. Pick a job above, or open a job and press “Project plan”.</div>') + '</div>';
         V().querySelectorAll('[data-plan]').forEach(function (tr) { tr.onclick = function () { location.hash = '#plan/' + tr.getAttribute('data-plan'); }; });
         V().querySelectorAll('[data-pdel]').forEach(function (b) {
           b.onclick = function (e) {
@@ -301,9 +314,30 @@
             });
           };
         });
+        var byCore = {}; avail.forEach(function (x) { byCore[x.core] = x; });
+        $('#newPlanJob').onchange = function () { var x = byCore[this.value], el = $('#jobPeek'); el.hidden = !x; el.innerHTML = x ? jobPeek(x) : ''; };
         $('#newPlanGo').onclick = function () { var c = $('#newPlanJob').value; if (!c) return toast('Pick a job first', true); location.hash = '#plan/' + c; };
       });
     });
+  }
+
+  /* "Plan a job…": say what the work is, and show the whole request before committing to a plan */
+  var VAGUE = /question|fix-?it|enquir|inquir|^general$|^other$/i;
+  function jobTag(x) {
+    var t = (x.title || '').toLowerCase(), sv = (x.service || '').trim();
+    if (sv && !VAGUE.test(sv) && t.indexOf(sv.toLowerCase()) < 0) return sv;
+    return x.kind && x.kind !== 'Job' && t.indexOf(x.kind.toLowerCase()) < 0 ? x.kind : '';
+  }
+  function jobLabel(x) { var tag = jobTag(x); return x.ref + ' · ' + x.name + ': ' + (x.title || 'Job') + (tag ? ' [' + tag + ']' : '') + (x.suburb ? ' · ' + x.suburb : ''); }
+  var STAGE_TXT = { new: 'New enquiry', called: 'Called', quoted: 'Quoted', won: 'Job won', completed: 'Completed', invoiced: 'Invoiced', paid: 'Paid', lost: 'Lost' };
+  function jobPeek(x) {
+    var d = x.created ? new Date(x.created) : null;
+    var f = [['Service', x.service], ['Type', x.kind], ['Suburb', x.suburb], ['Stage', STAGE_TXT[x.stage] || x.stage], ['Received', d ? d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Australia/Sydney' }) : ''],
+      ['Best time to call', x.bestTime], ['Came from', x.source], ['Photos', x.photos ? String(x.photos) : 'None']].filter(function (r) { return r[1]; });
+    return '<div class="jobpeek"><div class="row" style="gap:10px"><span class="ref">' + esc(x.ref) + '</span><b>' + esc(x.name) + ': ' + esc(x.title) + '</b><span class="sp"></span><a class="btn btn-sm" href="#job/' + esc(x.core) + '">Open job</a></div>' +
+      '<div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-top:8px">What the customer wants (what we would be committing to)</div>' +
+      '<div class="pre">' + (x.scope ? esc(x.scope) : '<i class="muted">No details on this job yet. Open the job and add a note first, or write the scope on the next screen.</i>') + '</div>' +
+      '<dl class="peekf">' + f.map(function (r) { return '<div><dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd></div>'; }).join('') + '</dl></div>';
   }
 
   function planView(args) {
@@ -460,8 +494,8 @@
       '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
       '<div class="grid pkpis">' +
         mini('Scope', R.pct + '% complete', R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8)) +
-        mini('Time', 'Finish ' + prettyY(R.finish), (R.SPI == null ? 'not started' : 'SPI ' + R.SPI) + (R.late.length ? ' · ' + R.late.length + ' late' : '') + (p.baseline && p.baseline.finish && R.finish ? ' · ' + varDays(p.baseline.finish, R.finish) : ''), R.late.length ? 'red' : rag(R.SPI, 0.95, 0.85)) +
-        mini('Cost', money(R.AC) + ' of ' + money(R.BAC), (R.CPI == null ? 'no actual costs yet' : 'CPI ' + R.CPI + ' · forecast ' + money(R.EAC)), rag(R.CPI, 0.95, 0.85)) +
+        mini('Time', 'Finish ' + prettyY(R.finish), (R.SPI == null ? 'not started' : 'SPI ' + R.SPI) + (R.late.length ? ' · ' + R.late.length + ' late' : '') + (p.baseline && p.baseline.finish && R.finish ? ' · ' + varDays(p.baseline.finish, R.finish) : ''), R.late.length ? 'red' : evRag(R.SPI)) +
+        mini('Cost', money(R.AC) + ' of ' + money(R.BAC), (R.CPI == null ? 'no actual costs yet' : 'CPI ' + R.CPI + ' · forecast ' + money(R.EAC)), evRag(R.CPI)) +
         mini('Risks & issues', pl((p.risks || []).filter(function (r) { return r.status !== 'Closed'; }).length, 'risk') + ' · ' + pl((p.issues || []).filter(function (x) { return x.status !== 'Resolved'; }).length, 'issue'), pl((p.risks || []).filter(function (r) { return r.status !== 'Closed' && r.p * r.i >= 12; }).length, 'high risk'), (p.risks || []).some(function (r) { return r.status !== 'Closed' && r.p * r.i >= 15; }) ? 'red' : (p.issues || []).some(function (x) { return x.status !== 'Resolved' && /High|Critical/.test(x.priority); }) ? 'amber' : 'green') +
       '</div>' +
       '<div class="tabs" id="planTabs">' + tabs.map(function (t) { return '<a class="tab' + (S.tab === t[0] ? ' on' : '') + '" href="#plan/' + esc(S.core) + '/' + t[0] + '" style="text-decoration:none">' + t[1] + '</a>'; }).join('') + '</div><div id="planBody"></div>';
@@ -822,8 +856,8 @@
     header(ov, 4, ['Status', 'Value', 'Notes']);
     var kp = [
       ['Scope: % complete', R.pct / 100, R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8), '0%'],
-      ['Time: planned finish', D(R.finish), (R.SPI == null ? 'not started' : 'SPI ' + R.SPI) + (R.late.length ? ' · ' + R.late.length + ' late task' + (R.late.length === 1 ? '' : 's') : ''), R.late.length ? 'red' : rag(R.SPI, 0.95, 0.85), dateF],
-      ['Cost: spent so far (actual)', R.AC, 'of ' + money(R.BAC) + ' budget' + (R.CPI == null ? '' : ' · CPI ' + R.CPI + ' · forecast ' + money(R.EAC)), rag(R.CPI, 0.95, 0.85), money$],
+      ['Time: planned finish', D(R.finish), (R.SPI == null ? 'not started' : 'SPI ' + R.SPI) + (R.late.length ? ' · ' + R.late.length + ' late task' + (R.late.length === 1 ? '' : 's') : ''), R.late.length ? 'red' : evRag(R.SPI), dateF],
+      ['Cost: spent so far (actual)', R.AC, 'of ' + money(R.BAC) + ' budget' + (R.CPI == null ? '' : ' · CPI ' + R.CPI + ' · forecast ' + money(R.EAC)), evRag(R.CPI), money$],
       ['Risks open (high)', openRisks.length, openRisks.filter(function (r) { return r.p * r.i >= 12; }).length + ' high risk(s)', openRisks.some(function (r) { return r.p * r.i >= 15; }) ? 'red' : 'green', '0'],
       ['Issues open', openIssues.length, openIssues.filter(function (x) { return /High|Critical/.test(x.priority); }).length + ' high or critical', openIssues.some(function (x) { return /High|Critical/.test(x.priority); }) ? 'amber' : 'green', '0']
     ];

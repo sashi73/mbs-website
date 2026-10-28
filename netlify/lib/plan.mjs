@@ -209,24 +209,54 @@ export function jobKind(j) {
   if (/install|new|build|renovat|extension|deck|pergola|fence|paint|tile|retil/.test(t)) return 'New work';
   return 'Job';
 }
-export function jobTitle(j) {
+// a service like "Repair question (Ask Mr. Fixit)" or "General enquiry" says nothing about the work, so the enquiry text is used
+const vague = (s) => !s || GENERIC.test(s) || /\bquestions?\b|mr\.? ?fix-?it|\benquir|\binquir/i.test(s);
+const ASKED = /\b(?:has |have |had )?(?:asked|asks|is asking|was asking|enquired|enquires|wants|would like|needs|requested|requests|is looking for)\b(?: (?:Mr\.? ?Fix-?it|us|the team|MBS))?(?: (?:a |some )?(?:question|questions|quote|advice|help))?(?: (?:about|for|regarding|whether|if|on|with|to have|to get|to))?\s+/i;
+export function workFrom(text) {   // "Customer Sashi from Box Hill has asked about a noisy bathroom exhaust fan…" -> "Noisy bathroom exhaust fan…"
+  let t = tidy(text).replace(/^(summary|brief|enquiry)\s*[:\-]\s*/i, '');
+  if (!t) return '';
+  const q = t.match(/[“"]([^”"]{8,400})[”"]/);
+  if (q) t = q[1];
+  else { const m = t.slice(0, 240).match(ASKED); if (m) t = t.slice(m.index + m[0].length); }
+  t = t.replace(/^(hi|hello|hey|g'?day)[,!.\s]+/i, '')
+    .replace(/^(please\s+)?(can|could|would) (you|someone|u|your team) (please )?(help( me| us)?( to| with)? |come and |have a look at )?/i, '')
+    .replace(/^how (do|can|should|would|much) (i|we|you|it cost to) (go about )?/i, '')
+    .replace(/^(i|we) (need|want|would like|'d like|am looking for|are looking for|have)( (to have|to get|someone to|to))? /i, '')
+    .replace(/^(a |an )?(free )?(quote|price|estimate|advice) (to|for|on|about) /i, '')
+    .replace(/^(my|our|their|his|her|the|a|an) /i, '');
+  const parts = t.split(/(?<=[.!?])\s+|\n|\s(?=(?:Best time|The best time|Photos? (?:were|was|are)|No photos|The customer would like|They would like|Customer would like))/i).map((x) => x.replace(/[.!?,;:\s]+$/, '')).filter(Boolean);
+  let out = parts[0] || '';
+  out = out.replace(/[,;]?\s+(what|how|can|could|should|would|any|is it|do you|does anyone)\b[^.]*$/i, (m) => out.length - m.length >= 15 ? '' : m);
+  if (out.length < 50 && parts[1] && out.length + parts[1].length < 95 && !/^(best time|photos?|no photos|please|thanks|thank you|the customer would|can|could|would|what|how|is it|do you|any)\b/i.test(parts[1])) out += '; ' + parts[1].replace(/^(it|this|that) /i, (w) => w.toLowerCase());
+  if (out.length > 95) out = out.slice(0, 92).replace(/[\s,;]+\S*$/, '') + '…';
+  return out;
+}
+export function jobTitle(j) {   // the work itself, from the customer's words or the enquiry brief; the service name if there's nothing better
   let s = tidy(j.service);
-  if (!s || GENERIC.test(s) || s.length > 60) {
-    let t = tidy(j.summary).replace(/^(summary|brief|enquiry)\s*[:\-]\s*/i, '');
-    t = t.replace(/^(the )?(customer|client|caller|they|he|she)( has)? (asked|asks|is asking|wants|would like|needs|enquired|enquires|is looking|looking)( a question)?( (about|for|to|regarding|if))?\s*/i, '');
-    t = (t.split(/(?<=[.!?])\s|\n/)[0] || '').replace(/[.!?]+$/, '');
-    if (t) s = t.length > 60 ? t.slice(0, 57).replace(/\s+\S*$/, '') + '…' : t;
-  }
+  const w = workFrom(j.details) || workFrom(j.summary);
+  if (w && (vague(s) || s.length > 60 || w.length > s.length + 8)) s = w;
+  else if (vague(s)) s = '';
   s = s || 'Job';
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 export function jobScope(j) {
   const parts = [];
-  if (tidy(j.service) && !GENERIC.test(tidy(j.service))) parts.push(tidy(j.service));
+  if (tidy(j.service) && !vague(tidy(j.service))) parts.push(tidy(j.service));
+  if (tidy(j.details) && !tidy(j.summary).includes(tidy(j.details).slice(0, 60))) parts.push('Customer\'s words: ' + String(j.details).trim());
   if (tidy(j.summary)) parts.push(String(j.summary).trim());
   const notes = (j.notes || []).map((n) => tidy(n.text)).filter(Boolean).slice(-5);
   if (notes.length) parts.push('Notes: ' + notes.join(' | '));
   return parts.join('\n\n').slice(0, 3000);
+}
+
+// the enquiry text often starts "Customer Sashi Kumar from …": take names, phone numbers and emails out before it goes to the AI
+export function privateOut(text, job = {}) {
+  let t = String(text || '').replace(/[^\s@]+@[^\s@]+\.[A-Za-z]{2,}(\.[A-Za-z]{2,})*/g, '[email]').replace(/\+?\d[\d\s()-]{6,}\d/g, '[phone]');
+  const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const name = tidy(job.name);
+  if (name) t = t.replace(new RegExp(esc(name), 'gi'), 'the customer');
+  for (const part of name.split(/\s+/).filter((x) => x.length >= 3)) t = t.replace(new RegExp('\\b' + esc(part) + '\\b', 'gi'), 'the customer');
+  return t.replace(/\b(customer )?the customer( the customer)+/gi, 'the customer').replace(/\bcustomer the customer\b/gi, 'the customer');
 }
 
 // ---------- ✨ AI builds a plan (runs in a background function, so it can take longer than a normal request) ----------
@@ -234,7 +264,7 @@ const planCap = () => Math.max(800, Math.min(4000, Number(env('AI_PLAN_MAX_TOKEN
 export async function buildAiPlan({ core, describe, scope, type, start }, by) {
   const job = core ? await J.find(core) : null;
   if (!job) return { error: 'Job not found' };
-  const text = str(describe, 1500) || str(scope, 1500);
+  const text = privateOut(str(describe, 1500) || str(scope, 1500), job);   // never send the customer's name, phone or email
   if (text.length < 10) return { error: 'Describe the job first (what the customer wants done).' };
   if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.' };
   try { await checkLimit(); } catch (e) { return { error: e.message }; }
@@ -303,7 +333,8 @@ export async function planPost(action, body, { who, by, audit }) {
     const planned = new Set(keys.map((k) => k.slice(5)));
     const open = list.filter((j) => J.OPEN.includes(j.stage) && !planned.has(j.core)).sort((a, b) => b.created - a.created).slice(0, 150);
     const full = await kv.getMany(open.map((j) => 'job:' + j.core));
-    return out(200, { jobs: full.filter(Boolean).map((j) => ({ core: j.core, ref: J.refFor(j), name: j.name || 'Customer', suburb: j.suburb || '', title: jobTitle(j), kind: jobKind(j) })) });
+    return out(200, { jobs: full.filter(Boolean).map((j) => ({ core: j.core, ref: J.refFor(j), name: j.name || 'Customer', suburb: j.suburb || '', title: jobTitle(j), kind: jobKind(j),
+      service: j.service || '', stage: j.stage || '', created: j.created || 0, bestTime: j.best_time || '', source: j.source || '', photos: (j.photos || []).length, scope: jobScope(j).slice(0, 1500) })) });
   }
   if (action === 'planAiStatus') {
     const id = str(body.id, 40).replace(/[^a-z0-9]/gi, '');

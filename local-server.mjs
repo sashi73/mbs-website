@@ -28,8 +28,11 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-29 v25d (planner: job types, AI-built plans, drag to reorder)';
+const VERSION = '2026-10-29 v25e (planner: jobs listed by the actual work)';
 const NEEDS = [
+  ['netlify/lib/plan.mjs', 'privateOut'],
+  ['netlify/functions/lead.mjs', 'details: clean(lead.details'],
+  ['admin/admin-plan.js', 'jobPeek'],
   ['netlify/functions/planai-background.mjs', 'buildAiPlan'],
   ['admin/admin-plan.js', 'dragRows'],
   ['netlify/lib/plan.mjs', 'planAiStatus'],

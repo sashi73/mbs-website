@@ -59,14 +59,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const deck = await J.nextCore('C');
     await J.create({ core: deck, name: 'Ana Ruiz', phone: '0400 333 444', email: 'ana@example.com', suburb: 'Kellyville', service: 'Composite deck', source: 'web',
       summary: 'Wants a 6 x 4 m composite deck off the family room.' });
+    const fixit = await J.nextCore('Q');   // as Mr. Fixit saves it on the live site
+    await J.create({ core: fixit, name: 'Sashi Kumar', phone: '0400 777 888', email: 'sk@example.com', suburb: 'Cabramatta West NSW 2166', service: 'Repair question (Ask Mr. Fixit)', source: 'chat', best_time: 'Weekday mornings',
+      details: 'my bathroom exhaust fan is really noisy and doesnt take the steam out, what should I do?',
+      summary: 'Customer Sashi Kumar from Cabramatta West NSW 2166 has asked Mr. Fixit about a bathroom exhaust fan that has become noisy and no longer clears steam. Sashi can be reached on 0400 777 888. Best time to call is weekday mornings. No photos were attached.' });
     const blank = await J.nextCore('M');
     await J.create({ core: blank, name: 'Lee Wong', phone: '0400 555 666', email: 'lee@x.com', suburb: 'Rouse Hill', service: '', source: 'phone', summary: '' });
 
     // ---- server: what the job is ----
     const fanJob = await kv.get('job:' + fan);
-    ok('Title', 'a "Customer asked a question about…" enquiry becomes a short job title', P.jobTitle(fanJob) === 'Repairing his bathroom exhaust fan', P.jobTitle(fanJob));
+    ok('Title', 'a "Customer asked a question about…" enquiry becomes a short job title', P.jobTitle(fanJob) === 'Repairing his bathroom exhaust fan; it is noisy and has stopped pulling steam out', P.jobTitle(fanJob));
+    const fx = await kv.get('job:' + fixit);
+    ok('Title', 'Mr. Fixit job ("Repair question (Ask Mr. Fixit)") is titled by the actual work, from the customer\'s own words', P.jobTitle(fx) === 'Bathroom exhaust fan is really noisy and doesnt take the steam out' && fx.details, P.jobTitle(fx));
+    ok('Title', 'without the customer\'s words, the work comes from the enquiry brief', P.jobTitle({ ...fx, details: '' }) === 'Bathroom exhaust fan that has become noisy and no longer clears steam', P.jobTitle({ ...fx, details: '' }));
+    ok('Scope', 'scope keeps the customer\'s words and the brief; "Repair question (Ask Mr. Fixit)" left out', /Customer's words: my bathroom exhaust fan/.test(P.jobScope(fx)) && /no longer clears steam/.test(P.jobScope(fx)) && !/Repair question/.test(P.jobScope(fx)));
+    ok('Privacy', 'names, phone numbers and emails are taken out of text for the AI', !/Sashi|Kumar|0400|sk@/.test(P.privateOut(P.jobScope(fx) + ' email sk@example.com', fx)) && /the customer/.test(P.privateOut(P.jobScope(fx), fx)));
     ok('Title', 'the kind of job is worked out (Repair)', P.jobKind(fanJob) === 'Repair', P.jobKind(fanJob));
-    ok('Title', 'a real service name is kept as the title', P.jobTitle(await kv.get('job:' + deck)) === 'Composite deck');
+    ok('Title', 'a short service name gives way to the fuller work description (6 x 4 m composite deck…)', P.jobTitle(await kv.get('job:' + deck)) === '6 x 4 m composite deck off the family room', P.jobTitle(await kv.get('job:' + deck)));
     ok('Scope', 'scope comes from the service and the enquiry summary (generic "General question" left out)', /exhaust fan/.test(P.jobScope(fanJob)) && !/General question/.test(P.jobScope(fanJob)));
 
     const br = await chromium.launch();
@@ -88,7 +97,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const opts = await p.$$eval('#newPlanJob option', (o) => o.map((x) => x.textContent));
     ok('List', 'the "Plan a job…" list says what each job is: "Sashi Test: Repairing his bathroom exhaust fan"', opts.some((t) => /Sashi Test: Repairing his bathroom exhaust fan/.test(t) && /Box Hill/.test(t)), opts.join(' / '));
     ok('List', 'no raw "Customer asked a question" text in the list', !opts.some((t) => /Customer asked/i.test(t)));
-    ok('List', 'kind added when the title does not say it (Composite deck (New work))', opts.some((t) => /Ana Ruiz: Composite deck \(New work\)/.test(t)), opts.join(' / '));
+    ok('List', 'kind added when the title does not say it ([New work])', opts.some((t) => /Ana Ruiz: 6 x 4 m composite deck off the family room \[New work\]/.test(t)), opts.join(' / '));
+    ok('List', 'Mr. Fixit job listed by the work, not "Repair question": "Sashi Kumar: Bathroom exhaust fan is really noisy… [Repair] · Cabramatta West"', opts.some((t) => /Sashi Kumar: Bathroom exhaust fan is really noisy and doesnt take the steam out \[Repair\] · Cabramatta West/.test(t)) && !opts.some((t) => /Repair question/.test(t)), opts.join(' / '));
+    ok('List', 'nothing shown until a job is picked', await p.isHidden('#jobPeek'));
+    await p.selectOption('#newPlanJob', fixit);
+    const peek = await p.textContent('#jobPeek');
+    ok('List', 'picking a job shows what we would be committing to: the full request', /committing to/.test(peek) && /no longer clears steam/.test(peek) && /my bathroom exhaust fan is really noisy/.test(peek));
+    ok('List', '…plus the other fields: service, type, suburb, stage, received, best time, source, photos', ['Service', 'Type', 'Suburb', 'Stage', 'Received', 'Best time to call', 'Came from', 'Photos'].every((w) => peek.includes(w)) && /Weekday mornings/.test(peek) && /New enquiry/.test(peek), peek.slice(0, 400));
+    await p.screenshot({ path: 'MBS_plan25e_peek.jpg', type: 'jpeg', quality: 80 });
+    // AI with the scope as filled in from the enquiry (it has the customer's name and phone in it)
+    await p.click('#newPlanGo'); await p.waitForSelector('#tplScope');
+    ok('Chooser', 'scope prefilled from the enquiry includes the customer\'s words', /Customer's words/.test(await p.inputValue('#tplScope')));
+    await p.click('[data-mode=ai]'); const n0 = seen.length; await p.click('#aiGo'); await p.waitForSelector('#aiOut .tplprev', { timeout: 20000 });
+    const fxReq = seen.slice(n0).find((x) => /WATERFALL/.test(x.sys));
+    ok('Privacy', 'AI plan from the prefilled scope: no customer name, phone or email sent', fxReq && !/Sashi|Kumar|0400|sk@/.test(fxReq.raw) && /exhaust fan/.test(fxReq.u.description), fxReq && fxReq.u.description.slice(0, 200));
+    await p.goto(`${BASE}/admin/#projects`); await p.waitForSelector('#newPlanJob');
 
     // ---- chooser: scope + job types ----
     await p.selectOption('#newPlanJob', fan); await p.click('#newPlanGo'); await p.waitForSelector('#tplScope');
@@ -121,10 +144,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('AI', 'planning tips are shown', /licensed electrician/.test(await p.textContent('#aiOut .aitips')));
     ok('AI', 'the AI works out the scope too: in/out of scope, deliverables, acceptance, assumptions shown', /Duct to the eave/.test(await p.textContent('#aiOut .aiscope')) && /Other electrical work/.test(await p.textContent('#aiOut .aiscope')) && /compliance certificate/.test(await p.textContent('#aiOut .aiscope')) && /clears steam/.test(await p.textContent('#aiOut .aiscope')));
     ok('AI', 'and the risks: cause, P×I score, response and action shown', (await p.$$('#aiOut .airisks tbody tr')).length === 3 && /House built before 1990/.test(await p.textContent('#aiOut .airisks')) && /10/.test(await p.textContent('#aiOut .airisks .score')));
-    const req = seen.find((x) => /WATERFALL/.test(x.sys));
+    const req = seen.filter((x) => /WATERFALL/.test(x.sys)).pop();
     ok('AI', 'AI is asked for tasks, scope and risks, capped at AI_PLAN_MAX_TOKENS (1600 here, default 3000)', req && req.max === 1600 && /eave/.test(req.u.description) && /SCOPE/.test(req.sys) && /RISKS/.test(req.sys));
     ok('Privacy', 'no customer name, phone or email sent to the AI', req && !/Sashi Test|0400 111|example\.com/.test(req.raw));
-    ok('AI', 'draft is kept as aiplan:<id> (status done)', (await kv.keys('aiplan:')).length === 1);
+    ok('AI', 'draft is kept as aiplan:<id> (status done)', (await kv.keys('aiplan:')).length === 2);   // one per AI build (2 so far)
     await p.click('#tplCreate'); await p.waitForSelector('table.gt');
     let st = await kv.get('plan:' + fan);
     const inst = st && st.tasks.find((t) => /install new/.test(t.name));
@@ -157,6 +180,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Types', 'plan from a job type: inspection, quote, council check, materials, trade steps, QA, handover, invoice', st && /Site inspection/.test(st.tasks[0].name) && st.tasks.some((t) => /Council/.test(t.name)) && /Invoice/.test(st.tasks[st.tasks.length - 1].name) && st.tasks.length === 11, st && st.tasks.map((t) => t.name).join(' | '));
     ok('Types', 'tasks run one after another and the budget is filled in', st && st.tasks.slice(1).every((t, i) => t.pred[0] === st.tasks[i].id) && st.charter.budget > 5000);
     await p.screenshot({ path: 'MBS_plan25d.jpg', type: 'jpeg', quality: 80 });
+
+    // ---- Projects list: SPI / CPI with colours and a legend ----
+    const ago = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+    const evPlan = async (name, pct, actual) => {
+      const c = await J.nextCore('M');
+      await J.create({ core: c, name, phone: '1', email: '', suburb: 'Box Hill', service: 'Painting', source: 'chat', summary: 'Paint the fence' });
+      const r = await p.request.post(`${BASE}/.netlify/functions/admin`, { headers: { 'X-MBS-Admin': '1' }, data: { action: 'planSave', core: c, rev: 0, plan: { name: name + ' plan', start: ago,
+        tasks: [{ id: 't1', name: 'Paint', dur: 5, qty: 1, unit: 'lot', rate: 1000, pct, status: pct >= 100 ? 'done' : 'doing', actual, pred: [], res: [] }], risks: [], issues: [], charter: {} } } });
+      return r.status();
+    };
+    const sts = [await evPlan('Green Gary', 100, 800), await evPlan('Yellow Yuki', 95, 1000), await evPlan('Red Rita', 50, 1000)];
+    await p.goto(`${BASE}/admin/#dashboard`); await p.goto(`${BASE}/admin/#projects`); await p.waitForSelector('.evkey');
+    const heads = await p.$$eval('#view thead th', (h) => h.map((x) => x.textContent.trim()));
+    ok('SPI/CPI', 'list columns are SPI (time) and CPI (cost) instead of Time and Cost', heads.some((h) => /^SPI/.test(h)) && heads.some((h) => /^CPI/.test(h)) && !heads.includes('Time') && !heads.includes('Cost'), heads.join(','));
+    const chip = (who) => p.evaluate((w) => { const tr = [...document.querySelectorAll('tr[data-plan]')].find((r) => r.textContent.includes(w)); return [...tr.querySelectorAll('.evcell')].map((td) => td.querySelector('.rag').className.replace('rag ev ', '') + ' ' + td.textContent.trim()); }, who);
+    const g = await chip('Green Gary'), y = await chip('Yellow Yuki'), rd = await chip('Red Rita');
+    ok('SPI/CPI', 'green for 1.00 or more (SPI 1.00 "On track", CPI 1.25)', sts.every((x) => x === 200) && /rag-green 1\.00On track/.test(g[0]) && /rag-green 1\.25On track/.test(g[1]), g.join(' | '));
+    ok('SPI/CPI', 'yellow for 0.90 to 0.99 (SPI 0.95, CPI 0.95, "Watch")', /rag-amber 0\.95Watch/.test(y[0]) && /rag-amber 0\.95Watch/.test(y[1]), y.join(' | '));
+    ok('SPI/CPI', 'red below 0.90 (SPI 0.50, CPI 0.50, "Act now")', /rag-red 0\.50Act now/.test(rd[0]) && /rag-red 0\.50Act now/.test(rd[1]), rd.join(' | '));
+    const allChips = await p.$$eval('.evcell .rag', (c) => c.map((x) => [x.className, x.textContent.trim()]));
+    ok('SPI/CPI', 'every chip on the list has the right colour for its number (grey "–" when there is no data)', allChips.every(([c, t]) => t === '–' ? /grey/.test(c) : +t >= 1 ? /green/.test(c) : +t >= 0.9 ? /amber/.test(c) : /red/.test(c)), JSON.stringify(allChips));
+    const key = await p.textContent('.evkey');
+    ok('SPI/CPI', 'legend under the list explains SPI, CPI, 1.00 or more, 0.90–0.99 (yellow, watch), below 0.90 and "–"', /SPI/.test(key) && /CPI/.test(key) && /1\.00 or more/.test(key) && /0\.90 – 0\.99/.test(key) && /Watch/.test(key) && /below 0\.90/.test(key) && /not enough/.test(key) && (await p.$$('.evkey .evdot')).length === 4);
+    await p.screenshot({ path: 'MBS_plan25e_spi.jpg', type: 'jpeg', quality: 80 });
 
     // ---- phone ----
     const ph = await ctx.newPage(); await ph.setViewportSize({ width: 390, height: 844 });

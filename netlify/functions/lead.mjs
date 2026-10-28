@@ -62,7 +62,7 @@ export default async (req) => {
     try {
       job = await J.create({ core, name: clean(lead.name, 120), phone: clean(lead.phone, 40), email: clean(lead.email, 160),
         suburb: loc ? loc.label : clean(lead.suburb, 80), service: clean(lead.service, 120), best_time: clean(lead.best_time, 80),
-        summary: clean(leadForTeam.summary, 1500), mapsUrl: loc ? loc.mapsUrl : '', source });
+        summary: clean(leadForTeam.summary, 1500), details: clean(lead.details, 1500), mapsUrl: loc ? loc.mapsUrl : '', source });
       if (photos.length) job = await J.savePhotos(core, photos);
       if (cal && cal.start) await J.addReminder({ at: cal.start, core, chat: 'alerts',
         text: `Call ${job.name || 'the customer'}${job.phone ? ' on ' + job.phone : ''} (best time: ${job.best_time || 'anytime'})` });
