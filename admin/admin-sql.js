@@ -208,15 +208,28 @@
     P.innerHTML = '<div class="card-h"><h2>✨ AI query</h2><span class="muted" style="font-size:12.5px">Ask in plain English. The AI writes the query; it runs here on your own data.</span></div>' +
       '<form class="askbar" id="askForm"><input id="askQ" autocomplete="off" maxlength="400" placeholder="e.g. How many new jobs did I get this month?" aria-label="Your question"><button class="btn btn-gold" id="askGo" type="submit">Ask</button></form>' +
       '<div class="ask-ex">' + EXAMPLES.map(function (e) { return '<button type="button" class="chipq" data-ex="' + esc(e) + '">' + esc(e) + '</button>'; }).join('') + '</div>' +
-      '<div id="askOut"></div>' +
+      '<div id="askOut"></div><div class="muted" id="askUse" style="font-size:12px;margin-top:8px"></div>' +
       (S.askLog.length ? '<details class="ask-log"><summary>Earlier questions (' + S.askLog.length + ')</summary>' + S.askLog.slice().reverse().map(function (a, i) { return '<button type="button" class="ask-old" data-old="' + (S.askLog.length - 1 - i) + '"><b>' + esc(a.q) + '</b><small>' + esc(a.answer || '') + '</small></button>'; }).join('') + '</details>' : '') +
+      '<p style="margin:12px 0 0"><button type="button" class="btn btn-sm" id="aiPing">🔌 Test AI connection</button> <span class="muted" id="aiPingOut" style="font-size:12.5px"></span></p>' +
       '<p class="muted" style="font-size:12px;margin:12px 0 0">To write the query the AI only sees table and column names, today\'s dates and short lists like stages and plan names. To word the answer it sees the results with names, phone numbers and emails removed. Don\'t type phone numbers into the question.</p>';
     var last = S.askLog[S.askLog.length - 1];
     if (last) showAnswer(last);
+    api('sqlUsage').then(showUse).catch(function () {});
+    $('#aiPing').onclick = function () {
+      var o = $('#aiPingOut'); o.textContent = 'Checking…';
+      api('aiPing').then(function (r) {
+        o.textContent = r.ok ? '✅ DeepSeek answered in ' + (r.ms / 1000).toFixed(1) + ' s (model ' + r.model + ', time allowed ' + r.timeoutSec + ' s).'
+          : '❌ ' + (r.reason || 'No answer') + (r.ms ? ' (after ' + (r.ms / 1000).toFixed(1) + ' s)' : '');
+      }).catch(function (e) { o.textContent = '❌ ' + e.message; });
+    };
     $('#askForm').onsubmit = function (e) { e.preventDefault(); ask($('#askQ').value); };
     P.querySelectorAll('[data-ex]').forEach(function (b) { b.onclick = function () { $('#askQ').value = b.getAttribute('data-ex'); ask(b.getAttribute('data-ex')); }; });
     P.querySelectorAll('[data-old]').forEach(function (b) { b.onclick = function () { var a = S.askLog[+b.getAttribute('data-old')]; try { run(a.sql); S.title = a.title; S.view = a.view || 'table'; if (a.chart) S.chart = JSON.parse(JSON.stringify(a.chart)); else autoChart(); results(); showAnswer(a); $('#askQ').value = a.q; } catch (e) { fail(e); } }; });
     setTimeout(function () { var i = $('#askQ'); if (i && !S.askBusy) i.focus(); }, 30);
+  }
+  function showUse(t) {
+    var el = $('#askUse'); if (!el || !t) return;
+    el.textContent = 'Today: ' + t.questions + ' of ' + t.limit + ' AI questions used · ' + Number(t.tokens || 0).toLocaleString('en-AU') + ' tokens.';
   }
   function showAnswer(a) {
     var O = $('#askOut'); if (!O) return;
@@ -225,6 +238,7 @@
     O.innerHTML = '<div class="ask-ans' + (a.error ? ' err' : '') + '"><div class="ask-q">“' + esc(a.q) + '”</div>' + big +
       '<div class="ask-a">' + (a.answer ? esc(a.answer) : '<span class="ask-think">Working out the answer…</span>') + '</div>' +
       (a.note ? '<div class="muted" style="font-size:12.5px;margin-top:6px">How I read it: ' + esc(a.note) + '</div>' : '') +
+      (a.tokens ? '<div class="muted" style="font-size:12px;margin-top:4px">This question used about ' + a.tokens.toLocaleString('en-AU') + ' tokens.</div>' : '') +
       (a.sql ? '<details class="ask-sql"><summary>Show the query</summary><pre class="json" style="max-height:220px">' + esc(a.sql) + '</pre><button class="btn btn-sm" type="button" id="askEdit">Open in SQL editor</button></details>' : '') + '</div>';
     var ed = $('#askEdit'); if (ed) ed.onclick = function () { S.sql = a.sql; S.title = a.title || 'Query results'; S.tab = 'editor'; draw(); };
   }
@@ -235,18 +249,30 @@
     S.askBusy = true;
     var btn = $('#askGo'); if (btn) { btn.disabled = true; btn.textContent = 'Thinking…'; }
     var O = $('#askOut'); if (O) O.innerHTML = '<div class="ask-ans"><div class="ask-q">“' + esc(question) + '”</div><div class="ask-a"><span class="ask-think">Writing the query…</span></div></div>';
-    var H = hints(), hist = S.askLog.slice(-2).map(function (a) { return { q: a.q, sql: a.sql }; });
-    var a = { q: question, at: Date.now() };
+    var H = hints(), hist = S.askLog.slice(-1).map(function (a) { return { q: a.q, sql: a.sql }; });
+    var a = { q: question, at: Date.now(), tokens: 0 };
+    var count = function (r) { a.tokens += Number(r && r.tokens) || 0; if (r && r.today) showUse(r.today); return r; };
     var tryRun = function (r, n) {
       if (!r.sql) return Promise.reject(new Error(r.note || 'I could not turn that into a query. Try asking in a different way.'));
       try { run(r.sql); return Promise.resolve(r); }
       catch (e) {
         if (n >= 1) return Promise.reject(new Error('The AI\'s query did not work (' + e.message + '). Try asking in a different way.'));
         var t = $('#askOut .ask-think'); if (t) t.textContent = 'Fixing the query…';
-        return api('sqlAsk', { question: question, hints: H, history: hist, previous: { sql: r.sql, error: e.message } }).then(function (r2) { return tryRun(r2, n + 1); });
+        return api('sqlAsk', { question: question, hints: H, history: hist, previous: { sql: r.sql, error: e.message } }).then(count).then(function (r2) { return tryRun(r2, n + 1); });
       }
     };
-    api('sqlAsk', { question: question, hints: H, history: hist }).then(function (r) { return tryRun(r, 0); }).then(function (r) {
+    var slow = function (e) { return /took too long|slow right now|Error 50[234]|Failed to fetch|NetworkError/i.test(String(e && e.message)); };
+    var first = function () {
+      return api('sqlAsk', { question: question, hints: H, history: hist }).catch(function (e) {
+        if (!slow(e)) throw e;
+        var t = $('#askOut .ask-think'); if (t) t.textContent = 'The AI is slow right now, trying once more…';
+        return api('sqlAsk', { question: question, hints: H, history: hist }).catch(function (e2) {
+          if (slow(e2)) throw new Error('The AI did not answer in time (twice). DeepSeek may be busy: try again in a minute. If this keeps happening, press "Test AI connection" below.');
+          throw e2;
+        });
+      });
+    };
+    first().then(count).then(function (r) { return tryRun(r, 0); }).then(function (r) {
       a.sql = S.sql; a.title = r.title || 'AI query'; a.note = r.note || '';
       S.title = a.title;
       var ok = r.chart && S.cols.indexOf(r.chart.x) >= 0 && r.chart.y.every(function (y) { return S.cols.indexOf(y) >= 0; });
@@ -254,7 +280,10 @@
       a.view = S.view; a.chart = JSON.parse(JSON.stringify(S.chart));
       if (S.rows.length === 1 && S.cols.length === 1) { var v = S.rows[0][S.cols[0]]; a.single = typeof v === 'number' ? v.toLocaleString('en-AU', { maximumFractionDigits: 2 }) : String(v == null ? '' : v); }
       results(); showAnswer(a);
-      return api('sqlAnswer', { question: question, title: a.title, sql: S.sql, columns: S.cols, rows: S.rows.slice(0, 200) }).then(function (x) { a.answer = x.answer; }).catch(function () { a.answer = S.rows.length + ' row' + (S.rows.length === 1 ? '' : 's') + ' found (see the table).'; });
+      // a single number or nothing found: no need to spend tokens on wording the answer
+      if (!S.rows.length) { a.answer = 'Nothing matched that question.'; return; }
+      if (a.single != null) { a.answer = a.title + ': ' + a.single + '.'; return; }
+      return api('sqlAnswer', { question: question, title: a.title, sql: S.sql, columns: S.cols, rows: S.rows.slice(0, 20), row_count: S.rows.length }).then(function (x) { a.answer = x.answer; count(x); }).catch(function () { a.answer = S.rows.length + ' row' + (S.rows.length === 1 ? '' : 's') + ' found (see the table).'; });
     }).then(function () {
       S.askLog.push(a); if (S.askLog.length > 20) S.askLog.shift();
       showAnswer(a);
@@ -495,6 +524,6 @@
     };
   }
 
-  M.addView('sql', 'SQL wizard', function () { return page(); });
+  M.addView('sql', 'SQL wizard', function (args) { if (args && ['ask', 'templates', 'wizard', 'editor', 'saved'].indexOf(args[0]) >= 0) S.tab = args[0]; return page(); });
   window.MBS.sqlState = S;   // for tests
 })();

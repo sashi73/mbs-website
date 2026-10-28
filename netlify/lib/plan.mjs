@@ -4,6 +4,8 @@
 import * as kv from './kv.mjs';
 import * as J from './jobs.mjs';
 import { parseWhen, whenText, sydneyTime } from './calendar.mjs';
+import { env } from './shared.mjs';
+import { llmJson, usage, checkLimit, llmSetup } from './ai.mjs';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const str = (s, max = 300) => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
@@ -145,6 +147,41 @@ export async function remind(core, taskId, when, by) {
 // ---------- console actions ----------
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
 const out = (status, body) => new Response(JSON.stringify(body), { status, headers: H });
+// ---------- AI support for risks and issues: "possible resolutions" (DeepSeek, token-capped) ----------
+// Sent to the AI: the plan name, the kind of work and suburb, the risk/issue text and a few task names.
+// Never sent: the customer's name, phone number or email.
+const adviseCap = () => Math.max(150, Math.min(800, Number(env('AI_ADVISE_MAX_TOKENS', '400')) || 400));
+export async function advise(core, kind, id, ask, draft) {
+  const job = await J.find(core);
+  if (!job) return { error: 'Job not found', code: 404 };
+  const plan = await get(job.core);
+  if (!plan) return { error: 'This job has no plan', code: 404 };
+  let item = (kind === 'risk' ? plan.risks : plan.issues || []).find((x) => x.id === id);
+  if (draft && typeof draft === 'object') item = { ...(item || {}), ...draft };   // what is on screen (may not be saved yet)
+  if (!item || !str(item.title, 200)) return { error: `Write the ${kind} first, then ask the AI.` };
+  if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.', code: 503 };
+  try { await checkLimit(); } catch (e) { return { error: e.message, code: 429 }; }
+  schedule(plan);
+  const ctx = { work: str(job.service, 120), suburb: str(job.suburb, 60), plan: str(plan.name, 100), stage: job.stage,
+    tasks: plan.tasks.slice(0, 20).map((t) => `${str(t.name, 50)} (${t.pct}%${t.ef ? ', finish ' + t.ef : ''})`) };
+  const it = kind === 'risk'
+    ? { risk: str(item.title, 200), cause: str(item.cause, 300), probability_1to5: int(item.p, 1, 5, 3), impact_1to5: int(item.i, 1, 5, 3), current_response: str(item.response, 20), current_action: str(item.action, 300) }
+    : { issue: str(item.title, 200), detail: str(item.detail, 300), priority: str(item.priority, 20), due: ymdOk(item.due), status: str(item.status, 20), notes_so_far: str(item.resolution, 300) };
+  const system = 'You are an experienced NSW residential building and remedial project manager (waterproofing, painting, tiling, construction). ' +
+    `Give POSSIBLE RESOLUTIONS for the ${kind} described, practical for a small builder: safe, compliant, customer-friendly. ` +
+    (kind === 'risk' ? 'Cover how to reduce the chance and the impact (PMI responses: avoid, mitigate, transfer, accept). ' : 'Cover the immediate fix and how to stop it happening again. ') +
+    'Be brief. Do not invent prices or regulations; say "check with" a licensed trade, engineer, insurer or council where that applies. ' +
+    'JSON only: {"options":[{"title":"max 60 chars","response":"' + (kind === 'risk' ? 'Avoid|Mitigate|Transfer|Accept' : 'Fix now|Workaround|Escalate|Prevent') + '","steps":["max 90 chars", "2-3 steps"],"effort":"Low|Medium|High"}] (2-3 options), "watch":"one short thing to keep an eye on"}';
+  let o, used;
+  try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify({ ...it, extra_question: ask || '', job: ctx }) }], { maxTokens: adviseCap(), temperature: 0.3 })); }
+  catch (e) { return { error: e.message, code: Number.isInteger(e.code) && e.code >= 400 && e.code < 600 ? e.code : 502 }; }
+  const today = await usage(true, used);
+  const options = (Array.isArray(o.options) ? o.options : []).slice(0, 4).map((x) => ({ title: str(x.title, 80), response: str(x.response, 20), effort: ['Low', 'Medium', 'High'].includes(x.effort) ? x.effort : '',
+    steps: (Array.isArray(x.steps) ? x.steps : []).slice(0, 4).map((t) => str(t, 140)).filter(Boolean) })).filter((x) => x.title);
+  if (!options.length) return { error: 'The AI did not suggest anything useful. Add more detail and try again.' };
+  return { kind, title: str(item.title, 200), options, watch: str(o.watch, 200), tokens: used, today };
+}
+
 export async function planPost(action, body, { who, by, audit }) {
   const core = str(body.core, 40);
   if (action === 'planList') {
@@ -169,6 +206,12 @@ export async function planPost(action, body, { who, by, audit }) {
     if (r.conflict) return out(409, { error: 'Someone else changed this plan. Your view has been refreshed with their version.', plan: r.conflict });
     if (body.note && audit) await audit(who, `Plan ${core}: ${str(body.note, 120)}`);
     return out(200, { plan: r.plan });
+  }
+  if (action === 'planAdvise') {
+    const r = await advise(core, body.kind === 'issue' ? 'issue' : 'risk', str(body.id, 20), str(body.ask, 300), body.item);
+    if (r.error) return out(r.code || 400, { error: r.error });
+    if (audit) await audit(who, `Plan ${core}: asked AI about ${body.kind === 'issue' ? 'issue' : 'risk'} "${str(r.title, 60)}"`);
+    return out(200, r);
   }
   if (action === 'planDelete') {
     const job = await J.find(core);

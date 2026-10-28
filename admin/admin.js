@@ -77,7 +77,8 @@
     var name = VIEWS[parts[0]] ? parts[0] : 'dashboard';
     $('#title').textContent = TITLES[name];
     document.title = TITLES[name] + ' · MBS Console';
-    Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (a) { a.classList.toggle('on', a.getAttribute('data-nav') === (NAVKEY[name] || name)); });
+    var navOn = name === 'sql' && parts[1] === 'ask' ? 'ask' : (NAVKEY[name] || name);
+    Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (a) { a.classList.toggle('on', a.getAttribute('data-nav') === navOn); });
     $('#side').classList.remove('open');
     view.innerHTML = '<div class="empty">Loading…</div>';
     Promise.resolve(VIEWS[name](parts.slice(1))).catch(fail);

@@ -1,2 +1,2 @@
-MBS website v24d (2026-10-28)
-SQL wizard AI query: ask in plain English ("How many new jobs this month?", "What is the completion status of the bathroom project?"); DeepSeek writes a read-only query, it runs in the browser on your data, and DeepSeek words the answer (names, phones and emails removed). Automatic query repair, follow-up questions, examples, history. Planner (v24c), speed fixes (v24b).
+MBS website v24f (2026-10-28)
+Console: "Ask AI (plain English)" in the left menu, version shown at the bottom of the menu, AI answers kept inside Netlify's 10-second function limit (AI_TIMEOUT_SECONDS, default 8.5, with one automatic retry), "Test AI connection" button, clearer DeepSeek errors (bad key, no credit). Ask AI on risks/issues (v24e), AI query (v24d), planner (v24c), speed fixes (v24b).
