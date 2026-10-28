@@ -421,3 +421,37 @@ body.plan-wide .gsplit,body.plan-wide .gpane{max-height:calc(100vh - 290px)}
 .gtr .glab{top:calc(50% - 8px)}
 .gtr .gsub{top:calc(50% - 5px)}
 .gtr .gbase{top:calc(50% + 9px)}
+
+/* v25d: drag tasks / sub-tasks up and down */
+.grip{display:inline-block;cursor:grab;color:#A8A397;font-size:14px;line-height:1;padding:2px 3px 2px 0;touch-action:none;user-select:none;vertical-align:middle}
+.grip:hover{color:#1B2A41}
+body.rowdrag,body.rowdrag *{cursor:grabbing!important;user-select:none}
+tr.dragging td{background:var(--gold-soft)!important;opacity:.75}
+tr.drop-before td{box-shadow:inset 0 3px 0 var(--gold)}
+tr.drop-after td{box-shadow:inset 0 -3px 0 var(--gold)}
+
+/* v25d: new-plan chooser (scope, job type, blank, AI) */
+.tmode.on{border-color:var(--gold);background:var(--gold-soft);box-shadow:0 0 0 1px var(--gold) inset}
+.jobline{margin:0 0 6px;font-size:14px}
+#tplScope{width:100%;min-height:96px}
+.tplprev{margin-top:12px;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#FDFCF9;display:grid;gap:8px}
+.tpltasks{margin:0;padding-left:22px;columns:2 260px;column-gap:28px;font-size:13.5px}
+.tpltasks li{break-inside:avoid;margin:2px 0}
+.aitips{background:#F4F8FF;border:1px solid #D6E2F5;border-radius:10px;padding:8px 12px;font-size:13.5px}
+.aitips ul{margin:4px 0 0;padding-left:20px}
+.jobreq{background:#FBF8F1;border:1px dashed var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px}
+.jobreq div{white-space:pre-wrap;margin-top:4px;max-height:180px;overflow:auto}
+/* v25d: type a number in # to move a row */
+input.posin{width:34px;min-width:0;padding:2px 3px;text-align:center;font-size:12.5px;border:1px solid transparent;background:transparent;border-radius:6px;color:inherit}
+input.posin:hover{border-color:var(--line);background:#fff}
+input.posin:focus{border-color:var(--gold);background:#fff;outline:none;box-shadow:0 0 0 2px var(--gold-soft)}
+input.posin.sub{width:28px;font-size:11.5px}
+tr.just-moved td{animation:justmoved 1.6s ease-out}
+@keyframes justmoved{from{background:var(--gold-soft)}to{background:transparent}}
+/* v25d: AI draft scope + risks */
+.aiscope,.airisks{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:#fff;font-size:13.5px;display:grid;gap:6px}
+.aiscope .pre{white-space:pre-wrap}
+.airisks{overflow-x:auto}
+.airisks table{width:100%;border-collapse:collapse;font-size:12.5px}
+.airisks th,.airisks td{text-align:left;padding:4px 6px;border-top:1px solid var(--line);vertical-align:top}
+.airisks th{border-top:0;color:var(--muted);font-weight:700}

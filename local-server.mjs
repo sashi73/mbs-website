@@ -28,8 +28,11 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-28 v25c (planner: resizable Gantt, Excel export)';
+const VERSION = '2026-10-29 v25d (planner: job types, AI-built plans, drag to reorder)';
 const NEEDS = [
+  ['netlify/functions/planai-background.mjs', 'buildAiPlan'],
+  ['admin/admin-plan.js', 'dragRows'],
+  ['netlify/lib/plan.mjs', 'planAiStatus'],
   ['netlify/lib/inventory.mjs', 'invPost'],
   ['admin/admin-inv.js', 'reorder'],
   ['netlify/lib/ai.mjs', 'checkLimit'],
@@ -113,7 +116,7 @@ async function oldFiles() {
   return [...out];
 }
 
-const FUNCTIONS = { chat: './netlify/functions/chat.mjs', lead: './netlify/functions/lead.mjs', tts: './netlify/functions/tts.mjs', visits: './netlify/functions/visits.mjs', admin: './netlify/functions/admin.mjs' };
+const FUNCTIONS = { chat: './netlify/functions/chat.mjs', lead: './netlify/functions/lead.mjs', tts: './netlify/functions/tts.mjs', visits: './netlify/functions/visits.mjs', admin: './netlify/functions/admin.mjs', 'planai-background': './netlify/functions/planai-background.mjs' };
 
 // Per-visitor limits, so nobody can run up AI costs or flood staff with fake enquiries once the site is public.
 // [requests allowed, per this many minutes]. Change in .env, e.g. LIMIT_CHAT=60/10
@@ -149,7 +152,7 @@ createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     // Server functions
-    const fn = url.pathname.match(/^\/\.netlify\/functions\/([a-z]+)$/);
+    const fn = url.pathname.match(/^\/\.netlify\/functions\/([a-z-]+)$/);
     if (fn && FUNCTIONS[fn[1]]) {
       if (req.method === 'POST' && overLimit(fn[1], clientIp(req))) {
         console.log(`[${new Date().toLocaleTimeString()}] Limit reached: ${fn[1]} from ${clientIp(req)}`);
@@ -170,6 +173,11 @@ createServer(async (req, res) => {
         body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks)
       });
       const mod = await import(pathToFileURL(join(ROOT, FUNCTIONS[fn[1]])).href);
+      if (fn[1].endsWith('-background')) {   // like Netlify: answer 202 at once, keep working afterwards
+        Promise.resolve().then(() => mod.default(request, { waitUntil: (p) => { Promise.resolve(p).catch(() => {}); } })).catch((e) => console.error('Background function failed:', e));
+        res.writeHead(202).end();
+        return;
+      }
       const response = await mod.default(request, { waitUntil: (p) => { Promise.resolve(p).catch(() => {}); } });
       res.writeHead(response.status, Object.fromEntries(response.headers));
       res.end(Buffer.from(await response.arrayBuffer()));

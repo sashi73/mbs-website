@@ -1,2 +1,2 @@
-MBS website v25c (2026-10-28)
-Project planner: task list and Gantt chart side by side with a divider you can drag (remembered), "Wide view" hides the menu; "Excel" downloads the whole plan as a formatted workbook: Overview, Schedule (sub-tasks grouped), Gantt (coloured bars per working day), Board, Scope, Risks (with heat map), Issues, Materials. Sub-tasks (v25b), inventory (v25).
+MBS website v25d (2026-10-29)
+Project planner: jobs are listed as "Customer: what the job is"; a new plan starts from the scope of work (filled from the enquiry, required), then a job type (22 types with sub-types), a blank plan, or ✨ Ask AI to build it (tasks, sub-tasks, costs, risks and planning tips; runs as a background function). Drag ⠿ to move tasks up or down; sub-tasks move only inside their own task. Excel export (v25c), sub-tasks (v25b), inventory (v25).

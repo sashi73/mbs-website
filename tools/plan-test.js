@@ -60,10 +60,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // ---- start from the job page ----
     await p.goto(`${BASE}/admin/#job/${core}`); await p.waitForSelector('#jobPlan a.btn');
     ok('Job page', 'job page has a "Create a project plan" button', /Create a project plan/.test(await p.textContent('#jobPlan')));
-    await p.click('#jobPlan a.btn'); await p.waitForSelector('.tpl-grid');
-    ok('Templates', 'five templates offered (bathroom, balcony, repaint, deck, blank)', (await p.$$('.tpl')).length === 5 && /Bathroom waterproofing & retiling/.test(await p.textContent('.tpl-grid')));
+    await p.click('#jobPlan a.btn'); await p.waitForSelector('#tplType');
+    ok('Templates', 'job types offered in groups (20+), incl. Bathroom > Waterproofing & retiling', (await p.$$('#tplType optgroup')).length >= 20 && /Waterproofing & retiling/.test(await p.textContent('#tplType optgroup[label=Bathroom]')));
     await p.fill('#tplStart', start);
-    await p.click('[data-tk=bathroom]'); await p.waitForSelector('table.gt');
+    await p.selectOption('#tplType', 'bathroom'); await p.click('#tplCreate'); await p.waitForSelector('table.gt');
     ok('Schedule', 'opens on the Dates columns so the Gantt chart is in view', (await p.evaluate(() => document.querySelector('th.gcol').getBoundingClientRect().left)) < 1150, await p.evaluate(() => [...document.querySelectorAll('table.gt thead th')].map((h) => h.textContent.slice(0, 6) + ':' + Math.round(h.getBoundingClientRect().width)).join(' ')));
     await p.screenshot({ path: 'MBS_plan_gantt.jpg', type: 'jpeg', quality: 80 });
     await p.click('[data-cols=c]');
@@ -114,7 +114,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Schedule', 'still matches the server after the change', await check());
 
     // ---- predecessors by row number ----
-    const rowOf = async (n) => p.evaluate((n) => { const tr = [...document.querySelectorAll('tr[data-tid]')].find((r) => r.querySelector('[data-k=name]').value === n); return +tr.cells[0].textContent; }, n);
+    const rowOf = async (n) => p.evaluate((n) => { const tr = [...document.querySelectorAll('tr[data-tid]')].find((r) => r.querySelector('[data-k=name]').value === n); return +tr.querySelector('[data-pos]').value; }, n);
     const bookRow = await rowOf('Book plumber & tiler'), stripRow = await rowOf('Strip-out & rubbish removal');
     await setCell('Strip-out & rubbish removal', 'pred', String(bookRow));
     st = await stored();
@@ -156,8 +156,36 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.click(`tr[data-tid="${mileId}"] [data-del]`); await p.click('#okBtn'); await saved();
     ok('Edit', 'a task can be deleted', !(await stored()).tasks.some((t) => t.id === mileId));
     const before = (await S()).tasks.findIndex((t) => t.id === newId);
-    await p.click(`tr[data-tid="${newId}"] [data-move="-1"]`); await saved();
-    ok('Edit', 'a task can be moved up', (await stored()).tasks.findIndex((t) => t.id === newId) === before - 1);
+    const pos = async (id, v) => { const sel = `tr[data-tid="${id}"] [data-pos]`; await p.fill(sel, String(v)); await p.press(sel, 'Enter'); await saved(); };
+    await pos(newId, before); // before is 0-based, so this is one place up
+    ok('Edit', 'typing a number in # moves the task there (one up)', (await stored()).tasks.findIndex((t) => t.id === newId) === before - 1);
+    await pos(newId, 1);
+    st = await stored();
+    ok('Edit', 'typing 1 moves the task to the first position; numbers and "After #" follow', st.tasks[0].id === newId && (await p.inputValue(`tr[data-tid="${newId}"] [data-pos]`)) === '1' && (await p.inputValue(`tr[data-tid="${st.tasks[1].id}"] [data-pos]`)) === '2');
+    const third = st.tasks[5].id;
+    await pos(third, 3);
+    st = await stored();
+    ok('Edit', 'typing 3 puts the task third, after the first two', st.tasks[2].id === third && st.tasks[0].id === newId);
+    await pos(third, 'x'); 
+    ok('Edit', 'a non-number is ignored (stays where it was)', (await stored()).tasks[2].id === third && (await p.inputValue(`tr[data-tid="${third}"] [data-pos]`)) === '3');
+    await pos(third, 999);
+    st = await stored();
+    ok('Edit', 'a number past the end moves it to the last place', st.tasks[st.tasks.length - 1].id === third);
+    ok('Edit', 'no ↑ ↓ arrow buttons any more', !(await p.$('[data-move]')) && !(await p.$('[data-smove]')));
+    // drag the ⠿ handle: last task onto the top
+    const dragTo = async (fromSel, toSel, after) => {
+      const g = await p.$(fromSel + ' [data-grip]'); const gb = await g.boundingBox(); const tb = await (await p.$(toSel)).boundingBox();
+      await p.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2); await p.mouse.down();
+      const y = after ? tb.y + tb.height - 3 : tb.y + 3;
+      await p.mouse.move(gb.x + 2, (gb.y + y) / 2, { steps: 4 }); await p.mouse.move(gb.x + 2, y, { steps: 4 });
+      const shown = await p.$('tr.drop-before, tr.drop-after');
+      await p.mouse.up(); await saved(); return !!shown;
+    };
+    const L = st.tasks.length, aboveId = st.tasks[L - 4].id;
+    await p.$eval(`tr[data-tid="${aboveId}"]`, (e) => e.scrollIntoView({ block: 'center' }));
+    const line = await dragTo(`tr[data-tid="${third}"]`, `tr[data-tid="${aboveId}"]`, false);
+    st = await stored();
+    ok('Edit', 'dragging ⠿ moves a task (last one dropped above the 4th from last, with a drop line shown)', line && st.tasks[L - 4].id === third && st.tasks[L - 3].id === aboveId, line + ' ' + st.tasks.slice(-5).map((t) => t.name).join(' | '));
 
     // ---- reminder ----
     await p.click(`tr[data-tid="${await tid('Hire skip bin')}"] [data-rem]`); await p.waitForSelector('#modal [data-w=start]');
@@ -259,8 +287,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // ---- projects list ----
     ok('Projects', 'projects list shows the plan with progress, time and cost status', /Priya Nair/.test(await p.textContent('#view')) && (await p.$$('.rag')).length >= 2 && (await p.$$('.pbar')).length >= 1);
     ok('Projects', 'jobs without a plan can be picked to start one', /Tom Lee/.test(await p.textContent('#newPlanJob')) && !/Priya Nair/.test(await p.textContent('#newPlanJob')));
-    await p.selectOption('#newPlanJob', core2); await p.click('#newPlanGo'); await p.waitForSelector('[data-tk=repaint]');
-    await p.click('[data-tk=repaint]'); await p.waitForSelector('table.gt');
+    await p.selectOption('#newPlanJob', core2); await p.click('#newPlanGo'); await p.waitForSelector('#tplType');
+    await p.selectOption('#tplType', 'repaint'); await p.click('#tplCreate'); await p.waitForSelector('table.gt');
     ok('Projects', 'second plan (exterior repaint, buy paint) created from the list', (await p.$$eval('tr[data-tid] [data-k=name]', (e) => e.map((x) => x.value))).includes('Buy paint'));
 
     // ---- job page card ----

@@ -43,8 +43,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.goto(`${BASE}/admin/`, { waitUntil: 'networkidle' });
     await p.fill('[name=username]', 'sashi73'); await p.fill('[name=password]', 'sashi98'); await p.click('#loginForm button');
     await p.waitForSelector('#app:not([hidden])');
-    await p.goto(`${BASE}/admin/#plan/${core}`); await p.waitForSelector('[data-tk=bathroom]');
-    await p.fill('#tplStart', today); await p.click('[data-tk=bathroom]'); await p.waitForSelector('#gSplit');
+    await p.goto(`${BASE}/admin/#plan/${core}`); await p.waitForSelector('#tplType');
+    await p.fill('#tplStart', today); await p.fill('#tplScope', 'Waterproof and retile the main bathroom'); await p.selectOption('#tplType', 'bathroom'); await p.click('#tplCreate'); await p.waitForSelector('#gSplit');
     const buy = await p.evaluate(() => window.MBS.planState.plan.tasks.find((t) => t.name === 'Buy tiles').id);
     await p.click(`tr[data-tid="${buy}"] [data-pick]`); await p.waitForSelector('#pkList [data-pk]'); await p.click('#pkList [data-pk]'); await saved();
     // a risk and an issue

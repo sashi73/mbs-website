@@ -43,14 +43,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.goto(`${BASE}/admin/`, { waitUntil: 'networkidle' });
     await p.fill('[name=username]', 'sashi73'); await p.fill('[name=password]', 'sashi98'); await p.click('#loginForm button');
     await p.waitForSelector('#app:not([hidden])');
-    await p.goto(`${BASE}/admin/#plan/${core}`); await p.waitForSelector('[data-tk=bathroom]');
-    await p.fill('#tplStart', today); await p.click('[data-tk=bathroom]'); await p.waitForSelector('table.gt');
+    await p.goto(`${BASE}/admin/#plan/${core}`); await p.waitForSelector('#tplType');
+    await p.fill('#tplStart', today); await p.fill('#tplScope', 'Waterproof and retile the main bathroom'); await p.selectOption('#tplType', 'bathroom'); await p.click('#tplCreate'); await p.waitForSelector('table.gt');
     await p.click('[data-cols=a]');
 
     // ---- template sub-tasks ----
     let strip = await T('Strip-out & rubbish removal'), tile = await T('Wall & floor tiling');
     ok('Template', 'bathroom template has sub-tasks: strip-out (3) and tiling (3)', strip.subs.length === 3 && tile.subs.length === 3 && tile.subs[2].name === 'Wall tiles');
-    const subRows = await p.$$eval(`tr[data-ptid="${strip.id}"]`, (rs) => rs.map((r) => r.cells[0].textContent.trim()));
+    const subRows = await p.$$eval(`tr[data-ptid="${strip.id}"]`, (rs) => rs.map((r) => r.cells[0].textContent.replace('⠿', '').trim() + r.querySelector('[data-spos]').value));
     ok('Grid', 'sub-tasks show under their task, numbered like 6.1, 6.2, 6.3', subRows.length === 3 && /^\d+\.1$/.test(subRows[0]) && /^\d+\.3$/.test(subRows[2]), subRows.join(','));
     const inside = async (tid) => p.evaluate((tid) => {
       const tr = document.querySelector(`tr[data-gtid="${tid}"]`), pb = tr.querySelector('.gbar').getBoundingClientRect();
@@ -138,6 +138,33 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const ps = sd.data.plan_subtasks || [];
     ok('SQL', 'SQL wizard has plan_subtasks with start/finish inside each task', ps.length >= 7 && ps.every((x) => { const t = sd.data.plan_tasks.find((y) => y.task === x.task); return t && x.start >= t.start && x.finish <= t.finish; }) && ps.some((x) => x.owner === 'Ali'), JSON.stringify(ps.slice(0, 2)));
     ok('SQL', 'sub-tasks have no cost columns', !('planned_cost' in (ps[0] || {})));
+
+    // ---- moving sub-tasks: type a number, or drag ⠿ (only inside their own task) ----
+    await p.goto(`${BASE}/admin/#plan/${core}/schedule`); await p.reload(); await p.waitForSelector('table.gt');   // the server copy was changed directly above
+    let tl = await T('Wall & floor tiling');
+    const wallId = tl.subs[2].id, firstSub = tl.subs[0].id;
+    const nT = tl.subs.length, nS = (await T('Strip-out & rubbish removal')).subs.length;
+    await p.fill(`tr[data-sid="${wallId}"] [data-spos]`, '1'); await p.press(`tr[data-sid="${wallId}"] [data-spos]`, 'Enter'); await saved();
+    tl = await T('Wall & floor tiling'); st = await stored();
+    ok('Move', 'typing 1 in a sub-task\'s number moves it to the top of its task', tl.subs[0].id === wallId && tl.subs[1].id === firstSub && st.tasks.find((t) => t.id === tl.id).subs[0].id === wallId, tl.subs.map((x) => x.id + ':' + x.name).join(' | ') + ' want ' + wallId + ' val=' + (await p.inputValue(`tr[data-sid="${wallId}"] [data-spos]`)) + ' ' + errors.join(';'));
+    await p.fill(`tr[data-sid="${wallId}"] [data-spos]`, '9'); await p.press(`tr[data-sid="${wallId}"] [data-spos]`, 'Enter'); await saved();
+    tl = await T('Wall & floor tiling'); let sp = await T('Strip-out & rubbish removal');
+    ok('Move', 'a number past the end puts it last in the SAME task (never into another task)', tl.subs[tl.subs.length - 1].id === wallId && tl.subs.length === nT && sp.subs.every((x) => x.id !== wallId));
+    const drag = async (fromSel, toSel) => {
+      await p.$eval(toSel, (e) => e.scrollIntoView({ block: 'center' }));
+      const gb = await (await p.$(fromSel + ' [data-grip]')).boundingBox(), tb = await (await p.$(toSel)).boundingBox();
+      await p.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2); await p.mouse.down();
+      await p.mouse.move(gb.x + 2, (gb.y + tb.y) / 2, { steps: 4 }); await p.mouse.move(gb.x + 2, tb.y + 3, { steps: 4 });
+      await p.mouse.up(); await p.waitForTimeout(150); if (await p.$('#planSave >> text=Saving…')) await saved();
+    };
+    await drag(`tr[data-sid="${wallId}"]`, `tr[data-sid="${tl.subs[0].id}"]`);
+    tl = await T('Wall & floor tiling');
+    ok('Move', 'dragging ⠿ reorders sub-tasks inside the task', tl.subs[0].id === wallId, tl.subs.map((x) => x.name).join(' | '));
+    sp = await T('Strip-out & rubbish removal');
+    await drag(`tr[data-sid="${wallId}"]`, `tr[data-sid="${sp.subs[0].id}"]`);
+    tl = await T('Wall & floor tiling'); sp = await T('Strip-out & rubbish removal');
+    ok('Move', 'dragging a sub-task over another task does not move it out of its own task', tl.subs.some((x) => x.id === wallId) && sp.subs.every((x) => x.id !== wallId) && tl.subs.length === nT && sp.subs.length === nS);
+    ok('Boundary', 'after moving, every sub-task is still inside its task\'s dates', await inside(tl.id) && await inside(sp.id));
 
     ok('Console', 'no JavaScript errors', errors.length === 0, errors.join(' | '));
     await br.close();

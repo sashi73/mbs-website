@@ -115,7 +115,7 @@ function clean(p, core) {
   return {
     core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10),
     charter: { objective: str(c.objective, 1500), inScope: str(c.inScope, 3000), outScope: str(c.outScope, 2000), deliverables: str(c.deliverables, 2000),
-      acceptance: str(c.acceptance, 2000), assumptions: str(c.assumptions, 2000), budget: r2(c.budget), customer: str(c.customer, 120), manager: str(c.manager, 80) },
+      acceptance: str(c.acceptance, 2000), assumptions: str(c.assumptions, 2000), notes: str(c.notes, 3000), budget: r2(c.budget), customer: str(c.customer, 120), manager: str(c.manager, 80) },
     phases, tasks,
     risks: (Array.isArray(p.risks) ? p.risks : []).slice(0, 100).map((r) => ({ id: uid(r.id, 'r'), title: str(r.title, 200), cause: str(r.cause, 800), p: int(r.p, 1, 5, 3), i: int(r.i, 1, 5, 3),
       response: RESP.includes(r.response) ? r.response : 'Mitigate', action: str(r.action, 800), owner: str(r.owner, 80), review: ymdOk(r.review), status: r.status === 'Closed' ? 'Closed' : 'Open', raised: ymdOk(r.raised) })),
@@ -199,6 +199,77 @@ export async function advise(core, kind, id, ask, draft) {
   return { kind, title: str(item.title, 200), options, watch: str(o.watch, 200), tokens: used, today };
 }
 
+// ---------- what the job is: a short title and the scope, from the enquiry ----------
+const GENERIC = /^((general|website|web|online|new|phone|chat|customer)\s*)?(general|question|enquiry|inquiry|other|ask(ed)?( a)? question|chat|website|quote( request)?|request|contact( us)?|call ?back|message|n\/a|-)?s?$/i;
+function tidy(t) { return String(t || '').replace(/\s+/g, ' ').trim(); }
+export function jobKind(j) {
+  const t = tidy((j.service || '') + ' ' + (j.summary || '')).toLowerCase();
+  if (/leak|repair|fix|broken|crack|replace|not working|damaged|rot|peel|mould|mold/.test(t)) return 'Repair';
+  if (/question|advice|ask|wonder|how (do|much)/.test(t) && !/quote|install|build|renovat/.test(t)) return 'Question';
+  if (/install|new|build|renovat|extension|deck|pergola|fence|paint|tile|retil/.test(t)) return 'New work';
+  return 'Job';
+}
+export function jobTitle(j) {
+  let s = tidy(j.service);
+  if (!s || GENERIC.test(s) || s.length > 60) {
+    let t = tidy(j.summary).replace(/^(summary|brief|enquiry)\s*[:\-]\s*/i, '');
+    t = t.replace(/^(the )?(customer|client|caller|they|he|she)( has)? (asked|asks|is asking|wants|would like|needs|enquired|enquires|is looking|looking)( a question)?( (about|for|to|regarding|if))?\s*/i, '');
+    t = (t.split(/(?<=[.!?])\s|\n/)[0] || '').replace(/[.!?]+$/, '');
+    if (t) s = t.length > 60 ? t.slice(0, 57).replace(/\s+\S*$/, '') + '…' : t;
+  }
+  s = s || 'Job';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+export function jobScope(j) {
+  const parts = [];
+  if (tidy(j.service) && !GENERIC.test(tidy(j.service))) parts.push(tidy(j.service));
+  if (tidy(j.summary)) parts.push(String(j.summary).trim());
+  const notes = (j.notes || []).map((n) => tidy(n.text)).filter(Boolean).slice(-5);
+  if (notes.length) parts.push('Notes: ' + notes.join(' | '));
+  return parts.join('\n\n').slice(0, 3000);
+}
+
+// ---------- ✨ AI builds a plan (runs in a background function, so it can take longer than a normal request) ----------
+const planCap = () => Math.max(800, Math.min(4000, Number(env('AI_PLAN_MAX_TOKENS', '3000')) || 3000));   // AI plan reply cap: default 3000, AI_PLAN_MAX_TOKENS 800-4000
+export async function buildAiPlan({ core, describe, scope, type, start }, by) {
+  const job = core ? await J.find(core) : null;
+  if (!job) return { error: 'Job not found' };
+  const text = str(describe, 1500) || str(scope, 1500);
+  if (text.length < 10) return { error: 'Describe the job first (what the customer wants done).' };
+  if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.' };
+  try { await checkLimit(); } catch (e) { return { error: e.message }; }
+  const system = 'You are an experienced NSW residential building and remedial project manager. Build a practical WATERFALL project plan for a small builder from the job description. ' +
+    'Include: site inspection, quote accepted (milestone, 0 days), any approvals needed (council, strata, engineer), ordering materials with realistic lead times, the trade work in the right order (with sub-steps where useful), inspections/tests (e.g. flood test), clean-up, handover and invoice (milestone). ' +
+    'Days are working days. "after" lists the task numbers (1-based) that must finish first. Sub-tasks must fit inside their task: [name, start offset in days from the task start, days]. ' +
+    'Costs: qty, unit (h, m², L, lot, each) and a typical Sydney rate ex GST for labour or materials; use 0 if unsure. Do not invent council rules; say "check with council" where relevant. ' +
+    'Also work out the SCOPE for this job: in_scope (the work included, as short "- " lines), out_of_scope (what is NOT included, to avoid arguments later), deliverables (e.g. certificates, photos, finished work), acceptance (how the customer knows it is done) and assumptions/constraints. ' +
+    'And the RISKS specific to this job (4-6): [title, cause, probability 1-5, impact 1-5, response Avoid|Mitigate|Transfer|Accept, action]. Plus 3-6 short planning tips (lead times, permits, weather, inspections, access, safety). Keep every text short. ' +
+    'JSON only: {"name":"short plan name","objective":"one sentence","in_scope":"","out_of_scope":"","deliverables":"","acceptance":"","assumptions":"","tips":[""],"tasks":[{"n":"","d":1,"after":[],"q":0,"u":"h","r":0,"s":[["",0,1]]}],"risks":[["","",3,3,"Mitigate",""]]}';
+  const user = { job_type: str(type, 120), work: str(job.service, 120), suburb: str(job.suburb, 60), start_date: str(start, 10), description: text };
+  let o, used;
+  try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: planCap(), timeoutMs: 150000, temperature: 0.3 })); }
+  catch (e) { return { error: e.message }; }
+  const today = await usage(true, used);
+  const tasks = (Array.isArray(o.tasks) ? o.tasks : []).slice(0, 40).map((t) => ({
+    n: str(t.n || t.name, 160), d: int(t.d ?? t.days, 0, 120, 1), after: (Array.isArray(t.after) ? t.after : []).map((x) => int(x, 1, 40, 0)).filter(Boolean),
+    q: Math.max(0, r2(t.q)), u: str(t.u, 12), r: Math.max(0, r2(t.r)), s: (Array.isArray(t.s) ? t.s : []).slice(0, 12).map((x) => Array.isArray(x) ? [str(x[0], 120), int(x[1], 0, 120, 0), int(x[2], 1, 120, 1)] : null).filter((x) => x && x[0])
+  })).filter((t) => t.n);
+  if (tasks.length < 2) return { error: 'The AI did not return a usable plan. Add a bit more detail and try again.', tokens: used, today };
+  tasks.forEach((t, i) => { t.after = t.after.filter((a) => a <= tasks.length && a !== i + 1); });
+  const list = (x, n, m) => (Array.isArray(x) ? x : []).slice(0, n).map((v) => str(v, m)).filter(Boolean);
+  const txt = (x, m) => Array.isArray(x) ? x.map((v) => str(v, 300)).filter(Boolean).map((v) => /^[-•]/.test(v) ? v : '- ' + v).join('\n').slice(0, m) : str(x, m);
+  // risks: [title, cause, p, i, response, action]; older shape [title, p, i, response, action] also accepted. Sent on as [title, p, i, response, action, cause]
+  const risks = (Array.isArray(o.risks) ? o.risks : []).slice(0, 8).map((r) => {
+    if (r && !Array.isArray(r) && typeof r === 'object') r = [r.title, r.cause, r.p ?? r.probability, r.i ?? r.impact, r.response, r.action];
+    if (!Array.isArray(r)) return null;
+    const old = typeof r[1] === 'number' || /^\d$/.test(String(r[1]));
+    const [t, c, p, i, resp, act] = old ? [r[0], '', r[1], r[2], r[3], r[4]] : r;
+    return [str(t, 160), int(p, 1, 5, 3), int(i, 1, 5, 3), RESP.includes(resp) ? resp : 'Mitigate', str(act, 300), str(c, 300)];
+  }).filter((r) => r && r[0]);
+  return { plan: { name: str(o.name, 100), objective: str(o.objective, 400), inScope: txt(o.in_scope, 1500), outScope: txt(o.out_of_scope, 800), deliverables: txt(o.deliverables, 800), acceptance: txt(o.acceptance, 600),
+    assumptions: txt(o.assumptions, 800), tips: list(o.tips, 8, 240), tasks, risks }, tokens: used, today };
+}
+
 export async function planPost(action, body, { who, by, audit }) {
   const core = str(body.core, 40);
   if (action === 'planList') {
@@ -215,7 +286,7 @@ export async function planPost(action, body, { who, by, audit }) {
     const rems = remsAll.filter((r) => r.core === job.core).map((r) => ({ ...r, when: whenText(r.at) }));
     let costs = 0;
     try { costs = r2(Object.values((idx && idx.expenses) || {}).filter((e) => e.core === job.core).reduce((a, e) => a + (e.inc - e.gst), 0)); } catch {}
-    return out(200, { plan, job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage }, reminders: rems, expensesEx: costs });
+    return out(200, { plan, job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), scope: jobScope(job) }, reminders: rems, expensesEx: costs });
   }
   if (action === 'planSave') {
     if (!core || !(await J.find(core))) return out(404, { error: 'Job not found' });
@@ -226,6 +297,18 @@ export async function planPost(action, body, { who, by, audit }) {
     let low = [];
     try { low = await INV.syncPlan(core, before, r.plan, by); } catch (e) { console.error('Stock update from plan failed:', e.message); }
     return out(200, { plan: r.plan, low });
+  }
+  if (action === 'planJobs') {   // open jobs without a plan, labelled "Customer: what the job is"
+    const [list, keys] = await Promise.all([J.all(), kv.keys('plan:')]);
+    const planned = new Set(keys.map((k) => k.slice(5)));
+    const open = list.filter((j) => J.OPEN.includes(j.stage) && !planned.has(j.core)).sort((a, b) => b.created - a.created).slice(0, 150);
+    const full = await kv.getMany(open.map((j) => 'job:' + j.core));
+    return out(200, { jobs: full.filter(Boolean).map((j) => ({ core: j.core, ref: J.refFor(j), name: j.name || 'Customer', suburb: j.suburb || '', title: jobTitle(j), kind: jobKind(j) })) });
+  }
+  if (action === 'planAiStatus') {
+    const id = str(body.id, 40).replace(/[^a-z0-9]/gi, '');
+    const r = id ? await kv.get('aiplan:' + id) : null;
+    return out(200, r || { status: 'waiting' });
   }
   if (action === 'planAdvise') {
     const r = await advise(core, body.kind === 'issue' ? 'issue' : 'risk', str(body.id, 20), str(body.ask, 300), body.item);

@@ -131,6 +131,7 @@ export function kindOf(k) {
   if (k === 'inv-index') return 'inventory list';
   if (k === 'inv-seq') return 'inventory counter';
   if (k === 'ai-usage') return 'AI usage (questions and tokens per day)';
+  if (k.startsWith('aiplan:')) return 'AI plan draft';
   return 'other';
 }
 export async function listKeys(name) {

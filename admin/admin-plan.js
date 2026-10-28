@@ -86,16 +86,121 @@
       [['Underground services where footings go', 2, 4, 'Avoid', 'Dial Before You Dig before set-out'], ['Timber price or supply changes', 3, 2, 'Mitigate', 'Lock in the order when the quote is accepted']]),
     blank: T('Project plan', '', '', [[0, 'k1', 'Site inspection', 1, '', 1, 'h', 90, []], [4, 'k2', 'Handover', 1, '', 1, 'h', 90, ['k1']]], [])
   };
-  function fromTemplate(key, job, start) {
-    var t = TEMPLATES[key], ids = {}, n = 0;
-    var tasks = t.rows.map(function (r) { var id = 't' + (++n); ids[r[1]] = id; return { id: id, phase: 'ph1', name: r[2], dur: r[3], res: [], lead: '', resource: '', qty: r[5], unit: r[6], rate: r[7], pred: r[8], actual: 0, pct: 0, status: 'todo', snet: '', notes: '',
-      subs: (r[9] || []).map(function (x, i) { return { id: 's' + n + '_' + (i + 1), name: x[0], off: x[1], dur: x[2], owner: '', status: 'todo' }; }) }; });
-    tasks.forEach(function (x) { x.pred = x.pred.map(function (k) { return ids[k]; }).filter(Boolean); });
-    var budget = r2(tasks.reduce(function (a, x) { return a + cost(x); }, 0));
-    return { name: key === 'blank' ? (job.service || 'Project plan') : t.name, start: start, phases: [{ id: 'ph1', name: 'Work' }], tasks: tasks,
-      charter: { objective: t.objective, inScope: t.scope, outScope: '', deliverables: '', acceptance: 'Work complete, inspected and accepted by the customer; site clean; invoice issued.', assumptions: '', budget: budget, customer: job.name || '', manager: '' },
-      risks: t.risks.map(function (r, i) { return { id: 'r' + (i + 1), title: r[0], cause: '', p: r[1], i: r[2], response: r[3], action: r[4], owner: '', review: '', status: 'Open', raised: today() }; }),
-      issues: [], baseline: null };
+  function fromTemplate(key, job, start, scope) { var p = newPlan(TEMPLATES[key] || buildTemplate(key), job, start, scope); if (key === 'blank') p.name = job.title || job.service || 'Project plan'; return p; }
+
+
+  /* ---------- job types: 22 common types with sub-types; each builds a starting plan (example rates: change them to yours) ---------- */
+  var RISK = {
+    weather: ['Rain or wind stops outdoor work', 4, 3, 'Mitigate', 'Check the forecast daily; keep a buffer day'], hidden: ['Hidden damage found once it is opened up', 3, 4, 'Mitigate', 'Agree a contingency and variations in writing up front'],
+    supply: ['Materials late or out of stock', 2, 3, 'Mitigate', 'Confirm stock before ordering; order on day 1'], access: ['Access, keys or parking problems on site', 2, 2, 'Avoid', 'Confirm access and parking with the customer before starting'],
+    approval: ['Approval (council / strata / engineer) takes longer than planned', 3, 3, 'Mitigate', 'Lodge early; do not start until approved in writing'], services: ['Hitting pipes, cables or underground services', 2, 4, 'Avoid', 'Locate services first (Dial Before You Dig)'],
+    finish: ['Customer unhappy with the colour or finish', 2, 3, 'Avoid', 'Sample or test patch signed off before full work'], asbestos: ['Asbestos in older materials', 2, 5, 'Avoid', 'Test before demolition; licensed removalist if positive'],
+    cure: ['Products need longer to cure (cold or humid weather)', 2, 2, 'Accept', 'Allow an extra day before the next trade'], licensed: ['Part of the work needs a licensed plumber or electrician', 3, 3, 'Transfer', 'Book the licensed trade early; keep the compliance certificate'],
+    structure: ['Structural problem needs an engineer', 2, 5, 'Transfer', 'Engineer to inspect and certify before continuing'], leak: ['Leak comes back after the repair', 2, 4, 'Mitigate', 'Water or flood test with photos before closing up'],
+    height: ['Work at height (falls)', 2, 5, 'Mitigate', 'Scaffold or edge protection; SWMS signed before work'], dust: ['Dust and noise upset the customer or neighbours', 3, 2, 'Mitigate', 'Dust sheets, extraction and agreed work hours']
+  };
+  function St(n, d, q, u, r, subs) { return [n, d, q, u, r, subs || []]; }
+  var CATALOG = [
+    { c: 'Bathroom', items: [
+      { id: 'bathroom', n: 'Waterproofing & retiling', legacy: 'bathroom' },
+      { id: 'bath-reno', n: 'Full bathroom renovation', m: 6500, s: [St('Strip-out & rubbish removal', 2, 16, 'h', 55, [['Remove fixtures', 0, 1], ['Remove tiles and screed', 0, 2], ['Rubbish removal', 1, 1]]), St('Plumbing & electrical rough-in', 2, 1, 'lot', 2400, [['Plumber rough-in', 0, 1], ['Electrician rough-in', 1, 1]]), St('Wall sheeting & set', 2, 1, 'lot', 1400), St('Screed & falls', 1, 8, 'h', 85), St('Waterproofing membrane', 2, 1, 'lot', 950, [['Primer and bond breaker', 0, 1], ['Membrane, two coats', 0, 2]]), St('Flood test (24 h) & photos', 1, 1, 'h', 90), St('Wall & floor tiling', 4, 32, 'h', 85, [['Floor tiles', 0, 1], ['Wall tiles', 1, 3]]), St('Fit-off: vanity, toilet, tapware, screen', 2, 1, 'lot', 1600), St('Paint ceiling & touch-ups', 1, 6, 'h', 70)], r: ['hidden', 'asbestos', 'supply', 'cure', 'licensed'] },
+      { id: 'shower-leak', n: 'Shower leak repair (no full strip-out)', m: 600, s: [St('Find the leak (moisture readings, water test)', 1, 3, 'h', 90), St('Remove grout & silicone, regrout or reseal', 1, 8, 'h', 85), St('Replace damaged tiles at the hob / floor waste', 1, 6, 'h', 85), St('Water test & photos', 1, 1, 'h', 90)], r: ['leak', 'hidden', 'supply'] },
+      { id: 'exhaust-fan', n: 'Exhaust fan repair or replacement', m: 250, s: [St('Isolate power & remove the old fan', 1, 1, 'h', 110), St('Install the new fan and duct it outside', 1, 3, 'h', 110, [['Cut or enlarge the ceiling opening', 0, 1], ['Duct to eave or roof', 0, 1], ['Wire and test', 0, 1]]), St('Patch & paint the ceiling', 1, 3, 'h', 70)], r: ['licensed', 'access', 'asbestos'] },
+      { id: 'vanity', n: 'Vanity, toilet or tapware replacement', m: 1200, s: [St('Disconnect & remove old fittings', 1, 3, 'h', 110), St('Install new vanity / toilet / tapware', 1, 6, 'h', 110), St('Silicone, test for leaks & clean', 1, 2, 'h', 85)], r: ['licensed', 'supply', 'hidden'] }] },
+    { c: 'Kitchen', items: [
+      { id: 'kitchen-reno', n: 'Full kitchen renovation', m: 12000, s: [St('Strip-out & rubbish removal', 2, 16, 'h', 55), St('Plumbing & electrical rough-in', 2, 1, 'lot', 2200), St('Wall repairs & set', 1, 8, 'h', 80), St('Install cabinets', 2, 16, 'h', 75), St('Benchtop template, make & install', 6, 1, 'lot', 3500, [['Template', 0, 1], ['Fabrication (supplier)', 1, 4], ['Install', 5, 1]]), St('Splashback tiling', 1, 8, 'h', 85), St('Appliances & fit-off', 1, 1, 'lot', 900), St('Paint & touch-ups', 1, 8, 'h', 70)], r: ['supply', 'hidden', 'licensed', 'dust'] },
+      { id: 'splashback', n: 'Splashback tiling', m: 600, s: [St('Prepare walls & set out', 1, 4, 'h', 85), St('Tile splashback', 1, 6, 'h', 85), St('Grout, silicone & clean', 1, 3, 'h', 85)], r: ['supply', 'finish'] },
+      { id: 'benchtop', n: 'Benchtop replacement', m: 3000, s: [St('Measure & template', 1, 2, 'h', 90), St('Fabrication (supplier)', 5, 1, 'lot', 0), St('Remove old & install new benchtop', 1, 6, 'h', 75), St('Reconnect sink & cooktop', 1, 1, 'lot', 450)], r: ['supply', 'licensed'] }] },
+    { c: 'Laundry', items: [
+      { id: 'laundry-reno', n: 'Laundry renovation', m: 4000, s: [St('Strip-out', 1, 8, 'h', 55), St('Plumbing rough-in', 1, 1, 'lot', 1200), St('Waterproofing', 2, 1, 'lot', 600), St('Tiling', 2, 16, 'h', 85), St('Cabinets, tub & fit-off', 2, 1, 'lot', 1400)], r: ['hidden', 'cure', 'licensed'] },
+      { id: 'laundry-tub', n: 'Tub or cabinet replacement', m: 900, s: [St('Remove old tub / cabinet', 1, 2, 'h', 110), St('Install new & connect', 1, 4, 'h', 110), St('Silicone & test', 1, 1, 'h', 85)], r: ['licensed', 'supply'] }] },
+    { c: 'Waterproofing', items: [
+      { id: 'balcony', n: 'Balcony remediation (concrete cancer)', legacy: 'balcony' },
+      { id: 'wp-balcony', n: 'Balcony membrane & retile', m: 2500, a: ['strata'], s: [St('Remove tiles & screed', 2, 16, 'h', 55), St('Repair substrate & new screed with falls', 2, 16, 'h', 85), St('Membrane & upturns', 2, 1, 'lot', 1400, [['Primer', 0, 1], ['Membrane, two coats', 0, 2]]), St('Flood test & photos', 1, 1, 'h', 90), St('Retile balcony', 3, 24, 'h', 85)], r: ['weather', 'hidden', 'cure', 'approval', 'leak'] },
+      { id: 'wp-planter', n: 'Planter box waterproofing', m: 900, s: [St('Empty planter & remove soil', 1, 8, 'h', 55), St('Prepare & membrane', 2, 1, 'lot', 700), St('Drainage cell & geofabric', 1, 4, 'h', 55), St('Refill soil & replant', 1, 6, 'h', 55)], r: ['weather', 'cure', 'leak'] },
+      { id: 'wp-retaining', n: 'Retaining wall / basement waterproofing', m: 2200, s: [St('Excavate behind wall', 2, 16, 'h', 55), St('Clean & apply membrane', 2, 1, 'lot', 1500), St('Ag pipe & drainage', 1, 8, 'h', 55), St('Backfill & compact', 1, 8, 'h', 55)], r: ['weather', 'services', 'leak'] }] },
+    { c: 'Remedial & concrete repair', items: [
+      { id: 'concrete-cancer', n: 'Concrete cancer (spalling) repair', m: 1500, a: ['engineer'], s: [St('Break out spalled concrete', 1, 8, 'h', 85), St('Treat & prime steel', 1, 4, 'h', 85), St('Repair mortar & cure', 2, 1, 'lot', 900), St('Coating to match', 1, 6, 'h', 70)], r: ['structure', 'height', 'cure', 'weather'] },
+      { id: 'crack-repair', n: 'Crack injection & repair', m: 500, s: [St('Inspect & mark cracks', 1, 2, 'h', 90), St('Inject / fill cracks', 1, 6, 'h', 85), St('Render & paint to match', 1, 6, 'h', 70)], r: ['structure', 'finish'] },
+      { id: 'render-repair', n: 'Render repair & patching', m: 600, s: [St('Remove drummy render', 1, 6, 'h', 80), St('Re-render patches', 1, 8, 'h', 80), St('Paint to match', 1, 6, 'h', 70)], r: ['weather', 'finish', 'height'] }] },
+    { c: 'Painting – interior', items: [
+      { id: 'paint-house', n: 'Whole-house interior repaint', m: 1600, s: [St('Protect floors & furniture', 1, 6, 'h', 55), St('Patch, sand & prep', 2, 16, 'h', 70), St('Ceilings', 1, 8, 'h', 70), St('Walls two coats', 3, 24, 'h', 70, [['First coat', 0, 2], ['Second coat', 1, 2]]), St('Doors & trims', 2, 16, 'h', 70), St('Touch-ups & clean-up', 1, 6, 'h', 70)], r: ['finish', 'dust', 'access'] },
+      { id: 'paint-room', n: 'One or two rooms', m: 400, s: [St('Protect & prep', 1, 4, 'h', 70), St('Ceiling & walls', 1, 8, 'h', 70), St('Trims & touch-ups', 1, 4, 'h', 70)], r: ['finish'] }] },
+    { c: 'Painting – exterior', items: [
+      { id: 'repaint', n: 'Full exterior repaint', legacy: 'repaint' },
+      { id: 'paint-fence', n: 'Fence, deck or eaves painting', m: 500, s: [St('Wash & prep', 1, 6, 'h', 55), St('Prime / first coat', 1, 8, 'h', 70), St('Second coat', 1, 8, 'h', 70)], r: ['weather', 'finish'] }] },
+    { c: 'Tiling', items: [
+      { id: 'tile-floor', n: 'Floor tiling', m: 1800, s: [St('Remove old flooring', 1, 8, 'h', 55), St('Level & prepare floor', 1, 8, 'h', 85), St('Lay tiles', 3, 24, 'h', 85), St('Grout, silicone & clean', 1, 6, 'h', 85)], r: ['supply', 'hidden', 'finish'] },
+      { id: 'tile-outdoor', n: 'Outdoor / alfresco tiling', m: 2200, s: [St('Prepare slab & falls', 1, 8, 'h', 85), St('Lay outdoor tiles', 3, 24, 'h', 85), St('Grout & seal', 1, 6, 'h', 85)], r: ['weather', 'supply', 'cure'] },
+      { id: 'tile-feature', n: 'Wall / feature tiling', m: 900, s: [St('Prepare walls & set out', 1, 4, 'h', 85), St('Tile walls', 2, 12, 'h', 85), St('Grout, trims & clean', 1, 4, 'h', 85)], r: ['supply', 'finish'] }] },
+    { c: 'Decking', items: [
+      { id: 'deck-timber', n: 'Timber deck (new)', m: 6000, a: ['council'], s: [St('Set out & footings', 2, 16, 'h', 75, [['Set out', 0, 1], ['Dig & pour footings', 0, 2]]), St('Bearers & joists', 2, 16, 'h', 75), St('Decking boards', 2, 16, 'h', 75), St('Stairs & balustrade', 2, 16, 'h', 75), St('Oil / stain finish', 1, 6, 'h', 70)], r: ['weather', 'services', 'approval', 'supply'] },
+      { id: 'deck-composite', n: 'Composite deck (new)', m: 9000, a: ['council'], s: [St('Set out & footings', 2, 16, 'h', 75), St('Steel or timber sub-frame', 2, 16, 'h', 75), St('Composite boards & fascia', 3, 24, 'h', 75), St('Stairs & balustrade', 2, 16, 'h', 75)], r: ['weather', 'services', 'approval', 'supply'] },
+      { id: 'deck-repair', n: 'Deck repair & re-oil', m: 700, s: [St('Inspect & replace rotten boards / joists', 1, 8, 'h', 75), St('Sand & clean', 1, 8, 'h', 55), St('Oil, two coats', 1, 6, 'h', 70)], r: ['weather', 'hidden'] },
+      { id: 'deck', n: 'Deck & pergola build', legacy: 'deck' }] },
+    { c: 'Pergola & outdoor roof', items: [
+      { id: 'pergola-timber', n: 'Timber pergola', m: 4500, a: ['council'], s: [St('Set out & footings', 2, 16, 'h', 75), St('Posts & beams', 2, 16, 'h', 75), St('Rafters & battens', 1, 8, 'h', 75), St('Roof sheets / cover', 1, 8, 'h', 75), St('Gutters & downpipe', 1, 6, 'h', 75)], r: ['weather', 'approval', 'height'] },
+      { id: 'pergola-insulated', n: 'Insulated roof patio', m: 9000, a: ['council'], s: [St('Footings & posts', 2, 16, 'h', 75), St('Beam & brackets to house', 1, 8, 'h', 75), St('Insulated panels & flashing', 2, 16, 'h', 75), St('Gutters, downpipe & lights', 1, 1, 'lot', 900)], r: ['weather', 'approval', 'height', 'licensed'] }] },
+    { c: 'Fencing & gates', items: [
+      { id: 'fence-colorbond', n: 'Colorbond fence', m: 2500, s: [St('Remove old fence', 1, 8, 'h', 55), St('Dig & concrete posts', 1, 8, 'h', 75), St('Rails & panels', 1, 8, 'h', 75), St('Gate & clean-up', 1, 4, 'h', 75)], r: ['services', 'weather', 'access'] },
+      { id: 'fence-timber', n: 'Timber paling fence', m: 2000, s: [St('Remove old fence', 1, 8, 'h', 55), St('Posts & rails', 1, 8, 'h', 75), St('Palings & capping', 2, 12, 'h', 75), St('Stain / paint (optional)', 1, 6, 'h', 70)], r: ['services', 'weather'] },
+      { id: 'gate', n: 'Gate supply & install', m: 700, s: [St('Measure & order gate', 1, 1, 'h', 90), St('Install posts & gate', 1, 6, 'h', 75), St('Latch, adjust & test', 1, 2, 'h', 75)], r: ['supply'] }] },
+    { c: 'Roofing & gutters', items: [
+      { id: 'roof-leak', n: 'Roof leak repair', m: 400, s: [St('Find the leak (inspection, water test)', 1, 3, 'h', 90), St('Replace tiles / re-point / flashings', 1, 6, 'h', 90), St('Water test & photos', 1, 1, 'h', 90)], r: ['height', 'weather', 'leak'] },
+      { id: 'gutters', n: 'Gutter & downpipe replacement', m: 1500, s: [St('Scaffold / edge protection', 1, 1, 'lot', 600), St('Remove old gutters', 1, 6, 'h', 75), St('Install gutters & downpipes', 2, 16, 'h', 75), St('Water test & clean-up', 1, 2, 'h', 75)], r: ['height', 'weather', 'supply'] },
+      { id: 'roof-restore', n: 'Roof restoration', m: 2500, s: [St('Scaffold / edge protection', 1, 1, 'lot', 900), St('Pressure clean', 1, 8, 'h', 55), St('Replace broken tiles & re-point ridges', 2, 16, 'h', 90), St('Seal & two coats of roof paint', 2, 16, 'h', 80)], r: ['height', 'weather', 'finish'] }] },
+    { c: 'Plastering & ceilings', items: [
+      { id: 'plaster-patch', n: 'Patch & repair walls / ceilings', m: 250, s: [St('Cut out damaged areas', 1, 3, 'h', 80), St('Patch, set & sand', 2, 8, 'h', 80), St('Paint to match', 1, 4, 'h', 70)], r: ['dust', 'finish'] },
+      { id: 'ceiling', n: 'Ceiling replacement', m: 1800, s: [St('Remove old ceiling', 1, 8, 'h', 55), St('Check / fix ceiling frame', 1, 6, 'h', 75), St('Sheet ceiling & cornice', 2, 16, 'h', 80), St('Set, sand & paint', 2, 16, 'h', 75)], r: ['asbestos', 'dust', 'hidden'] }] },
+    { c: 'Flooring', items: [
+      { id: 'floor-floating', n: 'Timber / laminate / hybrid floating floor', m: 3500, s: [St('Remove old flooring', 1, 8, 'h', 55), St('Level the subfloor', 1, 8, 'h', 75), St('Underlay & lay boards', 2, 16, 'h', 75), St('Skirting / trims & clean', 1, 6, 'h', 75)], r: ['supply', 'hidden', 'access'] },
+      { id: 'floor-sand', n: 'Floor sanding & polishing', m: 800, s: [St('Prepare & punch nails', 1, 4, 'h', 70), St('Sand, three passes', 1, 8, 'h', 70), St('Stain & coat (3 coats)', 2, 12, 'h', 70)], r: ['cure', 'dust', 'finish'] }] },
+    { c: 'Carpentry, doors & windows', items: [
+      { id: 'doors', n: 'Doors (hang or replace)', m: 900, s: [St('Remove old doors', 1, 2, 'h', 75), St('Hang doors & fit hardware', 1, 8, 'h', 75), St('Paint / finish', 1, 6, 'h', 70)], r: ['supply'] },
+      { id: 'windows', n: 'Window replacement', m: 3500, s: [St('Measure & order windows', 1, 2, 'h', 90), St('Supplier lead time', 10, 1, 'lot', 0), St('Remove old & install new windows', 2, 16, 'h', 75), St('Flash, seal & make good', 1, 8, 'h', 75)], r: ['supply', 'weather', 'hidden'] },
+      { id: 'trims', n: 'Skirting, architraves & small carpentry', m: 400, s: [St('Remove & measure', 1, 4, 'h', 75), St('Cut & fix new trims', 1, 8, 'h', 75), St('Fill & paint', 1, 6, 'h', 70)], r: ['finish'] }] },
+    { c: 'Concrete & paving', items: [
+      { id: 'driveway', n: 'Concrete driveway', m: 4000, s: [St('Excavate & prepare base', 1, 8, 'h', 85), St('Formwork & mesh', 1, 8, 'h', 85), St('Pour & finish concrete', 1, 1, 'lot', 1800), St('Cure, saw cuts & clean-up', 3, 4, 'h', 85)], r: ['weather', 'services', 'cure'] },
+      { id: 'pavers', n: 'Paving', m: 2500, s: [St('Excavate & compact base', 1, 8, 'h', 85), St('Screed sand & lay pavers', 2, 16, 'h', 85), St('Cut edges, sand joints & seal', 1, 8, 'h', 85)], r: ['weather', 'services', 'supply'] }] },
+    { c: 'Plumbing repairs', items: [
+      { id: 'plumb-leak', n: 'Find & fix a leak', m: 300, s: [St('Leak detection', 1, 2, 'h', 110), St('Repair pipe / fitting', 1, 3, 'h', 110), St('Make good walls or floor', 1, 6, 'h', 80)], r: ['licensed', 'hidden', 'leak'] },
+      { id: 'hws', n: 'Hot water system replacement', m: 2200, s: [St('Remove old system', 1, 2, 'h', 110), St('Install & connect new system', 1, 4, 'h', 110), St('Test, compliance certificate & clean-up', 1, 1, 'h', 110)], r: ['licensed', 'supply'] },
+      { id: 'drains', n: 'Blocked drain / stormwater', m: 400, s: [St('CCTV camera inspection', 1, 1, 'lot', 350), St('Clear or repair the drain', 1, 4, 'h', 110), St('Test & report', 1, 1, 'h', 110)], r: ['licensed', 'services', 'hidden'] }] },
+    { c: 'Electrical', items: [
+      { id: 'elec-lights', n: 'Lights & power points', m: 500, s: [St('Plan positions & isolate power', 1, 1, 'h', 110), St('Install lights / power points', 1, 6, 'h', 110), St('Test, tag & compliance certificate', 1, 1, 'h', 110)], r: ['licensed', 'asbestos'] },
+      { id: 'switchboard', n: 'Switchboard upgrade', m: 1500, s: [St('Book power isolation', 2, 1, 'lot', 0), St('Replace switchboard & safety switches', 1, 8, 'h', 110), St('Test & compliance certificate', 1, 1, 'h', 110)], r: ['licensed', 'asbestos', 'approval'] }] },
+    { c: 'Maintenance & handyman', items: [
+      { id: 'maint-list', n: 'List of small repairs', m: 300, s: [St('Walk-through & agree the list', 1, 1, 'h', 90), St('Carry out repairs', 2, 12, 'h', 75), St('Customer check & sign-off', 1, 1, 'h', 90)], r: ['access', 'supply'] },
+      { id: 'pre-sale', n: 'Pre-sale touch-up', m: 800, s: [St('Patch & repair', 1, 8, 'h', 75), St('Paint touch-ups', 2, 12, 'h', 70), St('Clean & photos', 1, 4, 'h', 55)], r: ['finish', 'access'] },
+      { id: 'strata-visit', n: 'Strata maintenance visit', m: 200, a: ['strata'], s: [St('Inspect & report', 1, 3, 'h', 90), St('Carry out approved repairs', 1, 8, 'h', 75), St('Report with photos to strata', 1, 1, 'h', 90)], r: ['approval', 'access'] }] },
+    { c: 'Demolition & strip-out', items: [
+      { id: 'demo', n: 'Internal strip-out', m: 300, s: [St('Asbestos check', 1, 1, 'lot', 350), St('Strip-out', 2, 16, 'h', 55), St('Skip bin & rubbish removal', 1, 1, 'lot', 600)], r: ['asbestos', 'services', 'dust'] }] },
+    { c: 'Extensions & structural', items: [
+      { id: 'wall-removal', n: 'Remove a wall (structural)', m: 2500, a: ['engineer'], s: [St('Temporary props', 1, 4, 'h', 75), St('Remove wall', 1, 8, 'h', 55), St('Install beam & posts', 1, 8, 'h', 75), St('Make good: plaster, floor & paint', 3, 24, 'h', 75)], r: ['structure', 'asbestos', 'services', 'dust'] },
+      { id: 'extension', n: 'Room extension / granny flat (large)', m: 45000, a: ['council', 'engineer'], s: [St('Site set-up & excavation', 3, 24, 'h', 85), St('Slab or footings', 4, 1, 'lot', 9000), St('Frame & roof', 8, 1, 'lot', 14000), St('Windows, doors & lock-up', 4, 1, 'lot', 8000), St('Rough-in: plumbing & electrical', 3, 1, 'lot', 6000), St('Insulation, plaster & fix-out', 8, 1, 'lot', 9000), St('Wet areas & tiling', 6, 1, 'lot', 7000), St('Painting & final fit-off', 5, 1, 'lot', 5000), St('Final inspection & occupation certificate', 2, 1, 'lot', 800)], r: ['approval', 'weather', 'supply', 'structure', 'licensed'] }] },
+    { c: 'Landscaping & retaining walls', items: [
+      { id: 'retaining', n: 'Retaining wall', m: 3500, s: [St('Excavate & set out', 1, 8, 'h', 85), St('Footing / base course', 1, 8, 'h', 85), St('Build wall (blocks or sleepers)', 2, 16, 'h', 85), St('Drainage & backfill', 1, 8, 'h', 55)], r: ['services', 'weather', 'structure'] },
+      { id: 'garden', n: 'Garden makeover', m: 1500, s: [St('Clear & prepare', 1, 8, 'h', 55), St('Edging, soil & irrigation', 1, 8, 'h', 55), St('Plant & mulch', 1, 8, 'h', 55)], r: ['weather', 'services'] }] }
+  ];
+  var APPROVAL = { council: ['Council / CDC approval (check if needed)', 10], strata: ['Strata / owner approval', 5], engineer: ['Engineer inspection & design', 5] };
+  function catalogItem(id) { var f = null; CATALOG.forEach(function (c) { c.items.forEach(function (i) { if (i.id === id) f = { cat: c.c, item: i }; }); }); return f; }
+  function buildTemplate(id) {
+    var f = catalogItem(id); if (!f) return TEMPLATES.blank;
+    var it = f.item;
+    if (it.legacy) return TEMPLATES[it.legacy];
+    var rows = [], n = 0, key = function () { return 'k' + (++n); };
+    var k1 = key(); rows.push([0, k1, 'Site inspection & measure', 1, '', 2, 'h', 90, []]);
+    var k2 = key(); rows.push([0, k2, 'Quote accepted', 0, '', 0, '', 0, [k1]]);
+    var prev = k2;
+    (it.a || []).forEach(function (a) { var k = key(); rows.push([0, k, APPROVAL[a][0], APPROVAL[a][1], '', a === 'engineer' ? 1 : 0, a === 'engineer' ? 'lot' : '', a === 'engineer' ? 1200 : 0, [prev]]); prev = k; });
+    if (it.m) { var km = key(); rows.push([1, km, 'Order materials', 1, '', 1, 'lot', it.m, [prev]]); prev = km; }
+    (it.s || []).forEach(function (s) { var k = key(); rows.push([2, k, s[0], s[1], '', s[2], s[3], s[4], [prev], s[5]]); prev = k; });
+    var kq = key(); rows.push([3, kq, 'Quality inspection & defects', 1, '', 1, 'h', 90, [prev]]);
+    var kh = key(); rows.push([4, kh, 'Clean-up & handover', 1, '', 3, 'h', 55, [kq]]);
+    rows.push([4, key(), 'Invoice', 0, '', 0, '', 0, [kh]]);
+    var name = /^(Full|Whole|One or two|List of|Find|Remove a|Internal)/.test(it.n) ? it.n : f.cat.replace(/ –.*/, '') + ': ' + it.n;
+    return T(name, 'Complete the ' + it.n.toLowerCase() + ' safely and to standard, on time and on budget, and hand over a clean site.', '', rows,
+      (it.r || []).map(function (k) { return RISK[k]; }).filter(Boolean));
   }
 
   /* ---------- status (board columns) and resources (people) ---------- */
@@ -174,11 +279,10 @@
   /* ---------- views ---------- */
   function projects() {
     return api('planList', { today: today() }).then(function (d) {
-      return api('jobs', { stage: 'open' }).then(function (j) {
-        var planned = {}; d.plans.forEach(function (p) { planned[p.core] = 1; });
-        var avail = j.jobs.filter(function (x) { return !planned[x.core]; });
+      return api('planJobs', {}).then(function (j) {
+        var avail = j.jobs;
         V().innerHTML = '<div class="card"><div class="card-h"><h2>Project plans (' + d.plans.length + ')</h2>' +
-          '<div class="row"><select id="newPlanJob" style="width:auto"><option value="">Plan a job…</option>' + avail.map(function (x) { return '<option value="' + esc(x.core) + '">' + esc(x.ref + ' · ' + x.name + (x.service ? ' · ' + x.service : '')) + '</option>'; }).join('') + '</select><button class="btn btn-gold btn-sm" id="newPlanGo">＋ Start a plan</button></div></div>' +
+          '<div class="row"><select id="newPlanJob" style="width:auto"><option value="">Plan a job…</option>' + avail.map(function (x) { return '<option value="' + esc(x.core) + '">' + esc(x.ref + ' · ' + x.name + ': ' + x.title + (x.kind && x.title.toLowerCase().indexOf(x.kind.toLowerCase()) < 0 ? ' (' + x.kind + ')' : '') + (x.suburb ? ' · ' + x.suburb : '')) + '</option>'; }).join('') + '</select><button class="btn btn-gold btn-sm" id="newPlanGo">＋ Start a plan</button></div></div>' +
           (d.plans.length ? '<div class="table-wrap"><table><thead><tr><th>Project</th><th>Progress</th><th class="hide-sm">Finish</th><th>Time</th><th>Cost</th><th class="hide-sm">Risks</th><th class="hide-sm">Issues</th><th></th></tr></thead><tbody>' +
             d.plans.map(function (p) {
               var tC = rag(p.SPI, 0.95, 0.85), cC = rag(p.CPI, 0.95, 0.85);
@@ -214,19 +318,137 @@
       return loadInv().then(render);
     });
   }
+  /* ---------- new plan: scope of work + job type / blank / ✨ AI ---------- */
+  var GUESS = [[/exhaust|\bfan\b/, 'exhaust-fan'], [/shower.{0,40}leak|leak.{0,40}shower/, 'shower-leak'], [/vanity|toilet|tapware|\btaps?\b/, 'vanity'], [/bathroom.{0,40}(waterproof|retil)|(waterproof|retil).{0,40}bathroom/, 'bathroom'], [/bathroom|ensuite/, 'bath-reno'],
+    [/splashback/, 'splashback'], [/benchtop/, 'benchtop'], [/kitchen/, 'kitchen-reno'], [/laundry/, 'laundry-reno'], [/concrete cancer|spall/, 'concrete-cancer'], [/balcony/, 'wp-balcony'], [/planter/, 'wp-planter'],
+    [/basement/, 'wp-retaining'], [/retaining/, 'retaining'], [/crack/, 'crack-repair'], [/render/, 'render-repair'], [/composite/, 'deck-composite'], [/deck.{0,30}pergola|pergola.{0,30}deck/, 'deck'], [/re-?oil|deck.{0,30}(repair|rot)/, 'deck-repair'], [/deck/, 'deck-timber'],
+    [/insulated|patio/, 'pergola-insulated'], [/pergola/, 'pergola-timber'], [/colorbond/, 'fence-colorbond'], [/fence/, 'fence-timber'], [/\bgate/, 'gate'], [/gutter|downpipe/, 'gutters'], [/roof.{0,40}leak|leak.{0,40}roof/, 'roof-leak'], [/roof/, 'roof-restore'],
+    [/ceiling/, 'ceiling'], [/plaster|hole in (the )?wall/, 'plaster-patch'], [/sand(ing)?.{0,20}polish|polish/, 'floor-sand'], [/laminate|hybrid|floating|timber floor|flooring/, 'floor-floating'], [/outdoor til|alfresco/, 'tile-outdoor'], [/feature wall|wall til/, 'tile-feature'], [/til(e|es|ing)\b/, 'tile-floor'],
+    [/window/, 'windows'], [/\bdoors?\b/, 'doors'], [/skirting|architrave/, 'trims'], [/driveway/, 'driveway'], [/paver|paving/, 'pavers'], [/hot water/, 'hws'], [/drain|stormwater|blocked/, 'drains'], [/leak/, 'plumb-leak'],
+    [/switchboard/, 'switchboard'], [/light|power point|electric/, 'elec-lights'], [/exterior|outside of the house/, 'repaint'], [/paint/, 'paint-house'], [/strata/, 'strata-visit'], [/remove.{0,20}wall|wall removal/, 'wall-removal'],
+    [/demolition|strip.?out/, 'demo'], [/extension|granny/, 'extension'], [/garden|landscap/, 'garden'], [/pre-?sale/, 'pre-sale'], [/handyman|odd jobs|repairs|maintenance/, 'maint-list']];
+  function guessType(text) { var s = String(text || '').toLowerCase(), f = ''; GUESS.some(function (g) { if (g[0].test(s)) { f = g[1]; return true; } return false; }); return f; }
+  function draftFacts(p) { var q = JSON.parse(JSON.stringify(p)), R = rollup(q, today()); return { tasks: q.tasks.length, days: R.start ? workBetween(R.start, R.finish) : 0, budget: R.BAC, risks: (q.risks || []).length, start: R.start, finish: R.finish }; }
+  function newPlan(t, job, start, scope, extra) {   // plan object from template-style rows
+    var ids = {}, n = 0;
+    var tasks = t.rows.map(function (r) { var id = 't' + (++n); ids[r[1]] = id; return { id: id, phase: 'ph1', name: r[2], dur: r[3], res: [], lead: '', resource: '', qty: r[5], unit: r[6], rate: r[7], pred: r[8], actual: 0, pct: 0, status: 'todo', snet: '', notes: '',
+      subs: (r[9] || []).map(function (x, i) { return { id: 's' + n + '_' + (i + 1), name: x[0], off: x[1], dur: x[2], owner: '', status: 'todo' }; }) }; });
+    tasks.forEach(function (x) { x.pred = x.pred.map(function (k) { return ids[k]; }).filter(Boolean); fitSubs(x); });
+    extra = extra || {};
+    var inScope = String(scope || '').trim();
+    if (t.scope) inScope = inScope ? inScope + '\n\nTypical work: ' + t.scope : t.scope;
+    return { name: t.name, start: start, phases: [{ id: 'ph1', name: 'Work' }], tasks: tasks,
+      charter: { objective: t.objective, inScope: inScope, outScope: extra.outScope || '', deliverables: extra.deliverables || '', acceptance: extra.acceptance || 'Work complete, inspected and accepted by the customer; site clean; invoice issued.', assumptions: extra.assumptions || '', notes: extra.notes || '',
+        budget: r2(tasks.reduce(function (a, x) { return a + cost(x); }, 0)), customer: job.name || '', manager: '' },
+      risks: t.risks.map(function (r, i) { return { id: 'r' + (i + 1), title: r[0], cause: r[5] || '', p: r[1], i: r[2], response: r[3], action: r[4], owner: '', review: '', status: 'Open', raised: today() }; }),
+      issues: [], baseline: null };
+  }
+  function fromAi(d, job, start, scope) {   // the AI draft -> the same row format as the templates
+    var rows = d.tasks.map(function (x, i) { return [0, 'a' + (i + 1), x.n, x.d, '', x.q, x.u, x.r, (x.after || []).map(function (a) { return 'a' + a; }), x.s]; });
+    var p = newPlan({ name: d.name || (job.title || 'Project plan'), objective: d.objective || '', scope: d.inScope ? d.inScope : '', rows: rows, risks: d.risks || [] }, job, start, scope,
+      { outScope: d.outScope, deliverables: d.deliverables, acceptance: d.acceptance, assumptions: d.assumptions, notes: (d.tips || []).map(function (x) { return '• ' + x; }).join('\n') });
+    var cs = String(scope || '').trim();
+    p.charter.inScope = cs && d.inScope ? cs + '\n\nPlanned work (AI): ' + d.inScope : cs || d.inScope || '';
+    return p;
+  }
+  function typeOptions(sel) {
+    return '<option value="">Choose a job type…</option>' + CATALOG.map(function (c) { return '<optgroup label="' + esc(c.c) + '">' + c.items.map(function (i) { return '<option value="' + i.id + '"' + (i.id === sel ? ' selected' : '') + '>' + esc(i.n) + '</option>'; }).join('') + '</optgroup>'; }).join('');
+  }
+  function rid() { var a = new Uint8Array(12); (window.crypto || window.msCrypto).getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  function previewHtml(p, tips, full) {
+    var f = draftFacts(p), c = p.charter, sc = function (r) { return r.p * r.i; };
+    var scopeBox = full ? '<div class="aiscope"><b>🎯 Scope (worked out by AI)</b>' + [['In scope', full.inScope || ''], ['Out of scope', c.outScope], ['Deliverables', c.deliverables], ['Acceptance', c.acceptance], ['Assumptions', c.assumptions]]
+      .filter(function (x) { return x[1]; }).map(function (x) { return '<div><span class="muted">' + x[0] + '</span><div class="pre">' + esc(x[1]) + '</div></div>'; }).join('') + '</div>' : '';
+    var riskBox = full && p.risks.length ? '<div class="airisks"><b>⚠ Risks (worked out by AI)</b><table><thead><tr><th>Risk</th><th>Cause</th><th>P×I</th><th>Response</th><th>Action</th></tr></thead><tbody>' + p.risks.map(function (r) { return '<tr><td>' + esc(r.title) + '</td><td>' + esc(r.cause) + '</td><td><span class="score ' + scoreCls(sc(r)) + '">' + sc(r) + '</span></td><td>' + esc(r.response) + '</td><td>' + esc(r.action) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '';
+    return '<div class="tplprev"><div class="row" style="gap:16px;flex-wrap:wrap"><b style="font-size:15px">' + esc(p.name) + '</b><span>' + pl(f.tasks, 'task') + '</span><span>about ' + pl(f.days, 'working day') + '</span><span>' + money(f.budget) + ' example budget</span><span>' + pl(f.risks, 'risk') + '</span></div>' +
+      (tips && tips.length ? '<div class="aitips"><b>💡 Planning tips</b><ul>' + tips.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>' : '') +
+      '<ol class="tpltasks">' + p.tasks.map(function (t) { return '<li>' + (t.dur === 0 ? '◆ ' : '') + esc(t.name) + ' <small class="muted">' + (t.dur === 0 ? 'milestone' : pl(t.dur, 'day')) + (t.subs && t.subs.length ? ' · ' + pl(t.subs.length, 'sub-task') : '') + '</small></li>'; }).join('') + '</ol>' +
+      scopeBox + riskBox + (!full && p.risks.length ? '<div class="muted" style="font-size:12.5px"><b>Risks:</b> ' + p.risks.map(function (r) { return esc(r.title); }).join(' · ') + '</div>' : '') + '</div>';
+  }
   function chooser() {
     $('#title').textContent = 'Project plan';
-    var j = S.job;
-    V().innerHTML = '<div class="row" style="margin-bottom:14px"><a class="btn btn-sm" href="#job/' + esc(j.core) + '">← ' + esc(j.ref) + '</a><h2 style="font-size:22px">Plan this job: ' + esc(j.name) + '</h2></div>' +
-      '<div class="card"><h2>1. Pick a starting template</h2><p class="muted" style="margin:-4px 0 12px">Each one has the usual tasks and milestones, example unit costs and common risks. People (resources) are left blank for you to fill in. Change anything afterwards.</p>' +
-      '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<button class="tpl" data-tk="' + k + '"><b>' + esc(k === 'blank' ? 'Blank plan' : t.name) + '</b><small>' + (k === 'blank' ? 'Two tasks to start from' : t.rows.length + ' tasks · ' + t.risks.length + ' risks · ' + money(t.rows.reduce(function (a, r) { return a + r[5] * r[7]; }, 0)) + ' budget') + '</small></button>'; }).join('') + '</div>' +
-      '<h2 style="margin-top:18px">2. Start date</h2><input type="date" id="tplStart" value="' + today() + '" style="width:auto"></div>';
-    V().querySelectorAll('[data-tk]').forEach(function (b) {
-      b.onclick = function () {
-        S.plan = fromTemplate(b.getAttribute('data-tk'), j, $('#tplStart').value || today()); S.rev = 0; S.tab = 'schedule';
-        api('planSave', { core: S.core, plan: S.plan, rev: 0, note: 'plan created (' + b.getAttribute('data-tk') + ')' }).then(function (r) { S.plan = normalise(r.plan); S.rev = r.plan.rev; toast('Plan created'); history.replaceState(null, '', '#plan/' + S.core + '/schedule'); render(); }).catch(fail);
+    var j = S.job, scope0 = j.scope || '';
+    var guess = guessType(j.title + ' ' + scope0);
+    S.mode = 'type'; S.aiDraft = null; S.aiId = ''; S.aiText = ''; S.tplType = '';
+    V().innerHTML = '<div class="row" style="margin-bottom:14px"><a class="btn btn-sm" href="#job/' + esc(j.core) + '">← ' + esc(j.ref) + '</a><h2 style="font-size:22px">Plan this job: ' + esc(j.name) + ': ' + esc(j.title || j.service || 'Job') + '</h2></div>' +
+      '<div class="card"><h2>1. What the customer wants (scope of work)</h2>' +
+      '<p class="jobline"><span class="ref">' + esc(j.ref) + '</span> <b>' + esc(j.title || '') + '</b>' + [j.suburb, j.source ? 'from ' + j.source : ''].filter(Boolean).map(function (x) { return ' · ' + esc(x); }).join('') + '</p>' +
+      '<p class="muted" style="margin:0 0 8px">The tasks (WBS) and Gantt chart are built from this, so it is needed. It is filled in from the enquiry and notes: check it and add what is missing (what, where, sizes, materials, access, deadline).</p>' +
+      '<textarea id="tplScope" rows="5" placeholder="e.g. Bathroom exhaust fan is noisy and has stopped working. Replace it with a quieter fan, duct it outside through the eave, patch and paint the ceiling around it.">' + esc(scope0) + '</textarea></div>' +
+      '<div class="card"><h2>2. How do you want to build the plan?</h2><div class="tpl-grid tmodes">' +
+      [['type', '📋 Pick a job type', CATALOG.length + ' common job types, each with sub-types. Builds tasks, sub-tasks, example costs and risks.'], ['blank', '⬜ Blank plan', 'Two rows to start from. Add your own tasks.'], ['ai', '✨ Ask AI to build it', 'Describe the job; AI works out the tasks, sub-tasks, costs, scope and risks, plus tips to help you plan.']]
+        .map(function (m) { return '<button class="tpl tmode' + (S.mode === m[0] ? ' on' : '') + '" data-mode="' + m[0] + '"><b>' + m[1] + '</b><small>' + m[2] + '</small></button>'; }).join('') + '</div>' +
+      '<div id="modeBody" style="margin-top:14px"></div>' +
+      '<div class="row" style="margin-top:16px;align-items:flex-end"><label style="display:grid;gap:4px;font-weight:700">Start date<input type="date" id="tplStart" value="' + today() + '" style="width:auto"></label><span class="sp"></span><button class="btn btn-gold" id="tplCreate">Create plan</button></div></div>';
+    var mode = function () {
+      V().querySelectorAll('[data-mode]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-mode') === S.mode); });
+      var mb = $('#modeBody'), create = $('#tplCreate');
+      create.disabled = false; create.textContent = 'Create plan';
+      if (S.mode === 'type') {
+        mb.innerHTML = '<label style="display:grid;gap:4px;font-weight:700">Job type<select id="tplType" style="max-width:520px">' + typeOptions(S.tplType || guess) + '</select></label>' +
+          (guess && !S.tplType ? '<small class="muted">Suggested from the enquiry. Change it if it\'s not right.</small>' : '') + '<div id="tplPrev"></div>';
+        var show = function () { var v = $('#tplType').value; S.tplType = v; $('#tplPrev').innerHTML = v ? previewHtml(newPlan(buildTemplate(v), j, $('#tplStart').value || today(), '')) : ''; };
+        $('#tplType').onchange = show; show();
+      } else if (S.mode === 'blank') {
+        mb.innerHTML = '<p class="muted" style="margin:0">A plan with a site inspection and a handover. Add tasks, milestones and sub-tasks yourself on the Schedule tab.</p>';
+      } else {
+        mb.innerHTML = '<label style="display:grid;gap:4px;font-weight:700">Describe the plan for the AI <small class="muted" style="font-weight:400">(leave empty to use the scope above)</small><textarea id="aiDescribe" rows="4" placeholder="e.g. Replace the exhaust fan in a 2nd-floor unit bathroom, duct it outside through the eave, patch and paint the ceiling. Strata building; customer wants it done before Christmas.">' + esc(S.aiText || '') + '</textarea></label>' +
+          '<div class="row" style="margin-top:8px"><button class="btn btn-gold btn-sm" id="aiGo">✨ Build the plan with AI</button><small class="muted">Usually 20–60 seconds. No names or contact details are sent.</small></div><div id="aiOut"></div>';
+        $('#aiDescribe').oninput = function () { S.aiText = this.value; };
+        $('#aiGo').onclick = aiRun;
+        create.disabled = !S.aiDraft; create.textContent = 'Use this plan';
+        if (S.aiDraft) showDraft();
+      }
+    };
+    function showDraft() {
+      var out = $('#aiOut'); if (!out) return;
+      var p = fromAi(S.aiDraft, j, $('#tplStart').value || today(), $('#tplScope').value);
+      out.innerHTML = previewHtml(p, S.aiDraft.tips, S.aiDraft) + '<p class="muted" style="font-size:12.5px;margin:6px 0 0">This is an AI draft: check the tasks, days, prices, scope and risks (all go into the Scope and Risks tabs). People (resources) are left blank. Press <b>Use this plan</b> to create it, or <b>Build the plan with AI</b> again for another version.</p>';
+      $('#tplCreate').disabled = false;
+    }
+    function aiRun() {
+      var desc = $('#aiDescribe').value.trim(), scope = $('#tplScope').value.trim();
+      if ((desc || scope).length < 10) { toast('Describe the job first (what the customer wants done)', true); ($('#aiDescribe').value ? $('#aiDescribe') : $('#tplScope')).focus(); return; }
+      var id = rid(), go = $('#aiGo'), out = $('#aiOut');
+      S.aiId = id; S.aiDraft = null; $('#tplCreate').disabled = true; go.disabled = true;
+      out.innerHTML = '<p class="ask-think" style="margin:10px 0 0">AI is building the plan… this usually takes 20–60 seconds</p>';
+      var t0 = Date.now(), cat = catalogItem($('#tplType') ? $('#tplType').value : S.tplType || '');
+      var poll = function () {
+        return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
+          if (S.aiId !== id) return;
+          if (d.status === 'done' && d.plan) { S.aiDraft = d.plan; go.disabled = false; showDraft(); if (d.today != null) toast('AI plan ready (' + (d.tokens || 0) + ' tokens)'); return; }
+          if (d.status === 'error') throw new Error(d.error || 'The AI plan could not be made');
+          if (Date.now() - t0 > 170000) throw new Error('The AI is taking too long. Try again, or pick a job type instead.');
+          return poll();
+        });
       };
-    });
+      fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
+        body: JSON.stringify({ id: id, core: j.core, describe: desc, scope: scope, type: cat ? cat.cat + ': ' + cat.item.n : '', start: $('#tplStart').value || today() }) })
+        .then(function (r) {
+          if (r.status === 401 || r.status === 403) throw new Error('Your session has ended. Sign in again.');
+          if (r.status !== 202 && !r.ok) throw new Error('Could not start the AI (' + r.status + '). Try again.');
+          return poll();
+        }).catch(function (e) { if (S.aiId !== id) return; go.disabled = false; var o = $('#aiOut'); if (o) o.innerHTML = '<p class="bad" style="margin:10px 0 0">' + esc(e.message) + '</p>'; });
+    }
+    V().querySelectorAll('[data-mode]').forEach(function (b) { b.onclick = function () { S.mode = b.getAttribute('data-mode'); mode(); }; });
+    $('#tplStart').onchange = function () { if (S.mode === 'type' && $('#tplType') && $('#tplType').value) $('#tplType').onchange(); };
+    mode();
+    $('#tplCreate').onclick = function () {
+      var scope = $('#tplScope').value.trim(), start = $('#tplStart').value || today(), plan, note;
+      if (scope.length < 10 && !(S.mode === 'ai' && S.aiDraft)) { toast('Write the scope of work first: what the customer wants done', true); $('#tplScope').focus(); return; }
+      if (S.mode === 'type') {
+        var v = $('#tplType').value; if (!v) { toast('Pick a job type first', true); $('#tplType').focus(); return; }
+        plan = newPlan(buildTemplate(v), j, start, scope); note = 'plan created (' + v + ')';
+      } else if (S.mode === 'blank') {
+        plan = newPlan(TEMPLATES.blank, j, start, scope); plan.name = j.title || j.service || 'Project plan'; note = 'plan created (blank)';
+      } else {
+        if (!S.aiDraft) return toast('Build the plan with AI first', true);
+        plan = fromAi(S.aiDraft, j, start, scope); note = 'plan created (AI draft)';
+      }
+      var btn = this; btn.disabled = true;
+      S.plan = plan; S.rev = 0; S.tab = 'schedule';
+      api('planSave', { core: S.core, plan: S.plan, rev: 0, note: note }).then(function (r) { S.plan = normalise(r.plan); S.rev = r.plan.rev; S.aiDraft = null; S.aiText = ''; S.tplType = ''; toast('Plan created'); history.replaceState(null, '', '#plan/' + S.core + '/schedule'); render(); }).catch(function (e) { btn.disabled = false; S.plan = null; fail(e); });
+    };
   }
 
   function render() {
@@ -234,7 +456,7 @@
     $('#title').textContent = 'Project plan';
     var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues']];
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>' +
-      '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name) + '</span><span class="sp"></span>' +
+      '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
       '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
       '<div class="grid pkpis">' +
         mini('Scope', R.pct + '% complete', R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8)) +
@@ -316,7 +538,7 @@
       return b + '<span class="gbar st-' + t.status + (late ? ' late' : '') + '" style="left:' + left + 'px;width:' + w + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' – ' + pretty(t.ef) + ' · ' + stName[t.status] + ' ' + t.pct + '%') + '"><span class="gfill" style="width:' + t.pct + '%"></span></span>' + lab;
     };
     var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button>' +
-      '<span class="muted" style="font-size:12.5px">Days are working days (Mon–Fri). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span><span class="sp"></span>' +
+      '<span class="muted" style="font-size:12.5px">To move a task, type its new number in <b>#</b> (1 = first) or drag <b>⠿</b>. Sub-tasks move inside their own task. Days are working days (Mon–Fri). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span><span class="sp"></span>' +
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700">Project start<input type="date" id="pStart" value="' + esc(p.start) + '" style="width:auto"></label>' +
       '<div class="tabs" style="margin:0" title="Which columns to show"><button class="tab' + (S.cols === 's' ? ' on' : '') + '" data-cols="s">📅 Dates</button><button class="tab' + (S.cols === 'c' ? ' on' : '') + '" data-cols="c">$ Costs</button><button class="tab' + (S.cols === 'a' ? ' on' : '') + '" data-cols="a">All columns</button></div>' +
       '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button></div></div>' +
@@ -325,7 +547,7 @@
     rows.forEach(function (r) {
       var t = r.t, late = t.pct < 100 && t.ef < t0, base = p.baseline && p.baseline.tasks ? p.baseline.tasks[t.id] : null;
       var subs = t.subs || [], open = subs.length && !S.closed[t.id];
-      html += '<tr data-tid="' + esc(t.id) + '" class="' + (t.pct >= 100 ? 'tdone' : '') + (late ? ' tlate' : '') + (t.dur === 0 ? ' tmile' : '') + (subs.length ? ' tparent' : '') + '"><td class="muted nowrap">' + (subs.length ? '<button class="subtog" type="button" data-tog title="' + (open ? 'Hide' : 'Show') + ' sub-tasks">' + (open ? '▾' : '▸') + '</button>' : '') + r.n + '</td>' +
+      html += '<tr data-tid="' + esc(t.id) + '" class="' + (t.pct >= 100 ? 'tdone' : '') + (late ? ' tlate' : '') + (t.dur === 0 ? ' tmile' : '') + (subs.length ? ' tparent' : '') + '"><td class="muted nowrap">' + '<span class="grip" data-grip title="Drag up or down to move this task">⠿</span>' + (subs.length ? '<button class="subtog" type="button" data-tog title="' + (open ? 'Hide' : 'Show') + ' sub-tasks">' + (open ? '▾' : '▸') + '</button>' : '') + '<input class="posin" data-pos inputmode="numeric" value="' + r.n + '" title="Type a number to move this task there (1 = first)"></td>' +
         '<td><input type="checkbox" data-k="done"' + (t.pct >= 100 ? ' checked' : '') + ' title="Done" style="width:auto"></td>' +
         '<td><div class="tname"><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"><button class="pkbtn" type="button" data-pick title="' + (t.item ? 'Change the stock item' : 'Use a stock item from Inventory') + '">📦</button></div>' + stockChip(t) +
           (t.dur === 0 ? '' : '<button class="subadd" type="button" data-addsub title="Break this task into smaller steps (they stay inside its dates)">＋ sub-task' + (subs.length ? ' · ' + subs.filter(function (x) { return x.status === 'done'; }).length + '/' + subs.length + ' done' : '') + '</button>') + '</td>' +
@@ -341,13 +563,13 @@
         '<td><input data-k="actual" inputmode="decimal" value="' + esc(t.actual || '') + '" style="width:80px"></td>' +
         '<td><select data-k="status" class="stsel st-' + t.status + '"' + (subs.length ? ' title="Setting this moves all its sub-tasks too"' : '') + '>' + STATUS.map(function (x) { return '<option value="' + x[0] + '"' + (t.status === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></td>' +
         '<td><input data-k="pct" type="number" min="0" max="100" step="1" value="' + t.pct + '" style="width:54px"' + (subs.length ? ' disabled title="Worked out from the sub-tasks"' : '') + '></td>' +
-        '<td class="acts"><button class="btn btn-sm" data-rem title="Reminder">🔔</button><button class="btn btn-sm" data-move="-1" title="Move up">↑</button><button class="btn btn-sm" data-move="1" title="Move down">↓</button><button class="btn btn-sm" data-del title="Delete">✕</button></td>' +
+        '<td class="acts"><button class="btn btn-sm" data-rem title="Reminder">🔔</button><button class="btn btn-sm" data-del title="Delete">✕</button></td>' +
         '</tr>';
       G += '<tr data-gtid="' + esc(t.id) + '"><td class="gcol"><div class="gtrack" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + bar(t, base) + '</div></td></tr>';
       if (open) subs.forEach(function (sb, j) {
         var d = subDates(t, sb), sl = sb.status !== 'done' && d.ef && d.ef < t0, maxDur = Math.max(1, t.dur) - sb.off;
         var left = d.es ? x(d.es) : 0, sw = d.es ? (daysBetween(d.es, d.ef) + 1) * dayW : 0;
-        html += '<tr class="tsub' + (sb.status === 'done' ? ' tdone' : '') + (sl ? ' tlate' : '') + '" data-sid="' + esc(sb.id) + '" data-ptid="' + esc(t.id) + '"><td class="muted nowrap subn">' + r.n + '.' + (j + 1) + '</td>' +
+        html += '<tr class="tsub' + (sb.status === 'done' ? ' tdone' : '') + (sl ? ' tlate' : '') + '" data-sid="' + esc(sb.id) + '" data-ptid="' + esc(t.id) + '"><td class="muted nowrap subn"><span class="grip" data-grip title="Drag up or down to reorder (stays inside this task)">⠿</span>' + r.n + '.<input class="posin sub" data-spos inputmode="numeric" value="' + (j + 1) + '" title="Type a number to move this sub-task there (inside this task)"></td>' +
           '<td><input type="checkbox" data-sk="done"' + (sb.status === 'done' ? ' checked' : '') + ' style="width:auto" title="Done"></td>' +
           '<td><div class="subname"><span class="subarrow">↳</span><input data-sk="name" value="' + esc(sb.name) + '"></div></td>' +
           '<td><input data-sk="owner" list="resList" value="' + esc(sb.owner || '') + '" placeholder="Who" style="min-width:90px;width:110px"></td>' +
@@ -357,7 +579,7 @@
           '<td class="muted subcost" title="Costs stay on the task">–</td><td></td>' +
           '<td><select data-sk="status" class="stsel st-' + sb.status + '">' + STATUS.map(function (o) { return '<option value="' + o[0] + '"' + (sb.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></td>' +
           '<td class="muted">' + stPct[sb.status] + '</td>' +
-          '<td class="acts"><button class="btn btn-sm" data-smove="-1" title="Move up">↑</button><button class="btn btn-sm" data-smove="1" title="Move down">↓</button><button class="btn btn-sm" data-sdel title="Delete sub-task">✕</button></td>' +
+          '<td class="acts"><button class="btn btn-sm" data-sdel title="Delete sub-task">✕</button></td>' +
           '</tr>';
         G += '<tr data-gsid="' + esc(sb.id) + '" data-gptid="' + esc(t.id) + '"><td class="gcol"><div class="gtrack gtrack-sub" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + (d.es ? '<span class="gsub st-' + sb.status + (sl ? ' late' : '') + '" style="left:' + left + 'px;width:' + sw + 'px" title="' + esc(sb.name + ' · ' + pretty(d.es) + ' – ' + pretty(d.ef) + ' · ' + stName[sb.status]) + '"><span class="gfill" style="width:' + stPct[sb.status] + '%"></span></span><span class="glab" style="left:' + (left + sw + 4) + 'px">' + esc(sb.owner || '') + '</span>' : '') + '</div></td></tr>';
       });
@@ -418,14 +640,26 @@
     B.querySelectorAll('[data-rlead]').forEach(function (b) { b.onclick = function () { var t = task(b); t.lead = b.getAttribute('data-rlead'); fixRes(t); dirty(); render(); }; });
     B.querySelectorAll('[data-rx]').forEach(function (b) { b.onclick = function () { var t = task(b), n = b.getAttribute('data-rx'); t.res = t.res.filter(function (x) { return x !== n; }); fixRes(t); dirty(); render(); }; });
     B.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { var t = task(b); M.confirmBox('Delete “' + t.name + '”?', 'Tasks that come after it will no longer wait for it.', 'Delete', true).then(function (ok) { if (!ok) return; p.tasks = p.tasks.filter(function (x) { return x !== t; }); p.tasks.forEach(function (x) { x.pred = (x.pred || []).filter(function (id) { return id !== t.id; }); }); dirty(); render(); }); }; });
-    B.querySelectorAll('[data-move]').forEach(function (b) {
-      b.onclick = function () {
-        var t = task(b), a = p.tasks.indexOf(t), c = a + (+b.getAttribute('data-move'));
-        if (c < 0 || c >= p.tasks.length) return;
-        p.tasks[a] = p.tasks[c]; p.tasks[c] = t; dirty(); render();
-      };
+    // type a number in # to move it there (1 = first); the rest close up behind it
+    var place = function (arr, item, v) {
+      var a = arr.indexOf(item), c = Math.max(1, Math.min(arr.length, Math.round(+v || 0))) - 1;
+      if (!(+v >= 1) || a === c) return false;
+      arr.splice(a, 1); arr.splice(c, 0, item); return true;
+    };
+    var posKeys = function (inp, keep) {
+      inp.addEventListener('focus', function () { inp.select(); });
+      inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } else if (e.key === 'Escape') { inp.value = keep; inp.blur(); } });
+    };
+    B.querySelectorAll('[data-pos]').forEach(function (inp) {
+      var keep = inp.value; posKeys(inp, keep);
+      inp.addEventListener('change', function () {
+        var t = task(inp);
+        if (place(p.tasks, t, inp.value)) { dirty('task moved to #' + (p.tasks.indexOf(t) + 1) + ': ' + t.name); render(); var n = $('#planBody tr[data-tid="' + t.id + '"]'); if (n) n.classList.add('just-moved'); }
+        else inp.value = keep;
+      });
     });
     B.querySelectorAll('[data-rem]').forEach(function (b) { b.onclick = function () { reminderBox(task(b)); }; });
+    dragRows(B, p);
     // sub-tasks
     B.querySelectorAll('[data-tog]').forEach(function (b) { b.onclick = function () { var t = task(b); S.closed[t.id] = !S.closed[t.id]; render(); }; });
     B.querySelectorAll('[data-addsub]').forEach(function (b) {
@@ -457,7 +691,14 @@
       });
     });
     B.querySelectorAll('[data-sdel]').forEach(function (b) { b.onclick = function () { var o = subOf(b); o.t.subs = o.t.subs.filter(function (x) { return x !== o.sb; }); derive(o.t); if (!o.t.subs.length) setStatus(o.t, o.t.status); dirty('sub-task deleted: ' + o.sb.name); render(); }; });
-    B.querySelectorAll('[data-smove]').forEach(function (b) { b.onclick = function () { var o = subOf(b), a = o.t.subs.indexOf(o.sb), c = a + (+b.getAttribute('data-smove')); if (c < 0 || c >= o.t.subs.length) return; o.t.subs[a] = o.t.subs[c]; o.t.subs[c] = o.sb; dirty(); render(); }; });
+    B.querySelectorAll('[data-spos]').forEach(function (inp) {
+      var keep = inp.value; posKeys(inp, keep);
+      inp.addEventListener('change', function () {
+        var o = subOf(inp); if (!o.sb) return;
+        if (place(o.t.subs, o.sb, inp.value)) { dirty('sub-task moved: ' + o.sb.name + ' (' + o.t.name + ')'); render(); var n = $('#planBody tr[data-sid="' + o.sb.id + '"]'); if (n) n.classList.add('just-moved'); }
+        else inp.value = keep;
+      });
+    });
     B.querySelectorAll('[data-pick]').forEach(function (b) {
       b.onclick = function () {
         var t = task(b);
@@ -479,6 +720,54 @@
     };
     $('#addTask').onclick = function () { add(false); };
     $('#addMile').onclick = function () { add(true); };
+  }
+
+  /* ---------- drag a task (or a sub-task, inside its own task) up or down ---------- */
+  function dragRows(B, p) {
+    var st = null;
+    var clear = function () { st.rows.forEach(function (r) { r.classList.remove('drop-before', 'drop-after'); }); };
+    function mv(e) {
+      if (!st) return;
+      e.preventDefault(); clear();
+      var y = e.clientY, best = null, after = false;
+      for (var i = 0; i < st.rows.length; i++) { var rc = st.rows[i].getBoundingClientRect(); if (y < rc.top + rc.height / 2) { best = st.rows[i]; break; } }
+      if (!best) { best = st.rows[st.rows.length - 1]; after = true; }
+      var me = st.rows.indexOf(st.tr), at = st.rows.indexOf(best);
+      if (best === st.tr || (!after && at === me + 1)) { st.target = null; }   // no change: dropped where it already is
+      else { st.target = best; st.after = after; best.classList.add(after ? 'drop-after' : 'drop-before'); }
+      if (y < 70) scrollBy(0, -14); else if (y > innerHeight - 70) scrollBy(0, 14);
+    }
+    function up() {
+      document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up);
+      if (!st) return;
+      var s = st; clear(); st = null;
+      s.tr.classList.remove('dragging'); document.body.classList.remove('rowdrag');
+      if (!s.target) return;
+      var arr, from, to, label;
+      if (s.sub) {
+        var t = p.tasks.filter(function (x) { return x.id === s.tr.getAttribute('data-ptid'); })[0]; if (!t) return;
+        arr = t.subs; from = arr.filter(function (x) { return x.id === s.tr.getAttribute('data-sid'); })[0]; to = arr.filter(function (x) { return x.id === s.target.getAttribute('data-sid'); })[0];
+        label = 'sub-task moved: ' + (from && from.name) + ' (' + t.name + ')';
+      } else {
+        arr = p.tasks; from = arr.filter(function (x) { return x.id === s.tr.getAttribute('data-tid'); })[0]; to = arr.filter(function (x) { return x.id === s.target.getAttribute('data-tid'); })[0];
+        label = 'task moved: ' + (from && from.name);
+      }
+      if (!from || !to || from === to) return;
+      arr.splice(arr.indexOf(from), 1); arr.splice(arr.indexOf(to) + (s.after ? 1 : 0), 0, from);
+      dirty(label); render();
+    }
+    B.querySelectorAll('[data-grip]').forEach(function (g) {
+      g.addEventListener('pointerdown', function (e) {
+        if (e.button) return;
+        e.preventDefault();
+        var tr = g.closest('tr'), sub = tr.hasAttribute('data-sid');
+        var rows = Array.prototype.slice.call(B.querySelectorAll('#gLeft tbody ' + (sub ? 'tr[data-sid][data-ptid="' + tr.getAttribute('data-ptid') + '"]' : 'tr[data-tid]')));
+        if (rows.length < 2) return toast(sub ? 'Only one sub-task in this task' : 'Only one task so far');
+        st = { tr: tr, sub: sub, rows: rows, target: null, after: false };
+        tr.classList.add('dragging'); document.body.classList.add('rowdrag');
+        document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
+      });
+    });
   }
 
   /* ---------- export the whole plan to Excel (one formatted tab per section) ---------- */
@@ -646,7 +935,7 @@
     titleBlock(sp, 'Project charter (scope)', 2);
     var c = p.charter || {};
     header(sp, 4, ['Item', 'Details']);
-    [['Plan name', p.name], ['Customer (sponsor)', c.customer], ['Project manager', c.manager], ['Approved budget', c.budget ? Number(c.budget) : ''], ['Planned cost (BAC)', R.BAC], ['Objective', c.objective], ['In scope', c.inScope], ['Out of scope', c.outScope], ['Deliverables', c.deliverables], ['Acceptance criteria', c.acceptance], ['Assumptions & constraints', c.assumptions]]
+    [['Plan name', p.name], ['Customer (sponsor)', c.customer], ['Project manager', c.manager], ['Approved budget', c.budget ? Number(c.budget) : ''], ['Planned cost (BAC)', R.BAC], ['Objective', c.objective], ['In scope', c.inScope], ['Out of scope', c.outScope], ['Deliverables', c.deliverables], ['Acceptance criteria', c.acceptance], ['Assumptions & constraints', c.assumptions], ['Planning notes & tips', c.notes]]
       .forEach(function (x, i) { var r = sp.getRow(5 + i); r.values = [x[0], x[1] == null ? '' : x[1]]; r.getCell(1).font = { bold: true }; r.getCell(1).fill = fill(GOLDSOFT); r.getCell(2).alignment = { wrapText: true, vertical: 'top' }; if (typeof x[1] === 'number') r.getCell(2).numFmt = money$; r.eachCell(function (cc) { cc.border = box; }); var len = String(x[1] || '').length; if (len > 90) r.height = 15 * Math.ceil(len / 90) + 4; });
     footer(sp, 18);
 
@@ -788,9 +1077,10 @@
       '<label>Plan name<input data-p="name" value="' + esc(p.name) + '"></label><label>Customer (sponsor)<input data-c="customer" value="' + esc(c.customer) + '"></label>' +
       '<label>Project manager<input data-c="manager" value="' + esc(c.manager) + '"></label><label>Approved budget ($)<input data-c="budget" inputmode="decimal" value="' + esc(c.budget || '') + '"></label>' +
       f('objective', 'Objective (why we are doing this)', 2, 'e.g. Stop the leak into the unit below and give the customer a modern bathroom') +
-      f('inScope', 'In scope', 3, 'What is included') + f('outScope', 'Out of scope', 2, 'What is NOT included (avoids arguments later), e.g. electrical work, painting outside the bathroom') +
+      (S.job.scope ? '<div class="full jobreq"><b>Customer\'s request (from the enquiry)</b><div>' + esc(S.job.scope) + '</div></div>' : '') + f('inScope', 'In scope (what the customer wants done)', 4, 'What is included') + f('outScope', 'Out of scope', 2, 'What is NOT included (avoids arguments later), e.g. electrical work, painting outside the bathroom') +
       f('deliverables', 'Deliverables', 2, 'e.g. Waterproofing certificate, flood-test photos, finished bathroom, warranty') +
       f('acceptance', 'Acceptance criteria (how we know it\'s done)', 2, '') + f('assumptions', 'Assumptions & constraints', 2, 'e.g. Access weekdays 7am-5pm; no work in heavy rain; customer supplies tapware') +
+      f('notes', 'Planning notes & tips', 3, 'e.g. Order tiles 2 weeks ahead; book the plumber for day 3; strata needs 48 h notice') +
       '</div>' + (c.budget ? '<p style="margin:12px 0 0">Planned cost <b>' + money(rollup(p, today()).BAC) + '</b> against an approved budget of <b>' + money(c.budget) + '</b>.</p>' : '') + '</div>';
     $('#planBody').querySelectorAll('[data-c]').forEach(function (el) { el.oninput = function () { var k = el.getAttribute('data-c'); c[k] = k === 'budget' ? r2(String(el.value).replace(/[$,]/g, '')) : el.value; dirty(); }; });
     $('#planBody').querySelector('[data-p=name]').oninput = function () { p.name = this.value; dirty(); };
