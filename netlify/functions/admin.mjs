@@ -25,7 +25,17 @@ async function jobFull(input) {
   return job;
 }
 
-export default async (req) => {
+// timing headers: how long the server itself took, and whether this was a fresh ("cold") copy of the function
+let served = 0;
+export default async (req, context) => {
+  const t0 = Date.now(), first = served++ === 0;
+  const res = await handle(req, context);
+  try { res.headers.set('Server-Timing', `app;dur=${Date.now() - t0}`); res.headers.set('X-MBS-Start', first ? 'cold' : 'warm'); } catch {}
+  return res;
+};
+
+async function handle(req, context) {
+  A.setDefer(context && typeof context.waitUntil === 'function' ? (p) => context.waitUntil(p) : null);
   try {
     const url = new URL(req.url);
 
@@ -68,13 +78,13 @@ export default async (req) => {
     if (action === 'login') {
       if (!A.adminReady()) return bad('The admin console is not set up yet: add ADMIN_USERNAME and ADMIN_PASSWORD in Netlify.', 503);
       const ip = A.clientIp(req);
-      const wait = await A.lockedFor(ip);
+      const { wait, had } = await A.loginCheck(ip);
       if (wait) return bad(`Too many wrong attempts. Try again in ${wait} minute${wait > 1 ? 's' : ''}.`, 429);
       if (!A.checkPassword(body.username, body.password)) {
         const left = await A.noteFailure(ip);
         return bad(left ? `Wrong username or password (${left} tr${left > 1 ? 'ies' : 'y'} left).` : 'Too many wrong attempts. Locked for 15 minutes.', 401);
       }
-      await A.clearFailures(ip);
+      if (had) await A.later(A.clearFailures(ip));
       const user = env('ADMIN_USERNAME').trim();
       await A.audit(user, 'Logged in');
       return out(200, { ok: true, user }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(user)) });
@@ -90,9 +100,10 @@ export default async (req) => {
 
       // ---------- CRM ----------
       case 'dashboard': {
-        const all = await J.all(), now = Date.now();
+        const now = Date.now();
+        const [all, remsAll] = await Promise.all([J.all(), J.reminders()]);
         const per = period(body.period || 'month', now);
-        const rems = (await J.reminders()).filter((r) => r.at >= now - 86400000).slice(0, 8);
+        const rems = remsAll.filter((r) => r.at >= now - 86400000).slice(0, 8);
         return out(200, {
           period: per.name, report: J.report(all, per.from, per.to),
           total: all.length, open: all.filter((j) => J.OPEN.includes(j.stage)).length,
@@ -108,9 +119,9 @@ export default async (req) => {
         return out(200, { jobs: list.sort((a, b) => b.created - a.created) });
       }
       case 'job': {
-        const job = await jobFull(body.ref);
+        const [job, remsAll] = await Promise.all([jobFull(body.ref), J.reminders()]);
         if (!job) return bad('Job not found', 404);
-        const rems = (await J.reminders()).filter((r) => r.core === job.core).map((r) => ({ ...r, when: whenText(r.at) }));
+        const rems = remsAll.filter((r) => r.core === job.core).map((r) => ({ ...r, when: whenText(r.at) }));
         return out(200, { job, reminders: rems });
       }
       case 'stage': {
@@ -214,4 +225,4 @@ export default async (req) => {
     console.error('Admin error:', e);
     return bad('Something went wrong: ' + e.message, 500);
   }
-};
+}

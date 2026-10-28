@@ -33,9 +33,16 @@ function localCount(add) {
 async function netlifyCount(add) {
   const { getStore } = await import('@netlify/blobs');
   const store = getStore({ name: 'mbs-visits', consistency: 'strong' });
-  const v = (await store.get('count', { type: 'json' })) || { total: 0, days: {} };
-  if (add) await store.setJSON('count', bump(v));
-  return v.total || 0;
+  if (!add) { const v = await store.get('count', { type: 'json' }); return (v && v.total) || 0; }
+  // add one safely: only save if nobody else saved in between, otherwise read again and retry
+  for (let i = 0; i < 25; i++) {
+    const cur = await store.getWithMetadata('count', { type: 'json' });
+    const v = bump((cur && cur.data) || { total: 0, days: {} });
+    const r = await store.setJSON('count', v, cur ? (cur.etag ? { onlyIfMatch: cur.etag } : {}) : { onlyIfNew: true });
+    if (!r || r.modified !== false) return v.total;
+    await new Promise((res) => setTimeout(res, Math.min(1000, 20 * 2 ** Math.min(i, 6)) * (0.5 + Math.random())));
+  }
+  return 0;
 }
 
 export default async (req) => {

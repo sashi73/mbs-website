@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-28 v24 (MBS Console: project planner)';
+const VERSION = '2026-10-28 v24b (faster console, safe when many people use it at once)';
 const NEEDS = [
   ['admin/admin-plan.js', 'planState'],
   ['netlify/lib/plan.mjs', 'planPost'],
@@ -164,7 +164,7 @@ createServer(async (req, res) => {
         body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks)
       });
       const mod = await import(pathToFileURL(join(ROOT, FUNCTIONS[fn[1]])).href);
-      const response = await mod.default(request);
+      const response = await mod.default(request, { waitUntil: (p) => { Promise.resolve(p).catch(() => {}); } });
       res.writeHead(response.status, Object.fromEntries(response.headers));
       res.end(Buffer.from(await response.arrayBuffer()));
       return;

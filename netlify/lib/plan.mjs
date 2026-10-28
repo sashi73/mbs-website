@@ -112,7 +112,7 @@ export async function save(core, plan, rev, by) {
 }
 export async function list() {
   const out = [];
-  for (const k of await kv.keys('plan:')) { const p = await kv.get(k); if (p) out.push(p); }
+  for (const p of await kv.getMany(await kv.keys('plan:'))) if (p) out.push(p);
   return out;
 }
 export async function remind(core, taskId, when, by) {
@@ -140,17 +140,19 @@ export async function planPost(action, body, { who, by, audit }) {
   const core = str(body.core, 40);
   if (action === 'planList') {
     const today = new Date().toISOString().slice(0, 10);
-    const jobs = Object.fromEntries((await J.all()).map((j) => [j.core, j]));
-    const plans = (await list()).map((p) => ({ core: p.core, name: p.name, ref: jobs[p.core] ? jobs[p.core].ref : p.core, customer: jobs[p.core] ? jobs[p.core].name : '', updated: p.updated, ...rollup(p, body.today || today) }));
+    const [jobList, planList] = await Promise.all([J.all(), list()]);
+    const jobs = Object.fromEntries(jobList.map((j) => [j.core, j]));
+    const plans = planList.map((p) => ({ core: p.core, name: p.name, ref: jobs[p.core] ? jobs[p.core].ref : p.core, customer: jobs[p.core] ? jobs[p.core].name : '', updated: p.updated, ...rollup(p, body.today || today) }));
     return out(200, { plans: plans.sort((a, b) => (b.updated || 0) - (a.updated || 0)) });
   }
   if (action === 'planGet') {
     const job = await J.find(core);
     if (!job) return out(404, { error: 'Job not found' });
-    const rems = (await J.reminders()).filter((r) => r.core === job.core).map((r) => ({ ...r, when: whenText(r.at) }));
+    const [remsAll, idx, plan] = await Promise.all([J.reminders(), kv.get('acct-index').catch(() => null), get(job.core)]);
+    const rems = remsAll.filter((r) => r.core === job.core).map((r) => ({ ...r, when: whenText(r.at) }));
     let costs = 0;
-    try { const idx = (await kv.get('acct-index')) || { expenses: {} }; costs = r2(Object.values(idx.expenses || {}).filter((e) => e.core === job.core).reduce((a, e) => a + (e.inc - e.gst), 0)); } catch {}
-    return out(200, { plan: await get(job.core), job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage }, reminders: rems, expensesEx: costs });
+    try { costs = r2(Object.values((idx && idx.expenses) || {}).filter((e) => e.core === job.core).reduce((a, e) => a + (e.inc - e.gst), 0)); } catch {}
+    return out(200, { plan, job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage }, reminders: rems, expensesEx: costs });
   }
   if (action === 'planSave') {
     if (!core || !(await J.find(core))) return out(404, { error: 'Job not found' });

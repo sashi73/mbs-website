@@ -1,2 +1,2 @@
-MBS website v24 (2026-10-28)
-MBS Console project planner (PMI, waterfall): job templates, schedule grid with Gantt chart, working-day dates and predecessors, resources and unit costs, tick-box and % complete, board view, scope charter, earned value (time & cost), baseline, risk register with heat map, issue log, Telegram reminders. SQL wizard (v23), accounts (v22).
+MBS website v24b (2026-10-28)
+Stress-tested: console reads in parallel, activity log written after the answer, PDF library loaded only when needed (smaller, faster cold starts), safe saving when several people change the same job / log / visitor counter at once, job list self-repair every 5 minutes. Project planner (v24), SQL wizard (v23), accounts (v22).

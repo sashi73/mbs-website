@@ -1,13 +1,12 @@
 // SQL wizard support: read-only tables for the browser (queries run in the browser, nothing can be changed),
 // an AI-written narrative (DeepSeek) and a PDF report.
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { env, stripThinking } from './shared.mjs';
 import * as kv from './kv.mjs';
 import * as J from './jobs.mjs';
 import * as ACC from './accounts.mjs';
 import { parts } from './calendar.mjs';
 import LOGO from './logo-png.mjs';
-import { business } from './pdf.mjs';
+import { business, pdfLib } from './pdf.mjs';
 import * as PLAN from './plan.mjs';
 
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
@@ -39,15 +38,18 @@ export const DESCRIBE = {
 export async function tables() {
   const now = Date.now();
   const jobs = [];
-  for (const k of await kv.keys('job:')) {
-    const j = await kv.get(k); if (!j) continue;
+  const [jobRecs, data, remList, visitRec, planList] = await Promise.all([
+    kv.keys('job:').then((ks) => kv.getMany(ks)), ACC.allDocs(), J.reminders(),
+    import('@netlify/blobs').then(({ getStore }) => getStore({ name: 'mbs-visits', consistency: 'strong' }).get('count', { type: 'json' })).catch(() => null),
+    PLAN.list()]);
+  for (const j of jobRecs) {
+    if (!j) continue;
     jobs.push({ ref: J.refFor(j), core: j.core, stage: j.stage, name: j.name || '', phone: j.phone || '', email: j.email || '', suburb: j.suburb || '', service: j.service || '',
       trade: j.trade || (j.core || '')[0] || '', source: j.source || '', best_time: j.best_time || '', created: d10(j.created), created_month: d10(j.created).slice(0, 7),
       quote_inc: j.quote ? r2(j.quote.amount) : null, invoice_inc: j.invoice ? r2(j.invoice.amount) : null,
       called_date: d10(j.called_at), quoted_date: d10(j.quoted_at), won_date: d10(j.won_at), completed_date: d10(j.completed_at), invoiced_date: d10(j.invoiced_at),
       paid_date: d10(j.paid_at), lost_date: d10(j.lost_at), lost_reason: j.lost_reason || '', photos: (j.photos || []).length, notes: (j.notes || []).length });
   }
-  const data = await ACC.allDocs();
   const quotes = data.quotes.map((q) => ({ id: q.id, job: q.core || '', customer: q.customer.name, status: ACC.effectiveStatus(q, now), issued: q.issued, issued_month: (q.issued || '').slice(0, 7),
     valid_until: q.validUntil || '', ex: q.totals.ex, gst: q.totals.gst, inc: q.totals.inc, invoice_id: q.invoiceId || '' }));
   const invoices = data.invoices.map((i) => {
@@ -63,16 +65,15 @@ export async function tables() {
     gst: i.totals.inc ? r2(p.amount * i.totals.gst / i.totals.inc) : 0, method: p.method, reference: p.ref || '' });
   const expenses = data.expenses.map((e) => ({ id: e.id, date: e.date, month: (e.date || '').slice(0, 7), supplier: e.supplier, description: e.desc, category: e.category, job: e.core || '',
     ex: e.ex, gst: e.gst, inc: e.inc, has_receipt: !!e.receipt }));
-  const reminders = (await J.reminders()).map((r) => ({ id: r.id, due: new Date(r.at).toISOString(), date: d10(r.at), text: r.text, job: r.core || '' }));
+  const reminders = remList.map((r) => ({ id: r.id, due: new Date(r.at).toISOString(), date: d10(r.at), text: r.text, job: r.core || '' }));
   let visits = [];
   try {
-    const { getStore } = await import('@netlify/blobs');
-    const v = await getStore({ name: 'mbs-visits', consistency: 'strong' }).get('count', { type: 'json' });
+    const v = visitRec;
     visits = Object.entries((v && v.days) || {}).map(([date, n]) => ({ date, month: date.slice(0, 7), visits: n })).sort((a, b) => (a.date > b.date ? 1 : -1));
   } catch {}
   const plan_tasks = [], plan_risks = [], plan_issues = [];
   const todayS = d10(now);
-  for (const p of await PLAN.list()) {
+  for (const p of planList) {
     PLAN.schedule(p);
     const ph = Object.fromEntries(p.phases.map((f) => [f.id, f.name]));
     for (const t of p.tasks) plan_tasks.push({ job: p.core, plan: p.name, phase: ph[t.phase] || '', task: t.name, resource: t.resource, start: t.es, finish: t.ef, days: t.dur, qty: t.qty, unit: t.unit,
@@ -127,6 +128,7 @@ export async function narrative({ title, sql, columns, rows, focus }) {
 const safe = (s) => String(s ?? '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—−]/g, '-').replace(/…/g, '...')
   .replace(/[•·]/g, '-').replace(/ /g, ' ').replace(/[\r\t]/g, ' ').replace(/[^\n\x20-\x7E\xA0-\xFF]/g, '');
 export async function reportPdf({ title, summary, insights, recommendations, sql, columns, rows, chart, by, ai }) {
+  const { PDFDocument, StandardFonts, rgb } = await pdfLib();
   const B = business();
   const pdf = await PDFDocument.create();
   pdf.setTitle(safe(title)); pdf.setAuthor(B.name); pdf.setCreator(B.name); pdf.setProducer(B.name);

@@ -192,7 +192,8 @@ export async function attachReceipt(id, buf, type, by) {
 // basis "cash": income when payments arrive (GST in the payment) · "accrual": income when invoices are issued
 export async function allDocs() {
   const out = { quotes: [], invoices: [], expenses: [] };
-  for (const t of ['quote', 'invoice', 'expense']) for (const k of await kv.keys(KEY[t])) { const d = await kv.get(k); if (d) out[GROUP[t]].push(d); }
+  await Promise.all(['quote', 'invoice', 'expense'].map(async (t) => { for (const d of await kv.getMany(await kv.keys(KEY[t]))) if (d) out[GROUP[t]].push(d); }));
+  for (const g of Object.keys(out)) out[g].sort((a, b) => (a.id > b.id ? 1 : -1));
   return out;
 }
 const inRange = (ymd, from, to) => ymd && ymd >= from && ymd <= to;

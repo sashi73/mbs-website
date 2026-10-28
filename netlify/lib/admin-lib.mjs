@@ -70,6 +70,12 @@ export async function lockedFor(ip, now = Date.now()) {
   const r = await s.get('fail:' + ip, { type: 'json' });
   return r && r.until > now ? Math.ceil((r.until - now) / 60000) : 0;
 }
+// one read for the login: { wait: minutes still locked, had: earlier wrong tries to clear }
+export async function loginCheck(ip, now = Date.now()) {
+  const s = await store(ADMIN);
+  const r = await s.get('fail:' + ip, { type: 'json' });
+  return { wait: r && r.until > now ? Math.ceil((r.until - now) / 60000) : 0, had: !!r };
+}
 export async function noteFailure(ip, now = Date.now()) {
   const s = await store(ADMIN);
   const r = (await s.get('fail:' + ip, { type: 'json' })) || { n: 0, first: now };
@@ -82,16 +88,27 @@ export async function noteFailure(ip, now = Date.now()) {
 export async function clearFailures(ip) { const s = await store(ADMIN); await s.delete('fail:' + ip); }
 
 // activity log (last 300 admin actions)
-export async function audit(user, text) {
+// On Netlify the log is written after the answer has gone back to the browser (context.waitUntil),
+// so writing the log never slows a click down. Elsewhere it is written before answering.
+let deferFn = null;
+export function setDefer(fn) { deferFn = typeof fn === 'function' ? fn : null; }
+export function later(promise) {
+  const p = Promise.resolve(promise).catch((e) => console.error('Background task failed:', e.message));
+  if (deferFn) { deferFn(p); return Promise.resolve(); }
+  return p;
+}
+async function writeAudit(user, text) {
   const s = await store(ADMIN);
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 15; i++) {
     const cur = await s.getWithMetadata('log', { type: 'json' });
     const list = (cur && cur.data) || [];
     list.unshift({ at: Date.now(), user, text });
     const r = await s.setJSON('log', list.slice(0, 300), cur ? (cur.etag ? { onlyIfMatch: cur.etag } : {}) : { onlyIfNew: true });
     if (!r || r.modified !== false) return;
+    await new Promise((res) => setTimeout(res, Math.min(1500, 25 * 2 ** Math.min(i, 6)) * (0.5 + Math.random())));
   }
 }
+export function audit(user, text) { return later(writeAudit(user, text)); }
 export async function auditLog() { const s = await store(ADMIN); return (await s.get('log', { type: 'json' })) || []; }
 
 // ---------- data explorer ----------

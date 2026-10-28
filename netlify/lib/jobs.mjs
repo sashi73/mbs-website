@@ -63,12 +63,36 @@ export async function list(stages = OPEN) {
 }
 export async function all() { return Object.values((await index()).jobs).sort((a, b) => a.created - b.created); }
 
+// put a job's summary in the index (the list the console and bot read). If many changes arrive at once
+// and it still can't be saved, leave a "pending" note; the 5-minute scheduled job adds it later (healIndex).
+async function indexJob(job) {
+  try { await kv.update('index', (idx) => { idx.jobs[job.core] = summary(job); return idx; }, () => ({ jobs: {} })); }
+  catch (e) { console.error('Index busy, queued', job.core, e.message); await kv.set('pending:' + job.core, { at: Date.now() }); }
+}
 async function save(job) {
   job.updated = Date.now();
   job.ref = refFor(job);
   await kv.set('job:' + job.core, job);
-  await kv.update('index', (idx) => { idx.jobs[job.core] = summary(job); return idx; }, () => ({ jobs: {} }));
+  await indexJob(job);
   return job;
+}
+// change a job safely: if two people change the same job at the same moment, both changes are kept
+async function change(input, fn) {
+  const found = await find(input);
+  if (!found) return null;
+  let result;
+  const job = await kv.update('job:' + found.core, (j) => { result = fn(j); j.updated = Date.now(); j.ref = refFor(j); return j; }, null);
+  await indexJob(job);
+  return { job, result };
+}
+export async function healIndex() {
+  const pending = await kv.keys('pending:');
+  for (const k of pending) {
+    const job = await kv.get('job:' + k.slice(8));
+    if (job) await kv.update('index', (idx) => { idx.jobs[job.core] = summary(job); return idx; }, () => ({ jobs: {} }));
+    await kv.del(k);
+  }
+  return pending.length;
 }
 
 // new running number (never resets), dated in Sydney time
@@ -90,44 +114,48 @@ export async function create(fields, by = 'website') {
 
 // move a job to a stage. extra: { amount } for quoted / invoiced, { reason } for lost
 export async function setStage(input, stage, by, extra = {}) {
-  const job = await find(input);
-  if (!job) return { error: 'not found' };
   if (!STAGES.includes(stage)) return { error: 'bad stage' };
-  const before = refFor(job), now = Date.now();
-  job.stage = stage;
-  if (TIME_FIELD[stage]) job[TIME_FIELD[stage]] = now;
-  let text = LABEL[stage];
-  if (stage === 'quoted' && extra.amount) { job.quote = { amount: extra.amount, gst: gstOf(extra.amount), at: now }; text += ` ${money(extra.amount)} inc GST`; }
-  if (stage === 'invoiced' && extra.amount) { job.invoice = { amount: extra.amount, gst: gstOf(extra.amount), at: now }; text += ` ${money(extra.amount)} inc GST`; }
-  if (stage === 'lost' && extra.reason) { job.lost_reason = extra.reason; text += `: ${extra.reason}`; }
-  const after = refFor(job);
-  if (after !== before) text += ` (${before} → ${after})`;
-  job.history.push({ at: now, by, text });
-  await save(job);
-  return { job, before, after };
+  const r = await change(input, (job) => {
+    const before = refFor(job), now = Date.now();
+    job.stage = stage;
+    if (TIME_FIELD[stage]) job[TIME_FIELD[stage]] = now;
+    let text = LABEL[stage];
+    if (stage === 'quoted' && extra.amount) { job.quote = { amount: extra.amount, gst: gstOf(extra.amount), at: now }; text += ` ${money(extra.amount)} inc GST`; }
+    if (stage === 'invoiced' && extra.amount) { job.invoice = { amount: extra.amount, gst: gstOf(extra.amount), at: now }; text += ` ${money(extra.amount)} inc GST`; }
+    if (stage === 'lost' && extra.reason) { job.lost_reason = extra.reason; text += `: ${extra.reason}`; }
+    const after = refFor(job);
+    if (after !== before) text += ` (${before} → ${after})`;
+    job.history.push({ at: now, by, text });
+    return { before, after };
+  });
+  if (!r) return { error: 'not found' };
+  return { job: r.job, before: r.result.before, after: r.result.after };
 }
 
 export async function addNote(input, text, by) {
-  const job = await find(input);
-  if (!job) return null;
-  job.notes.push({ at: Date.now(), by, text });
-  job.history.push({ at: Date.now(), by, text: 'Note: ' + text });
-  return save(job);
+  const r = await change(input, (job) => {
+    job.notes = job.notes || []; job.history = job.history || [];
+    job.notes.push({ at: Date.now(), by, text });
+    job.history.push({ at: Date.now(), by, text: 'Note: ' + text });
+  });
+  return r ? r.job : null;
 }
 
 // ---------- photos (kept privately in Blobs, sent back by the bot with /photos) ----------
 export async function savePhotos(core, photos, by = 'customer') {
-  const job = await kv.get('job:' + core);
-  if (!job || !photos.length) return job;
-  job.photos = job.photos || [];
-  for (const p of photos.slice(0, 20)) {
-    const n = job.photos.length + 1;
-    const key = `photo:${core}:${n}`;
+  const existing = await kv.get('job:' + core);
+  if (!existing || !photos.length) return existing;
+  const stamp = Date.now().toString(36), saved = [];
+  for (const [i, p] of photos.slice(0, 20).entries()) {
+    const key = `photo:${core}:${stamp}${i + 1}`;
     await kv.putFile(key, p.buf, { type: p.type || 'image/jpeg', by, at: Date.now() });
-    job.photos.push({ key, type: p.type || 'image/jpeg', by, at: Date.now() });
+    saved.push({ key, type: p.type || 'image/jpeg', by, at: Date.now() });
   }
-  job.history.push({ at: Date.now(), by, text: `${photos.length} photo${photos.length > 1 ? 's' : ''} saved` });
-  return save(job);
+  const r = await change(core, (job) => {
+    job.photos = (job.photos || []).concat(saved);
+    job.history.push({ at: Date.now(), by, text: `${saved.length} photo${saved.length > 1 ? 's' : ''} saved` });
+  });
+  return r ? r.job : existing;
 }
 export async function photo(key) { return kv.getFile(key); }
 

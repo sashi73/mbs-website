@@ -8,6 +8,7 @@ import { parts, whenText } from '../lib/calendar.mjs';
 
 export async function runReminders(now = Date.now()) {
   const sent = [];
+  try { const n = await J.healIndex(); if (n) console.log('Job list: added', n, 'waiting job(s)'); } catch (e) { console.error('Job list tidy failed:', e.message); }
   const owner = env('TELEGRAM_CHAT_ID');
   if (!env('TELEGRAM_BOT_TOKEN') || !owner) return sent;
   for (const r of await J.takeDue(now)) {

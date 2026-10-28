@@ -1,11 +1,18 @@
 // Branded A4 PDF for quotes and tax invoices (pdf-lib, no other software needed on Netlify).
 // Meets the ATO tax-invoice rules: "Tax invoice", seller name + ABN, date, items, GST, total, buyer details.
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import LOGO from './logo-png.mjs';
 import { env } from './shared.mjs';
 import { calc, money, prettyDate } from './accounts.mjs';
 
-const GOLD = rgb(0.79, 0.64, 0.15), INK = rgb(0.08, 0.08, 0.08), GREY = rgb(0.42, 0.41, 0.38), LINE = rgb(0.88, 0.87, 0.84), PALE = rgb(0.985, 0.97, 0.92);
+// pdf-lib is big, so it is only loaded when a PDF is actually made (keeps every other console click fast)
+let PDFDocument, StandardFonts, rgb, GOLD, INK, GREY, LINE, PALE;
+export async function pdfLib() {
+  if (!rgb) {
+    ({ PDFDocument, StandardFonts, rgb } = await import('pdf-lib'));
+    GOLD = rgb(0.79, 0.64, 0.15); INK = rgb(0.08, 0.08, 0.08); GREY = rgb(0.42, 0.41, 0.38); LINE = rgb(0.88, 0.87, 0.84); PALE = rgb(0.985, 0.97, 0.92);
+  }
+  return { PDFDocument, StandardFonts, rgb };
+}
 // Standard PDF fonts only know Western characters: swap the common typographic ones, drop the rest
 const safe = (s) => String(s ?? '').replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"').replace(/[–—−]/g, '-')
   .replace(/…/g, '...').replace(/[•·]/g, '-').replace(/ /g, ' ').replace(/[\r\t]/g, ' ').replace(/[^\n\x20-\x7E\xA0-\xFF]/g, '');
@@ -21,6 +28,7 @@ export function business() {
 }
 
 export async function buildPdf(doc) {
+  await pdfLib();
   const B = business();
   const pdf = await PDFDocument.create();
   pdf.setTitle(`${doc.type === 'quote' ? 'Quote' : 'Tax invoice'} ${doc.id}`); pdf.setAuthor(B.name); pdf.setCreator(B.name); pdf.setProducer(B.name);

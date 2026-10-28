@@ -23,7 +23,7 @@ export async function set(key, val) {
 export async function update(key, fn, fallback = null) {
   const s = await store();
   const start = () => (typeof fallback === 'function' ? fallback() : structuredClone(fallback));
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 30; i++) {
     const cur = await s.getWithMetadata(key, { type: 'json' });
     let etag = cur && cur.etag;
     if (cur && !etag) {   // some Blobs servers don't send the version tag with a read: get it from the listing
@@ -35,9 +35,24 @@ export async function update(key, fn, fallback = null) {
     const opts = !cur ? { onlyIfNew: true } : etag ? { onlyIfMatch: etag } : {};
     const r = await s.setJSON(key, v, opts);
     if (!r || r.modified !== false) return v;
-    await new Promise((res) => setTimeout(res, 40 + Math.random() * 160));   // someone else saved first: read again
+    // someone else saved first: wait a little (longer each time, randomised so busy writers spread out), then read again
+    await new Promise((res) => setTimeout(res, Math.min(1500, 25 * 2 ** Math.min(i, 6)) * (0.5 + Math.random())));
   }
   throw new Error('Could not save ' + key + ' (too many changes at once, please try again)');
+}
+
+// read many keys at once (up to `limit` at a time) instead of one after another
+export async function getMany(keyList, limit = 16) {
+  const out = new Array(keyList.length);
+  let next = 0;
+  const worker = async () => { while (next < keyList.length) { const i = next++; out[i] = await get(keyList[i]); } };
+  await Promise.all(Array.from({ length: Math.min(limit, keyList.length) }, worker));
+  return out;
+}
+
+export async function del(key) {
+  const s = await store();
+  await s.delete(key);
 }
 
 export async function keys(prefix = '') {

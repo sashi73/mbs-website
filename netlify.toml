@@ -5,6 +5,8 @@
 
 [functions]
   node_bundler = "esbuild"
+  # big library used only when a PDF is made: shipped beside the function, loaded on demand
+  external_node_modules = ["pdf-lib"]
 
 # Keep server-only files out of the public site
 [[redirects]]
