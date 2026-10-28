@@ -183,12 +183,27 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     ok('SEO', `${pg}: title ${seo.title.length} chars (aim 30-65)`, seo.title.length >= 30 && seo.title.length <= 65, seo.title);
     ok('SEO', `${pg}: description ${seo.desc.length} chars (aim 110-170)`, seo.desc.length >= 110 && seo.desc.length <= 170);
     ok('SEO', `${pg}: canonical link, one main heading, language, all photos described`, /^https:\/\/mbsplc\.com\.au\//.test(seo.canon) && seo.h1 === 1 && seo.lang === 'en-AU' && seo.noalt === 0, `${seo.canon} h1=${seo.h1}`);
-    if (seo.ld.length) ok('SEO', `${pg}: business details for Google read correctly`, seo.ld.every(t => t === 'GeneralContractor'), seo.ld.join(','));
+    if (seo.ld.length) ok('SEO', `${pg}: business details for Google read correctly`, seo.ld.includes('GeneralContractor') && seo.ld.every(t => ['GeneralContractor', 'WebSite'].includes(t)), seo.ld.join(','));
   }
   ok('SEO', 'every page has a different title', titles.size === PAGES.length);
   const vt = await p.request.get(`${BASE}/version.txt`);
   ok('Smoke', 'version.txt shows the live website version', vt.status() === 200 && /MBS website v\d+/.test(await vt.text()), (await vt.text()).split('\n')[0]);
   const rb = await p.request.get(`${BASE}/robots.txt`); const rbt = await rb.text();
+  {
+    await p.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded' });
+    const b = await p.evaluate(() => {
+      const ld = [...document.querySelectorAll('script[type="application/ld+json"]')].map(x => JSON.parse(x.textContent));
+      const biz = ld.find(x => x['@type'] === 'GeneralContractor') || {}, site = ld.find(x => x['@type'] === 'WebSite') || {};
+      return { title: document.title, eyebrow: (document.querySelector('.hero .eyebrow') || {}).textContent || '', legal: biz.legalName, alt: biz.alternateName || [], site: site.name, siteAlt: site.alternateName || [] };
+    });
+    ok('Brand SEO', 'home title starts with "Modern Building Solutions (MBS)"', /^Modern Building Solutions \(MBS\)/.test(b.title), b.title);
+    ok('Brand SEO', 'business info lists the legal name and the names people search (MBS, MBSPLC, Modern Building Solution)', b.legal === 'Modern Building Solutions Pty Ltd' && ['MBS', 'MBSPLC', 'Modern Building Solution'].every(x => b.alt.includes(x)), b.alt.join(', '));
+    ok('Brand SEO', 'Google site name record says "Modern Building Solutions" (also MBSPLC)', b.site === 'Modern Building Solutions' && b.siteAlt.includes('MBSPLC'));
+    ok('Brand SEO', 'brand name visible at the top of the home page', /Modern Building Solutions Pty Ltd/.test(b.eyebrow), b.eyebrow);
+    const titles = [];
+    for (const pg of ['services', 'projects', 'about', 'contact']) { await p.goto(`${BASE}/${pg}.html`, { waitUntil: 'domcontentloaded' }); titles.push(await p.title()); }
+    ok('Brand SEO', 'every page title includes "Modern Building Solutions"', titles.every(t => /Modern Building Solutions/.test(t)), titles.join(' || '));
+  }
   ok('SEO', 'robots.txt is there and points to the sitemap', rb.status() === 200 && /Sitemap: https:\/\/mbsplc\.com\.au\/sitemap\.xml/.test(rbt));
   const sm = await p.request.get(`${BASE}/sitemap.xml`); const smt = await sm.text();
   ok('SEO', 'sitemap.xml lists all 5 pages', sm.status() === 200 && (smt.match(/<loc>/g) || []).length === 5);
