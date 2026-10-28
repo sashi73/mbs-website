@@ -353,3 +353,27 @@ select.stsel{max-width:122px;font-size:12px;padding:4px 4px 4px 7px}
 .ai-err{background:#FFF4EF;border:1px solid #F5C2B0;color:#9A3412;border-radius:10px;padding:10px 12px;margin:12px 0 0}
 #modal .modal-card{max-height:88vh;overflow:auto}
 .side-foot .ver{color:#8C8775;font-size:11px;font-weight:700;letter-spacing:.04em}
+
+/* ---------- inventory & suppliers (v25) ---------- */
+.nbadge{margin-left:auto;background:#B42318;color:#fff;border-radius:99px;font-size:11px;font-weight:800;padding:1px 7px;line-height:1.5}
+.side-nav a{display:flex;align-items:center}
+.lowbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#FFF4EF;border:1px solid #F5C2B0;border-radius:12px;padding:10px 12px;margin-bottom:12px}
+.ichip{display:inline-block;font-size:11.5px;font-weight:800;border-radius:99px;padding:3px 9px}
+.ichip-ok{background:#DCFCE7;color:#166534}.ichip-low{background:#FDE2D8;color:#B42318}.ichip-order{background:#DBEAFE;color:#1E40AF}.ichip-archived{background:#EFEDE7;color:#6B675E}
+.linkish{background:none;border:0;padding:0;font:inherit;font-weight:800;color:inherit;cursor:pointer;text-align:left}
+.linkish:hover{color:var(--gold);text-decoration:underline}
+table.itab td{vertical-align:middle}
+input.expired{border-color:#F5C2B0;background:#FFF4EF}
+.ro-ways{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.ro-way{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:8px;align-content:start}
+.ro-way h3{font-size:15px;margin:0}
+.ro-mail{margin-top:12px;display:grid;gap:8px;border:1px solid #EFE6CC;background:#FFFCF3;border-radius:12px;padding:12px}
+.ro-mail textarea{font-family:inherit;line-height:1.45}
+button.item.pk{width:100%;font:inherit;cursor:pointer;align-items:center}
+button.item.pk:hover,button.item.pk.on{border-color:var(--gold);background:var(--gold-soft)}
+.pkchip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;background:#F1EEE6;border-radius:99px;padding:2px 8px;margin-top:2px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.pkchip.short{background:#FDE2D8;color:#B42318}
+.pkbtn{background:none;border:1px dashed #D9D3C3;border-radius:6px;cursor:pointer;font-size:12px;padding:1px 5px;margin-left:2px}
+.pkbtn:hover{border-color:var(--gold);background:var(--gold-soft)}
+@media (max-width:700px){.ro-ways{grid-template-columns:1fr}}
+.tname{display:flex;align-items:center;gap:2px}

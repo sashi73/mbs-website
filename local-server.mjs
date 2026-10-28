@@ -28,8 +28,10 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-28 v24f (Ask AI in the menu, AI within Netlify time limit)';
+const VERSION = '2026-10-28 v25 (inventory and suppliers)';
 const NEEDS = [
+  ['netlify/lib/inventory.mjs', 'invPost'],
+  ['admin/admin-inv.js', 'reorder'],
   ['netlify/lib/ai.mjs', 'checkLimit'],
   ['admin/admin-plan.js', 'askAI'],
   ['admin/admin-sql.js', 'askPanel'],

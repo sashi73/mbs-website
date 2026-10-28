@@ -126,6 +126,11 @@ export function kindOf(k) {
   if (k.startsWith('receipt:')) return 'receipt';
   if (k === 'acct-index') return 'accounts list';
   if (k === 'acct-seq') return 'accounts counter';
+  if (k.startsWith('inv:')) return 'stock item';
+  if (k.startsWith('sup:')) return 'supplier';
+  if (k === 'inv-index') return 'inventory list';
+  if (k === 'inv-seq') return 'inventory counter';
+  if (k === 'ai-usage') return 'AI usage (questions and tokens per day)';
   return 'other';
 }
 export async function listKeys(name) {

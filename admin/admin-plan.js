@@ -137,6 +137,8 @@
         S.busy = false;
         if (S.core !== core) return;
         S.rev = r.plan.rev; plan.rev = r.plan.rev;
+        if (plan.tasks.some(function (t) { return t.item; })) loadInv().then(function () { if (S.plan === plan && (S.tab === 'schedule' || S.tab === 'overview') && !S.timer && !document.activeElement.closest('#planBody')) render(); });
+        if (r.low && r.low.length && M.inv) M.inv.prompt(r.low);
         var el = $('#planSave'); if (el && !S.timer) el.textContent = 'Saved ✓';
       }).catch(function (e) {
         S.busy = false;
@@ -188,7 +190,7 @@
       S.core = d.job.core; S.job = d.job; S.reminders = d.reminders; S.expensesEx = d.expensesEx; S.tab = tab;
       if (!d.plan) return chooser();
       S.plan = normalise(d.plan); S.rev = d.plan.rev;
-      render();
+      return loadInv().then(render);
     });
   }
   function chooser() {
@@ -244,6 +246,16 @@
   function ordered() {   // tasks in order, with their row numbers (like Microsoft Project's ID column)
     return S.plan.tasks.map(function (t, i) { return { t: t, n: i + 1 }; });
   }
+  // stock items (Inventory) used by tasks
+  function invItem(id) { return id && S.inv ? S.inv[id] : null; }
+  function stockChip(t) {
+    if (!t.item) return '';
+    var i = invItem(t.item);
+    if (!i) return '<span class="pkchip">📦 stock item ' + esc(t.item) + '</span>';
+    var short = t.status !== 'done' && i.available < 0;
+    return '<span class="pkchip' + (short ? ' short' : '') + '" title="' + esc(i.name + ': ' + i.available + ' ' + i.unit + ' available after what jobs have set aside') + '">📦 ' + esc(i.name) + ' · ' + (t.status === 'done' ? 'used' : short ? 'short ' + (-i.available) + ' ' + esc(i.unit) : i.available + ' ' + esc(i.unit) + ' left') + '</span>';
+  }
+  function loadInv() { return M.inv ? M.inv.load().then(function (d) { S.inv = {}; d.items.forEach(function (i) { S.inv[i.id] = i; }); }).catch(function () {}) : Promise.resolve(); }
   function resCell(t) {
     var r = t.res || [];
     return '<div class="rbox">' + r.map(function (name) {
@@ -290,7 +302,7 @@
       var t = r.t, late = t.pct < 100 && t.ef < t0, base = p.baseline && p.baseline.tasks ? p.baseline.tasks[t.id] : null;
       html += '<tr data-tid="' + esc(t.id) + '" class="' + (t.pct >= 100 ? 'tdone' : '') + (late ? ' tlate' : '') + (t.dur === 0 ? ' tmile' : '') + '"><td class="muted">' + r.n + '</td>' +
         '<td><input type="checkbox" data-k="done"' + (t.pct >= 100 ? ' checked' : '') + ' title="Done" style="width:auto"></td>' +
-        '<td><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"></td>' +
+        '<td><div class="tname"><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"><button class="pkbtn" type="button" data-pick title="' + (t.item ? 'Change the stock item' : 'Use a stock item from Inventory') + '">📦</button></div>' + stockChip(t) + '</td>' +
         '<td>' + resCell(t) + '</td>' +
         '<td><input data-k="dur" type="number" min="0" max="365" value="' + t.dur + '" style="width:50px" title="0 days = milestone"></td>' +
         '<td><input data-k="snet" type="date" value="' + esc(t.es) + '" class="' + (t.snet ? 'pinned' : '') + '" title="' + (t.snet ? 'Starts no earlier than ' + pretty(t.snet) + ' (clear the date box to remove)' : 'Worked out from the tasks before it. Pick a later date to hold it back.') + '"></td>' +
@@ -367,6 +379,19 @@
       };
     });
     B.querySelectorAll('[data-rem]').forEach(function (b) { b.onclick = function () { reminderBox(task(b)); }; });
+    B.querySelectorAll('[data-pick]').forEach(function (b) {
+      b.onclick = function () {
+        var t = task(b);
+        if (!M.inv) return toast('Inventory is not available', true);
+        M.inv.pick(t.item, function (it) {
+          if (!it) { t.item = ''; dirty('stock item removed: ' + t.name); render(); return; }
+          t.item = it.id; t.unit = it.unit; if (it.price) t.rate = it.price; if (!t.qty) t.qty = 1;
+          if (/^New (task|milestone)$/.test(t.name)) t.name = 'Supply ' + it.name;
+          S.inv = S.inv || {}; S.inv[it.id] = it;
+          dirty('stock item: ' + it.name + ' on ' + t.name); render(); toast('Linked to ' + it.name + ': unit and price filled in');
+        });
+      };
+    });
     var add = function (mile) {
       var last = p.tasks[p.tasks.length - 1];
       var t = { id: 't' + Date.now().toString(36), phase: 'ph1', name: mile ? 'New milestone' : 'New task', dur: mile ? 0 : 1, res: [], lead: '', resource: '', qty: 0, unit: '', rate: 0, actual: 0, pct: 0, status: 'todo', pred: last ? [last.id] : [], snet: '', notes: '' };
@@ -538,11 +563,25 @@
         (p.baseline ? '<p class="muted" style="margin:6px 0 0">Baseline set ' + esc(M.day(p.baseline.at)) + ': finish ' + esc(prettyY(p.baseline.finish)) + ', budget ' + money(p.baseline.BAC) + '. Now: finish ' + esc(prettyY(R.finish)) + ' (' + esc(varDays(p.baseline.finish, R.finish)) + ').</p>' : '<p class="muted" style="margin:6px 0 0">Tip: press “Set baseline” once the plan is agreed, so you can track slippage.</p>') + '</div>' +
       '<div class="card"><h2>Next 14 days</h2>' + (coming.length ? '<div class="list">' + coming.map(function (r) { return '<div class="item"><div><b>#' + r.n + ' ' + esc(r.t.name) + '</b><br><small>' + esc(pretty(r.t.es)) + ' – ' + esc(pretty(r.t.ef)) + (r.t.res && r.t.res.length ? ' · ' + esc(resText(r.t)) : '') + '</small></div><b>' + r.t.pct + '%</b></div>'; }).join('') + '</div>' : '<div class="empty">Nothing scheduled in the next two weeks.</div>') + '</div></div>' +
       '<div class="grid" style="align-content:start">' +
+      materialsCard() +
       '<div class="card"><h2>Late tasks</h2>' + (R.late.length ? '<div class="list">' + R.late.map(function (t) { return '<div class="item"><div><b>' + esc(t.name) + '</b><br><small style="color:#C2410C">was due ' + esc(pretty(t.ef)) + '</small></div><b>' + t.pct + '%</b></div>'; }).join('') + '</div>' : '<div class="empty">Nothing late. 👍</div>') + '</div>' +
       '<div class="card"><h2>Top risks</h2>' + ((p.risks || []).filter(function (r) { return r.status !== 'Closed'; }).sort(function (a, b) { return b.p * b.i - a.p * a.i; }).slice(0, 4).map(function (r) { return '<div class="item"><div><b>' + esc(r.title || '(untitled)') + '</b><br><small>' + esc(r.response) + (r.action ? ': ' + esc(r.action) : '') + '</small></div><span class="score ' + scoreCls(r.p * r.i) + '">' + r.p * r.i + '</span></div>'; }).join('') || '<div class="empty">No open risks.</div>') + '</div>' +
       '<div class="card"><h2>Open issues</h2>' + ((p.issues || []).filter(function (x) { return x.status !== 'Resolved'; }).map(function (x) { return '<div class="item"><div><b>' + esc(x.title || '(untitled)') + '</b><br><small>' + esc(x.priority) + (x.owner ? ' · ' + esc(x.owner) : '') + (x.due ? ' · due ' + esc(pretty(x.due)) : '') + '</small></div><small>' + esc(x.status) + '</small></div>'; }).join('') || '<div class="empty">No open issues.</div>') + '</div>' +
       (S.reminders.length ? '<div class="card"><h2>Reminders for this job</h2><div class="list">' + S.reminders.map(function (r) { return '<div class="item"><div><b>' + esc(r.when) + '</b><br><small>' + esc(r.text) + '</small></div></div>'; }).join('') + '</div></div>' : '') +
       '</div></div>';
+    $('#planBody').querySelectorAll('[data-invro]').forEach(function (b) { b.onclick = function () { M.inv.reorder(b.getAttribute('data-invro')); }; });
+  }
+
+  function materialsCard() {
+    var p = S.plan, by = {};
+    p.tasks.forEach(function (t) { if (!t.item) return; var b = by[t.item] = by[t.item] || { need: 0, used: 0, tasks: 0 }; b.tasks++; if (t.status === 'done') b.used += Number(t.qty) || 0; else b.need += Number(t.qty) || 0; });
+    var ids = Object.keys(by);
+    if (!ids.length) return '<div class="card"><h2>Materials from stock</h2><p class="muted" style="margin:0">Press 📦 next to a task name to use an item from Inventory. Its quantity is set aside for this job and taken out of stock when the task is Done.</p></div>';
+    return '<div class="card"><h2>Materials from stock</h2><div class="list">' + ids.map(function (id) {
+      var i = invItem(id) || { name: id, unit: '', available: 0 }, b = by[id], short = i.available < 0;
+      return '<div class="item"><div><b>' + esc(i.name) + '</b><br><small>' + (b.need ? 'needed ' + b.need + ' ' + esc(i.unit) : '') + (b.need && b.used ? ' · ' : '') + (b.used ? 'used ' + b.used + ' ' + esc(i.unit) : '') + ' · ' + (short ? '<b style="color:#B42318">short ' + (-i.available) + ' ' + esc(i.unit) + '</b>' : i.available + ' ' + esc(i.unit) + ' left in stock') + '</small></div>' +
+        (short || i.low ? '<button class="btn btn-sm btn-gold" data-invro="' + esc(id) + '">Re-order</button>' : '<a class="btn btn-sm" href="#inventory/' + esc(id) + '">Stock</a>') + '</div>';
+    }).join('') + '</div></div>';
   }
 
   /* ---------- job page card ---------- */

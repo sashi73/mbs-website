@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>MBS Console</title>
 <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="admin.css?v=24f">
+<link rel="stylesheet" href="admin.css?v=25">
 </head>
 <body>
 
@@ -41,6 +41,9 @@
       <a href="#invoices" data-nav="invoices"><i>🧾</i>Invoices</a>
       <a href="#expenses" data-nav="expenses"><i>💳</i>Expenses</a>
       <a href="#accounts" data-nav="accounts"><i>📒</i>Accounting &amp; BAS</a>
+      <p class="side-h">Stock</p>
+      <a href="#inventory" data-nav="inventory"><i>📦</i>Inventory</a>
+      <a href="#inventory/suppliers" data-nav="suppliers"><i>🏭</i>Suppliers</a>
       <p class="side-h">Data</p>
       <a href="#sql/ask" data-nav="ask"><i>✨</i>Ask AI (plain English)</a>
       <a href="#sql" data-nav="sql"><i>🧮</i>SQL wizard &amp; reports</a>
@@ -51,7 +54,7 @@
     </nav>
     <div class="side-foot">
       <span class="who" id="who"></span>
-      <small class="ver" title="Console version">v24f</small>
+      <small class="ver" title="Console version">v25</small>
       <button class="link" id="logout" type="button">Sign out</button>
     </div>
   </aside>
@@ -70,9 +73,10 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="modal" id="modal" hidden><div class="modal-card" role="dialog" aria-modal="true"><div id="modalBody"></div></div></div>
 
-<script src="admin.js?v=24f"></script>
-<script src="admin-acct.js?v=24f"></script>
-<script src="admin-sql.js?v=24f"></script>
-<script src="admin-plan.js?v=24f"></script>
+<script src="admin.js?v=25"></script>
+<script src="admin-acct.js?v=25"></script>
+<script src="admin-sql.js?v=25"></script>
+<script src="admin-plan.js?v=25"></script>
+<script src="admin-inv.js?v=25"></script>
 </body>
 </html>

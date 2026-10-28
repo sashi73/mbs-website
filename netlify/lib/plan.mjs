@@ -6,6 +6,7 @@ import * as J from './jobs.mjs';
 import { parseWhen, whenText, sydneyTime } from './calendar.mjs';
 import { env } from './shared.mjs';
 import { llmJson, usage, checkLimit, llmSetup } from './ai.mjs';
+import * as INV from './inventory.mjs';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const str = (s, max = 300) => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
@@ -90,7 +91,7 @@ function clean(p, core) {
   const tasks = (Array.isArray(p.tasks) ? p.tasks : []).slice(0, 300).map((t) => ({
     id: uid(t.id, 't'), name: str(t.name, 160) || 'New task', phase: phIds.has(t.phase) ? t.phase : phases[0].id,
     dur: int(t.dur, 0, 365, 1), snet: ymdOk(t.snet), pred: (Array.isArray(t.pred) ? t.pred : []).map((x) => str(x, 20)).slice(0, 10),
-    ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000)
+    item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000)
   }));
   const tIds = new Set(tasks.map((t) => t.id));
   for (const t of tasks) t.pred = t.pred.filter((x) => tIds.has(x) && x !== t.id);
@@ -202,10 +203,13 @@ export async function planPost(action, body, { who, by, audit }) {
   }
   if (action === 'planSave') {
     if (!core || !(await J.find(core))) return out(404, { error: 'Job not found' });
+    const before = await get(core);
     const r = await save(core, body.plan || {}, body.rev, by);
     if (r.conflict) return out(409, { error: 'Someone else changed this plan. Your view has been refreshed with their version.', plan: r.conflict });
     if (body.note && audit) await audit(who, `Plan ${core}: ${str(body.note, 120)}`);
-    return out(200, { plan: r.plan });
+    let low = [];
+    try { low = await INV.syncPlan(core, before, r.plan, by); } catch (e) { console.error('Stock update from plan failed:', e.message); }
+    return out(200, { plan: r.plan, low });
   }
   if (action === 'planAdvise') {
     const r = await advise(core, body.kind === 'issue' ? 'issue' : 'risk', str(body.id, 20), str(body.ask, 300), body.item);
@@ -219,6 +223,7 @@ export async function planPost(action, body, { who, by, audit }) {
     const had = await get(job.core);
     if (!had) return out(404, { error: 'This job has no plan' });
     await kv.del('plan:' + job.core);
+    try { await INV.refresh((had.tasks || []).map((t) => t.item), by); } catch (e) { console.error('Stock refresh failed:', e.message); }
     if (audit) await audit(who, `Plan ${job.core}: deleted ("${had.name}")`);
     return out(200, { ok: true });
   }
