@@ -2,12 +2,12 @@ MBS website on a free Oracle Cloud server (Always Free)
 =====================================================
 
 What you end up with: the same website and Mr. Fixit that run on your PC, running 24/7 on a
-server in Sydney, at https://www.modernbuildingsolutions.com.au, restarting by itself, with a
+server in Sydney, at https://mbsplc.com.au, restarting by itself, with a
 backup of every enquiry each night.
 
 You need: your GitHub repository (with branch MBS-FixIT-ver-21), your working .env on your PC,
 a credit or debit card for Oracle's identity check (Always Free resources are not charged),
-and access to the domain's DNS settings (where modernbuildingsolutions.com.au is registered).
+and access to the domain's DNS settings (where mbsplc.com.au is registered).
 
 Never upload .env or the server key (mbs.key) to GitHub, email or chat.
 
@@ -81,20 +81,20 @@ PART C - INSTALL THE SITE (on the server, about 10 minutes)
 PART D - YOUR DOMAIN AND HTTPS
 ------------------------------
 10. Where the domain is managed (the registrar / DNS provider), set two "A" records:
-      Host @    (modernbuildingsolutions.com.au)       -> YOUR-SERVER-IP
-      Host www  (www.modernbuildingsolutions.com.au)   -> YOUR-SERVER-IP
+      Host @    (mbsplc.com.au)       -> YOUR-SERVER-IP
+      Host www  (mbsplc.com.au)   -> YOUR-SERVER-IP
     Remove any old A/AAAA/CNAME records for @ and www that point elsewhere.
     Changes usually work within an hour (can take up to a day).
 
 11. Then on the server run the setup again, this time with the domain:
-      bash ~/mbs-website/deploy/setup-server.sh https://github.com/YOUR-USERNAME/mbs-website.git www.modernbuildingsolutions.com.au
-    Caddy gets a free HTTPS certificate by itself. Open https://www.modernbuildingsolutions.com.au
+      bash ~/mbs-website/deploy/setup-server.sh https://github.com/YOUR-USERNAME/mbs-website.git mbsplc.com.au
+    Caddy gets a free HTTPS certificate by itself. Open https://mbsplc.com.au
     (the plain address without www forwards there too).
 
-12. Email from the real domain: in Resend (resend.com > Domains) add modernbuildingsolutions.com.au
+12. Email from the real domain: in Resend (resend.com > Domains) add mbsplc.com.au
     and add the DNS records it shows at your DNS provider. When it says Verified, on the server:
       nano ~/mbs-website/.env
-    change  FROM_EMAIL=MBS Website <website@modernbuildingsolutions.com.au>
+    change  FROM_EMAIL=MBS Website <website@mbsplc.com.au>
     and OWNER_EMAIL to the business email, save, then:  bash ~/mbs-website/deploy/update.sh
 
 

@@ -252,7 +252,7 @@ export async function writeBrief(lead, extra = {}) {
 
 // Strip any "thinking" text some models include, so customers only see the answer.
 // Removes tired stock phrases from Mr. Fixit's answers, whatever the AI writes.
-export const SITE_VERSION = 'v20f';
+export const SITE_VERSION = 'v20h';
 export function humanise(text) {
   let t = String(text || '');
   const swap = [

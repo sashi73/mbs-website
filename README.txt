@@ -23,7 +23,7 @@ STEP 2 - Get your keys
   c. Resend: resend.com > sign up > API Keys > create. Paste into RESEND_API_KEY.
      Put the email you signed up with into OWNER_EMAIL.
      (Once you verify your own domain in Resend, you can send to any address and
-      change FROM_EMAIL to e.g. MBS Website <website@modernbuildingsolutions.com.au>.)
+      change FROM_EMAIL to e.g. MBS Website <website@mbsplc.com.au>.)
   Save .env.
 
 STEP 3 - Run the setup check
@@ -140,7 +140,7 @@ QUOTE QUESTIONS AND PHOTOS
 
 GOING PUBLIC LATER
   Running locally means the site works on this computer. To let customers use it
-  from modernbuildingsolutions.com.au, this server needs to be reachable from the
+  from mbsplc.com.au, this server needs to be reachable from the
   internet, for example with a free Cloudflare Tunnel, or by hosting the same folder
   on Netlify (netlify.toml is already included). Ask when you're ready.
 

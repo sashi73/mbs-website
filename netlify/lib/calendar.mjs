@@ -89,7 +89,7 @@ export function callReminder({ prejob, name, phone, suburb, service, bestTime, s
   const ics = [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Modern Building Solutions//Website//EN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',
-    `UID:${(prejob || 'call-' + start)}@modernbuildingsolutions.com.au`,
+    `UID:${(prejob || 'call-' + start)}@mbsplc.com.au`,
     `DTSTAMP:${gcal(nowMs)}`, `DTSTART:${gcal(start)}`, `DTEND:${gcal(end)}`,
     fold(`SUMMARY:${esc(title)}`), fold(`DESCRIPTION:${esc(details)}`), ...(suburb ? [fold(`LOCATION:${esc(suburb)}`)] : []),
     'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${esc('Call ' + (name || 'customer'))}`, 'TRIGGER:-PT10M', 'END:VALARM',

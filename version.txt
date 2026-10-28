@@ -1,2 +1,2 @@
-MBS website v20f (2026-10-27)
-Job alerts, call-back reminders and the weekly report can go to several private chats (TELEGRAM_ALERT_IDS). Past projects removed from Mr. Fixit (v20e), landing page changes (v20d), Sydney-clock call times (v20c).
+MBS website v20h (2026-10-27)
+Security headers (HTTPS-only, no framing, no MIME sniffing). New address https://mbsplc.com.au (v20g), job alerts to several private chats (v20f).

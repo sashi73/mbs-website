@@ -22,7 +22,7 @@ Use the same Telegram bot that already sends you the website enquiries, and your
 3. Push this version to GitHub (or netlify.cmd deploy --prod) and wait until the deploy says Published.
 
 4. Open this address once in your browser (your site address, then your secret):
-      https://YOUR-SITE.netlify.app/.netlify/functions/telegram?setup=YOUR-SECRET
+      https://mbsplc.com.au/.netlify/functions/telegram?setup=YOUR-SECRET
    It should say "Telegram bot connected", and the bot sends you "MBS job tracker is connected".
 
 5. In Mr.FixitB post /help. Everything works in the channel: alerts with buttons, commands, reminders and the

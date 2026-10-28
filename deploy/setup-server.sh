@@ -4,7 +4,7 @@
 #
 #  Run it on the server, as the normal "ubuntu" user (not root):
 #     bash setup-server.sh https://github.com/YOUR-USERNAME/mbs-website.git
-#     bash setup-server.sh https://github.com/YOUR-USERNAME/mbs-website.git www.modernbuildingsolutions.com.au
+#     bash setup-server.sh https://github.com/YOUR-USERNAME/mbs-website.git mbsplc.com.au
 #
 #  1st argument: your GitHub repository (the address from the green Code button)
 #  2nd argument (optional): your domain. Leave it out to test with the server's

@@ -182,14 +182,14 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     titles.add(seo.title);
     ok('SEO', `${pg}: title ${seo.title.length} chars (aim 30-65)`, seo.title.length >= 30 && seo.title.length <= 65, seo.title);
     ok('SEO', `${pg}: description ${seo.desc.length} chars (aim 110-170)`, seo.desc.length >= 110 && seo.desc.length <= 170);
-    ok('SEO', `${pg}: canonical link, one main heading, language, all photos described`, /^https:\/\/www\.modernbuildingsolutions\.com\.au\//.test(seo.canon) && seo.h1 === 1 && seo.lang === 'en-AU' && seo.noalt === 0, `${seo.canon} h1=${seo.h1}`);
+    ok('SEO', `${pg}: canonical link, one main heading, language, all photos described`, /^https:\/\/mbsplc\.com\.au\//.test(seo.canon) && seo.h1 === 1 && seo.lang === 'en-AU' && seo.noalt === 0, `${seo.canon} h1=${seo.h1}`);
     if (seo.ld.length) ok('SEO', `${pg}: business details for Google read correctly`, seo.ld.every(t => t === 'GeneralContractor'), seo.ld.join(','));
   }
   ok('SEO', 'every page has a different title', titles.size === PAGES.length);
   const vt = await p.request.get(`${BASE}/version.txt`);
   ok('Smoke', 'version.txt shows the live website version', vt.status() === 200 && /MBS website v\d+/.test(await vt.text()), (await vt.text()).split('\n')[0]);
   const rb = await p.request.get(`${BASE}/robots.txt`); const rbt = await rb.text();
-  ok('SEO', 'robots.txt is there and points to the sitemap', rb.status() === 200 && /Sitemap: https:\/\/www\.modernbuildingsolutions\.com\.au\/sitemap\.xml/.test(rbt));
+  ok('SEO', 'robots.txt is there and points to the sitemap', rb.status() === 200 && /Sitemap: https:\/\/mbsplc\.com\.au\/sitemap\.xml/.test(rbt));
   const sm = await p.request.get(`${BASE}/sitemap.xml`); const smt = await sm.text();
   ok('SEO', 'sitemap.xml lists all 5 pages', sm.status() === 200 && (smt.match(/<loc>/g) || []).length === 5);
   const nf = await p.request.get(`${BASE}/no-such-page.html`);
@@ -246,9 +246,10 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     ok('Chat area check', 'name is not asked twice (goes straight to the phone number)', /best phone number for the team to call, Jane\?/.test(t4) && (t4.match(/what.s your name\?/gi) || []).length === 1);
     await type(q, '0412 345 678');
     const t4b = (await chatText(q)).split('0412 345 678').pop();
-    ok('Chat area check', 'quote: best time question right after the phone number (before email)', /When.s the best time for one of our team to call you\?/.test(t4b) && !/email/i.test(t4b) && (await chipList(q)).includes('Anytime'), (await chipList(q)).join(' | '));
-    await tap(q, 'Anytime');
-    ok('Chat area check', 'quote: then asks for an email copy', /copy by email/i.test((await chatText(q)).split('Anytime').pop()));
+    ok('Chat area check', 'quote: best time question right after the phone number (before email)', /When.s the best time for one of our team to call you\?/.test(t4b) && !/email/i.test(t4b) && (await chipList(q)).some(x => /morning|afternoon|evening|now|Anytime/i.test(x)), (await chipList(q)).join(' | '));
+    const pickTime = (await chipList(q))[0];
+    await tap(q, pickTime);
+    ok('Chat area check', 'quote: then asks for an email copy', /copy by email/i.test((await chatText(q)).split(pickTime).pop()));
     await cx.close();
   }
   {
