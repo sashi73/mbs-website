@@ -26,9 +26,9 @@ export const SCHEMA = {
   expenses: ['id', 'date', 'month', 'supplier', 'description', 'category', 'job', 'ex', 'gst', 'inc', 'has_receipt'],
   reminders: ['id', 'due', 'date', 'text', 'job'],
   visits: ['date', 'month', 'visits'],
-  plan_tasks: ['job', 'plan', 'task', 'resource', 'lead', 'status', 'start', 'finish', 'days', 'qty', 'unit', 'unit_cost', 'planned_cost', 'actual_cost', 'pct_complete', 'done', 'late'],
-  plan_risks: ['job', 'plan', 'risk', 'probability', 'impact', 'score', 'response', 'owner', 'status', 'review'],
-  plan_issues: ['job', 'plan', 'issue', 'priority', 'owner', 'raised', 'due', 'status']
+  plan_tasks: ['job', 'plan_name', 'task', 'resource', 'lead', 'status', 'start', 'finish', 'days', 'qty', 'unit', 'unit_cost', 'planned_cost', 'actual_cost', 'pct_complete', 'done', 'late'],
+  plan_risks: ['job', 'plan_name', 'risk', 'probability', 'impact', 'score', 'response', 'owner', 'status', 'review'],
+  plan_issues: ['job', 'plan_name', 'issue', 'priority', 'owner', 'raised', 'due', 'status']
 };
 export const DESCRIBE = {
   jobs: 'Every enquiry and job (pipeline stage, customer, suburb, trade, values)', quotes: 'Quotes (status, totals ex/inc GST)', invoices: 'Tax invoices (paid, balance, days overdue)',
@@ -76,10 +76,10 @@ export async function tables() {
   for (const p of planList) {
     PLAN.schedule(p);
     const STN = { todo: 'To do', doing: 'In progress', review: 'In review / QA', done: 'Done' };
-    for (const t of p.tasks) plan_tasks.push({ job: p.core, plan: p.name, task: t.name, resource: t.resource || '', lead: t.lead || '', status: STN[t.status] || (t.pct >= 100 ? 'Done' : t.pct > 0 ? 'In progress' : 'To do'), start: t.es, finish: t.ef, days: t.dur, qty: t.qty, unit: t.unit,
+    for (const t of p.tasks) plan_tasks.push({ job: p.core, plan_name: p.name, task: t.name, resource: t.resource || '', lead: t.lead || '', status: STN[t.status] || (t.pct >= 100 ? 'Done' : t.pct > 0 ? 'In progress' : 'To do'), start: t.es, finish: t.ef, days: t.dur, qty: t.qty, unit: t.unit,
       unit_cost: t.rate, planned_cost: r2(t.qty * t.rate), actual_cost: t.actual, pct_complete: t.pct, done: t.pct >= 100, late: t.pct < 100 && t.ef < todayS });
-    for (const r of p.risks || []) plan_risks.push({ job: p.core, plan: p.name, risk: r.title, probability: r.p, impact: r.i, score: r.p * r.i, response: r.response, owner: r.owner, status: r.status, review: r.review });
-    for (const x of p.issues || []) plan_issues.push({ job: p.core, plan: p.name, issue: x.title, priority: x.priority, owner: x.owner, raised: x.raised, due: x.due, status: x.status });
+    for (const r of p.risks || []) plan_risks.push({ job: p.core, plan_name: p.name, risk: r.title, probability: r.p, impact: r.i, score: r.p * r.i, response: r.response, owner: r.owner, status: r.status, review: r.review });
+    for (const x of p.issues || []) plan_issues.push({ job: p.core, plan_name: p.name, issue: x.title, priority: x.priority, owner: x.owner, raised: x.raised, due: x.due, status: x.status });
   }
   return { jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_risks, plan_issues };
 }
@@ -122,6 +122,122 @@ export async function narrative({ title, sql, columns, rows, focus }) {
   } catch (e) {
     return { ...basicSummary(columns, rows), ai: false, note: /abort/i.test(e.message) ? 'The AI took too long, so this is a basic summary. Try again.' : 'The AI could not be reached (' + e.message + '), so this is a basic summary.' };
   } finally { clearTimeout(timer); }
+}
+
+// ---------- AI query: a plain-English question -> SQL (the AI writes it) -> run in the browser -> a plain-English answer ----------
+// The AI never sees the data rows when writing SQL: only table and column names, the dates for "this month" etc.,
+// and short lists of codes (stages, statuses, plan names, suburbs). Phone numbers, emails and names are never sent.
+function llmSetup() {
+  const key = env('LLM_API_KEY');
+  if (!key) return null;
+  const base = env('LLM_BASE_URL', 'https://api.deepseek.com').replace(/\/+$/, '');
+  let model = env('LLM_MODEL', 'deepseek-chat'); if (/reasoner|thinking/i.test(model)) model = 'deepseek-chat';
+  return { key, base, model };
+}
+async function llmJson(messages, { maxTokens = 700, timeoutMs = 25000, temperature = 0.1 } = {}) {
+  const L = llmSetup();
+  if (!L) { const e = new Error('AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.'); e.code = 503; throw e; }
+  const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${L.base}/chat/completions`, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${L.key}` },
+      body: JSON.stringify({ model: L.model, temperature, stream: false, max_tokens: maxTokens, response_format: { type: 'json_object' }, messages }) });
+    if (!r.ok) throw new Error('DeepSeek error ' + r.status);
+    const j = await r.json();
+    const txt = stripThinking(j?.choices?.[0]?.message?.content ?? '').replace(/^```(?:json)?\s*|\s*```$/g, '');
+    return JSON.parse(txt);
+  } catch (e) {
+    if (e.code) throw e;
+    throw new Error(/abort/i.test(e.message) ? 'The AI took too long to answer. Try again, or ask a shorter question.' : 'The AI could not be reached (' + e.message + ').');
+  } finally { clearTimeout(timer); }
+}
+
+const NOTES = {
+  jobs: 'one row per enquiry/job. ref = job number staff see (P... = enquiry, no letter = quoted, J... = job won or later); core = stable job id used to join other tables; stage = pipeline stage; name = customer; suburb; service = the work asked for; trade = trade letter; source = how it came in; created = date the enquiry arrived; created_month = YYYY-MM; quote_inc / invoice_inc = $ inc GST; called_date, quoted_date, won_date, completed_date, invoiced_date, paid_date, lost_date = date it reached that stage (blank if not); lost_reason; photos and notes = how many',
+  quotes: 'one row per quote. id (Q-...); job = jobs.core; customer; status; issued = date; issued_month; valid_until; ex / gst / inc = dollars ex GST, GST, inc GST; invoice_id if invoiced',
+  invoices: 'one row per tax invoice. id (INV-...); job = jobs.core; customer; status; issued; issued_month; due; ex / gst / inc dollars; paid = $ received; balance = $ still owed; days_overdue',
+  items: 'line items: doc_id = quotes.id or invoices.id; doc_type quote|invoice; description; qty; price; gst_free; ex / gst / inc',
+  payments: 'payments received: invoice_id = invoices.id; customer; date; month; amount; gst; method',
+  expenses: 'money spent: id; date; month; supplier; description; category; job = jobs.core (blank if overhead); ex / gst / inc; has_receipt',
+  reminders: 'follow-ups: due (ISO time); date; text; job = jobs.core',
+  visits: 'website visitors: date; month; visits (number that day)',
+  plan_tasks: 'project plan tasks (one row per task, one plan per job): job = jobs.core; plan_name; task; resource = everyone on it (lead first); lead; status To do|In progress|In review / QA|Done; start / finish dates; days (0 = milestone); qty, unit, unit_cost, planned_cost, actual_cost; pct_complete 0-100; done true/false; late true/false (past finish and not done)',
+  plan_risks: 'project risks: job; plan_name; risk; probability 1-5; impact 1-5; score = probability x impact; response; owner; status Open|Closed; review date',
+  plan_issues: 'project issues: job; plan_name; issue; priority; owner; raised; due; status Open|In progress|Resolved'
+};
+
+function sydneyDates(now = Date.now()) {
+  const p = parts(now);
+  const D = (y, m, d) => new Date(Date.UTC(y, m - 1, d));
+  const S = (dt) => dt.toISOString().slice(0, 10);
+  const add = (dt, n) => new Date(dt.getTime() + n * 86400000);
+  const today = D(p.y, p.mo, p.d), wd = (today.getUTCDay() + 6) % 7, monday = add(today, -wd);
+  const monthStart = D(p.y, p.mo, 1), monthEnd = add(D(p.y, p.mo + 1, 1), -1);
+  const lmStart = D(p.y, p.mo - 1, 1), lmEnd = add(monthStart, -1);
+  const fyY = p.mo >= 7 ? p.y : p.y - 1, q0 = Math.floor((p.mo - 1) / 3) * 3 + 1;
+  return {
+    today: S(today), yesterday: S(add(today, -1)), this_week: [S(monday), S(add(monday, 6))], last_week: [S(add(monday, -7)), S(add(monday, -1))],
+    this_month: [S(monthStart), S(monthEnd)], last_month: [S(lmStart), S(lmEnd)], this_quarter: [S(D(p.y, q0, 1)), S(add(D(p.y, q0 + 3, 1), -1))],
+    this_year: [`${p.y}-01-01`, `${p.y}-12-31`], last_year: [`${p.y - 1}-01-01`, `${p.y - 1}-12-31`],
+    this_financial_year: [`${fyY}-07-01`, `${fyY + 1}-06-30`], last_financial_year: [`${fyY - 1}-07-01`, `${fyY}-06-30`],
+    last_7_days: [S(add(today, -6)), S(today)], last_30_days: [S(add(today, -29)), S(today)], weekday: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][wd]
+  };
+}
+const HINT_KEYS = ['row_counts', 'stages', 'quote_status', 'invoice_status', 'expense_categories', 'trades', 'sources', 'suburbs', 'services', 'plans', 'plan_status', 'risk_status', 'issue_status'];
+function cleanHints(h) {
+  const out = {};
+  for (const k of HINT_KEYS) {
+    const v = h && h[k];
+    if (Array.isArray(v)) out[k] = v.slice(0, 40).map((x) => String(x ?? '').slice(0, 90)).filter(Boolean);
+    else if (v && typeof v === 'object') out[k] = Object.fromEntries(Object.entries(v).slice(0, 20).map(([a, b]) => [String(a).slice(0, 30), Number(b) || 0]));
+  }
+  return out;
+}
+export function readOnly(sql) {
+  const s = String(sql || '').replace(/--[^\n]*/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ').trim().replace(/;\s*$/, '');
+  if (!/^(select|with)\b/i.test(s) || /;/.test(s) || /\b(into|insert|update|delete|drop|create|alter|attach|detach|require|source|declare)\b/i.test(s) || /\b(json|csv|xlsx|xls|txt|tab|tsv|html|ods|file)\s*\(/i.test(s)) return '';
+  return s;
+}
+export async function askSql({ question, hints, previous, history }) {
+  const dates = sydneyDates();
+  const schema = Object.fromEntries(Object.entries(SCHEMA).map(([t, cols]) => [t, { columns: cols, about: NOTES[t] || DESCRIBE[t] || '' }]));
+  const system = 'You turn questions from the owner of Modern Building Solutions (a Sydney building company: remedial, waterproofing, painting, construction) into ONE read-only SQL query over the tables below. ' +
+    'The query runs in AlaSQL (in the browser), so follow these rules exactly:\n' +
+    '- One SELECT (or WITH ... SELECT). No semicolons, no INSERT/UPDATE/DELETE, no functions that read files.\n' +
+    '- Use only the tables and columns listed. Join with the id columns described (jobs.core = quotes.job = invoices.job = expenses.job = plan_tasks.job).\n' +
+    '- Dates are text YYYY-MM-DD (months YYYY-MM). Compare with BETWEEN \'from\' AND \'to\' using the exact dates given in "dates" for words like today, this week, this month, last month, this financial year (Australian FY 1 Jul - 30 Jun).\n' +
+    '- Never use these words as aliases (they break this database): total, value, count, sum, rows, index, plan, top, group, desc, asc. Every alias must also be different from every column name (e.g. jobs_count, total_inc, planned_finish).\n' +
+    '- Give every column in the result a clear snake_case alias. In UNION queries give every part the same aliases.\n' +
+    '- For names or words the user types (a customer, a project, a suburb, a supplier), match loosely: LOWER(column) LIKE \'%word%\'. "Project X" usually means a plan: match plan_tasks.plan_name, or the job (jobs.name customer, jobs.service, jobs.suburb, jobs.ref) joined on plan_tasks.job = jobs.core.\n' +
+    '- Project completion % = ROUND(SUM(CASE WHEN days < 1 THEN 1 ELSE days END * pct_complete) / SUM(CASE WHEN days < 1 THEN 1 ELSE days END)). Also useful: tasks done = SUM(CASE WHEN done THEN 1 ELSE 0 END), late tasks, MAX(finish) AS planned_finish.\n' +
+    '- "New jobs" or "new enquiries" means jobs by created date. "Won" uses won_date. Money owed = SUM(balance) of invoices whose status is not paid or void. Amounts are AUD; say inc GST unless asked ex GST.\n' +
+    '- Lists: return the useful columns (ref, customer name, suburb, amounts, dates), newest first, LIMIT 200. Counts and totals: return one row.\n' +
+    '- If the question cannot be answered from these tables, return an empty sql and explain in "note".\n' +
+    'Reply as JSON only: {"sql": string, "title": string (a short report title, max 60 chars), "note": string (one short sentence saying how you read the question, e.g. which dates you used), ' +
+    '"chart": null or {"type": "bar"|"hbar"|"line"|"pie"|"doughnut", "x": label column alias, "y": [number column aliases]} (a chart only when there are several rows to compare)}.';
+  const user = { question: String(question).slice(0, 500), dates, tables: schema, known_values: cleanHints(hints) };
+  if (Array.isArray(history) && history.length) user.earlier_questions = history.slice(-2).map((h) => ({ question: String(h.q || '').slice(0, 300), sql: String(h.sql || '').slice(0, 1500) }));
+  if (previous && previous.sql) user.your_previous_attempt = { sql: String(previous.sql).slice(0, 3000), error: String(previous.error || '').slice(0, 400), instruction: 'That query failed. Fix it and follow every rule.' };
+  const o = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: 900 });
+  const sql = String(o.sql || '').trim();
+  let chart = null;
+  if (o.chart && typeof o.chart === 'object' && o.chart.x && Array.isArray(o.chart.y) && ['bar', 'hbar', 'line', 'pie', 'doughnut'].includes(o.chart.type)) chart = { type: o.chart.type, x: String(o.chart.x), y: o.chart.y.map(String).slice(0, 4) };
+  if (sql && !readOnly(sql)) return { sql: '', title: '', note: 'The AI suggested a query that is not allowed here (reports only read data). Try asking in a different way.', chart: null };
+  return { sql: sql ? readOnly(sql) : '', title: String(o.title || 'AI query').slice(0, 80), note: String(o.note || '').slice(0, 300), chart };
+}
+export async function answerFromRows({ question, title, sql, columns, rows }) {
+  const s = sample(columns, rows);
+  const one = rows.length === 1 && columns.length === 1 ? rows[0][columns[0]] : undefined;
+  const basic = rows.length === 0 ? 'Nothing matched that question.' : one !== undefined ? `${columns[0].replace(/_/g, ' ')}: ${typeof one === 'number' ? one.toLocaleString('en-AU') : one}.` : `${rows.length} row${rows.length === 1 ? '' : 's'} found (see the table).`;
+  if (!llmSetup()) return { answer: basic, ai: false };
+  try {
+    const o = await llmJson([
+      { role: 'system', content: 'You answer the owner of a Sydney building company in plain English, using ONLY the query results given. 1 to 3 short sentences. Lead with the direct answer and the key figure(s). ' +
+        'Australian spelling, dollars as $1,234.56. If there are no rows, say nothing matched and suggest one reason. Do not mention SQL or tables. Some private columns were removed before you saw the data; never guess names, phones or emails. ' +
+        'Reply as JSON: {"answer": string}.' },
+      { role: 'user', content: JSON.stringify({ question: String(question).slice(0, 500), report_title: title, row_count: rows.length, columns: s.columns, rows: s.rows, removed_private_columns: s.removed }) }
+    ], { maxTokens: 300, timeoutMs: 20000, temperature: 0.2 });
+    return { answer: String(o.answer || basic).slice(0, 700), ai: true };
+  } catch (e) { return { answer: basic, ai: false, note: e.message }; }
 }
 
 // ---------- the PDF ----------
@@ -198,6 +314,16 @@ export async function sqlPost(action, body, { who }) {
   if (action === 'sqlNarrative') {
     const columns = (Array.isArray(body.columns) ? body.columns : []).map(String).slice(0, 40), rows = Array.isArray(body.rows) ? body.rows.slice(0, 200) : [];
     return out(200, await narrative({ title: String(body.title || 'Report').slice(0, 120), sql: String(body.sql || '').slice(0, 3000), columns, rows, focus: String(body.focus || '').slice(0, 400) }));
+  }
+  if (action === 'sqlAsk') {
+    const question = String(body.question || '').trim();
+    if (!question) return bad('Type a question first');
+    try { return out(200, await askSql({ question, hints: body.hints || {}, previous: body.previous || null, history: body.history || [] })); }
+    catch (e) { return bad(e.message, e.code || 502); }
+  }
+  if (action === 'sqlAnswer') {
+    const columns = (Array.isArray(body.columns) ? body.columns : []).map(String).slice(0, 40), rows = Array.isArray(body.rows) ? body.rows.slice(0, 200) : [];
+    return out(200, await answerFromRows({ question: String(body.question || '').slice(0, 500), title: String(body.title || '').slice(0, 120), sql: String(body.sql || '').slice(0, 3000), columns, rows }));
   }
   if (action === 'sqlPdf') {
     const columns = (Array.isArray(body.columns) ? body.columns : []).map(String).slice(0, 40), rows = Array.isArray(body.rows) ? body.rows.slice(0, 200) : [];

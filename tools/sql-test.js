@@ -78,6 +78,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Menu', 'left column has "SQL wizard & reports"', /SQL wizard/.test(await p.textContent('.side-nav')));
     await p.click('[data-nav=sql]');
     await p.waitForSelector('.sql-side .tbl', { timeout: 15000 });
+    ok('AI query', 'the SQL wizard opens on "✨ AI query"', /AI query/.test(await p.textContent('#sqlTabs .tab.on')));
+    await p.click('[data-tab=templates]');
     const side = await p.textContent('.sql-side');
     ok('Tables', 'tables listed with row counts (jobs 4 rows, quotes 1 row, payments 1 row, visits 2 rows)', /jobs\s*4 rows/.test(side) && /quotes\s*1 row(?!s)/.test(side) && /payments\s*1 row(?!s)/.test(side) && /visits\s*2 rows/.test(side), side.replace(/\s+/g, ' ').slice(0, 200));
 
@@ -211,7 +213,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // ---- phone ----
     const m = await ctx.newPage(); await m.setViewportSize({ width: 390, height: 844 });
     m.on('pageerror', (e) => errors.push('phone: ' + e.message));
-    await m.goto(`${BASE}/admin/#sql`, { waitUntil: 'domcontentloaded' }); await m.waitForSelector('.tpl', { timeout: 15000 });
+    await m.goto(`${BASE}/admin/#sql`, { waitUntil: 'domcontentloaded' }); await m.waitForSelector('#sqlTabs', { timeout: 15000 }); await m.click('[data-tab=templates]'); await m.waitForSelector('.tpl');
     await m.click('.tpl >> text=Jobs by stage'); await m.waitForSelector('#chCanvas');
     ok('Phone', 'SQL wizard works on a phone (no sideways scrolling)', await m.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await m.close();

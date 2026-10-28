@@ -1,2 +1,2 @@
-MBS website v24c (2026-10-28)
-Project planner: no names filled in for you; several people per task with a lead (★); tasks and milestones only (no phases); board To do / In progress / In review / QA / Done sets the Gantt % (0 / 33 / 67 / 100); delete a plan. Speed fixes (v24b), SQL wizard (v23), accounts (v22).
+MBS website v24d (2026-10-28)
+SQL wizard AI query: ask in plain English ("How many new jobs this month?", "What is the completion status of the bathroom project?"); DeepSeek writes a read-only query, it runs in the browser on your data, and DeepSeek words the answer (names, phones and emails removed). Automatic query repair, follow-up questions, examples, history. Planner (v24c), speed fixes (v24b).

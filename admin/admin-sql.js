@@ -9,7 +9,7 @@
   var CSS = ['vendor/codemirror.css', 'vendor/show-hint.css'];
   var OPEN = { jobs: true };
   var loaded = null, DB = null, SCHEMA = null, DESCRIBE = {}, loadedAt = 0;
-  var S = { period: null, tab: 'templates', view: 'table', sql: '', cols: [], rows: [], chart: { type: 'bar', x: '', y: [] }, title: 'Data report', wiz: { table: '', cols: [], filters: [], order: '', dir: 'DESC', limit: 100 } };
+  var S = { askLog: [], period: null, tab: 'ask', view: 'table', sql: '', cols: [], rows: [], chart: { type: 'bar', x: '', y: [] }, title: 'Data report', wiz: { table: '', cols: [], filters: [], order: '', dir: 'DESC', limit: 100 } };
   var chartObj = null, cm = null;
   var COLORS = ['#C9A227', '#1F2937', '#3B82F6', '#10B981', '#EF4444', '#8B5CF6', '#F59E0B', '#14B8A6', '#EC4899', '#6B7280', '#84CC16', '#0EA5E9'];
 
@@ -132,7 +132,7 @@
               SCHEMA[t].map(function (c) { return '<span class="chipd" draggable="true" data-drag="' + esc(c) + '" data-col="' + esc(c) + '" data-of="' + esc(t) + '">' + esc(c) + '</span>'; }).join('') + '</div></details>';
           }).join('') + '</aside>' +
         '<section class="sql-main">' +
-          '<div class="tabs" id="sqlTabs">' + [['templates', '★ Templates'], ['wizard', '🧩 Wizard'], ['editor', '⌨ SQL editor'], ['saved', '💾 Saved']].map(function (x) { return '<button class="tab' + (S.tab === x[0] ? ' on' : '') + '" data-tab="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
+          '<div class="tabs" id="sqlTabs">' + [['ask', '✨ AI query'], ['templates', '★ Templates'], ['wizard', '🧩 Wizard'], ['editor', '⌨ SQL editor'], ['saved', '💾 Saved']].map(function (x) { return '<button class="tab' + (S.tab === x[0] ? ' on' : '') + '" data-tab="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
           '<div class="card" id="sqlPanel"></div>' +
           '<div class="card" id="sqlResults" style="margin-top:16px"><div class="empty">Pick a template, build a query with the wizard, or write SQL, then press Run.</div></div>' +
         '</section>' +
@@ -176,7 +176,8 @@
         panel(); }; });
       var setRange = function () { var f = $('#perFrom').value, t = $('#perTo').value; if (f && t) { S.period = { key: 'custom', from: f <= t ? f : t, to: f <= t ? t : f, name: 'custom' }; $('#perShow').textContent = prettyRange(S.period); } };
       if ($('#perFrom')) { $('#perFrom').onchange = setRange; $('#perTo').onchange = setRange; }
-    } else if (S.tab === 'wizard') wizard(P);
+    } else if (S.tab === 'ask') askPanel(P);
+    else if (S.tab === 'wizard') wizard(P);
     else if (S.tab === 'editor') editor(P);
     else saved(P);
   }
@@ -186,6 +187,80 @@
     try { run(sql); } catch (e) { return fail(e); }
     if (t.c) { S.chart = { type: t.c[0], x: t.c[1], y: t.c[2].slice() }; S.view = 'chart'; } else { S.view = 'table'; autoChart(); }
     S.tab = 'editor'; draw();
+  }
+
+
+  /* ---------- ✨ AI query: ask in plain English ---------- */
+  var EXAMPLES = ['How many new jobs did I get this month?', 'What is the completion status of each project?', 'Which tasks are late, and who is the lead?', 'How much money is owed to me, and by which invoices?',
+    'Which quotes sent in the last 30 days are still waiting?', 'Jobs won this financial year by trade', 'Top 5 suburbs for enquiries this year', 'Spending by category last month'];
+  function hints() {
+    var q = function (sql, k) { try { return DB.exec(sql).map(function (r) { return r[k]; }).filter(function (v) { return v != null && v !== ''; }); } catch (e) { return []; } };
+    var counts = {}; Object.keys(SCHEMA).forEach(function (t) { counts[t] = DB.tables[t].data.length; });
+    var plans = []; try { plans = DB.exec('SELECT DISTINCT plan_name AS pn, job AS jb FROM plan_tasks').map(function (r) { return r.pn + ' (job ' + r.jb + ')'; }); } catch (e) {}
+    return {
+      row_counts: counts, stages: q('SELECT DISTINCT stage AS v FROM jobs', 'v'), quote_status: q('SELECT DISTINCT status AS v FROM quotes', 'v'), invoice_status: q('SELECT DISTINCT status AS v FROM invoices', 'v'),
+      expense_categories: q('SELECT DISTINCT category AS v FROM expenses', 'v'), trades: q('SELECT DISTINCT trade AS v FROM jobs', 'v'), sources: q('SELECT DISTINCT source AS v FROM jobs', 'v'),
+      suburbs: q('SELECT suburb AS v, COUNT(*) AS n FROM jobs GROUP BY suburb ORDER BY n DESC LIMIT 40', 'v'), services: q('SELECT service AS v, COUNT(*) AS n FROM jobs GROUP BY service ORDER BY n DESC LIMIT 30', 'v'),
+      plans: plans.slice(0, 40), plan_status: q('SELECT DISTINCT status AS v FROM plan_tasks', 'v'), risk_status: q('SELECT DISTINCT status AS v FROM plan_risks', 'v'), issue_status: q('SELECT DISTINCT status AS v FROM plan_issues', 'v')
+    };
+  }
+  function askPanel(P) {
+    P.innerHTML = '<div class="card-h"><h2>✨ AI query</h2><span class="muted" style="font-size:12.5px">Ask in plain English. The AI writes the query; it runs here on your own data.</span></div>' +
+      '<form class="askbar" id="askForm"><input id="askQ" autocomplete="off" maxlength="400" placeholder="e.g. How many new jobs did I get this month?" aria-label="Your question"><button class="btn btn-gold" id="askGo" type="submit">Ask</button></form>' +
+      '<div class="ask-ex">' + EXAMPLES.map(function (e) { return '<button type="button" class="chipq" data-ex="' + esc(e) + '">' + esc(e) + '</button>'; }).join('') + '</div>' +
+      '<div id="askOut"></div>' +
+      (S.askLog.length ? '<details class="ask-log"><summary>Earlier questions (' + S.askLog.length + ')</summary>' + S.askLog.slice().reverse().map(function (a, i) { return '<button type="button" class="ask-old" data-old="' + (S.askLog.length - 1 - i) + '"><b>' + esc(a.q) + '</b><small>' + esc(a.answer || '') + '</small></button>'; }).join('') + '</details>' : '') +
+      '<p class="muted" style="font-size:12px;margin:12px 0 0">To write the query the AI only sees table and column names, today\'s dates and short lists like stages and plan names. To word the answer it sees the results with names, phone numbers and emails removed. Don\'t type phone numbers into the question.</p>';
+    var last = S.askLog[S.askLog.length - 1];
+    if (last) showAnswer(last);
+    $('#askForm').onsubmit = function (e) { e.preventDefault(); ask($('#askQ').value); };
+    P.querySelectorAll('[data-ex]').forEach(function (b) { b.onclick = function () { $('#askQ').value = b.getAttribute('data-ex'); ask(b.getAttribute('data-ex')); }; });
+    P.querySelectorAll('[data-old]').forEach(function (b) { b.onclick = function () { var a = S.askLog[+b.getAttribute('data-old')]; try { run(a.sql); S.title = a.title; S.view = a.view || 'table'; if (a.chart) S.chart = JSON.parse(JSON.stringify(a.chart)); else autoChart(); results(); showAnswer(a); $('#askQ').value = a.q; } catch (e) { fail(e); } }; });
+    setTimeout(function () { var i = $('#askQ'); if (i && !S.askBusy) i.focus(); }, 30);
+  }
+  function showAnswer(a) {
+    var O = $('#askOut'); if (!O) return;
+    var big = '';
+    if (a.single != null) big = '<div class="ask-big">' + esc(a.single) + '</div>';
+    O.innerHTML = '<div class="ask-ans' + (a.error ? ' err' : '') + '"><div class="ask-q">“' + esc(a.q) + '”</div>' + big +
+      '<div class="ask-a">' + (a.answer ? esc(a.answer) : '<span class="ask-think">Working out the answer…</span>') + '</div>' +
+      (a.note ? '<div class="muted" style="font-size:12.5px;margin-top:6px">How I read it: ' + esc(a.note) + '</div>' : '') +
+      (a.sql ? '<details class="ask-sql"><summary>Show the query</summary><pre class="json" style="max-height:220px">' + esc(a.sql) + '</pre><button class="btn btn-sm" type="button" id="askEdit">Open in SQL editor</button></details>' : '') + '</div>';
+    var ed = $('#askEdit'); if (ed) ed.onclick = function () { S.sql = a.sql; S.title = a.title || 'Query results'; S.tab = 'editor'; draw(); };
+  }
+  function ask(question) {
+    question = String(question || '').trim();
+    if (!question) return toast('Type a question first', true);
+    if (S.askBusy) return;
+    S.askBusy = true;
+    var btn = $('#askGo'); if (btn) { btn.disabled = true; btn.textContent = 'Thinking…'; }
+    var O = $('#askOut'); if (O) O.innerHTML = '<div class="ask-ans"><div class="ask-q">“' + esc(question) + '”</div><div class="ask-a"><span class="ask-think">Writing the query…</span></div></div>';
+    var H = hints(), hist = S.askLog.slice(-2).map(function (a) { return { q: a.q, sql: a.sql }; });
+    var a = { q: question, at: Date.now() };
+    var tryRun = function (r, n) {
+      if (!r.sql) return Promise.reject(new Error(r.note || 'I could not turn that into a query. Try asking in a different way.'));
+      try { run(r.sql); return Promise.resolve(r); }
+      catch (e) {
+        if (n >= 1) return Promise.reject(new Error('The AI\'s query did not work (' + e.message + '). Try asking in a different way.'));
+        var t = $('#askOut .ask-think'); if (t) t.textContent = 'Fixing the query…';
+        return api('sqlAsk', { question: question, hints: H, history: hist, previous: { sql: r.sql, error: e.message } }).then(function (r2) { return tryRun(r2, n + 1); });
+      }
+    };
+    api('sqlAsk', { question: question, hints: H, history: hist }).then(function (r) { return tryRun(r, 0); }).then(function (r) {
+      a.sql = S.sql; a.title = r.title || 'AI query'; a.note = r.note || '';
+      S.title = a.title;
+      var ok = r.chart && S.cols.indexOf(r.chart.x) >= 0 && r.chart.y.every(function (y) { return S.cols.indexOf(y) >= 0; });
+      if (ok && S.rows.length > 1) { S.chart = { type: r.chart.type, x: r.chart.x, y: r.chart.y.slice() }; S.view = 'chart'; } else { S.view = 'table'; autoChart(); }
+      a.view = S.view; a.chart = JSON.parse(JSON.stringify(S.chart));
+      if (S.rows.length === 1 && S.cols.length === 1) { var v = S.rows[0][S.cols[0]]; a.single = typeof v === 'number' ? v.toLocaleString('en-AU', { maximumFractionDigits: 2 }) : String(v == null ? '' : v); }
+      results(); showAnswer(a);
+      return api('sqlAnswer', { question: question, title: a.title, sql: S.sql, columns: S.cols, rows: S.rows.slice(0, 200) }).then(function (x) { a.answer = x.answer; }).catch(function () { a.answer = S.rows.length + ' row' + (S.rows.length === 1 ? '' : 's') + ' found (see the table).'; });
+    }).then(function () {
+      S.askLog.push(a); if (S.askLog.length > 20) S.askLog.shift();
+      showAnswer(a);
+    }).catch(function (e) {
+      a.answer = e.message; a.error = true; showAnswer(a);
+    }).then(function () { S.askBusy = false; var b = $('#askGo'); if (b) { b.disabled = false; b.textContent = 'Ask'; } });
   }
 
   /* ---------- wizard ---------- */

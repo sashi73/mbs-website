@@ -270,7 +270,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // ---- SQL wizard and data explorer ----
     r = await api('sqlData'); const sd = await r.json();
     ok('SQL', 'SQL wizard has plan_tasks, plan_risks and plan_issues tables', sd.data && Array.isArray(sd.data.plan_tasks) && sd.data.plan_tasks.length >= 13 && Array.isArray(sd.data.plan_risks) && Array.isArray(sd.data.plan_issues), Object.keys(sd.data || {}).join(',') + ' ' + (sd.data && sd.data.plan_tasks && sd.data.plan_tasks.length));
-    await p.goto(`${BASE}/admin/#sql`); await p.waitForSelector('.tpl', { timeout: 15000 });
+    await p.goto(`${BASE}/admin/#sql`); await p.waitForSelector('#sqlTabs', { timeout: 15000 }); await p.click('[data-tab=templates]'); await p.waitForSelector('.tpl');
     ok('SQL', 'Projects templates offered (late tasks, planned vs actual, risks, issues)', /Projects/.test(await p.textContent('#view')) && /Late tasks/.test(await p.textContent('#view')) && /Planned vs actual cost/.test(await p.textContent('#view')));
     await p.click('.tpl >> text=Planned vs actual cost by job'); await p.waitForSelector('#chCanvas');
     const sq = await p.evaluate(() => window.MBS.sqlState.rows);

@@ -28,8 +28,10 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-28 v24c (planner: people with a lead, To do / In progress / In review / Done board)';
+const VERSION = '2026-10-28 v24d (SQL wizard: AI query in plain English)';
 const NEEDS = [
+  ['admin/admin-sql.js', 'askPanel'],
+  ['netlify/lib/admin-sql.mjs', 'askSql'],
   ['admin/admin-plan.js', 'planState'],
   ['netlify/lib/plan.mjs', 'planPost'],
   ['admin/admin-sql.js', 'useTemplate'],
