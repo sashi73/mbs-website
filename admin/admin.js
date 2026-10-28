@@ -352,5 +352,7 @@
   };
 
   /* ---------------- start ---------------- */
-  api('me').then(function (j) { showApp(j.user); }).catch(function () { showLogin(); });
+  // wait until every console script (accounts, SQL, planner) has added its pages, so a link like #plan/... opens the right page
+  function start() { api('me').then(function (j) { showApp(j.user); }).catch(function () { showLogin(); }); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();

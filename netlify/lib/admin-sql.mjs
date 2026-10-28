@@ -8,6 +8,7 @@ import * as ACC from './accounts.mjs';
 import { parts } from './calendar.mjs';
 import LOGO from './logo-png.mjs';
 import { business } from './pdf.mjs';
+import * as PLAN from './plan.mjs';
 
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
 const out = (status, body) => new Response(JSON.stringify(body), { status, headers: H });
@@ -25,11 +26,14 @@ export const SCHEMA = {
   payments: ['invoice_id', 'customer', 'date', 'month', 'amount', 'gst', 'method', 'reference'],
   expenses: ['id', 'date', 'month', 'supplier', 'description', 'category', 'job', 'ex', 'gst', 'inc', 'has_receipt'],
   reminders: ['id', 'due', 'date', 'text', 'job'],
-  visits: ['date', 'month', 'visits']
+  visits: ['date', 'month', 'visits'],
+  plan_tasks: ['job', 'plan', 'phase', 'task', 'resource', 'start', 'finish', 'days', 'qty', 'unit', 'unit_cost', 'planned_cost', 'actual_cost', 'pct_complete', 'done', 'late'],
+  plan_risks: ['job', 'plan', 'risk', 'probability', 'impact', 'score', 'response', 'owner', 'status', 'review'],
+  plan_issues: ['job', 'plan', 'issue', 'priority', 'owner', 'raised', 'due', 'status']
 };
 export const DESCRIBE = {
   jobs: 'Every enquiry and job (pipeline stage, customer, suburb, trade, values)', quotes: 'Quotes (status, totals ex/inc GST)', invoices: 'Tax invoices (paid, balance, days overdue)',
-  items: 'Line items of quotes and invoices', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
+  items: 'Line items of quotes and invoices', plan_tasks: 'Project plan tasks (dates, costs, % complete)', plan_risks: 'Risk registers of all plans', plan_issues: 'Issue logs of all plans', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
 };
 
 export async function tables() {
@@ -66,7 +70,17 @@ export async function tables() {
     const v = await getStore({ name: 'mbs-visits', consistency: 'strong' }).get('count', { type: 'json' });
     visits = Object.entries((v && v.days) || {}).map(([date, n]) => ({ date, month: date.slice(0, 7), visits: n })).sort((a, b) => (a.date > b.date ? 1 : -1));
   } catch {}
-  return { jobs, quotes, invoices, items, payments, expenses, reminders, visits };
+  const plan_tasks = [], plan_risks = [], plan_issues = [];
+  const todayS = d10(now);
+  for (const p of await PLAN.list()) {
+    PLAN.schedule(p);
+    const ph = Object.fromEntries(p.phases.map((f) => [f.id, f.name]));
+    for (const t of p.tasks) plan_tasks.push({ job: p.core, plan: p.name, phase: ph[t.phase] || '', task: t.name, resource: t.resource, start: t.es, finish: t.ef, days: t.dur, qty: t.qty, unit: t.unit,
+      unit_cost: t.rate, planned_cost: r2(t.qty * t.rate), actual_cost: t.actual, pct_complete: t.pct, done: t.pct >= 100, late: t.pct < 100 && t.ef < todayS });
+    for (const r of p.risks || []) plan_risks.push({ job: p.core, plan: p.name, risk: r.title, probability: r.p, impact: r.i, score: r.p * r.i, response: r.response, owner: r.owner, status: r.status, review: r.review });
+    for (const x of p.issues || []) plan_issues.push({ job: p.core, plan: p.name, issue: x.title, priority: x.priority, owner: x.owner, raised: x.raised, due: x.due, status: x.status });
+  }
+  return { jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_risks, plan_issues };
 }
 
 // ---------- AI narrative (DeepSeek) ----------

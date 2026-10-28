@@ -1,2 +1,2 @@
-MBS website v23 (2026-10-28)
-MBS Console SQL wizard: quick numbers (today / week / month / date range), report templates, drag-and-drop query builder, SQL editor with auto-complete, table / record / chart views, AI-written PDF reports (DeepSeek). Accounts (v22), Blobs token fix (v22b).
+MBS website v24 (2026-10-28)
+MBS Console project planner (PMI, waterfall): job templates, schedule grid with Gantt chart, working-day dates and predecessors, resources and unit costs, tick-box and % complete, board view, scope charter, earned value (time & cost), baseline, risk register with heat map, issue log, Telegram reminders. SQL wizard (v23), accounts (v22).

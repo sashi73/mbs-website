@@ -102,6 +102,7 @@ export function kindOf(k) {
   if (k === 'seq') return 'counter';
   if (k === 'reminders') return 'reminders';
   if (k === 'weekly') return 'weekly report marker';
+  if (k.startsWith('plan:')) return 'project plan';
   if (k.startsWith('quote:')) return 'quote';
   if (k.startsWith('invoice:')) return 'invoice';
   if (k.startsWith('expense:')) return 'expense';
@@ -126,6 +127,7 @@ export async function listKeys(name) {
       if (g) Object.assign(row, { name: g.name || g.supplier, status: g.status, amount: g.inc, date: g.issued || g.date, core: g.core });
     }
     if (row.kind === 'receipt') row.expense = k.slice(8);
+    if (row.kind === 'project plan') { row.job = k.slice(5); const j = idx[k.slice(5)]; if (j) Object.assign(row, { ref: j.ref, name: j.name }); }
     return row;
   });
 }
@@ -199,7 +201,7 @@ export async function moveKeys(from, to, keys) {
     }
   };
   for (const k of keys) {
-    if (!['job', 'photo', 'quote', 'invoice', 'expense'].includes(kindOf(k))) continue;   // records move; counters and lists stay put
+    if (!['job', 'photo', 'quote', 'invoice', 'expense', 'project plan'].includes(kindOf(k))) continue;   // records move; counters and lists stay put
     if (kindOf(k) === 'job') {
       const core = k.slice(4);
       const job = await a.get(k, { type: 'json' });
