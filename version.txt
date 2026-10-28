@@ -1,2 +1,2 @@
-MBS website v25 (2026-10-28)
-Inventory & suppliers: stock items with supplier quotes (prices, quote refs, valid-until), stock in / out / stock-take, on order and receive; low-stock prompt (call or email the supplier) and Telegram alert; AI-written re-order email with the quantity (AI_EMAIL_MAX_TOKENS, default 350); project plans can use stock items (set aside while the task is open, used when it is Done); SQL tables inventory, suppliers, supplier_prices, stock_moves. Console fixes and AI (v24b-f).
+MBS website v25b (2026-10-28)
+Project planner sub-tasks: break a task into steps with an owner, start and days, always inside the task's dates (they move with it and are shortened if the task gets shorter); costs stay on the task; the task's % and status come from its sub-tasks; board cards show a sub-task checklist; SQL table plan_subtasks. Inventory & suppliers (v25).

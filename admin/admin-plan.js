@@ -57,9 +57,9 @@
     bathroom: T('Bathroom waterproofing & retiling', 'Strip, waterproof to AS 3740 and retile the bathroom with no leaks, on time and on budget.', 'Strip-out, plumbing rough-in and fit-off, screed and falls, Ardex membrane, flood test, floor and wall tiles, grout and silicone, clean and handover.', [
       [0, 'k1', 'Site inspection & measure', 1, '', 2, 'h', 90, []], [0, 'k2', 'Quote accepted', 0, '', 0, '', 0, ['k1']],
       [1, 'k3', 'Buy tiles', 1, '', 12, 'm²', 65, ['k2']], [1, 'k4', 'Order membrane & plumbing parts', 1, '', 1, 'lot', 650, ['k2']], [1, 'k5', 'Book plumber & tiler', 1, '', 1, 'h', 90, ['k2']],
-      [2, 'k6', 'Strip-out & rubbish removal', 2, '', 16, 'h', 55, ['k3', 'k4', 'k5']], [2, 'k7', 'Plumbing rough-in', 1, '', 8, 'h', 110, ['k6']], [2, 'k8', 'Screed & falls', 1, '', 8, 'h', 85, ['k7']],
+      [2, 'k6', 'Strip-out & rubbish removal', 2, '', 16, 'h', 55, ['k3', 'k4', 'k5'], [['Remove vanity, toilet and screen', 0, 1], ['Remove tiles and screed', 0, 2], ['Rubbish removal', 1, 1]]], [2, 'k7', 'Plumbing rough-in', 1, '', 8, 'h', 110, ['k6']], [2, 'k8', 'Screed & falls', 1, '', 8, 'h', 85, ['k7']],
       [2, 'k9', 'Waterproofing membrane (Ardex)', 2, '', 1, 'lot', 900, ['k8']], [3, 'k10', 'Flood test (24 h) & photos', 1, '', 1, 'h', 90, ['k9']],
-      [2, 'k11', 'Wall & floor tiling', 3, '', 24, 'h', 85, ['k10']], [2, 'k12', 'Grout & silicone', 1, '', 6, 'h', 85, ['k11']], [2, 'k13', 'Fit-off: vanity, tapware, screen', 1, '', 6, 'h', 110, ['k12']],
+      [2, 'k11', 'Wall & floor tiling', 3, '', 24, 'h', 85, ['k10'], [['Set out and cut', 0, 1], ['Floor tiles', 0, 1], ['Wall tiles', 1, 2]]], [2, 'k12', 'Grout & silicone', 1, '', 6, 'h', 85, ['k11']], [2, 'k13', 'Fit-off: vanity, tapware, screen', 1, '', 6, 'h', 110, ['k12']],
       [3, 'k14', 'Final inspection & defects', 1, '', 1, 'h', 90, ['k13']], [4, 'k15', 'Clean & handover', 1, '', 3, 'h', 50, ['k14']], [4, 'k16', 'Invoice & warranty certificate', 0, '', 0, '', 0, ['k15']]],
       [['Hidden water damage found during strip-out', 3, 4, 'Mitigate', 'Inspect with moisture meter early; agree a contingency allowance in the quote'], ['Tile delivery delay', 2, 3, 'Mitigate', 'Confirm stock before ordering; order on day 1'], ['Membrane slow to cure (cold or humid)', 2, 2, 'Accept', 'Allow an extra day before the flood test']]),
     balcony: T('Balcony remediation (concrete cancer)', 'Repair concrete cancer and re-waterproof the balcony so it stays dry, with strata approval and safe access.', 'Inspection and report, approvals, scaffold, remove tiles and screed, concrete repair, new screed, membrane, flood test, retile, reinstate balustrade, handover.', [
@@ -88,7 +88,8 @@
   };
   function fromTemplate(key, job, start) {
     var t = TEMPLATES[key], ids = {}, n = 0;
-    var tasks = t.rows.map(function (r) { var id = 't' + (++n); ids[r[1]] = id; return { id: id, phase: 'ph1', name: r[2], dur: r[3], res: [], lead: '', resource: '', qty: r[5], unit: r[6], rate: r[7], pred: r[8], actual: 0, pct: 0, status: 'todo', snet: '', notes: '' }; });
+    var tasks = t.rows.map(function (r) { var id = 't' + (++n); ids[r[1]] = id; return { id: id, phase: 'ph1', name: r[2], dur: r[3], res: [], lead: '', resource: '', qty: r[5], unit: r[6], rate: r[7], pred: r[8], actual: 0, pct: 0, status: 'todo', snet: '', notes: '',
+      subs: (r[9] || []).map(function (x, i) { return { id: 's' + n + '_' + (i + 1), name: x[0], off: x[1], dur: x[2], owner: '', status: 'todo' }; }) }; });
     tasks.forEach(function (x) { x.pred = x.pred.map(function (k) { return ids[k]; }).filter(Boolean); });
     var budget = r2(tasks.reduce(function (a, x) { return a + cost(x); }, 0));
     return { name: key === 'blank' ? (job.service || 'Project plan') : t.name, start: start, phases: [{ id: 'ph1', name: 'Work' }], tasks: tasks,
@@ -101,7 +102,26 @@
   var STATUS = [['todo', 'To do', 0], ['doing', 'In progress', 33], ['review', 'In review / QA', 67], ['done', 'Done', 100]];
   var stPct = { todo: 0, doing: 33, review: 67, done: 100 }, stName = { todo: 'To do', doing: 'In progress', review: 'In review / QA', done: 'Done' };
   function statusFromPct(n) { return n >= 100 ? 'done' : n <= 0 ? 'todo' : n >= 67 ? 'review' : 'doing'; }
-  function setStatus(t, k) { t.status = k; t.pct = stPct[k]; }
+  function setStatus(t, k) { (t.subs || []).forEach(function (x) { x.status = k; }); t.status = k; t.pct = stPct[k]; }
+  /* sub-tasks: inside the task's dates, no costs of their own; the task's % comes from them (weighted by days) */
+  function fitSubs(t) {
+    var moved = false;
+    if (!t.subs) t.subs = [];
+    if (t.dur === 0 && t.subs.length) { t.subs = []; return true; }
+    var D = Math.max(1, t.dur);
+    t.subs.forEach(function (x) {
+      var off = Math.max(0, Math.min(D - 1, Math.round(+x.off || 0))), dur = Math.max(1, Math.min(D - off, Math.round(+x.dur || 1)));
+      if (off !== x.off || dur !== x.dur) moved = true;
+      x.off = off; x.dur = dur; if (!stPct.hasOwnProperty(x.status)) x.status = 'todo';
+    });
+    return moved;
+  }
+  function derive(t) {
+    if (!t.subs || !t.subs.length) return;
+    var w = t.subs.reduce(function (a, x) { return a + x.dur; }, 0) || 1;
+    t.pct = Math.round(t.subs.reduce(function (a, x) { return a + x.dur * stPct[x.status]; }, 0) / w); t.status = statusFromPct(t.pct);
+  }
+  function subDates(t, x) { if (!t.es) return { es: '', ef: '' }; var es = x.off ? addWork(t.es, x.off) : t.es; return { es: es, ef: x.dur > 1 ? addWork(es, x.dur - 1) : es }; }
   function resText(t) { var r = t.res || []; if (!r.length) return ''; var others = r.filter(function (x) { return x !== t.lead; }); return [t.lead].concat(others).filter(Boolean).join(', '); }
   function resShort(t) { var r = t.res || []; return r.length ? '★ ' + (t.lead || r[0]) + (r.length > 1 ? ' +' + (r.length - 1) : '') : ''; }
   function fixRes(t) { t.res = (t.res || []).filter(Boolean); if (t.res.indexOf(t.lead) < 0) t.lead = t.res[0] || ''; t.resource = resText(t); }
@@ -116,12 +136,13 @@
       if (!Array.isArray(t.res)) t.res = t.resource ? String(t.resource).split(/\s*,\s*/).filter(Boolean) : [];
       fixRes(t);
       if (!stPct.hasOwnProperty(t.status) || (t.status === 'done') !== (t.pct >= 100)) t.status = statusFromPct(t.pct || 0);
+      fitSubs(t); derive(t);
     });
     return p;
   }
 
   /* ---------- state + saving ---------- */
-  var S = { cols: (function () { try { return localStorage.getItem('mbsPlanCols') || 's'; } catch (e) { return 's'; } })(), core: '', plan: null, rev: 0, job: null, tab: 'schedule', zoom: 'day', saving: false, timer: null, reminders: [], expensesEx: 0 };
+  var S = { closed: {}, cols: (function () { try { return localStorage.getItem('mbsPlanCols') || 's'; } catch (e) { return 's'; } })(), core: '', plan: null, rev: 0, job: null, tab: 'schedule', zoom: 'day', saving: false, timer: null, reminders: [], expensesEx: 0 };
   function dirty(note) {
     $('#planSave').textContent = 'Saving…';
     clearTimeout(S.timer);
@@ -300,9 +321,11 @@
       '<div class="gwrap"><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task</th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th>Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th><th class="gcol">' + scale + '</th></tr></thead><tbody>';
     rows.forEach(function (r) {
       var t = r.t, late = t.pct < 100 && t.ef < t0, base = p.baseline && p.baseline.tasks ? p.baseline.tasks[t.id] : null;
-      html += '<tr data-tid="' + esc(t.id) + '" class="' + (t.pct >= 100 ? 'tdone' : '') + (late ? ' tlate' : '') + (t.dur === 0 ? ' tmile' : '') + '"><td class="muted">' + r.n + '</td>' +
+      var subs = t.subs || [], open = subs.length && !S.closed[t.id];
+      html += '<tr data-tid="' + esc(t.id) + '" class="' + (t.pct >= 100 ? 'tdone' : '') + (late ? ' tlate' : '') + (t.dur === 0 ? ' tmile' : '') + (subs.length ? ' tparent' : '') + '"><td class="muted nowrap">' + (subs.length ? '<button class="subtog" type="button" data-tog title="' + (open ? 'Hide' : 'Show') + ' sub-tasks">' + (open ? '▾' : '▸') + '</button>' : '') + r.n + '</td>' +
         '<td><input type="checkbox" data-k="done"' + (t.pct >= 100 ? ' checked' : '') + ' title="Done" style="width:auto"></td>' +
-        '<td><div class="tname"><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"><button class="pkbtn" type="button" data-pick title="' + (t.item ? 'Change the stock item' : 'Use a stock item from Inventory') + '">📦</button></div>' + stockChip(t) + '</td>' +
+        '<td><div class="tname"><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"><button class="pkbtn" type="button" data-pick title="' + (t.item ? 'Change the stock item' : 'Use a stock item from Inventory') + '">📦</button></div>' + stockChip(t) +
+          (t.dur === 0 ? '' : '<button class="subadd" type="button" data-addsub title="Break this task into smaller steps (they stay inside its dates)">＋ sub-task' + (subs.length ? ' · ' + subs.filter(function (x) { return x.status === 'done'; }).length + '/' + subs.length + ' done' : '') + '</button>') + '</td>' +
         '<td>' + resCell(t) + '</td>' +
         '<td><input data-k="dur" type="number" min="0" max="365" value="' + t.dur + '" style="width:50px" title="0 days = milestone"></td>' +
         '<td><input data-k="snet" type="date" value="' + esc(t.es) + '" class="' + (t.snet ? 'pinned' : '') + '" title="' + (t.snet ? 'Starts no earlier than ' + pretty(t.snet) + ' (clear the date box to remove)' : 'Worked out from the tasks before it. Pick a later date to hold it back.') + '"></td>' +
@@ -313,10 +336,26 @@
         '<td><input data-k="rate" inputmode="decimal" value="' + esc(t.rate || '') + '" style="width:74px"></td>' +
         '<td class="num">' + money(cost(t)) + '</td>' +
         '<td><input data-k="actual" inputmode="decimal" value="' + esc(t.actual || '') + '" style="width:80px"></td>' +
-        '<td><select data-k="status" class="stsel st-' + t.status + '">' + STATUS.map(function (x) { return '<option value="' + x[0] + '"' + (t.status === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></td>' +
-        '<td><input data-k="pct" type="number" min="0" max="100" step="1" value="' + t.pct + '" style="width:54px"></td>' +
+        '<td><select data-k="status" class="stsel st-' + t.status + '"' + (subs.length ? ' title="Setting this moves all its sub-tasks too"' : '') + '>' + STATUS.map(function (x) { return '<option value="' + x[0] + '"' + (t.status === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></td>' +
+        '<td><input data-k="pct" type="number" min="0" max="100" step="1" value="' + t.pct + '" style="width:54px"' + (subs.length ? ' disabled title="Worked out from the sub-tasks"' : '') + '></td>' +
         '<td class="acts"><button class="btn btn-sm" data-rem title="Reminder">🔔</button><button class="btn btn-sm" data-move="-1" title="Move up">↑</button><button class="btn btn-sm" data-move="1" title="Move down">↓</button><button class="btn btn-sm" data-del title="Delete">✕</button></td>' +
         '<td class="gcol"><div class="gtrack" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + bar(t, base) + '</div></td></tr>';
+      if (open) subs.forEach(function (sb, j) {
+        var d = subDates(t, sb), sl = sb.status !== 'done' && d.ef && d.ef < t0, maxDur = Math.max(1, t.dur) - sb.off;
+        var left = d.es ? x(d.es) : 0, sw = d.es ? (daysBetween(d.es, d.ef) + 1) * dayW : 0;
+        html += '<tr class="tsub' + (sb.status === 'done' ? ' tdone' : '') + (sl ? ' tlate' : '') + '" data-sid="' + esc(sb.id) + '" data-ptid="' + esc(t.id) + '"><td class="muted nowrap subn">' + r.n + '.' + (j + 1) + '</td>' +
+          '<td><input type="checkbox" data-sk="done"' + (sb.status === 'done' ? ' checked' : '') + ' style="width:auto" title="Done"></td>' +
+          '<td><div class="subname"><span class="subarrow">↳</span><input data-sk="name" value="' + esc(sb.name) + '"></div></td>' +
+          '<td><input data-sk="owner" list="resList" value="' + esc(sb.owner || '') + '" placeholder="Who" style="min-width:90px;width:110px"></td>' +
+          '<td><input data-sk="dur" type="number" min="1" max="' + maxDur + '" value="' + sb.dur + '" style="width:50px" title="At most ' + maxDur + ' day' + (maxDur === 1 ? '' : 's') + ' (to stay inside the task)"></td>' +
+          '<td><input data-sk="start" type="date" value="' + esc(d.es) + '" min="' + esc(t.es) + '" max="' + esc(t.ef) + '" title="Between ' + esc(pretty(t.es)) + ' and ' + esc(pretty(t.ef)) + ' (the task\'s dates)"></td>' +
+          '<td class="nowrap">' + esc(pretty(d.ef)) + '</td><td class="muted" style="font-size:11.5px">in #' + r.n + '</td><td></td><td></td><td></td>' +
+          '<td class="muted subcost" title="Costs stay on the task">–</td><td></td>' +
+          '<td><select data-sk="status" class="stsel st-' + sb.status + '">' + STATUS.map(function (o) { return '<option value="' + o[0] + '"' + (sb.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></td>' +
+          '<td class="muted">' + stPct[sb.status] + '</td>' +
+          '<td class="acts"><button class="btn btn-sm" data-smove="-1" title="Move up">↑</button><button class="btn btn-sm" data-smove="1" title="Move down">↓</button><button class="btn btn-sm" data-sdel title="Delete sub-task">✕</button></td>' +
+          '<td class="gcol"><div class="gtrack gtrack-sub" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + (d.es ? '<span class="gsub st-' + sb.status + (sl ? ' late' : '') + '" style="left:' + left + 'px;width:' + sw + 'px" title="' + esc(sb.name + ' · ' + pretty(d.es) + ' – ' + pretty(d.ef) + ' · ' + stName[sb.status]) + '"><span class="gfill" style="width:' + stPct[sb.status] + '%"></span></span><span class="glab" style="left:' + (left + sw + 4) + 'px">' + esc(sb.owner || '') + '</span>' : '') + '</div></td></tr>';
+      });
     });
     if (!rows.length) html += '<tr><td colspan="17"><div class="empty">No tasks yet. Press “＋ Task”.</div></td></tr>';
     html += '</tbody><tfoot><tr><td></td><td></td><td><b>Total (budget at completion)</b></td><td></td><td></td><td>' + esc(pretty(R.start)) + '</td><td>' + esc(pretty(R.finish)) + '</td><td></td><td></td><td></td><td></td><td class="num"><b>' + money(R.BAC) + '</b></td><td class="num"><b>' + money(R.AC) + '</b></td><td></td><td><b>' + R.pct + '%</b></td><td></td><td class="gcol"></td></tr></tfoot></table></div>' +
@@ -336,7 +375,7 @@
         if (k === 'done') { setStatus(t, el.checked ? 'done' : 'todo'); }
         else if (k === 'status') { setStatus(t, el.value); }
         else if (k === 'pct') { t.pct = Math.max(0, Math.min(100, Math.round(+el.value || 0))); t.status = statusFromPct(t.pct); }
-        else if (k === 'dur') { t.dur = Math.max(0, Math.min(365, Math.round(+el.value || 0))); }
+        else if (k === 'dur') { t.dur = Math.max(0, Math.min(365, Math.round(+el.value || 0))); if (fitSubs(t)) toast(t.dur === 0 ? 'A milestone has no sub-tasks, so they were removed' : 'Sub-tasks were shortened to fit inside the task\'s ' + t.dur + ' day' + (t.dur === 1 ? '' : 's')); derive(t); }
         else if (k === 'snet') { t.snet = el.value || ''; }
         else if (k === 'pred') { t.pred = el.value.split(/[,\s]+/).map(function (s) { return idOf[+s]; }).filter(function (id) { return id && id !== t.id; }); }
         else if (['qty', 'rate', 'actual'].indexOf(k) >= 0) { t[k] = r2(String(el.value).replace(/[$,]/g, '')); }
@@ -379,6 +418,38 @@
       };
     });
     B.querySelectorAll('[data-rem]').forEach(function (b) { b.onclick = function () { reminderBox(task(b)); }; });
+    // sub-tasks
+    B.querySelectorAll('[data-tog]').forEach(function (b) { b.onclick = function () { var t = task(b); S.closed[t.id] = !S.closed[t.id]; render(); }; });
+    B.querySelectorAll('[data-addsub]').forEach(function (b) {
+      b.onclick = function () {
+        var t = task(b), D = Math.max(1, t.dur); t.subs = t.subs || [];
+        var last = t.subs[t.subs.length - 1], off = last ? Math.min(D - 1, last.off + last.dur) : 0;
+        if (last && last.off + last.dur >= D) off = last.off;   // the task is full: start alongside the last one
+        var sb = { id: 's' + Date.now().toString(36), name: 'New sub-task', owner: '', off: off, dur: 1, status: 'todo' };
+        t.subs.push(sb); fitSubs(t); derive(t); S.closed[t.id] = false; dirty('sub-task added to ' + t.name); render();
+        setTimeout(function () { var i = $('#planBody tr[data-sid="' + sb.id + '"] [data-sk=name]'); if (i) { i.focus(); i.select(); } }, 30);
+      };
+    });
+    var subOf = function (el) { var tr = el.closest('tr'), t = p.tasks.filter(function (x) { return x.id === tr.getAttribute('data-ptid'); })[0]; return { t: t, sb: t && (t.subs || []).filter(function (x) { return x.id === tr.getAttribute('data-sid'); })[0] }; };
+    B.querySelectorAll('tr[data-sid] [data-sk]').forEach(function (el) {
+      var k = el.getAttribute('data-sk'), live = k === 'name' || k === 'owner';
+      el.addEventListener(live ? 'input' : 'change', function () {
+        var o = subOf(el), t = o.t, sb = o.sb; if (!sb) return;
+        if (k === 'name' || k === 'owner') { sb[k] = el.value; dirty(); return; }
+        if (k === 'done') sb.status = el.checked ? 'done' : 'todo';
+        else if (k === 'status') sb.status = el.value;
+        else if (k === 'dur') { var want = Math.max(1, Math.round(+el.value || 1)); sb.dur = want; fitSubs(t); if (sb.dur < want) toast('Kept inside the task: at most ' + sb.dur + ' day' + (sb.dur === 1 ? '' : 's') + ' from its start'); }
+        else if (k === 'start') {
+          var v = el.value || t.es;
+          if (v < t.es || v > t.ef) toast('Sub-tasks stay inside the task (' + pretty(t.es) + ' – ' + pretty(t.ef) + ')', true);
+          v = v < t.es ? t.es : v > t.ef ? t.ef : v; v = nextWork(v); if (v > t.ef) v = t.ef;
+          sb.off = Math.max(0, workBetween(t.es, v) - 1); fitSubs(t);
+        }
+        derive(t); dirty(k === 'done' || k === 'status' ? stName[sb.status] + ': ' + sb.name + ' (' + t.name + ')' : ''); render();
+      });
+    });
+    B.querySelectorAll('[data-sdel]').forEach(function (b) { b.onclick = function () { var o = subOf(b); o.t.subs = o.t.subs.filter(function (x) { return x !== o.sb; }); derive(o.t); if (!o.t.subs.length) setStatus(o.t, o.t.status); dirty('sub-task deleted: ' + o.sb.name); render(); }; });
+    B.querySelectorAll('[data-smove]').forEach(function (b) { b.onclick = function () { var o = subOf(b), a = o.t.subs.indexOf(o.sb), c = a + (+b.getAttribute('data-smove')); if (c < 0 || c >= o.t.subs.length) return; o.t.subs[a] = o.t.subs[c]; o.t.subs[c] = o.sb; dirty(); render(); }; });
     B.querySelectorAll('[data-pick]').forEach(function (b) {
       b.onclick = function () {
         var t = task(b);
@@ -421,6 +492,8 @@
         return '<div class="kcard' + (late ? ' late' : '') + '" draggable="true" data-tid="' + esc(t.id) + '"><label class="row" style="gap:8px;font-weight:700;flex-wrap:nowrap"><input type="checkbox" data-tick' + (t.pct >= 100 ? ' checked' : '') + ' style="width:auto" title="Done">' + (t.dur === 0 ? '◆ ' : '') + esc(t.name) + '</label>' +
           ((t.res || []).length ? '<div class="kres">' + t.res.map(function (n) { return '<span class="rchip' + (n === t.lead ? ' lead' : '') + '">' + (n === t.lead ? '★ ' : '') + esc(n) + '</span>'; }).join('') + '</div>' : '<small class="muted">No one assigned yet</small>') +
           '<small>#' + r.n + ' · ' + esc(pretty(t.es)) + (t.dur ? ' – ' + esc(pretty(t.ef)) : '') + (late ? ' · <b style="color:#C2410C">late</b>' : '') + (cost(t) ? ' · ' + money(cost(t)) : '') + '</small>' +
+          ((t.subs || []).length ? '<div class="kchk"><small class="muted">' + t.subs.filter(function (x) { return x.status === 'done'; }).length + ' of ' + t.subs.length + ' sub-tasks done</small>' + t.subs.map(function (x) {
+            return '<label class="kchk-i' + (x.status === 'done' ? ' done' : '') + '"><input type="checkbox" data-subtick="' + esc(x.id) + '"' + (x.status === 'done' ? ' checked' : '') + ' style="width:auto">' + esc(x.name) + (x.owner ? ' <small class="muted">· ' + esc(x.owner) + '</small>' : '') + '</label>'; }).join('') + '</div>' : '') +
           '<div class="pbar st-' + t.status + '"><span style="width:' + t.pct + '%"></span></div>' +
           '<div class="kmove">' + (c[0] !== 'todo' ? '<button class="btn btn-sm" data-step="-1" title="Back one column">←</button>' : '') + '<span class="muted">' + t.pct + '%</span>' + (c[0] !== 'done' ? '<button class="btn btn-sm" data-step="1" title="Next column">→</button>' : '') + '</div></div>';
       }).join('') + '</div>';
@@ -435,6 +508,12 @@
     });
     B.querySelectorAll('[data-step]').forEach(function (b) { b.onclick = function () { var t = find(b.closest('.kcard').getAttribute('data-tid')), i = STATUS.map(function (x) { return x[0]; }).indexOf(t.status) + (+b.getAttribute('data-step')); if (STATUS[i]) move(t, STATUS[i][0]); }; });
     B.querySelectorAll('[data-tick]').forEach(function (cb) { cb.onchange = function () { move(find(cb.closest('.kcard').getAttribute('data-tid')), cb.checked ? 'done' : 'todo'); }; });
+    B.querySelectorAll('[data-subtick]').forEach(function (cb) {
+      cb.onchange = function () {
+        var t = find(cb.closest('.kcard').getAttribute('data-tid')), sb = t.subs.filter(function (x) { return x.id === cb.getAttribute('data-subtick'); })[0];
+        sb.status = cb.checked ? 'done' : (sb.status === 'done' ? 'todo' : sb.status); derive(t); dirty(stName[sb.status] + ': ' + sb.name + ' (' + t.name + ')'); render();
+      };
+    });
   }
 
   /* ---------- scope (project charter) ---------- */

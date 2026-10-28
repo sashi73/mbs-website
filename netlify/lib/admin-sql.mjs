@@ -30,6 +30,7 @@ export const SCHEMA = {
   reminders: ['id', 'due', 'date', 'text', 'job'],
   visits: ['date', 'month', 'visits'],
   plan_tasks: ['job', 'plan_name', 'task', 'resource', 'lead', 'status', 'start', 'finish', 'days', 'qty', 'unit', 'unit_cost', 'planned_cost', 'actual_cost', 'pct_complete', 'done', 'late'],
+  plan_subtasks: ['job', 'plan_name', 'task', 'subtask', 'owner', 'start', 'finish', 'days', 'status', 'done', 'late'],
   plan_risks: ['job', 'plan_name', 'risk', 'probability', 'impact', 'score', 'response', 'owner', 'status', 'review'],
   plan_issues: ['job', 'plan_name', 'issue', 'priority', 'owner', 'raised', 'due', 'status'],
   inventory: ['id', 'item', 'sku', 'category', 'unit', 'location', 'on_hand', 'allocated', 'available', 'on_order', 'reorder_level', 'reorder_qty', 'low', 'unit_price', 'price_supplier', 'stock_value'],
@@ -39,7 +40,7 @@ export const SCHEMA = {
 };
 export const DESCRIBE = {
   jobs: 'Every enquiry and job (pipeline stage, customer, suburb, trade, values)', quotes: 'Quotes (status, totals ex/inc GST)', invoices: 'Tax invoices (paid, balance, days overdue)',
-  items: 'Line items of quotes and invoices', plan_tasks: 'Project plan tasks (dates, costs, % complete)', plan_risks: 'Risk registers of all plans', plan_issues: 'Issue logs of all plans', inventory: 'Stock items (on hand, set aside for jobs, re-order level)', suppliers: 'Suppliers', supplier_prices: 'Supplier quotes per stock item', stock_moves: 'Stock in and out', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
+  items: 'Line items of quotes and invoices', plan_tasks: 'Project plan tasks (dates, costs, % complete)', plan_risks: 'Risk registers of all plans', plan_issues: 'Issue logs of all plans', plan_subtasks: 'Sub-tasks inside plan tasks (no costs; costs stay on the task)', inventory: 'Stock items (on hand, set aside for jobs, re-order level)', suppliers: 'Suppliers', supplier_prices: 'Supplier quotes per stock item', stock_moves: 'Stock in and out', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
 };
 
 export async function tables() {
@@ -78,13 +79,17 @@ export async function tables() {
     const v = visitRec;
     visits = Object.entries((v && v.days) || {}).map(([date, n]) => ({ date, month: date.slice(0, 7), visits: n })).sort((a, b) => (a.date > b.date ? 1 : -1));
   } catch {}
-  const plan_tasks = [], plan_risks = [], plan_issues = [];
+  const plan_tasks = [], plan_risks = [], plan_issues = [], plan_subtasks = [];
   const todayS = d10(now);
   for (const p of planList) {
     PLAN.schedule(p);
     const STN = { todo: 'To do', doing: 'In progress', review: 'In review / QA', done: 'Done' };
     for (const t of p.tasks) plan_tasks.push({ job: p.core, plan_name: p.name, task: t.name, resource: t.resource || '', lead: t.lead || '', status: STN[t.status] || (t.pct >= 100 ? 'Done' : t.pct > 0 ? 'In progress' : 'To do'), start: t.es, finish: t.ef, days: t.dur, qty: t.qty, unit: t.unit,
       unit_cost: t.rate, planned_cost: r2(t.qty * t.rate), actual_cost: t.actual, pct_complete: t.pct, done: t.pct >= 100, late: t.pct < 100 && t.ef < todayS });
+    for (const t of p.tasks) for (const x of t.subs || []) {
+      const es = t.es ? (x.off ? PLAN.addWork(t.es, x.off) : t.es) : '', ef = es ? (x.dur > 1 ? PLAN.addWork(es, x.dur - 1) : es) : '';
+      plan_subtasks.push({ job: p.core, plan_name: p.name, task: t.name, subtask: x.name, owner: x.owner || '', start: es, finish: ef, days: x.dur, status: STN[x.status] || 'To do', done: x.status === 'done', late: x.status !== 'done' && !!ef && ef < todayS });
+    }
     for (const r of p.risks || []) plan_risks.push({ job: p.core, plan_name: p.name, risk: r.title, probability: r.p, impact: r.i, score: r.p * r.i, response: r.response, owner: r.owner, status: r.status, review: r.review });
     for (const x of p.issues || []) plan_issues.push({ job: p.core, plan_name: p.name, issue: x.title, priority: x.priority, owner: x.owner, raised: x.raised, due: x.due, status: x.status });
   }
@@ -101,7 +106,7 @@ export async function tables() {
   }
   const suppliers = stock.suppliers.filter((x) => !x.archived).map((x) => ({ id: x.id, supplier: x.name, contact: x.contact || '', phone: x.phone || '', email: x.email || '', categories: x.categories || '', terms: x.terms || '',
     items_quoted: stock.items.filter((i) => (i.prices || []).some((p) => p.supplier === x.id)).length }));
-  return { jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves };
+  return { jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves };
 }
 
 // ---------- AI narrative (DeepSeek) ----------
@@ -148,9 +153,32 @@ export async function narrative({ title, sql, columns, rows, focus }) {
 // The AI never sees the data rows when writing SQL: only table and column names, the dates for "this month" etc.,
 // and short lists of codes (stages, statuses, plan names, suburbs). Phone numbers, emails and names are never sent.
 // short notes the AI needs (kept brief to save tokens)
-const NOTES = 'jobs: core = id for joins, ref = job number staff see, stage new|called|quoted|won|completed|invoiced|paid|lost, created = enquiry date, *_date = date it reached that stage, quote_inc/invoice_inc $ inc GST, name = customer. ' +
-  'quotes/invoices/expenses/plan_*: job = jobs.core. invoices.balance = $ owed. items.doc_id = quote or invoice id. payments.invoice_id = invoices.id. ex/gst/inc = $ ex GST, GST, inc GST. ' +
-  'plan_tasks: one plan per job, status To do|In progress|In review / QA|Done, days 0 = milestone, pct_complete 0-100, done/late true|false.' + ' inventory: one row per stock item; available = on_hand - allocated (set aside by plan tasks not done yet); low = at or below reorder_level; unit_price = preferred or cheapest valid supplier quote ex GST. supplier_prices: one row per supplier quote. stock_moves: qty + in / - out, kind in|out|count|plan|order, job = jobs.core.';
+// short notes per table (only the tables a question needs are sent, to keep each AI call small)
+const NOTE = {
+  jobs: 'core = id for joins, ref = job number staff see, stage new|called|quoted|won|completed|invoiced|paid|lost, created = enquiry date, *_date = date it reached that stage, quote_inc/invoice_inc $ inc GST, name = customer',
+  quotes: 'job = jobs.core; ex/gst/inc $', invoices: 'job = jobs.core; balance = $ owed; ex/gst/inc $', items: 'doc_id = quote or invoice id', payments: 'invoice_id = invoices.id',
+  expenses: 'job = jobs.core (blank = overhead); ex/gst/inc $', reminders: 'job = jobs.core', visits: 'website visitors per day',
+  plan_tasks: 'one plan per job, job = jobs.core, status To do|In progress|In review / QA|Done, days 0 = milestone, pct_complete 0-100, done/late true|false',
+  plan_subtasks: 'steps inside a plan task (task = plan_tasks.task, same job), no costs', plan_risks: 'job = jobs.core', plan_issues: 'job = jobs.core',
+  inventory: 'one row per stock item; available = on_hand - allocated (set aside by open plan tasks); low = at or below reorder_level; unit_price = preferred or cheapest valid quote ex GST',
+  suppliers: 'suppliers', supplier_prices: 'one row per supplier quote for a stock item', stock_moves: 'qty + in / - out; kind in|out|count|plan|order; job = jobs.core'
+};
+const WORDS = {
+  quotes: /quot/i, invoices: /invoic|owe|owing|unpaid|overdue|paid|debt|balance|bill/i, items: /line item|items? on (the|a|my) (quote|invoice)/i, payments: /pay|paid|received|income|revenue|cash/i,
+  expenses: /expens|spend|spent|cost|receipt|purchase|bought/i, reminders: /remind|follow/i, visits: /visit|traffic|website/i,
+  plan_tasks: /plan|project|task|complet|progress|late|schedule|gantt|milestone|lead|resource|finish|behind/i, plan_subtasks: /sub-?task|step/i, plan_risks: /risk/i, plan_issues: /issue|problem/i,
+  inventory: /stock|inventor|material|re-?order|low on|on hand/i, suppliers: /supplier|vendor/i, supplier_prices: /price|cheap|compare|supplier quote/i, stock_moves: /stock (used|in|out)|used|movement|consum|took/i
+};
+function pickTables(question, extraSql = '') {
+  const q = String(question || ''), chosen = new Set(['jobs']);
+  for (const [t, re] of Object.entries(WORDS)) if (re.test(q)) chosen.add(t);
+  for (const t of Object.keys(SCHEMA)) if (new RegExp('\\b' + t + '\\b', 'i').test(extraSql)) chosen.add(t);
+  if (chosen.has('plan_subtasks')) chosen.add('plan_tasks');
+  if (chosen.has('supplier_prices') || chosen.has('stock_moves')) chosen.add('inventory');
+  // nothing specific (and not about jobs): give the AI every table
+  if (chosen.size === 1 && !/job|enquir|customer|lead|won|lost|suburb|trade|new|stage|called/i.test(q)) Object.keys(SCHEMA).forEach((t) => chosen.add(t));
+  return Object.keys(SCHEMA).filter((t) => chosen.has(t));
+}
 
 function sydneyDates(now = Date.now()) {
   const p = parts(now);
@@ -168,9 +196,11 @@ function sydneyDates(now = Date.now()) {
   };
 }
 const HINT_KEYS = { quote_status: 8, invoice_status: 8, expense_categories: 12, trades: 10, sources: 8, suburbs: 12, plans: 15 };
-function cleanHints(h) {
+const HINT_FOR = { quote_status: 'quotes', invoice_status: 'invoices', expense_categories: 'expenses', plans: 'plan_tasks' };
+function cleanHints(h, use) {
   const out = {};
-  for (const [k, n] of Object.entries(HINT_KEYS)) { const v = h && h[k]; if (Array.isArray(v) && v.length) out[k] = v.slice(0, n).map((x) => String(x ?? '').slice(0, 60)).filter(Boolean); }
+  for (const [k, n] of Object.entries(HINT_KEYS)) {
+    if (use && HINT_FOR[k] && !use.includes(HINT_FOR[k]) && !(k === 'plans' && use.some((t) => t.startsWith('plan_')))) continue; const v = h && h[k]; if (Array.isArray(v) && v.length) out[k] = v.slice(0, n).map((x) => String(x ?? '').slice(0, 60)).filter(Boolean); }
   return out;
 }
 export function readOnly(sql) {
@@ -190,8 +220,10 @@ const SYSTEM = 'Turn the question from the owner of a Sydney building company in
 export async function askSql({ question, hints, previous, history }) {
   const first = !(previous && previous.sql);
   if (first) await checkLimit();
-  const tables = Object.entries(SCHEMA).map(([t, cols]) => `${t}(${cols.join(',')})`).join('\n');
-  const user = { q: String(question).slice(0, 300), dates: sydneyDates(), tables, notes: NOTES, values: cleanHints(hints) };
+  const use = pickTables(question, [(history || []).map((h) => h && h.sql).join(' '), previous && previous.sql].join(' '));
+  const tables = use.map((t) => `${t}(${SCHEMA[t].join(',')})`).join('\n');
+  const notes = use.map((t) => `${t}: ${NOTE[t] || DESCRIBE[t] || ''}`).join('. ');
+  const user = { q: String(question).slice(0, 300), dates: sydneyDates(), tables, notes, values: cleanHints(hints, use) };
   if (Array.isArray(history) && history.length) user.earlier = history.slice(-1).map((h) => ({ q: String(h.q || '').slice(0, 200), sql: String(h.sql || '').slice(0, 600) }));
   if (!first) user.fix = { sql: String(previous.sql).slice(0, 1500), error: String(previous.error || '').slice(0, 200) };
   const { data: o, used } = await llmJson([{ role: 'system', content: SYSTEM }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: tokCap() });

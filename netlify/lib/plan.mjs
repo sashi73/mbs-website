@@ -82,17 +82,33 @@ function people(t) {
   const lead = res.includes(str(t.lead, 60)) ? str(t.lead, 60) : res[0] || '';
   return { res, lead, resource: [lead, ...res.filter((x) => x !== lead)].filter(Boolean).join(', ').slice(0, 300) };
 }
+// sub-tasks: always inside their task's dates (off = working days after the task starts, dur = working days),
+// no costs of their own; the task's % complete comes from its sub-tasks (weighted by days).
+const SPCT = { todo: 0, doing: 33, review: 67, done: 100 };
+function cleanSubs(list, t, uid) {
+  if (!Array.isArray(list) || t.dur === 0) return [];
+  const D = Math.max(1, t.dur);
+  return list.slice(0, 40).map((x) => {
+    const off = int(x.off, 0, D - 1, 0);
+    return { id: uid(x.id, 's'), name: str(x.name, 160) || 'Sub-task', owner: str(x.owner, 80), off, dur: int(x.dur, 1, D - off, 1), status: STAT.includes(x.status) ? x.status : 'todo' };
+  });
+}
 function clean(p, core) {
   const ids = new Set();
   const uid = (v, pre) => { let s = str(v, 20).replace(/[^\w-]/g, '') || pre + Math.random().toString(36).slice(2, 8); while (ids.has(s)) s += 'x'; ids.add(s); return s; };
   const phases = (Array.isArray(p.phases) ? p.phases : []).slice(0, 20).map((f) => ({ id: uid(f.id, 'ph'), name: str(f.name, 80) || 'Phase' }));
   if (!phases.length) phases.push({ id: 'ph1', name: 'Work' });
   const phIds = new Set(phases.map((f) => f.id));
-  const tasks = (Array.isArray(p.tasks) ? p.tasks : []).slice(0, 300).map((t) => ({
+  const tasks = (Array.isArray(p.tasks) ? p.tasks : []).slice(0, 300).map((t) => {
+    const o = {
     id: uid(t.id, 't'), name: str(t.name, 160) || 'New task', phase: phIds.has(t.phase) ? t.phase : phases[0].id,
     dur: int(t.dur, 0, 365, 1), snet: ymdOk(t.snet), pred: (Array.isArray(t.pred) ? t.pred : []).map((x) => str(x, 20)).slice(0, 10),
     item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000)
-  }));
+    };
+    o.subs = cleanSubs(t.subs, o, uid);
+    if (o.subs.length) { const w = o.subs.reduce((a, x) => a + x.dur, 0); o.pct = Math.round(o.subs.reduce((a, x) => a + x.dur * SPCT[x.status], 0) / w); o.status = statusOf(o.pct); }
+    return o;
+  });
   const tIds = new Set(tasks.map((t) => t.id));
   for (const t of tasks) t.pred = t.pred.filter((x) => tIds.has(x) && x !== t.id);
   const c = p.charter || {};

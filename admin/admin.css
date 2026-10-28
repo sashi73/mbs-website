@@ -377,3 +377,22 @@ button.item.pk:hover,button.item.pk.on{border-color:var(--gold);background:var(-
 .pkbtn:hover{border-color:var(--gold);background:var(--gold-soft)}
 @media (max-width:700px){.ro-ways{grid-template-columns:1fr}}
 .tname{display:flex;align-items:center;gap:2px}
+
+/* ---------- planner: sub-tasks (v25b) ---------- */
+.subtog{background:none;border:0;cursor:pointer;font-size:12px;padding:0 3px 0 0;color:#6B675E}
+.subadd{display:block;background:none;border:0;padding:1px 6px;margin-top:1px;font:inherit;font-size:11px;color:#8C8775;cursor:pointer;border-radius:6px}
+.subadd:hover{background:var(--gold-soft);color:#5A4400}
+tr.tsub td{background:#FCFBF8;font-size:12.5px}
+tr.tsub td.subn{padding-left:14px;font-size:11.5px}
+.subname{display:flex;align-items:center;gap:4px;padding-left:10px}
+.subarrow{color:#B8B2A3;font-weight:800}
+tr.tsub input,tr.tsub select{font-size:12.5px}
+tr.tparent input[data-k=name]{font-weight:800}
+.gtrack-sub{height:30px!important}
+.gsub{position:absolute;top:10px;height:9px;background:#E2E8F0;border-radius:3px;overflow:hidden;z-index:2;border:1px solid #CBD5E1}
+.gsub .gfill{display:block;height:100%;background:var(--st,#2563EB)}
+.gsub.late{border-color:#FCA5A5;background:#FEE2E2}
+tr.tsub .glab{top:8px;font-size:10.5px}
+.kchk{display:grid;gap:3px;margin-top:4px;padding-top:6px;border-top:1px dashed #E6E1D5}
+.kchk-i{display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:600;cursor:pointer}
+.kchk-i.done{color:#8A867C;text-decoration:line-through}

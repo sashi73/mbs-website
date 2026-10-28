@@ -124,7 +124,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const w1 = seen.filter((x) => /Turn the question/.test(x.sys)).pop();
     const m = w1.u.dates.this_month;
     ok('Context', `the AI is given Sydney dates for "this month" (${m[0]} to ${m[1]}), this week, financial year…`, m[0] === today.slice(0, 8) + '01' && m[1] >= today && Array.isArray(w1.u.dates.this_financial_year) && w1.u.dates.today === today);
-    ok('Context', 'the AI is given the tables, columns and short code lists (stages, plan names)', /jobs\(ref,core,stage/.test(w1.u.tables) && /new\|called\|quoted/.test(w1.u.notes) && w1.u.values.plans.some((x) => /Bathroom waterproofing/.test(x)));
+    ok('Context', 'the AI is given the table columns and short notes (stages)', /jobs\(ref,core,stage/.test(w1.u.tables) && /new\|called\|quoted/.test(w1.u.notes) );
+    ok('Tokens', 'only the tables the question needs are sent ("new jobs" → just jobs)', !/plan_tasks|inventory|supplier/.test(w1.u.tables) && !w1.u.values.plans);
     const body1 = JSON.parse(w1.raw);
     ok('Tokens', `writing the query: reply capped at AI_QUERY_MAX_TOKENS (450 here, default 500), request about ${Math.round(w1.raw.length / 3.6)} tokens (was about 2,400)`, body1.max_tokens === 450 && w1.raw.length / 3.6 < 1300, w1.raw.length);
     ok('Tokens', 'the screen shows the tokens used and today\'s question count', /used about \d[\d,]* tokens/.test(out.ans) && /Today: 1 of 50 AI questions used/.test(await p.textContent('#askUse')), await p.textContent('#askUse'));
@@ -137,6 +138,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Answer', '"Completion status of the bathroom project" → 33% done, 1 of 3 tasks (weighted by days, like the planner)', row.pct_done === 33 && row.tasks_done === 1 && row.tasks_count === 3 && /33% complete/.test(out.ans), JSON.stringify(row));
     const a2 = seen.filter((x) => /Answer the business owner/.test(x.sys)).pop();
     ok('Privacy', 'wording the answer: names, phones and emails are removed from the rows the AI sees', a2 && !/Priya|0400|@example/.test(a2.raw));
+    const w2 = seen.filter((x) => /Turn the question/.test(x.sys)).pop();
+    ok('Context', 'a project question gets the plan tables and the plan names', /plan_tasks\(/.test(w2.u.tables) && w2.u.values.plans.some((x) => /Bathroom waterproofing/.test(x)) && !/inventory\(/.test(w2.u.tables));
     ok('Tokens', 'wording the answer: reply capped at 200 tokens, at most 20 rows sent', JSON.parse(a2.raw).max_tokens === 200 && a2.u.rows.length <= 20);
     ok('Results', 'the results table is shown under the answer', /pct_done/.test(await p.textContent('#sqlResults')));
 
