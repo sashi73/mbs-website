@@ -1,13 +1,12 @@
 // Job tracker storage: Netlify Blobs only (store "mbs-jobs"). Free, nothing to set up on Netlify.
 // update() is safe when two changes arrive at the same moment: it retries instead of overwriting.
-let storePromise = null;
-function store() {
-  if (!storePromise) {
-    storePromise = import('@netlify/blobs')
-      .then(({ getStore }) => getStore({ name: 'mbs-jobs', consistency: 'strong' }))
-      .catch((e) => { storePromise = null; throw e; });
-  }
-  return storePromise;
+// A fresh store handle for every call: Netlify gives each request its own short-lived access token,
+// so a handle kept from an earlier request fails with "Token expired" once the function stays warm.
+let lib = null;
+async function store() {
+  if (!lib) lib = import('@netlify/blobs').catch((e) => { lib = null; throw e; });
+  const { getStore } = await lib;
+  return getStore({ name: 'mbs-jobs', consistency: 'strong' });
 }
 
 export async function get(key) {

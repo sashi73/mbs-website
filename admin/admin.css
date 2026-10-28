@@ -128,6 +128,13 @@ pre.json{background:#0F0F0F;color:#E8E3D6;border-radius:10px;padding:14px;overfl
 .soon .card{border-style:dashed}
 .badge{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:#151515;color:var(--gold-hi);padding:3px 8px;border-radius:6px}
 
+/* ---------- accounts (v22) ---------- */
+.st-overdue{background:#FDE2D8;color:#B42318}
+table.items td{padding:8px 6px;vertical-align:top}
+table.items textarea{min-height:40px;resize:vertical}
+table.items input{padding:8px}
+@media print{.side,.top,.actions,.tabs,#cGo,label{display:none!important}.app{display:block}.view{padding:0}.card{box-shadow:none;break-inside:avoid}}
+
 /* ---------- toast + modal ---------- */
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(30px);background:#151515;color:#fff;padding:11px 16px;border-radius:12px;font-weight:700;opacity:0;pointer-events:none;transition:.25s;z-index:50;max-width:calc(100vw - 32px)}
 .toast.show{opacity:1;transform:translateX(-50%)}

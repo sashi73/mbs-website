@@ -252,7 +252,7 @@ export async function writeBrief(lead, extra = {}) {
 
 // Strip any "thinking" text some models include, so customers only see the answer.
 // Removes tired stock phrases from Mr. Fixit's answers, whatever the AI writes.
-export const SITE_VERSION = 'v21';
+export const SITE_VERSION = 'v22b';
 export function humanise(text) {
   let t = String(text || '');
   const swap = [
@@ -377,7 +377,7 @@ export async function sendTelegramPhotosTo(chatId, photos, caption = '') {
   }
 }
 
-export async function sendEmail({ subject, html, text, replyTo, to: toOverride, attachments }) {
+export async function sendEmail({ subject, html, text, replyTo, to: toOverride, attachments, bcc }) {
   const key = env('RESEND_API_KEY');
   // Temporary default while testing: chat enquiries go to Sashi. Set OWNER_EMAIL in .env to change it.
   // toOverride is used only for the customer's own copy of their conversation.
@@ -387,6 +387,7 @@ export async function sendEmail({ subject, html, text, replyTo, to: toOverride, 
   const base = env('RESEND_API_BASE', 'https://api.resend.com');
   const body = { from, to: to.split(',').map((s) => s.trim()), subject, html, text };
   if (replyTo) body.reply_to = replyTo;
+  if (bcc) body.bcc = String(bcc).split(',').map((x) => x.trim()).filter(Boolean);
   if (attachments && attachments.length) body.attachments = attachments;   // [{ filename, content: base64 }]
   try {
     const r = await fetch(`${base}/emails`, {

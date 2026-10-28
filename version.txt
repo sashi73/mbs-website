@@ -1,2 +1,2 @@
-MBS website v21 (2026-10-28)
-MBS Console at /admin/: admin login, dashboard, jobs (stages, notes, photos, reminders), new jobs, reports with GST, CSV export, data explorer (delete / move to test database / backup), activity log. Brand SEO (v20i), security headers (v20h).
+MBS website v22b (2026-10-28)
+Fix: "Netlify Blobs ... Token expired" (a fresh database token on every request). Includes v22 accounts (quotes, tax invoices, payments, expenses, BAS) and the v21 console.

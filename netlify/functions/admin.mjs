@@ -8,6 +8,7 @@ import * as A from '../lib/admin-lib.mjs';
 import { period } from '../lib/bot.mjs';
 import { parseWhen, whenText } from '../lib/calendar.mjs';
 import { tradeCode } from '../lib/store.mjs';
+import { acctGet, acctPost } from '../lib/admin-acct.mjs';
 
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' };
 const out = (status, body, extra = {}) => new Response(JSON.stringify(body), { status, headers: { ...H, ...extra } });
@@ -33,7 +34,7 @@ export default async (req) => {
       const action = url.searchParams.get('action');
       if (action === 'photo') {
         const st = url.searchParams.get('store') || A.LIVE, k = url.searchParams.get('key') || '';
-        if (!storeOk(st) || !k.startsWith('photo:')) return bad('Not found', 404);
+        if (!storeOk(st) || !/^(photo|receipt):/.test(k)) return bad('Not found', 404);
         const p = await A.getPhoto(st, k);
         return p ? new Response(p.buf, { status: 200, headers: { 'Content-Type': p.type, 'Cache-Control': 'private, max-age=3600' } }) : bad('Not found', 404);
       }
@@ -51,7 +52,8 @@ export default async (req) => {
         return new Response(JSON.stringify({ store: st, at: new Date().toISOString(), data }, null, 1), { status: 200, headers: {
           'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${st}-backup-${new Date().toISOString().slice(0, 10)}.json"`, 'Cache-Control': 'no-store' } });
       }
-      return bad('Unknown request', 404);
+      const g = await acctGet(action, url);
+      return g || bad('Unknown request', 404);
     }
 
     if (req.method !== 'POST') return bad('Method not allowed', 405);
@@ -201,7 +203,10 @@ export default async (req) => {
         return out(200, { jobs: n });
       }
       case 'log': return out(200, { log: await A.auditLog() });
-      default: return bad('Unknown action');
+      default: {
+        const a = await acctPost(action, body, { who, by });
+        return a || bad('Unknown action');
+      }
     }
   } catch (e) {
     console.error('Admin error:', e);

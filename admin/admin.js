@@ -70,13 +70,14 @@
   /* ---------------- router ---------------- */
   var VIEWS = { dashboard: dashboard, jobs: jobs, job: jobView, new: newJob, reminders: reminders, reports: reports, data: dataExplorer, activity: activity, analytics: analytics };
   var TITLES = { dashboard: 'Dashboard', jobs: 'Jobs', job: 'Job', new: 'New job', reminders: 'Reminders', reports: 'Reports', data: 'Data explorer', activity: 'Activity log', analytics: 'Analytics & AI' };
+  var NAVKEY = { job: 'jobs' };
   function route() {
     if ($('#app').hidden) return;
     var parts = (location.hash.slice(1) || 'dashboard').split('/').map(decodeURIComponent);
     var name = VIEWS[parts[0]] ? parts[0] : 'dashboard';
     $('#title').textContent = TITLES[name];
     document.title = TITLES[name] + ' · MBS Console';
-    Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (a) { a.classList.toggle('on', a.getAttribute('data-nav') === (name === 'job' ? 'jobs' : name)); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (a) { a.classList.toggle('on', a.getAttribute('data-nav') === (NAVKEY[name] || name)); });
     $('#side').classList.remove('open');
     view.innerHTML = '<div class="empty">Loading…</div>';
     Promise.resolve(VIEWS[name](parts.slice(1))).catch(fail);
@@ -210,6 +211,7 @@
       $('#remForm').onsubmit = function (e) { e.preventDefault(); var f = e.target; api('remind', { ref: core, when: f.when.value, text: f.text.value || 'Follow up ' + j.name }).then(function (r) { toast('Reminder set for ' + r.reminder.when); route(); }).catch(fail); };
       $('#noteForm').onsubmit = function (e) { e.preventDefault(); api('note', { ref: core, text: e.target.text.value }).then(function () { toast('Note added'); route(); }).catch(fail); };
       bindRows();
+      jobExtras.forEach(function (fn) { try { fn(j); } catch (err) { fail(err); } });
     });
   }
   function kv(k, v) { return v ? '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>' : ''; }
@@ -339,6 +341,15 @@
        ['🎯 Win-rate analysis', 'Quote-to-win rate by trade, source and response time.'], ['👷 Team', 'Staff logins, job assignment and workload.']]
       .map(function (x) { return '<div class="card"><h2>' + x[0] + '</h2><p class="muted" style="margin:0">' + esc(x[1]) + '</p></div>'; }).join('') + '</div>';
   }
+
+  /* ---------------- shared with admin-acct.js (accounting screens) ---------------- */
+  var jobExtras = [];
+  window.MBS = {
+    api: api, esc: esc, money: money, gst: gst, date: date, day: day, chip: chip, toast: toast, fail: fail, modal: modal, closeModal: closeModal,
+    confirmBox: confirmBox, route: route, $: $, view: function () { return view; }, API: API,
+    addView: function (name, title, fn, navKey) { VIEWS[name] = fn; TITLES[name] = title; if (navKey) NAVKEY[name] = navKey; },
+    onJob: function (fn) { jobExtras.push(fn); }
+  };
 
   /* ---------------- start ---------------- */
   api('me').then(function (j) { showApp(j.user); }).catch(function () { showLogin(); });
