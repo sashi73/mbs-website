@@ -1,2 +1,2 @@
-MBS website v20i (2026-10-28)
-Brand SEO: page titles, business info and site name built around "Modern Building Solutions", "MBS" and "MBSPLC". Security headers (v20h), new address https://mbsplc.com.au (v20g), alerts to two people (v20f).
+MBS website v21 (2026-10-28)
+MBS Console at /admin/: admin login, dashboard, jobs (stages, notes, photos, reminders), new jobs, reports with GST, CSV export, data explorer (delete / move to test database / backup), activity log. Brand SEO (v20i), security headers (v20h).

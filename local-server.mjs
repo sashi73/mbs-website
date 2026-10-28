@@ -28,8 +28,10 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-28 v20i (brand SEO: Modern Building Solutions / MBSPLC; security headers; new address mbsplc.com.au; job alerts to several private chats: TELEGRAM_ALERT_IDS; Past projects removed from Mr. Fixit; landing page: new call bar wording, service columns reordered; best-time-to-call choices follow the Sydney clock; Mr.FixitB channel support; Telegram job tracker on Netlify: PW → W → JW, reminders, reports, photos; call-back reminder: Add to Google Calendar + .ics in alerts; ring clear of buttons and screen edges; glowing ring around Mr. Fixit instead of a bubble; glowing Mr. Fixit bubble, visitor counter, footer ABNs; best time to call asked right after the phone number; stock-phrase filter, version on alerts; natural, varied repair answers; map route starts from your current location; same name / Sydney / suburb steps for quotes and repair questions, suburb auto-picked; suburb + postcode suggestions, Google Maps link (from your current location) and QR in alerts; Mr. Fixit asks name and Sydney area first; solid white and yellow trades banner; SEO: titles, sitemap, robots, business details, 404 page; web-optimised WebP photos; owner photos in high resolution, recent jobs, 8 before & after, 59 owner photos, hero slideshow; accreditations: Ardex, Fatra, NSW Government Education, NSW Government, AIB, ISO 9001, Cm3)';
+const VERSION = '2026-10-28 v21 (MBS Console: admin CRM with login, jobs, reminders, reports and data explorer)';
 const NEEDS = [
+  ['netlify/functions/admin.mjs', 'readSession'],
+  ['admin/admin.js', 'dataExplorer'],
   ['netlify/lib/store.mjs', 'nextReference'],
   ['netlify/lib/shared.mjs', 'sendTelegramPhotos'],
   ['netlify/lib/shared.mjs', 'SCOPE_PROMPT'],
@@ -57,10 +59,8 @@ const NEEDS = [
   ['index.html', 'trustbar'],
   ['assets/style.css', '.trustbar'],
   ['projects.html', 'ba-frame'],
-  ['assets/fixit.js', 'proj_sector'],
   ['local-server.mjs', 'overLimit'],
   ['deploy/setup-server.sh', 'Caddy'],
-  ['assets/fixit-kb.js', 'projectSectors'],
   ['assets/site.js', 'ba-frame'],
   ['assets/style.css', '.ba-frame'],
   ['index.html', 'hero-slides'],
@@ -72,7 +72,7 @@ const NEEDS = [
   ['assets/fixit.js', 'function afterSuburb'],
   ['assets/fixit.js', 'function callLine'],
   ['netlify/lib/shared.mjs', 'export function humanise'],
-  ['index.html', 'fixit.js?v=20i'],
+  ['index.html', 'fixit.js?v=21'],
   ['assets/fixit.js', 'fx-ring'],
   ['netlify/lib/calendar.mjs', 'callReminder'],
   ['netlify/lib/bot.mjs', 'handleUpdate'],
@@ -101,7 +101,7 @@ async function oldFiles() {
   return [...out];
 }
 
-const FUNCTIONS = { chat: './netlify/functions/chat.mjs', lead: './netlify/functions/lead.mjs', tts: './netlify/functions/tts.mjs', visits: './netlify/functions/visits.mjs' };
+const FUNCTIONS = { chat: './netlify/functions/chat.mjs', lead: './netlify/functions/lead.mjs', tts: './netlify/functions/tts.mjs', visits: './netlify/functions/visits.mjs', admin: './netlify/functions/admin.mjs' };
 
 // Per-visitor limits, so nobody can run up AI costs or flood staff with fake enquiries once the site is public.
 // [requests allowed, per this many minutes]. Change in .env, e.g. LIMIT_CHAT=60/10
@@ -109,7 +109,7 @@ function limitOf(name, def) {
   const m = String(process.env['LIMIT_' + name.toUpperCase()] || def).match(/^(\d+)\/(\d+)$/);
   return m ? [Number(m[1]), Number(m[2]) * 60000] : [Infinity, 60000];
 }
-const LIMITS = { chat: limitOf('chat', '40/10'), tts: limitOf('tts', '80/10'), lead: limitOf('lead', '8/60'), visits: limitOf('visits', '20/10') };
+const LIMITS = { chat: limitOf('chat', '40/10'), tts: limitOf('tts', '80/10'), lead: limitOf('lead', '8/60'), visits: limitOf('visits', '20/10'), admin: limitOf('admin', '600/10') };
 const hits = new Map();
 function clientIp(req) {
   const peer = req.socket.remoteAddress || '';

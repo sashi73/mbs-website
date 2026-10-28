@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>MBS Console</title>
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="admin.css?v=21">
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<section class="login" id="login" hidden>
+  <form class="login-card" id="loginForm" autocomplete="on">
+    <img src="../assets/mbs-logo.svg" alt="Modern Building Solutions" class="login-logo" width="190" height="93">
+    <h1>MBS Console</h1>
+    <p class="muted">Staff and admin only.</p>
+    <label>Username<input name="username" autocomplete="username" required autofocus></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <p class="login-msg" id="loginMsg" role="alert"></p>
+    <button class="btn btn-gold btn-block" type="submit">Sign in</button>
+    <a class="back" href="../index.html">← Back to the website</a>
+  </form>
+</section>
+
+<!-- ============ APP ============ -->
+<div class="app" id="app" hidden>
+  <aside class="side" id="side">
+    <div class="side-top"><a class="side-brand" href="#dashboard"><img src="../assets/mbs-logo.svg" alt="MBS" width="104" height="51"><span>Console</span></a><button class="side-close" id="sideClose" type="button" aria-label="Close menu">✕</button></div>
+    <nav class="side-nav" aria-label="Console">
+      <p class="side-h">CRM</p>
+      <a href="#dashboard" data-nav="dashboard"><i>▦</i>Dashboard</a>
+      <a href="#jobs" data-nav="jobs"><i>☰</i>Jobs</a>
+      <a href="#new" data-nav="new"><i>＋</i>New job</a>
+      <a href="#reminders" data-nav="reminders"><i>⏰</i>Reminders</a>
+      <a href="#reports" data-nav="reports"><i>📊</i>Reports</a>
+      <p class="side-h">Data</p>
+      <a href="#data" data-nav="data"><i>🗄</i>Data explorer</a>
+      <a href="#activity" data-nav="activity"><i>🕘</i>Activity log</a>
+      <p class="side-h">Coming soon</p>
+      <a href="#analytics" data-nav="analytics"><i>✨</i>Analytics &amp; AI</a>
+    </nav>
+    <div class="side-foot">
+      <span class="who" id="who"></span>
+      <button class="link" id="logout" type="button">Sign out</button>
+    </div>
+  </aside>
+  <div class="backdrop" id="backdrop"></div>
+  <div class="main">
+    <header class="top">
+      <button class="menu-btn" id="menuBtn" type="button" aria-label="Menu">☰</button>
+      <h1 id="title">Dashboard</h1>
+      <form class="top-search" id="topSearch" role="search"><input id="q" placeholder="Search name, phone, suburb or job number…" aria-label="Search jobs"></form>
+      <a class="btn btn-gold btn-sm" href="#new">＋ New job</a>
+    </header>
+    <main class="view" id="view" tabindex="-1"></main>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="modal" id="modal" hidden><div class="modal-card" role="dialog" aria-modal="true"><div id="modalBody"></div></div></div>
+
+<script src="admin.js?v=21"></script>
+</body>
+</html>

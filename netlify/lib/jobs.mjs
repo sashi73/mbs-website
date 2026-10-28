@@ -33,7 +33,7 @@ export function parseRef(input) {
 }
 
 async function index() { return (await kv.get('index')) || { jobs: {} }; }
-const summary = (j) => ({ core: j.core, ref: refFor(j), stage: j.stage, name: j.name, phone: j.phone, suburb: j.suburb, service: j.service,
+export const summary = (j) => ({ core: j.core, ref: refFor(j), stage: j.stage, name: j.name, phone: j.phone, suburb: j.suburb, service: j.service,
   created: j.created, updated: j.updated, quote: j.quote || null, invoice: j.invoice || null,
   called_at: j.called_at || null, quoted_at: j.quoted_at || null, won_at: j.won_at || null, completed_at: j.completed_at || null,
   invoiced_at: j.invoiced_at || null, paid_at: j.paid_at || null, lost_at: j.lost_at || null });
