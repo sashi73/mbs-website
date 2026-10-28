@@ -70,6 +70,15 @@ export function rollup(plan, today) {
 
 // ---------- cleaning what the browser sends ----------
 const RESP = ['Avoid', 'Mitigate', 'Transfer', 'Accept', 'Exploit'], PRI = ['Low', 'Medium', 'High', 'Critical'];
+// people on a task: several names, one of them the lead. "resource" keeps a plain text copy (lead first) for reports.
+const STAT = ['todo', 'doing', 'review', 'done'];
+const statusOf = (pct) => (pct >= 100 ? 'done' : pct <= 0 ? 'todo' : pct >= 67 ? 'review' : 'doing');
+function people(t) {
+  let res = Array.isArray(t.res) ? t.res : String(t.resource || '').split(',');
+  res = [...new Set(res.map((x) => str(x, 60)).filter(Boolean))].slice(0, 12);
+  const lead = res.includes(str(t.lead, 60)) ? str(t.lead, 60) : res[0] || '';
+  return { res, lead, resource: [lead, ...res.filter((x) => x !== lead)].filter(Boolean).join(', ').slice(0, 300) };
+}
 function clean(p, core) {
   const ids = new Set();
   const uid = (v, pre) => { let s = str(v, 20).replace(/[^\w-]/g, '') || pre + Math.random().toString(36).slice(2, 8); while (ids.has(s)) s += 'x'; ids.add(s); return s; };
@@ -79,7 +88,7 @@ function clean(p, core) {
   const tasks = (Array.isArray(p.tasks) ? p.tasks : []).slice(0, 300).map((t) => ({
     id: uid(t.id, 't'), name: str(t.name, 160) || 'New task', phase: phIds.has(t.phase) ? t.phase : phases[0].id,
     dur: int(t.dur, 0, 365, 1), snet: ymdOk(t.snet), pred: (Array.isArray(t.pred) ? t.pred : []).map((x) => str(x, 20)).slice(0, 10),
-    resource: str(t.resource, 80), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000)
+    ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000)
   }));
   const tIds = new Set(tasks.map((t) => t.id));
   for (const t of tasks) t.pred = t.pred.filter((x) => tIds.has(x) && x !== t.id);
@@ -160,6 +169,15 @@ export async function planPost(action, body, { who, by, audit }) {
     if (r.conflict) return out(409, { error: 'Someone else changed this plan. Your view has been refreshed with their version.', plan: r.conflict });
     if (body.note && audit) await audit(who, `Plan ${core}: ${str(body.note, 120)}`);
     return out(200, { plan: r.plan });
+  }
+  if (action === 'planDelete') {
+    const job = await J.find(core);
+    if (!job) return out(404, { error: 'Job not found' });
+    const had = await get(job.core);
+    if (!had) return out(404, { error: 'This job has no plan' });
+    await kv.del('plan:' + job.core);
+    if (audit) await audit(who, `Plan ${job.core}: deleted ("${had.name}")`);
+    return out(200, { ok: true });
   }
   if (action === 'planRemind') {
     const r = await remind(core, str(body.taskId, 20), str(body.when, 60), by);

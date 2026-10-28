@@ -26,7 +26,7 @@ export const SCHEMA = {
   expenses: ['id', 'date', 'month', 'supplier', 'description', 'category', 'job', 'ex', 'gst', 'inc', 'has_receipt'],
   reminders: ['id', 'due', 'date', 'text', 'job'],
   visits: ['date', 'month', 'visits'],
-  plan_tasks: ['job', 'plan', 'phase', 'task', 'resource', 'start', 'finish', 'days', 'qty', 'unit', 'unit_cost', 'planned_cost', 'actual_cost', 'pct_complete', 'done', 'late'],
+  plan_tasks: ['job', 'plan', 'task', 'resource', 'lead', 'status', 'start', 'finish', 'days', 'qty', 'unit', 'unit_cost', 'planned_cost', 'actual_cost', 'pct_complete', 'done', 'late'],
   plan_risks: ['job', 'plan', 'risk', 'probability', 'impact', 'score', 'response', 'owner', 'status', 'review'],
   plan_issues: ['job', 'plan', 'issue', 'priority', 'owner', 'raised', 'due', 'status']
 };
@@ -75,8 +75,8 @@ export async function tables() {
   const todayS = d10(now);
   for (const p of planList) {
     PLAN.schedule(p);
-    const ph = Object.fromEntries(p.phases.map((f) => [f.id, f.name]));
-    for (const t of p.tasks) plan_tasks.push({ job: p.core, plan: p.name, phase: ph[t.phase] || '', task: t.name, resource: t.resource, start: t.es, finish: t.ef, days: t.dur, qty: t.qty, unit: t.unit,
+    const STN = { todo: 'To do', doing: 'In progress', review: 'In review / QA', done: 'Done' };
+    for (const t of p.tasks) plan_tasks.push({ job: p.core, plan: p.name, task: t.name, resource: t.resource || '', lead: t.lead || '', status: STN[t.status] || (t.pct >= 100 ? 'Done' : t.pct > 0 ? 'In progress' : 'To do'), start: t.es, finish: t.ef, days: t.dur, qty: t.qty, unit: t.unit,
       unit_cost: t.rate, planned_cost: r2(t.qty * t.rate), actual_cost: t.actual, pct_complete: t.pct, done: t.pct >= 100, late: t.pct < 100 && t.ef < todayS });
     for (const r of p.risks || []) plan_risks.push({ job: p.core, plan: p.name, risk: r.title, probability: r.p, impact: r.i, score: r.p * r.i, response: r.response, owner: r.owner, status: r.status, review: r.review });
     for (const x of p.issues || []) plan_issues.push({ job: p.core, plan: p.name, issue: x.title, priority: x.priority, owner: x.owner, raised: x.raised, due: x.due, status: x.status });

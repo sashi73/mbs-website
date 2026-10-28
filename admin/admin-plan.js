@@ -6,7 +6,6 @@
   var api = M.api, esc = M.esc, money = M.money, toast = M.toast, fail = M.fail, $ = M.$;
   var V = function () { return M.view(); };
   var r2 = function (n) { return Math.round((Number(n) || 0) * 100) / 100; };
-  var PH = ['Initiating', 'Planning', 'Executing', 'Monitoring & controlling', 'Closing'];
 
   /* ---------- working days (same rules as the server) ---------- */
   var toD = function (s) { var a = s.split('-').map(Number); return new Date(Date.UTC(a[0], a[1] - 1, a[2])); };
@@ -56,47 +55,69 @@
   function T(name, objective, scope, rows, risks) { return { name: name, objective: objective, scope: scope, rows: rows, risks: risks || [] }; }
   var TEMPLATES = {
     bathroom: T('Bathroom waterproofing & retiling', 'Strip, waterproof to AS 3740 and retile the bathroom with no leaks, on time and on budget.', 'Strip-out, plumbing rough-in and fit-off, screed and falls, Ardex membrane, flood test, floor and wall tiles, grout and silicone, clean and handover.', [
-      [0, 'k1', 'Site inspection & measure', 1, 'Sashi (PM)', 2, 'h', 90, []], [0, 'k2', 'Quote accepted', 0, 'Customer', 0, '', 0, ['k1']],
-      [1, 'k3', 'Buy tiles', 1, 'Supplier', 12, 'm²', 65, ['k2']], [1, 'k4', 'Order membrane & plumbing parts', 1, 'Supplier', 1, 'lot', 650, ['k2']], [1, 'k5', 'Book plumber & tiler', 1, 'Sashi (PM)', 1, 'h', 90, ['k2']],
-      [2, 'k6', 'Strip-out & rubbish removal', 2, 'Labourer', 16, 'h', 55, ['k3', 'k4', 'k5']], [2, 'k7', 'Plumbing rough-in', 1, 'Plumber', 8, 'h', 110, ['k6']], [2, 'k8', 'Screed & falls', 1, 'Tiler', 8, 'h', 85, ['k7']],
-      [2, 'k9', 'Waterproofing membrane (Ardex)', 2, 'Waterproofer', 1, 'lot', 900, ['k8']], [3, 'k10', 'Flood test (24 h) & photos', 1, 'Sashi (PM)', 1, 'h', 90, ['k9']],
-      [2, 'k11', 'Wall & floor tiling', 3, 'Tiler', 24, 'h', 85, ['k10']], [2, 'k12', 'Grout & silicone', 1, 'Tiler', 6, 'h', 85, ['k11']], [2, 'k13', 'Fit-off: vanity, tapware, screen', 1, 'Plumber', 6, 'h', 110, ['k12']],
-      [3, 'k14', 'Final inspection & defects', 1, 'Sashi (PM)', 1, 'h', 90, ['k13']], [4, 'k15', 'Clean & handover', 1, 'Cleaner', 3, 'h', 50, ['k14']], [4, 'k16', 'Invoice & warranty certificate', 0, 'Sashi (PM)', 0, '', 0, ['k15']]],
+      [0, 'k1', 'Site inspection & measure', 1, '', 2, 'h', 90, []], [0, 'k2', 'Quote accepted', 0, '', 0, '', 0, ['k1']],
+      [1, 'k3', 'Buy tiles', 1, '', 12, 'm²', 65, ['k2']], [1, 'k4', 'Order membrane & plumbing parts', 1, '', 1, 'lot', 650, ['k2']], [1, 'k5', 'Book plumber & tiler', 1, '', 1, 'h', 90, ['k2']],
+      [2, 'k6', 'Strip-out & rubbish removal', 2, '', 16, 'h', 55, ['k3', 'k4', 'k5']], [2, 'k7', 'Plumbing rough-in', 1, '', 8, 'h', 110, ['k6']], [2, 'k8', 'Screed & falls', 1, '', 8, 'h', 85, ['k7']],
+      [2, 'k9', 'Waterproofing membrane (Ardex)', 2, '', 1, 'lot', 900, ['k8']], [3, 'k10', 'Flood test (24 h) & photos', 1, '', 1, 'h', 90, ['k9']],
+      [2, 'k11', 'Wall & floor tiling', 3, '', 24, 'h', 85, ['k10']], [2, 'k12', 'Grout & silicone', 1, '', 6, 'h', 85, ['k11']], [2, 'k13', 'Fit-off: vanity, tapware, screen', 1, '', 6, 'h', 110, ['k12']],
+      [3, 'k14', 'Final inspection & defects', 1, '', 1, 'h', 90, ['k13']], [4, 'k15', 'Clean & handover', 1, '', 3, 'h', 50, ['k14']], [4, 'k16', 'Invoice & warranty certificate', 0, '', 0, '', 0, ['k15']]],
       [['Hidden water damage found during strip-out', 3, 4, 'Mitigate', 'Inspect with moisture meter early; agree a contingency allowance in the quote'], ['Tile delivery delay', 2, 3, 'Mitigate', 'Confirm stock before ordering; order on day 1'], ['Membrane slow to cure (cold or humid)', 2, 2, 'Accept', 'Allow an extra day before the flood test']]),
     balcony: T('Balcony remediation (concrete cancer)', 'Repair concrete cancer and re-waterproof the balcony so it stays dry, with strata approval and safe access.', 'Inspection and report, approvals, scaffold, remove tiles and screed, concrete repair, new screed, membrane, flood test, retile, reinstate balustrade, handover.', [
-      [0, 'k1', 'Site inspection & moisture readings', 1, 'Sashi (PM)', 2, 'h', 90, []], [0, 'k2', 'Engineer report', 3, 'Engineer', 1, 'lot', 1200, ['k1']], [0, 'k3', 'Strata / owner approval', 0, 'Strata', 0, '', 0, ['k2']],
-      [1, 'k4', 'Safety & scaffold plan', 1, 'Sashi (PM)', 2, 'h', 90, ['k3']], [1, 'k5', 'Order materials', 1, 'Supplier', 1, 'lot', 1500, ['k3']], [1, 'k6', 'Scaffold hire', 1, 'Scaffolder', 1, 'lot', 800, ['k4']],
-      [2, 'k7', 'Remove tiles & screed', 2, 'Labourer', 16, 'h', 55, ['k5', 'k6']], [2, 'k8', 'Concrete repair', 3, 'Concreter', 1, 'lot', 2400, ['k7']], [2, 'k9', 'New screed & falls', 2, 'Tiler', 16, 'h', 85, ['k8']],
-      [2, 'k10', 'Waterproofing membrane', 2, 'Waterproofer', 1, 'lot', 1400, ['k9']], [3, 'k11', 'Flood test & photos', 1, 'Sashi (PM)', 1, 'h', 90, ['k10']], [2, 'k12', 'Retile balcony', 3, 'Tiler', 24, 'h', 85, ['k11']],
-      [2, 'k13', 'Reinstate balustrade', 1, 'Carpenter', 1, 'lot', 600, ['k12']], [3, 'k14', 'Final inspection', 1, 'Sashi (PM)', 1, 'h', 90, ['k13']], [4, 'k15', 'Strike scaffold & handover', 1, 'Scaffolder', 1, 'lot', 300, ['k14']],
-      [4, 'k16', 'Invoice & warranty', 0, 'Sashi (PM)', 0, '', 0, ['k15']]],
+      [0, 'k1', 'Site inspection & moisture readings', 1, '', 2, 'h', 90, []], [0, 'k2', 'Engineer report', 3, '', 1, 'lot', 1200, ['k1']], [0, 'k3', 'Strata / owner approval', 0, '', 0, '', 0, ['k2']],
+      [1, 'k4', 'Safety & scaffold plan', 1, '', 2, 'h', 90, ['k3']], [1, 'k5', 'Order materials', 1, '', 1, 'lot', 1500, ['k3']], [1, 'k6', 'Scaffold hire', 1, '', 1, 'lot', 800, ['k4']],
+      [2, 'k7', 'Remove tiles & screed', 2, '', 16, 'h', 55, ['k5', 'k6']], [2, 'k8', 'Concrete repair', 3, '', 1, 'lot', 2400, ['k7']], [2, 'k9', 'New screed & falls', 2, '', 16, 'h', 85, ['k8']],
+      [2, 'k10', 'Waterproofing membrane', 2, '', 1, 'lot', 1400, ['k9']], [3, 'k11', 'Flood test & photos', 1, '', 1, 'h', 90, ['k10']], [2, 'k12', 'Retile balcony', 3, '', 24, 'h', 85, ['k11']],
+      [2, 'k13', 'Reinstate balustrade', 1, '', 1, 'lot', 600, ['k12']], [3, 'k14', 'Final inspection', 1, '', 1, 'h', 90, ['k13']], [4, 'k15', 'Strike scaffold & handover', 1, '', 1, 'lot', 300, ['k14']],
+      [4, 'k16', 'Invoice & warranty', 0, '', 0, '', 0, ['k15']]],
       [['Rain delays membrane or tiling', 4, 3, 'Mitigate', 'Weather covers; keep a 2-day buffer'], ['Concrete damage worse than the report', 3, 4, 'Mitigate', 'Variation process agreed with strata up front'], ['Access through neighbouring units', 2, 3, 'Avoid', 'Confirm access dates with strata in writing']]),
     repaint: T('Exterior repaint', 'Repaint the exterior with a durable, even finish, protecting gardens and neighbours.', 'Colour consult, wash, preparation and repairs, primer, two top coats, touch-ups, clean-up and handover.', [
-      [0, 'k1', 'Inspection & colour consult', 1, 'Sashi (PM)', 2, 'h', 90, []], [0, 'k2', 'Quote accepted', 0, 'Customer', 0, '', 0, ['k1']],
-      [1, 'k3', 'Buy paint', 1, 'Supplier', 60, 'L', 45, ['k2']], [1, 'k4', 'Book access equipment', 1, 'Hire', 1, 'lot', 350, ['k2']],
-      [2, 'k5', 'Pressure wash', 1, 'Labourer', 8, 'h', 55, ['k3', 'k4']], [2, 'k6', 'Prep & repairs', 2, 'Painter', 16, 'h', 70, ['k5']], [2, 'k7', 'Prime', 1, 'Painter', 8, 'h', 70, ['k6']],
-      [2, 'k8', 'First coat', 2, 'Painter', 16, 'h', 70, ['k7']], [2, 'k9', 'Second coat', 2, 'Painter', 16, 'h', 70, ['k8']], [2, 'k10', 'Touch-ups', 1, 'Painter', 4, 'h', 70, ['k9']],
-      [3, 'k11', 'Quality inspection', 1, 'Sashi (PM)', 1, 'h', 90, ['k10']], [4, 'k12', 'Clean-up & handover', 1, 'Labourer', 4, 'h', 55, ['k11']], [4, 'k13', 'Invoice', 0, 'Sashi (PM)', 0, '', 0, ['k12']]],
+      [0, 'k1', 'Inspection & colour consult', 1, '', 2, 'h', 90, []], [0, 'k2', 'Quote accepted', 0, '', 0, '', 0, ['k1']],
+      [1, 'k3', 'Buy paint', 1, '', 60, 'L', 45, ['k2']], [1, 'k4', 'Book access equipment', 1, '', 1, 'lot', 350, ['k2']],
+      [2, 'k5', 'Pressure wash', 1, '', 8, 'h', 55, ['k3', 'k4']], [2, 'k6', 'Prep & repairs', 2, '', 16, 'h', 70, ['k5']], [2, 'k7', 'Prime', 1, '', 8, 'h', 70, ['k6']],
+      [2, 'k8', 'First coat', 2, '', 16, 'h', 70, ['k7']], [2, 'k9', 'Second coat', 2, '', 16, 'h', 70, ['k8']], [2, 'k10', 'Touch-ups', 1, '', 4, 'h', 70, ['k9']],
+      [3, 'k11', 'Quality inspection', 1, '', 1, 'h', 90, ['k10']], [4, 'k12', 'Clean-up & handover', 1, '', 4, 'h', 55, ['k11']], [4, 'k13', 'Invoice', 0, '', 0, '', 0, ['k12']]],
       [['Rain or wind stops painting', 4, 3, 'Mitigate', 'Check the forecast daily; move to sheltered sides'], ['Customer unhappy with colour once applied', 2, 3, 'Avoid', 'Paint a test patch and get sign-off']]),
     deck: T('Deck & pergola build', 'Build a safe, compliant deck and pergola that drains well and looks good for years.', 'Design and set-out, footings, sub-frame, decking, pergola, balustrade and stairs, oil finish, handover.', [
-      [0, 'k1', 'Measure & design', 1, 'Sashi (PM)', 3, 'h', 90, []], [0, 'k2', 'Quote accepted', 0, 'Customer', 0, '', 0, ['k1']], [0, 'k3', 'Council / exempt development check', 2, 'Sashi (PM)', 2, 'h', 90, ['k2']],
-      [1, 'k4', 'Order timber & hardware', 1, 'Supplier', 1, 'lot', 3200, ['k3']],
-      [2, 'k5', 'Set out & footings', 2, 'Carpenter', 16, 'h', 75, ['k4']], [2, 'k6', 'Bearers & joists', 2, 'Carpenter', 16, 'h', 75, ['k5']], [2, 'k7', 'Decking boards', 2, 'Carpenter', 16, 'h', 75, ['k6']],
-      [2, 'k8', 'Pergola frame & roof', 2, 'Carpenter', 16, 'h', 75, ['k7']], [2, 'k9', 'Balustrade & stairs', 2, 'Carpenter', 16, 'h', 75, ['k8']], [2, 'k10', 'Oil / stain finish', 1, 'Painter', 6, 'h', 70, ['k9']],
-      [3, 'k11', 'Safety & quality check', 1, 'Sashi (PM)', 1, 'h', 90, ['k10']], [4, 'k12', 'Handover', 1, 'Sashi (PM)', 1, 'h', 90, ['k11']], [4, 'k13', 'Invoice', 0, 'Sashi (PM)', 0, '', 0, ['k12']]],
+      [0, 'k1', 'Measure & design', 1, '', 3, 'h', 90, []], [0, 'k2', 'Quote accepted', 0, '', 0, '', 0, ['k1']], [0, 'k3', 'Council / exempt development check', 2, '', 2, 'h', 90, ['k2']],
+      [1, 'k4', 'Order timber & hardware', 1, '', 1, 'lot', 3200, ['k3']],
+      [2, 'k5', 'Set out & footings', 2, '', 16, 'h', 75, ['k4']], [2, 'k6', 'Bearers & joists', 2, '', 16, 'h', 75, ['k5']], [2, 'k7', 'Decking boards', 2, '', 16, 'h', 75, ['k6']],
+      [2, 'k8', 'Pergola frame & roof', 2, '', 16, 'h', 75, ['k7']], [2, 'k9', 'Balustrade & stairs', 2, '', 16, 'h', 75, ['k8']], [2, 'k10', 'Oil / stain finish', 1, '', 6, 'h', 70, ['k9']],
+      [3, 'k11', 'Safety & quality check', 1, '', 1, 'h', 90, ['k10']], [4, 'k12', 'Handover', 1, '', 1, 'h', 90, ['k11']], [4, 'k13', 'Invoice', 0, '', 0, '', 0, ['k12']]],
       [['Underground services where footings go', 2, 4, 'Avoid', 'Dial Before You Dig before set-out'], ['Timber price or supply changes', 3, 2, 'Mitigate', 'Lock in the order when the quote is accepted']]),
-    blank: T('Project plan', '', '', [[0, 'k1', 'Site inspection', 1, 'Sashi (PM)', 1, 'h', 90, []], [4, 'k2', 'Handover', 1, 'Sashi (PM)', 1, 'h', 90, ['k1']]], [])
+    blank: T('Project plan', '', '', [[0, 'k1', 'Site inspection', 1, '', 1, 'h', 90, []], [4, 'k2', 'Handover', 1, '', 1, 'h', 90, ['k1']]], [])
   };
   function fromTemplate(key, job, start) {
     var t = TEMPLATES[key], ids = {}, n = 0;
-    var phases = PH.map(function (name, i) { return { id: 'ph' + (i + 1), name: name }; });
-    var tasks = t.rows.map(function (r) { var id = 't' + (++n); ids[r[1]] = id; return { id: id, phase: 'ph' + (r[0] + 1), name: r[2], dur: r[3], resource: r[4], qty: r[5], unit: r[6], rate: r[7], pred: r[8], actual: 0, pct: 0, snet: '', notes: '' }; });
+    var tasks = t.rows.map(function (r) { var id = 't' + (++n); ids[r[1]] = id; return { id: id, phase: 'ph1', name: r[2], dur: r[3], res: [], lead: '', resource: '', qty: r[5], unit: r[6], rate: r[7], pred: r[8], actual: 0, pct: 0, status: 'todo', snet: '', notes: '' }; });
     tasks.forEach(function (x) { x.pred = x.pred.map(function (k) { return ids[k]; }).filter(Boolean); });
     var budget = r2(tasks.reduce(function (a, x) { return a + cost(x); }, 0));
-    return { name: key === 'blank' ? (job.service || 'Project plan') : t.name, start: start, phases: phases, tasks: tasks,
-      charter: { objective: t.objective, inScope: t.scope, outScope: '', deliverables: '', acceptance: 'Work complete, inspected and accepted by the customer; site clean; invoice issued.', assumptions: '', budget: budget, customer: job.name || '', manager: 'Sashi' },
-      risks: t.risks.map(function (r, i) { return { id: 'r' + (i + 1), title: r[0], cause: '', p: r[1], i: r[2], response: r[3], action: r[4], owner: 'Sashi', review: '', status: 'Open', raised: today() }; }),
+    return { name: key === 'blank' ? (job.service || 'Project plan') : t.name, start: start, phases: [{ id: 'ph1', name: 'Work' }], tasks: tasks,
+      charter: { objective: t.objective, inScope: t.scope, outScope: '', deliverables: '', acceptance: 'Work complete, inspected and accepted by the customer; site clean; invoice issued.', assumptions: '', budget: budget, customer: job.name || '', manager: '' },
+      risks: t.risks.map(function (r, i) { return { id: 'r' + (i + 1), title: r[0], cause: '', p: r[1], i: r[2], response: r[3], action: r[4], owner: '', review: '', status: 'Open', raised: today() }; }),
       issues: [], baseline: null };
+  }
+
+  /* ---------- status (board columns) and resources (people) ---------- */
+  var STATUS = [['todo', 'To do', 0], ['doing', 'In progress', 33], ['review', 'In review / QA', 67], ['done', 'Done', 100]];
+  var stPct = { todo: 0, doing: 33, review: 67, done: 100 }, stName = { todo: 'To do', doing: 'In progress', review: 'In review / QA', done: 'Done' };
+  function statusFromPct(n) { return n >= 100 ? 'done' : n <= 0 ? 'todo' : n >= 67 ? 'review' : 'doing'; }
+  function setStatus(t, k) { t.status = k; t.pct = stPct[k]; }
+  function resText(t) { var r = t.res || []; if (!r.length) return ''; var others = r.filter(function (x) { return x !== t.lead; }); return [t.lead].concat(others).filter(Boolean).join(', '); }
+  function resShort(t) { var r = t.res || []; return r.length ? '★ ' + (t.lead || r[0]) + (r.length > 1 ? ' +' + (r.length - 1) : '') : ''; }
+  function fixRes(t) { t.res = (t.res || []).filter(Boolean); if (t.res.indexOf(t.lead) < 0) t.lead = t.res[0] || ''; t.resource = resText(t); }
+  function normalise(p) {   // older plans: phases and a single "resource" text
+    if (p.phases && p.phases.length > 1) {
+      var order = p.phases.map(function (f) { return f.id; });
+      p.tasks = p.tasks.map(function (t, i) { return { t: t, i: i }; }).sort(function (a, b) { return (order.indexOf(a.t.phase) - order.indexOf(b.t.phase)) || (a.i - b.i); }).map(function (x) { return x.t; });
+    }
+    p.phases = [{ id: 'ph1', name: 'Work' }];
+    p.tasks.forEach(function (t) {
+      t.phase = 'ph1';
+      if (!Array.isArray(t.res)) t.res = t.resource ? String(t.resource).split(/\s*,\s*/).filter(Boolean) : [];
+      fixRes(t);
+      if (!stPct.hasOwnProperty(t.status) || (t.status === 'done') !== (t.pct >= 100)) t.status = statusFromPct(t.pct || 0);
+    });
+    return p;
   }
 
   /* ---------- state + saving ---------- */
@@ -119,7 +140,7 @@
         var el = $('#planSave'); if (el && !S.timer) el.textContent = 'Saved ✓';
       }).catch(function (e) {
         S.busy = false;
-        if (/changed this plan/.test(e.message)) { return api('planGet', { core: core }).then(function (d) { S.plan = d.plan; S.rev = d.plan.rev; toast(e.message, true); render(); }); }
+        if (/changed this plan/.test(e.message)) { return api('planGet', { core: core }).then(function (d) { S.plan = normalise(d.plan); S.rev = d.plan.rev; toast(e.message, true); render(); }); }
         var el = $('#planSave'); if (el) el.textContent = 'Not saved'; fail(e);
       });
     };
@@ -135,15 +156,24 @@
         var avail = j.jobs.filter(function (x) { return !planned[x.core]; });
         V().innerHTML = '<div class="card"><div class="card-h"><h2>Project plans (' + d.plans.length + ')</h2>' +
           '<div class="row"><select id="newPlanJob" style="width:auto"><option value="">Plan a job…</option>' + avail.map(function (x) { return '<option value="' + esc(x.core) + '">' + esc(x.ref + ' · ' + x.name + (x.service ? ' · ' + x.service : '')) + '</option>'; }).join('') + '</select><button class="btn btn-gold btn-sm" id="newPlanGo">＋ Start a plan</button></div></div>' +
-          (d.plans.length ? '<div class="table-wrap"><table><thead><tr><th>Project</th><th>Progress</th><th class="hide-sm">Finish</th><th>Time</th><th>Cost</th><th class="hide-sm">Risks</th><th class="hide-sm">Issues</th></tr></thead><tbody>' +
+          (d.plans.length ? '<div class="table-wrap"><table><thead><tr><th>Project</th><th>Progress</th><th class="hide-sm">Finish</th><th>Time</th><th>Cost</th><th class="hide-sm">Risks</th><th class="hide-sm">Issues</th><th></th></tr></thead><tbody>' +
             d.plans.map(function (p) {
               var tC = rag(p.SPI, 0.95, 0.85), cC = rag(p.CPI, 0.95, 0.85);
               return '<tr class="click" data-plan="' + esc(p.core) + '"><td><b>' + esc(p.name) + '</b><br><small class="muted"><span class="ref">' + esc(p.ref) + '</span> · ' + esc(p.customer) + '</small></td>' +
                 '<td style="min-width:140px"><div class="pbar"><span style="width:' + p.pct + '%"></span></div><small>' + p.pct + '% · ' + p.done + '/' + p.total + ' tasks' + (p.late ? ' · <b style="color:#C2410C">' + p.late + ' late</b>' : '') + '</small></td>' +
                 '<td class="hide-sm">' + esc(prettyY(p.finish)) + '</td><td><span class="rag rag-' + tC + '">' + (p.SPI == null ? '—' : 'SPI ' + p.SPI) + '</span></td><td><span class="rag rag-' + cC + '">' + (p.CPI == null ? '—' : 'CPI ' + p.CPI) + '</span></td>' +
-                '<td class="hide-sm">' + p.openRisks + (p.highRisks ? ' <b style="color:#C2410C">(' + p.highRisks + ' high)</b>' : '') + '</td><td class="hide-sm">' + p.openIssues + '</td></tr>';
+                '<td class="hide-sm">' + p.openRisks + (p.highRisks ? ' <b style="color:#C2410C">(' + p.highRisks + ' high)</b>' : '') + '</td><td class="hide-sm">' + p.openIssues + '</td><td><button class="btn btn-sm" data-pdel="' + esc(p.core) + '" data-pname="' + esc(p.name) + '" title="Delete this plan">🗑</button></td></tr>';
             }).join('') + '</tbody></table></div>' : '<div class="empty">No plans yet. Pick a job above, or open a job and press “Project plan”.</div>') + '</div>';
         V().querySelectorAll('[data-plan]').forEach(function (tr) { tr.onclick = function () { location.hash = '#plan/' + tr.getAttribute('data-plan'); }; });
+        V().querySelectorAll('[data-pdel]').forEach(function (b) {
+          b.onclick = function (e) {
+            e.stopPropagation();
+            M.confirmBox('Delete this project plan?', 'The plan “' + esc(b.getAttribute('data-pname')) + '” will be deleted: tasks, dates, costs, risks and issues. The job itself, its quotes and invoices stay. This can\'t be undone.', 'Delete plan', true).then(function (ok) {
+              if (!ok) return;
+              api('planDelete', { core: b.getAttribute('data-pdel') }).then(function () { toast('Plan deleted'); projects(); }).catch(fail);
+            });
+          };
+        });
         $('#newPlanGo').onclick = function () { var c = $('#newPlanJob').value; if (!c) return toast('Pick a job first', true); location.hash = '#plan/' + c; };
       });
     });
@@ -157,7 +187,7 @@
       S.plan = null;
       S.core = d.job.core; S.job = d.job; S.reminders = d.reminders; S.expensesEx = d.expensesEx; S.tab = tab;
       if (!d.plan) return chooser();
-      S.plan = d.plan; S.rev = d.plan.rev;
+      S.plan = normalise(d.plan); S.rev = d.plan.rev;
       render();
     });
   }
@@ -165,13 +195,13 @@
     $('#title').textContent = 'Project plan';
     var j = S.job;
     V().innerHTML = '<div class="row" style="margin-bottom:14px"><a class="btn btn-sm" href="#job/' + esc(j.core) + '">← ' + esc(j.ref) + '</a><h2 style="font-size:22px">Plan this job: ' + esc(j.name) + '</h2></div>' +
-      '<div class="card"><h2>1. Pick a starting template</h2><p class="muted" style="margin:-4px 0 12px">Each one has PMI phases (Initiating → Planning → Executing → Monitoring & controlling → Closing), tasks, resources, example unit costs and common risks. Change anything afterwards.</p>' +
-      '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<button class="tpl" data-tk="' + k + '"><b>' + esc(k === 'blank' ? 'Blank plan' : t.name) + '</b><small>' + (k === 'blank' ? 'Just the five phases and two tasks' : t.rows.length + ' tasks · ' + t.risks.length + ' risks · ' + money(t.rows.reduce(function (a, r) { return a + r[5] * r[7]; }, 0)) + ' budget') + '</small></button>'; }).join('') + '</div>' +
+      '<div class="card"><h2>1. Pick a starting template</h2><p class="muted" style="margin:-4px 0 12px">Each one has the usual tasks and milestones, example unit costs and common risks. People (resources) are left blank for you to fill in. Change anything afterwards.</p>' +
+      '<div class="tpl-grid">' + Object.keys(TEMPLATES).map(function (k) { var t = TEMPLATES[k]; return '<button class="tpl" data-tk="' + k + '"><b>' + esc(k === 'blank' ? 'Blank plan' : t.name) + '</b><small>' + (k === 'blank' ? 'Two tasks to start from' : t.rows.length + ' tasks · ' + t.risks.length + ' risks · ' + money(t.rows.reduce(function (a, r) { return a + r[5] * r[7]; }, 0)) + ' budget') + '</small></button>'; }).join('') + '</div>' +
       '<h2 style="margin-top:18px">2. Start date</h2><input type="date" id="tplStart" value="' + today() + '" style="width:auto"></div>';
     V().querySelectorAll('[data-tk]').forEach(function (b) {
       b.onclick = function () {
         S.plan = fromTemplate(b.getAttribute('data-tk'), j, $('#tplStart').value || today()); S.rev = 0; S.tab = 'schedule';
-        api('planSave', { core: S.core, plan: S.plan, rev: 0, note: 'plan created (' + b.getAttribute('data-tk') + ')' }).then(function (r) { S.plan = r.plan; S.rev = r.plan.rev; toast('Plan created'); history.replaceState(null, '', '#plan/' + S.core + '/schedule'); render(); }).catch(fail);
+        api('planSave', { core: S.core, plan: S.plan, rev: 0, note: 'plan created (' + b.getAttribute('data-tk') + ')' }).then(function (r) { S.plan = normalise(r.plan); S.rev = r.plan.rev; toast('Plan created'); history.replaceState(null, '', '#plan/' + S.core + '/schedule'); render(); }).catch(fail);
       };
     });
   }
@@ -182,7 +212,7 @@
     var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues']];
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>' +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name) + '</span><span class="sp"></span>' +
-      '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button></div>' +
+      '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
       '<div class="grid pkpis">' +
         mini('Scope', R.pct + '% complete', R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8)) +
         mini('Time', 'Finish ' + prettyY(R.finish), (R.SPI == null ? 'not started' : 'SPI ' + R.SPI) + (R.late.length ? ' · ' + R.late.length + ' late' : '') + (p.baseline && p.baseline.finish && R.finish ? ' · ' + varDays(p.baseline.finish, R.finish) : ''), R.late.length ? 'red' : rag(R.SPI, 0.95, 0.85)) +
@@ -190,6 +220,16 @@
         mini('Risks & issues', pl((p.risks || []).filter(function (r) { return r.status !== 'Closed'; }).length, 'risk') + ' · ' + pl((p.issues || []).filter(function (x) { return x.status !== 'Resolved'; }).length, 'issue'), pl((p.risks || []).filter(function (r) { return r.status !== 'Closed' && r.p * r.i >= 12; }).length, 'high risk'), (p.risks || []).some(function (r) { return r.status !== 'Closed' && r.p * r.i >= 15; }) ? 'red' : (p.issues || []).some(function (x) { return x.status !== 'Resolved' && /High|Critical/.test(x.priority); }) ? 'amber' : 'green') +
       '</div>' +
       '<div class="tabs" id="planTabs">' + tabs.map(function (t) { return '<a class="tab' + (S.tab === t[0] ? ' on' : '') + '" href="#plan/' + esc(S.core) + '/' + t[0] + '" style="text-decoration:none">' + t[1] + '</a>'; }).join('') + '</div><div id="planBody"></div>';
+    $('#planDel').onclick = function () {
+      M.confirmBox('Delete this project plan?', 'The plan “' + esc(p.name) + '” for ' + esc(S.job.ref) + ' will be deleted: tasks, dates, costs, risks and issues. The job itself, its quotes and invoices stay. This can\'t be undone.', 'Delete plan', true).then(function (ok) {
+        if (!ok) return;
+        clearTimeout(S.timer); S.timer = null;
+        var core = S.core;
+        (S.q || Promise.resolve()).then(function () { return api('planDelete', { core: core }); }).then(function () {
+          S.plan = null; S.core = ''; toast('Plan deleted'); location.hash = '#projects';
+        }).catch(fail);
+      });
+    };
     $('#planBase').onclick = function () {
       M.confirmBox(p.baseline ? 'Re-set the baseline?' : 'Set the baseline?', 'Saves today\'s planned dates and costs so you can see later how far the job moved (PMI baseline). ' + (p.baseline ? 'The old baseline from ' + M.day(p.baseline.at) + ' is replaced.' : ''), 'Set baseline').then(function (ok) {
         if (!ok) return; schedule(p); var tasks = {}; p.tasks.forEach(function (t) { tasks[t.id] = { es: t.es, ef: t.ef, cost: cost(t) }; });
@@ -201,11 +241,15 @@
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
   function mini(k, v, s, c) { return '<div class="card kpi rag-card rag-b-' + (c || 'grey') + '"><div class="k">' + esc(k) + ' <span class="dot dot-' + (c || 'grey') + '"></span></div><div class="v" style="font-size:20px">' + esc(v) + '</div><div class="s">' + esc(s) + '</div></div>'; }
-  var phaseName = function (id) { var f = S.plan.phases.filter(function (x) { return x.id === id; })[0]; return f ? f.name : ''; };
-  function ordered() {   // tasks in phase order, with their row numbers (like Microsoft Project's ID column)
-    var out = [], n = 0;
-    S.plan.phases.forEach(function (f) { S.plan.tasks.forEach(function (t) { if (t.phase === f.id) out.push({ t: t, n: ++n }); }); });
-    return out;
+  function ordered() {   // tasks in order, with their row numbers (like Microsoft Project's ID column)
+    return S.plan.tasks.map(function (t, i) { return { t: t, n: i + 1 }; });
+  }
+  function resCell(t) {
+    var r = t.res || [];
+    return '<div class="rbox">' + r.map(function (name) {
+      var lead = name === t.lead;
+      return '<span class="rchip' + (lead ? ' lead' : '') + '"><button type="button" class="rname" data-rlead="' + esc(name) + '" title="' + (lead ? 'Lead for this task' : 'Make ' + esc(name) + ' the lead') + '">' + (lead ? '★ ' : '') + esc(name) + '</button><button type="button" class="rx" data-rx="' + esc(name) + '" title="Remove">×</button></span>';
+    }).join('') + '<input class="radd" data-radd list="resList" placeholder="' + (r.length ? '+ add' : 'Type a name') + '" aria-label="Add a person or trade"></div>';
   }
 
   /* ---------- schedule grid + Gantt ---------- */
@@ -219,7 +263,6 @@
     var x = function (s) { return daysBetween(from, s) * dayW; };
     var firstW = toD(from).getUTCDay(), satOff = ((6 - firstW + 7) % 7) * dayW;
     var weekendBg = 'background-image:repeating-linear-gradient(90deg,transparent 0,transparent ' + satOff + 'px,rgba(0,0,0,.045) ' + satOff + 'px,rgba(0,0,0,.045) ' + (satOff + 2 * dayW) + 'px,transparent ' + (satOff + 2 * dayW) + 'px,transparent ' + 7 * dayW + 'px);background-size:' + 7 * dayW + 'px 100%';
-    // date scale
     var scale = '<div class="gscale" style="width:' + W + 'px">';
     for (var i = 0; i < days; i++) {
       var d = toS(new Date(toD(from).getTime() + i * 864e5)), dd = +d.slice(8), wd = toD(d).getUTCDay();
@@ -233,91 +276,105 @@
       if (!t.es) return '';
       var late = t.pct < 100 && t.ef < t0, left = x(t.es), w = (daysBetween(t.es, t.ef) + 1) * dayW;
       var b = base && base.es ? '<span class="gbase" style="left:' + x(base.es) + 'px;width:' + ((daysBetween(base.es, base.ef) + 1) * dayW) + 'px" title="Baseline"></span>' : '';
-      if (t.dur === 0) return b + '<span class="gmile' + (t.pct >= 100 ? ' done' : '') + '" style="left:' + (left + dayW / 2 - 7) + 'px" title="' + esc(t.name) + ' · ' + pretty(t.es) + '"></span><span class="glab" style="left:' + (left + dayW + 4) + 'px">' + esc(pretty(t.es)) + '</span>';
-      return b + '<span class="gbar' + (late ? ' late' : '') + (t.pct >= 100 ? ' done' : '') + '" style="left:' + left + 'px;width:' + w + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' – ' + pretty(t.ef) + ' · ' + t.pct + '%') + '"><span class="gfill" style="width:' + t.pct + '%"></span></span>' +
-        '<span class="glab" style="left:' + (left + w + 4) + 'px">' + esc(t.resource || '') + '</span>';
+      var lab = '<span class="glab" style="left:' + ((t.dur === 0 ? left + dayW : left + w) + 4) + 'px">' + (t.dur === 0 ? esc(pretty(t.es)) + ' ' : '') + '<b class="gpct">' + t.pct + '%</b> ' + esc(resShort(t)) + '</span>';
+      if (t.dur === 0) return b + '<span class="gmile' + (t.pct >= 100 ? ' done' : '') + '" style="left:' + (left + dayW / 2 - 7) + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' · ' + stName[t.status]) + '"></span>' + lab;
+      return b + '<span class="gbar st-' + t.status + (late ? ' late' : '') + '" style="left:' + left + 'px;width:' + w + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' – ' + pretty(t.ef) + ' · ' + stName[t.status] + ' ' + t.pct + '%') + '"><span class="gfill" style="width:' + t.pct + '%"></span></span>' + lab;
     };
-    var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button><button class="btn btn-sm" id="addPhase">＋ Phase</button>' +
-      '<span class="muted" style="font-size:12.5px">Days are working days (Mon–Fri). “After #” = starts when those rows finish. Tick a task when it\'s done.</span><span class="sp"></span>' +
+    var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button>' +
+      '<span class="muted" style="font-size:12.5px">Days are working days (Mon–Fri). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span><span class="sp"></span>' +
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700">Project start<input type="date" id="pStart" value="' + esc(p.start) + '" style="width:auto"></label>' +
       '<div class="tabs" style="margin:0" title="Which columns to show"><button class="tab' + (S.cols === 's' ? ' on' : '') + '" data-cols="s">📅 Dates</button><button class="tab' + (S.cols === 'c' ? ' on' : '') + '" data-cols="c">$ Costs</button><button class="tab' + (S.cols === 'a' ? ' on' : '') + '" data-cols="a">All columns</button></div>' +
       '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button></div></div>' +
-      '<div class="gwrap"><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:190px">Task</th><th>Resource</th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th>Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>%</th><th></th><th class="gcol">' + scale + '</th></tr></thead><tbody>';
-    p.phases.forEach(function (f) {
-      var ts = rows.filter(function (r) { return r.t.phase === f.id; });
-      var ps = ts.length ? ts.reduce(function (m, r) { return !m || r.t.es < m ? r.t.es : m; }, '') : '', pf = ts.reduce(function (m, r) { return r.t.ef > m ? r.t.ef : m; }, '');
-      var pc = ts.reduce(function (a, r) { return a + cost(r.t); }, 0), pa = ts.reduce(function (a, r) { return a + (Number(r.t.actual) || 0); }, 0);
-      var dw = ts.reduce(function (a, r) { return a + Math.max(1, r.t.dur); }, 0) || 1, ppct = ts.length ? Math.round(ts.reduce(function (a, r) { return a + Math.max(1, r.t.dur) * r.t.pct; }, 0) / dw) : 0;
-      html += '<tr class="gphase"><td></td><td></td><td><input class="pname" data-ph="' + esc(f.id) + '" value="' + esc(f.name) + '"></td><td></td><td></td><td>' + esc(pretty(ps)) + '</td><td>' + esc(pretty(pf)) + '</td><td></td><td></td><td></td><td></td><td class="num"><b>' + money(pc) + '</b></td><td class="num">' + money(pa) + '</td><td>' + ppct + '%</td>' +
-        '<td>' + (ts.length ? '' : '<button class="btn btn-sm" data-delph="' + esc(f.id) + '" title="Delete empty phase">✕</button>') + '</td><td class="gcol"><div class="gtrack" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + (ps ? '<span class="gsum" style="left:' + x(ps) + 'px;width:' + ((daysBetween(ps, pf) + 1) * dayW) + 'px"></span>' : '') + '</div></td></tr>';
-      ts.forEach(function (r) {
-        var t = r.t, late = t.pct < 100 && t.ef < t0, base = p.baseline && p.baseline.tasks ? p.baseline.tasks[t.id] : null;
-        html += '<tr data-tid="' + esc(t.id) + '" class="' + (t.pct >= 100 ? 'tdone' : '') + (late ? ' tlate' : '') + '"><td class="muted">' + r.n + '</td>' +
-          '<td><input type="checkbox" data-k="done"' + (t.pct >= 100 ? ' checked' : '') + ' title="Done" style="width:auto"></td>' +
-          '<td><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"></td>' +
-          '<td><input data-k="resource" value="' + esc(t.resource) + '" list="resList" style="min-width:92px;width:100px"></td>' +
-          '<td><input data-k="dur" type="number" min="0" max="365" value="' + t.dur + '" style="width:50px"></td>' +
-          '<td><input data-k="snet" type="date" value="' + esc(t.es) + '" class="' + (t.snet ? 'pinned' : '') + '" title="' + (t.snet ? 'Starts no earlier than ' + pretty(t.snet) + ' (clear the date box to remove)' : 'Worked out from the tasks before it. Pick a later date to hold it back.') + '"></td>' +
-          '<td class="nowrap">' + esc(pretty(t.ef)) + (base && base.ef && base.ef !== t.ef ? '<br><small class="' + (t.ef > base.ef ? 'bad' : 'good') + '">base ' + esc(pretty(base.ef)) + '</small>' : '') + '</td>' +
-          '<td><input data-k="pred" value="' + esc((t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', ')) + '" placeholder="e.g. 2,3" style="width:58px"></td>' +
-          '<td><input data-k="qty" inputmode="decimal" value="' + esc(t.qty || '') + '" style="width:60px"></td>' +
-          '<td><input data-k="unit" value="' + esc(t.unit || '') + '" placeholder="h, m², lot" style="width:56px"></td>' +
-          '<td><input data-k="rate" inputmode="decimal" value="' + esc(t.rate || '') + '" style="width:74px"></td>' +
-          '<td class="num">' + money(cost(t)) + '</td>' +
-          '<td><input data-k="actual" inputmode="decimal" value="' + esc(t.actual || '') + '" style="width:80px"></td>' +
-          '<td><input data-k="pct" type="number" min="0" max="100" step="5" value="' + t.pct + '" style="width:54px"></td>' +
-          '<td class="nowrap acts"><button class="btn btn-sm" data-rem title="Reminder">🔔</button><button class="btn btn-sm" data-move="-1" title="Move up">↑</button><button class="btn btn-sm" data-move="1" title="Move down">↓</button><button class="btn btn-sm" data-del title="Delete">✕</button></td>' +
-          '<td class="gcol"><div class="gtrack" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + bar(t, base) + '</div></td></tr>';
-      });
+      '<div class="gwrap"><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task</th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th>Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th><th class="gcol">' + scale + '</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      var t = r.t, late = t.pct < 100 && t.ef < t0, base = p.baseline && p.baseline.tasks ? p.baseline.tasks[t.id] : null;
+      html += '<tr data-tid="' + esc(t.id) + '" class="' + (t.pct >= 100 ? 'tdone' : '') + (late ? ' tlate' : '') + (t.dur === 0 ? ' tmile' : '') + '"><td class="muted">' + r.n + '</td>' +
+        '<td><input type="checkbox" data-k="done"' + (t.pct >= 100 ? ' checked' : '') + ' title="Done" style="width:auto"></td>' +
+        '<td><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"></td>' +
+        '<td>' + resCell(t) + '</td>' +
+        '<td><input data-k="dur" type="number" min="0" max="365" value="' + t.dur + '" style="width:50px" title="0 days = milestone"></td>' +
+        '<td><input data-k="snet" type="date" value="' + esc(t.es) + '" class="' + (t.snet ? 'pinned' : '') + '" title="' + (t.snet ? 'Starts no earlier than ' + pretty(t.snet) + ' (clear the date box to remove)' : 'Worked out from the tasks before it. Pick a later date to hold it back.') + '"></td>' +
+        '<td class="nowrap">' + esc(pretty(t.ef)) + (base && base.ef && base.ef !== t.ef ? '<br><small class="' + (t.ef > base.ef ? 'bad' : 'good') + '">base ' + esc(pretty(base.ef)) + '</small>' : '') + '</td>' +
+        '<td><input data-k="pred" value="' + esc((t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', ')) + '" placeholder="e.g. 2,3" style="width:58px"></td>' +
+        '<td><input data-k="qty" inputmode="decimal" value="' + esc(t.qty || '') + '" style="width:60px"></td>' +
+        '<td><input data-k="unit" value="' + esc(t.unit || '') + '" placeholder="h, m², lot" style="width:56px"></td>' +
+        '<td><input data-k="rate" inputmode="decimal" value="' + esc(t.rate || '') + '" style="width:74px"></td>' +
+        '<td class="num">' + money(cost(t)) + '</td>' +
+        '<td><input data-k="actual" inputmode="decimal" value="' + esc(t.actual || '') + '" style="width:80px"></td>' +
+        '<td><select data-k="status" class="stsel st-' + t.status + '">' + STATUS.map(function (x) { return '<option value="' + x[0] + '"' + (t.status === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></td>' +
+        '<td><input data-k="pct" type="number" min="0" max="100" step="1" value="' + t.pct + '" style="width:54px"></td>' +
+        '<td class="acts"><button class="btn btn-sm" data-rem title="Reminder">🔔</button><button class="btn btn-sm" data-move="-1" title="Move up">↑</button><button class="btn btn-sm" data-move="1" title="Move down">↓</button><button class="btn btn-sm" data-del title="Delete">✕</button></td>' +
+        '<td class="gcol"><div class="gtrack" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + bar(t, base) + '</div></td></tr>';
     });
-    html += '</tbody><tfoot><tr><td></td><td></td><td><b>Total (budget at completion)</b></td><td></td><td></td><td>' + esc(pretty(R.start)) + '</td><td>' + esc(pretty(R.finish)) + '</td><td></td><td></td><td></td><td></td><td class="num"><b>' + money(R.BAC) + '</b></td><td class="num"><b>' + money(R.AC) + '</b></td><td><b>' + R.pct + '%</b></td><td></td><td class="gcol"></td></tr></tfoot></table></div>' +
-      '<datalist id="resList">' + Array.from(new Set(p.tasks.map(function (t) { return t.resource; }).concat(['Sashi (PM)', 'Labourer', 'Tiler', 'Plumber', 'Electrician', 'Painter', 'Carpenter', 'Waterproofer', 'Supplier', 'Customer']))).filter(Boolean).map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist></div>';
+    if (!rows.length) html += '<tr><td colspan="17"><div class="empty">No tasks yet. Press “＋ Task”.</div></td></tr>';
+    html += '</tbody><tfoot><tr><td></td><td></td><td><b>Total (budget at completion)</b></td><td></td><td></td><td>' + esc(pretty(R.start)) + '</td><td>' + esc(pretty(R.finish)) + '</td><td></td><td></td><td></td><td></td><td class="num"><b>' + money(R.BAC) + '</b></td><td class="num"><b>' + money(R.AC) + '</b></td><td></td><td><b>' + R.pct + '%</b></td><td></td><td class="gcol"></td></tr></tfoot></table></div>' +
+      '<div class="res-tip" id="resTip" hidden><b>Tip:</b> you can add more than one person or trade. Press <kbd>Enter</kbd> or type a comma after each name. <b>★</b> = the lead: the first one added is the lead; click another name to make them the lead.</div>' +
+      '<datalist id="resList">' + Array.from(new Set([].concat.apply([], p.tasks.map(function (t) { return t.res || []; })).concat(['Labourer', 'Tiler', 'Plumber', 'Electrician', 'Painter', 'Carpenter', 'Waterproofer', 'Supplier', 'Customer']))).filter(Boolean).map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist></div>';
     $('#planBody').innerHTML = html;
     var B = $('#planBody');
     B.querySelectorAll('[data-cols]').forEach(function (b) { b.onclick = function () { S.cols = b.getAttribute('data-cols'); try { localStorage.setItem('mbsPlanCols', S.cols); } catch (e) {} render(); }; });
     B.querySelectorAll('[data-zoom]').forEach(function (b) { b.onclick = function () { S.zoom = b.getAttribute('data-zoom'); render(); }; });
     $('#pStart').onchange = function () { if (this.value) { p.start = this.value; dirty(); render(); } };
-    B.querySelectorAll('.pname').forEach(function (inp) { inp.oninput = function () { p.phases.filter(function (f) { return f.id === inp.getAttribute('data-ph'); })[0].name = inp.value; dirty(); }; });
-    B.querySelectorAll('[data-delph]').forEach(function (b) { b.onclick = function () { if (p.phases.length < 2) return toast('A plan needs at least one phase', true); p.phases = p.phases.filter(function (f) { return f.id !== b.getAttribute('data-delph'); }); dirty(); render(); }; });
     var task = function (el) { var id = el.closest('tr').getAttribute('data-tid'); return p.tasks.filter(function (t) { return t.id === id; })[0]; };
     B.querySelectorAll('tr[data-tid] [data-k]').forEach(function (el) {
       var k = el.getAttribute('data-k');
-      var live = ['name', 'resource', 'unit'].indexOf(k) >= 0;
+      var live = ['name', 'unit'].indexOf(k) >= 0;
       el.addEventListener(live ? 'input' : 'change', function () {
         var t = task(el);
-        if (k === 'done') { t.pct = el.checked ? 100 : 0; }
-        else if (k === 'pct') { t.pct = Math.max(0, Math.min(100, Math.round(+el.value || 0))); }
+        if (k === 'done') { setStatus(t, el.checked ? 'done' : 'todo'); }
+        else if (k === 'status') { setStatus(t, el.value); }
+        else if (k === 'pct') { t.pct = Math.max(0, Math.min(100, Math.round(+el.value || 0))); t.status = statusFromPct(t.pct); }
         else if (k === 'dur') { t.dur = Math.max(0, Math.min(365, Math.round(+el.value || 0))); }
         else if (k === 'snet') { t.snet = el.value || ''; }
         else if (k === 'pred') { t.pred = el.value.split(/[,\s]+/).map(function (s) { return idOf[+s]; }).filter(function (id) { return id && id !== t.id; }); }
         else if (['qty', 'rate', 'actual'].indexOf(k) >= 0) { t[k] = r2(String(el.value).replace(/[$,]/g, '')); }
         else t[k] = el.value;
-        dirty(k === 'done' ? (el.checked ? 'done: ' : 'reopened: ') + t.name : '');
+        dirty(k === 'done' || k === 'status' ? stName[t.status] + ': ' + t.name : '');
         if (!live) render();
       });
     });
+    // resources: several people per task, one lead
+    var tip = $('#resTip');
+    var addNames = function (t, text) {
+      var added = false;
+      String(text).split(',').map(function (x) { return x.trim().slice(0, 60); }).filter(Boolean).forEach(function (name) {
+        if (t.res.map(function (x) { return x.toLowerCase(); }).indexOf(name.toLowerCase()) < 0 && t.res.length < 12) { t.res.push(name); added = true; }
+      });
+      if (added) { fixRes(t); dirty(); }
+      return added;
+    };
+    B.querySelectorAll('[data-radd]').forEach(function (inp) {
+      var refocus = function () { var id = task(inp).id; render(); var n = $('#planBody tr[data-tid="' + id + '"] [data-radd]'); if (n) n.focus(); };
+      inp.addEventListener('focus', function () {
+        var rc = inp.getBoundingClientRect(); tip.hidden = false;
+        tip.style.top = (rc.bottom + 6) + 'px'; tip.style.left = Math.max(8, Math.min(rc.left, innerWidth - 340)) + 'px';
+      });
+      inp.addEventListener('blur', function () { tip.hidden = true; if (inp.value.trim() && addNames(task(inp), inp.value)) { inp.value = ''; render(); } });
+      inp.addEventListener('keydown', function (e) {
+        if ((e.key === 'Enter' || e.key === ',') && inp.value.trim()) { e.preventDefault(); if (addNames(task(inp), inp.value)) { inp.value = ''; refocus(); } else inp.value = ''; }
+        else if (e.key === 'Backspace' && !inp.value) { var t = task(inp); if (t.res.length) { t.res.pop(); fixRes(t); dirty(); refocus(); } }
+      });
+      inp.addEventListener('input', function () { if (inp.value.indexOf(',') >= 0 && addNames(task(inp), inp.value)) { inp.value = ''; refocus(); } });
+    });
+    B.querySelectorAll('[data-rlead]').forEach(function (b) { b.onclick = function () { var t = task(b); t.lead = b.getAttribute('data-rlead'); fixRes(t); dirty(); render(); }; });
+    B.querySelectorAll('[data-rx]').forEach(function (b) { b.onclick = function () { var t = task(b), n = b.getAttribute('data-rx'); t.res = t.res.filter(function (x) { return x !== n; }); fixRes(t); dirty(); render(); }; });
     B.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { var t = task(b); M.confirmBox('Delete “' + t.name + '”?', 'Tasks that come after it will no longer wait for it.', 'Delete', true).then(function (ok) { if (!ok) return; p.tasks = p.tasks.filter(function (x) { return x !== t; }); p.tasks.forEach(function (x) { x.pred = (x.pred || []).filter(function (id) { return id !== t.id; }); }); dirty(); render(); }); }; });
     B.querySelectorAll('[data-move]').forEach(function (b) {
       b.onclick = function () {
-        var t = task(b), dir = +b.getAttribute('data-move'), same = p.tasks.filter(function (x) { return x.phase === t.phase; }), i = same.indexOf(t), other = same[i + dir];
-        if (other) { var a = p.tasks.indexOf(t), c = p.tasks.indexOf(other); p.tasks[a] = other; p.tasks[c] = t; }
-        else { var fi = p.phases.map(function (f) { return f.id; }).indexOf(t.phase), nf = p.phases[fi + dir]; if (nf) t.phase = nf.id; }
-        dirty(); render();
+        var t = task(b), a = p.tasks.indexOf(t), c = a + (+b.getAttribute('data-move'));
+        if (c < 0 || c >= p.tasks.length) return;
+        p.tasks[a] = p.tasks[c]; p.tasks[c] = t; dirty(); render();
       };
     });
     B.querySelectorAll('[data-rem]').forEach(function (b) { b.onclick = function () { reminderBox(task(b)); }; });
     var add = function (mile) {
-      var ph = p.phases.filter(function (f) { return f.name === 'Executing'; })[0] || p.phases[p.phases.length - 1];
-      var last = p.tasks.filter(function (x) { return x.phase === ph.id; }).slice(-1)[0];
-      var t = { id: 't' + Date.now().toString(36), phase: ph.id, name: mile ? 'New milestone' : 'New task', dur: mile ? 0 : 1, resource: '', qty: 0, unit: '', rate: 0, actual: 0, pct: 0, pred: last ? [last.id] : [], snet: '', notes: '' };
-      var at = last ? p.tasks.indexOf(last) + 1 : p.tasks.length; p.tasks.splice(at, 0, t); dirty(); render();
+      var last = p.tasks[p.tasks.length - 1];
+      var t = { id: 't' + Date.now().toString(36), phase: 'ph1', name: mile ? 'New milestone' : 'New task', dur: mile ? 0 : 1, res: [], lead: '', resource: '', qty: 0, unit: '', rate: 0, actual: 0, pct: 0, status: 'todo', pred: last ? [last.id] : [], snet: '', notes: '' };
+      p.tasks.push(t); dirty(); render();
       setTimeout(function () { var i = $('#planBody tr[data-tid="' + t.id + '"] [data-k=name]'); if (i) { i.focus(); i.select(); } }, 30);
     };
     $('#addTask').onclick = function () { add(false); };
     $('#addMile').onclick = function () { add(true); };
-    $('#addPhase').onclick = function () { p.phases.push({ id: 'ph' + Date.now().toString(36), name: 'New phase' }); dirty(); render(); };
-    var wrap = B.querySelector('.gwrap'), td = B.querySelector('.gtoday');
-    if (wrap && td && S.firstScroll !== S.core) { S.firstScroll = S.core; }
   }
   function reminderBox(t) {
     M.modal('<h2>Reminder for “' + esc(t.name) + '”</h2><p class="muted">Sent to Telegram (everyone who gets the job alerts).</p><div class="actions" style="margin:12px 0">' +
@@ -329,28 +386,30 @@
     $('#remGo').onclick = function () { go($('#remWhen').value); };
   }
 
-  /* ---------- board (Planner style) ---------- */
+  /* ---------- board (Planner style): To do → In progress → In review / QA → Done ---------- */
   function board() {
     var p = S.plan, t0 = today();
-    var cols = [['todo', 'Not started', function (t) { return !t.pct; }], ['doing', 'In progress', function (t) { return t.pct > 0 && t.pct < 100; }], ['done', 'Done', function (t) { return t.pct >= 100; }]];
-    $('#planBody').innerHTML = '<p class="muted" style="margin:0 0 10px">Drag a card to another column, or tick it when it\'s done.</p><div class="kanban">' + cols.map(function (c) {
-      var list = ordered().filter(function (r) { return c[2](r.t); });
-      return '<div class="kcol" data-col="' + c[0] + '"><h3>' + c[1] + ' <span class="muted">' + list.length + '</span></h3>' + list.map(function (r) {
+    $('#planBody').innerHTML = '<p class="muted" style="margin:0 0 10px">Drag a card to the next column as the work moves on. The Gantt chart follows automatically: To do 0%, In progress 33%, In review / QA 67%, Done 100%.</p><div class="kanban">' + STATUS.map(function (c) {
+      var list = ordered().filter(function (r) { return r.t.status === c[0]; });
+      return '<div class="kcol kcol-' + c[0] + '" data-col="' + c[0] + '"><h3>' + c[1] + ' <span class="muted">' + list.length + ' · ' + c[2] + '%</span></h3>' + list.map(function (r) {
         var t = r.t, late = t.pct < 100 && t.ef < t0;
-        return '<div class="kcard' + (late ? ' late' : '') + '" draggable="true" data-tid="' + esc(t.id) + '"><label class="row" style="gap:8px;font-weight:700"><input type="checkbox" data-tick' + (t.pct >= 100 ? ' checked' : '') + ' style="width:auto">' + esc(t.name) + '</label>' +
-          '<small class="muted">' + esc(phaseName(t.phase)) + (t.resource ? ' · ' + esc(t.resource) : '') + '</small><small>' + esc(pretty(t.es)) + (t.dur ? ' – ' + esc(pretty(t.ef)) : ' ◆') + (late ? ' · <b style="color:#C2410C">late</b>' : '') + (cost(t) ? ' · ' + money(cost(t)) : '') + '</small>' +
-          '<div class="pbar"><span style="width:' + t.pct + '%"></span></div></div>';
+        return '<div class="kcard' + (late ? ' late' : '') + '" draggable="true" data-tid="' + esc(t.id) + '"><label class="row" style="gap:8px;font-weight:700;flex-wrap:nowrap"><input type="checkbox" data-tick' + (t.pct >= 100 ? ' checked' : '') + ' style="width:auto" title="Done">' + (t.dur === 0 ? '◆ ' : '') + esc(t.name) + '</label>' +
+          ((t.res || []).length ? '<div class="kres">' + t.res.map(function (n) { return '<span class="rchip' + (n === t.lead ? ' lead' : '') + '">' + (n === t.lead ? '★ ' : '') + esc(n) + '</span>'; }).join('') + '</div>' : '<small class="muted">No one assigned yet</small>') +
+          '<small>#' + r.n + ' · ' + esc(pretty(t.es)) + (t.dur ? ' – ' + esc(pretty(t.ef)) : '') + (late ? ' · <b style="color:#C2410C">late</b>' : '') + (cost(t) ? ' · ' + money(cost(t)) : '') + '</small>' +
+          '<div class="pbar st-' + t.status + '"><span style="width:' + t.pct + '%"></span></div>' +
+          '<div class="kmove">' + (c[0] !== 'todo' ? '<button class="btn btn-sm" data-step="-1" title="Back one column">←</button>' : '') + '<span class="muted">' + t.pct + '%</span>' + (c[0] !== 'done' ? '<button class="btn btn-sm" data-step="1" title="Next column">→</button>' : '') + '</div></div>';
       }).join('') + '</div>';
     }).join('') + '</div>';
     var B = $('#planBody'), find = function (id) { return p.tasks.filter(function (t) { return t.id === id; })[0]; };
+    var move = function (t, k) { if (!t || t.status === k) return; setStatus(t, k); dirty(stName[k] + ': ' + t.name); render(); };
     B.querySelectorAll('.kcard').forEach(function (c) { c.addEventListener('dragstart', function (e) { e.dataTransfer.setData('text/plain', c.getAttribute('data-tid')); }); });
     B.querySelectorAll('.kcol').forEach(function (col) {
       col.addEventListener('dragover', function (e) { e.preventDefault(); col.classList.add('over'); });
       col.addEventListener('dragleave', function () { col.classList.remove('over'); });
-      col.addEventListener('drop', function (e) { e.preventDefault(); col.classList.remove('over'); var t = find(e.dataTransfer.getData('text/plain')); if (!t) return; var k = col.getAttribute('data-col');
-        t.pct = k === 'done' ? 100 : k === 'todo' ? 0 : (t.pct > 0 && t.pct < 100 ? t.pct : 50); dirty(k === 'done' ? 'done: ' + t.name : ''); render(); });
+      col.addEventListener('drop', function (e) { e.preventDefault(); col.classList.remove('over'); move(find(e.dataTransfer.getData('text/plain')), col.getAttribute('data-col')); });
     });
-    B.querySelectorAll('[data-tick]').forEach(function (cb) { cb.onchange = function () { var t = find(cb.closest('.kcard').getAttribute('data-tid')); t.pct = cb.checked ? 100 : 0; dirty(cb.checked ? 'done: ' + t.name : ''); render(); }; });
+    B.querySelectorAll('[data-step]').forEach(function (b) { b.onclick = function () { var t = find(b.closest('.kcard').getAttribute('data-tid')), i = STATUS.map(function (x) { return x[0]; }).indexOf(t.status) + (+b.getAttribute('data-step')); if (STATUS[i]) move(t, STATUS[i][0]); }; });
+    B.querySelectorAll('[data-tick]').forEach(function (cb) { cb.onchange = function () { move(find(cb.closest('.kcard').getAttribute('data-tid')), cb.checked ? 'done' : 'todo'); }; });
   }
 
   /* ---------- scope (project charter) ---------- */
@@ -425,7 +484,7 @@
       '<div class="card"><h2>Time & cost (earned value)</h2><div class="table-wrap"><table><tbody>' + evm.map(function (e) { return '<tr><td>' + esc(e[0]) + '<br><small class="muted">' + esc(e[2]) + '</small></td><td class="num" style="font-weight:800;font-size:15px">' + esc(e[1]) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
         (S.expensesEx ? '<p class="muted" style="margin:10px 0 0">Expenses recorded for this job in Accounts: <b>' + money(S.expensesEx) + '</b> ex GST.</p>' : '') +
         (p.baseline ? '<p class="muted" style="margin:6px 0 0">Baseline set ' + esc(M.day(p.baseline.at)) + ': finish ' + esc(prettyY(p.baseline.finish)) + ', budget ' + money(p.baseline.BAC) + '. Now: finish ' + esc(prettyY(R.finish)) + ' (' + esc(varDays(p.baseline.finish, R.finish)) + ').</p>' : '<p class="muted" style="margin:6px 0 0">Tip: press “Set baseline” once the plan is agreed, so you can track slippage.</p>') + '</div>' +
-      '<div class="card"><h2>Next 14 days</h2>' + (coming.length ? '<div class="list">' + coming.map(function (r) { return '<div class="item"><div><b>#' + r.n + ' ' + esc(r.t.name) + '</b><br><small>' + esc(pretty(r.t.es)) + ' – ' + esc(pretty(r.t.ef)) + (r.t.resource ? ' · ' + esc(r.t.resource) : '') + '</small></div><b>' + r.t.pct + '%</b></div>'; }).join('') + '</div>' : '<div class="empty">Nothing scheduled in the next two weeks.</div>') + '</div></div>' +
+      '<div class="card"><h2>Next 14 days</h2>' + (coming.length ? '<div class="list">' + coming.map(function (r) { return '<div class="item"><div><b>#' + r.n + ' ' + esc(r.t.name) + '</b><br><small>' + esc(pretty(r.t.es)) + ' – ' + esc(pretty(r.t.ef)) + (r.t.res && r.t.res.length ? ' · ' + esc(resText(r.t)) : '') + '</small></div><b>' + r.t.pct + '%</b></div>'; }).join('') + '</div>' : '<div class="empty">Nothing scheduled in the next two weeks.</div>') + '</div></div>' +
       '<div class="grid" style="align-content:start">' +
       '<div class="card"><h2>Late tasks</h2>' + (R.late.length ? '<div class="list">' + R.late.map(function (t) { return '<div class="item"><div><b>' + esc(t.name) + '</b><br><small style="color:#C2410C">was due ' + esc(pretty(t.ef)) + '</small></div><b>' + t.pct + '%</b></div>'; }).join('') + '</div>' : '<div class="empty">Nothing late. 👍</div>') + '</div>' +
       '<div class="card"><h2>Top risks</h2>' + ((p.risks || []).filter(function (r) { return r.status !== 'Closed'; }).sort(function (a, b) { return b.p * b.i - a.p * a.i; }).slice(0, 4).map(function (r) { return '<div class="item"><div><b>' + esc(r.title || '(untitled)') + '</b><br><small>' + esc(r.response) + (r.action ? ': ' + esc(r.action) : '') + '</small></div><span class="score ' + scoreCls(r.p * r.i) + '">' + r.p * r.i + '</span></div>'; }).join('') || '<div class="empty">No open risks.</div>') + '</div>' +

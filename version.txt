@@ -1,2 +1,2 @@
-MBS website v24b (2026-10-28)
-Stress-tested: console reads in parallel, activity log written after the answer, PDF library loaded only when needed (smaller, faster cold starts), safe saving when several people change the same job / log / visitor counter at once, job list self-repair every 5 minutes. Project planner (v24), SQL wizard (v23), accounts (v22).
+MBS website v24c (2026-10-28)
+Project planner: no names filled in for you; several people per task with a lead (★); tasks and milestones only (no phases); board To do / In progress / In review / QA / Done sets the Gantt % (0 / 33 / 67 / 100); delete a plan. Speed fixes (v24b), SQL wizard (v23), accounts (v22).

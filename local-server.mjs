@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-28 v24b (faster console, safe when many people use it at once)';
+const VERSION = '2026-10-28 v24c (planner: people with a lead, To do / In progress / In review / Done board)';
 const NEEDS = [
   ['admin/admin-plan.js', 'planState'],
   ['netlify/lib/plan.mjs', 'planPost'],
