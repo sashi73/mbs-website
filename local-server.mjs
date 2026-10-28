@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-28 v25b (planner sub-tasks)';
+const VERSION = '2026-10-28 v25c (planner: resizable Gantt, Excel export)';
 const NEEDS = [
   ['netlify/lib/inventory.mjs', 'invPost'],
   ['admin/admin-inv.js', 'reorder'],

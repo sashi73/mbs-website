@@ -142,7 +142,7 @@
   }
 
   /* ---------- state + saving ---------- */
-  var S = { closed: {}, cols: (function () { try { return localStorage.getItem('mbsPlanCols') || 's'; } catch (e) { return 's'; } })(), core: '', plan: null, rev: 0, job: null, tab: 'schedule', zoom: 'day', saving: false, timer: null, reminders: [], expensesEx: 0 };
+  var S = { split: (function () { try { return +localStorage.getItem('mbsPlanSplit') || 0; } catch (e) { return 0; } })(), closed: {}, cols: (function () { try { return localStorage.getItem('mbsPlanCols') || 's'; } catch (e) { return 's'; } })(), core: '', plan: null, rev: 0, job: null, tab: 'schedule', zoom: 'day', saving: false, timer: null, reminders: [], expensesEx: 0 };
   function dirty(note) {
     $('#planSave').textContent = 'Saving…';
     clearTimeout(S.timer);
@@ -235,7 +235,7 @@
     var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues']];
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>' +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name) + '</span><span class="sp"></span>' +
-      '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
+      '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
       '<div class="grid pkpis">' +
         mini('Scope', R.pct + '% complete', R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8)) +
         mini('Time', 'Finish ' + prettyY(R.finish), (R.SPI == null ? 'not started' : 'SPI ' + R.SPI) + (R.late.length ? ' · ' + R.late.length + ' late' : '') + (p.baseline && p.baseline.finish && R.finish ? ' · ' + varDays(p.baseline.finish, R.finish) : ''), R.late.length ? 'red' : rag(R.SPI, 0.95, 0.85)) +
@@ -243,6 +243,8 @@
         mini('Risks & issues', pl((p.risks || []).filter(function (r) { return r.status !== 'Closed'; }).length, 'risk') + ' · ' + pl((p.issues || []).filter(function (x) { return x.status !== 'Resolved'; }).length, 'issue'), pl((p.risks || []).filter(function (r) { return r.status !== 'Closed' && r.p * r.i >= 12; }).length, 'high risk'), (p.risks || []).some(function (r) { return r.status !== 'Closed' && r.p * r.i >= 15; }) ? 'red' : (p.issues || []).some(function (x) { return x.status !== 'Resolved' && /High|Critical/.test(x.priority); }) ? 'amber' : 'green') +
       '</div>' +
       '<div class="tabs" id="planTabs">' + tabs.map(function (t) { return '<a class="tab' + (S.tab === t[0] ? ' on' : '') + '" href="#plan/' + esc(S.core) + '/' + t[0] + '" style="text-decoration:none">' + t[1] + '</a>'; }).join('') + '</div><div id="planBody"></div>';
+    $('#planWide').onclick = function () { document.body.classList.toggle('plan-wide'); render(); };
+    $('#planXls').onclick = function () { exportExcel(); };
     $('#planDel').onclick = function () {
       M.confirmBox('Delete this project plan?', 'The plan “' + esc(p.name) + '” for ' + esc(S.job.ref) + ' will be deleted: tasks, dates, costs, risks and issues. The job itself, its quotes and invoices stay. This can\'t be undone.', 'Delete plan', true).then(function (ok) {
         if (!ok) return;
@@ -318,7 +320,8 @@
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700">Project start<input type="date" id="pStart" value="' + esc(p.start) + '" style="width:auto"></label>' +
       '<div class="tabs" style="margin:0" title="Which columns to show"><button class="tab' + (S.cols === 's' ? ' on' : '') + '" data-cols="s">📅 Dates</button><button class="tab' + (S.cols === 'c' ? ' on' : '') + '" data-cols="c">$ Costs</button><button class="tab' + (S.cols === 'a' ? ' on' : '') + '" data-cols="a">All columns</button></div>' +
       '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button></div></div>' +
-      '<div class="gwrap"><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task</th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th>Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th><th class="gcol">' + scale + '</th></tr></thead><tbody>';
+      '<div class="gsplit" id="gSplit"><div class="gpane gleft" id="gLeft"' + (S.split ? ' style="flex:0 0 ' + S.split + 'px;max-width:none"' : '') + '><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task</th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th>Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th></tr></thead><tbody>';
+    var G = '';   // rows of the Gantt pane (kept the same height as the grid rows)
     rows.forEach(function (r) {
       var t = r.t, late = t.pct < 100 && t.ef < t0, base = p.baseline && p.baseline.tasks ? p.baseline.tasks[t.id] : null;
       var subs = t.subs || [], open = subs.length && !S.closed[t.id];
@@ -339,7 +342,8 @@
         '<td><select data-k="status" class="stsel st-' + t.status + '"' + (subs.length ? ' title="Setting this moves all its sub-tasks too"' : '') + '>' + STATUS.map(function (x) { return '<option value="' + x[0] + '"' + (t.status === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></td>' +
         '<td><input data-k="pct" type="number" min="0" max="100" step="1" value="' + t.pct + '" style="width:54px"' + (subs.length ? ' disabled title="Worked out from the sub-tasks"' : '') + '></td>' +
         '<td class="acts"><button class="btn btn-sm" data-rem title="Reminder">🔔</button><button class="btn btn-sm" data-move="-1" title="Move up">↑</button><button class="btn btn-sm" data-move="1" title="Move down">↓</button><button class="btn btn-sm" data-del title="Delete">✕</button></td>' +
-        '<td class="gcol"><div class="gtrack" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + bar(t, base) + '</div></td></tr>';
+        '</tr>';
+      G += '<tr data-gtid="' + esc(t.id) + '"><td class="gcol"><div class="gtrack" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + bar(t, base) + '</div></td></tr>';
       if (open) subs.forEach(function (sb, j) {
         var d = subDates(t, sb), sl = sb.status !== 'done' && d.ef && d.ef < t0, maxDur = Math.max(1, t.dur) - sb.off;
         var left = d.es ? x(d.es) : 0, sw = d.es ? (daysBetween(d.es, d.ef) + 1) * dayW : 0;
@@ -354,15 +358,19 @@
           '<td><select data-sk="status" class="stsel st-' + sb.status + '">' + STATUS.map(function (o) { return '<option value="' + o[0] + '"' + (sb.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></td>' +
           '<td class="muted">' + stPct[sb.status] + '</td>' +
           '<td class="acts"><button class="btn btn-sm" data-smove="-1" title="Move up">↑</button><button class="btn btn-sm" data-smove="1" title="Move down">↓</button><button class="btn btn-sm" data-sdel title="Delete sub-task">✕</button></td>' +
-          '<td class="gcol"><div class="gtrack gtrack-sub" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + (d.es ? '<span class="gsub st-' + sb.status + (sl ? ' late' : '') + '" style="left:' + left + 'px;width:' + sw + 'px" title="' + esc(sb.name + ' · ' + pretty(d.es) + ' – ' + pretty(d.ef) + ' · ' + stName[sb.status]) + '"><span class="gfill" style="width:' + stPct[sb.status] + '%"></span></span><span class="glab" style="left:' + (left + sw + 4) + 'px">' + esc(sb.owner || '') + '</span>' : '') + '</div></td></tr>';
+          '</tr>';
+        G += '<tr data-gsid="' + esc(sb.id) + '" data-gptid="' + esc(t.id) + '"><td class="gcol"><div class="gtrack gtrack-sub" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + (d.es ? '<span class="gsub st-' + sb.status + (sl ? ' late' : '') + '" style="left:' + left + 'px;width:' + sw + 'px" title="' + esc(sb.name + ' · ' + pretty(d.es) + ' – ' + pretty(d.ef) + ' · ' + stName[sb.status]) + '"><span class="gfill" style="width:' + stPct[sb.status] + '%"></span></span><span class="glab" style="left:' + (left + sw + 4) + 'px">' + esc(sb.owner || '') + '</span>' : '') + '</div></td></tr>';
       });
     });
-    if (!rows.length) html += '<tr><td colspan="17"><div class="empty">No tasks yet. Press “＋ Task”.</div></td></tr>';
-    html += '</tbody><tfoot><tr><td></td><td></td><td><b>Total (budget at completion)</b></td><td></td><td></td><td>' + esc(pretty(R.start)) + '</td><td>' + esc(pretty(R.finish)) + '</td><td></td><td></td><td></td><td></td><td class="num"><b>' + money(R.BAC) + '</b></td><td class="num"><b>' + money(R.AC) + '</b></td><td></td><td><b>' + R.pct + '%</b></td><td></td><td class="gcol"></td></tr></tfoot></table></div>' +
+    if (!rows.length) { html += '<tr><td colspan="16"><div class="empty">No tasks yet. Press “＋ Task”.</div></td></tr>'; G += '<tr><td class="gcol"></td></tr>'; }
+    html += '</tbody><tfoot><tr><td></td><td></td><td><b>Total (budget at completion)</b></td><td></td><td></td><td>' + esc(pretty(R.start)) + '</td><td>' + esc(pretty(R.finish)) + '</td><td></td><td></td><td></td><td></td><td class="num"><b>' + money(R.BAC) + '</b></td><td class="num"><b>' + money(R.AC) + '</b></td><td></td><td><b>' + R.pct + '%</b></td><td></td></tr></tfoot></table></div>' +
+      '<div class="gsplitter" id="gSplitter" title="Drag to make the task list or the Gantt chart wider (double-click to reset)"><span></span></div>' +
+      '<div class="gpane gright" id="gRight"><table class="gt gtr"><thead><tr><th class="gcol">' + scale + '</th></tr></thead><tbody>' + G + '</tbody><tfoot><tr><td class="gcol"></td></tr></tfoot></table></div></div>' +
       '<div class="res-tip" id="resTip" hidden><b>Tip:</b> you can add more than one person or trade. Press <kbd>Enter</kbd> or type a comma after each name. <b>★</b> = the lead: the first one added is the lead; click another name to make them the lead.</div>' +
       '<datalist id="resList">' + Array.from(new Set([].concat.apply([], p.tasks.map(function (t) { return t.res || []; })).concat(['Labourer', 'Tiler', 'Plumber', 'Electrician', 'Painter', 'Carpenter', 'Waterproofer', 'Supplier', 'Customer']))).filter(Boolean).map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist></div>';
     $('#planBody').innerHTML = html;
     var B = $('#planBody');
+    splitPanes(x(t0));
     B.querySelectorAll('[data-cols]').forEach(function (b) { b.onclick = function () { S.cols = b.getAttribute('data-cols'); try { localStorage.setItem('mbsPlanCols', S.cols); } catch (e) {} render(); }; });
     B.querySelectorAll('[data-zoom]').forEach(function (b) { b.onclick = function () { S.zoom = b.getAttribute('data-zoom'); render(); }; });
     $('#pStart').onchange = function () { if (this.value) { p.start = this.value; dirty(); render(); } };
@@ -471,6 +479,262 @@
     };
     $('#addTask').onclick = function () { add(false); };
     $('#addMile').onclick = function () { add(true); };
+  }
+
+  /* ---------- export the whole plan to Excel (one formatted tab per section) ---------- */
+  var xlsLib = null;
+  function loadXls() {
+    if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+    if (!xlsLib) xlsLib = new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = 'vendor/exceljs.min.js?v=440'; sc.onload = function () { res(window.ExcelJS); }; sc.onerror = function () { xlsLib = null; rej(new Error('Could not load the Excel tool. Check your connection and try again.')); }; document.head.appendChild(sc); });
+    return xlsLib;
+  }
+  function exportExcel() {
+    var btn = $('#planXls'); if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
+    var done = function () { var b = $('#planXls'); if (b) { b.disabled = false; b.textContent = '⬇ Excel'; } };
+    (S.timer ? saveNow() : Promise.resolve()).then(loadXls).then(function (XL) { return buildWorkbook(XL); }).then(function (wb) { return wb.xlsx.writeBuffer(); }).then(function (buf) {
+      var name = 'MBS-plan-' + (S.job.ref || S.core) + '-' + today() + '.xlsx';
+      var url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      var a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      S.lastExport = name; toast('Excel downloaded: ' + name);
+    }).catch(fail).then(done);
+  }
+  function buildWorkbook(XL) {
+    var p = JSON.parse(JSON.stringify(S.plan)), t0 = today(), R = rollup(p, t0), job = S.job;
+    schedule(p);
+    var wb = new XL.Workbook(); wb.creator = 'MBS Console'; wb.created = new Date(); wb.title = p.name;
+    var INK = 'FF151515', GOLD = 'FFC9A227', GOLDSOFT = 'FFFBF4DC', GREY = 'FF6B675E', LINE = 'FFE4E0D6', WHITE = 'FFFFFFFF';
+    var STC = { todo: 'FFE5E7EB', doing: 'FFDBEAFE', review: 'FFEDE9FE', done: 'FFDCFCE7' }, STB = { todo: 'FF9CA3AF', doing: 'FF2563EB', review: 'FF7C3AED', done: 'FF16A34A' };
+    var fill = function (c) { return { type: 'pattern', pattern: 'solid', fgColor: { argb: c } }; };
+    var thin = { style: 'thin', color: { argb: LINE } }, box = { top: thin, left: thin, bottom: thin, right: thin };
+    var D = function (s) { if (!s) return null; var a = s.split('-').map(Number); return new Date(Date.UTC(a[0], a[1] - 1, a[2])); };
+    var money$ = '"$"#,##0.00', dateF = 'd mmm yyyy';
+    var titleBlock = function (ws, title, cols) {
+      ws.mergeCells(1, 1, 1, cols); var c = ws.getCell(1, 1); c.value = title; c.font = { bold: true, size: 16, color: { argb: INK } };
+      ws.mergeCells(2, 1, 2, cols); var d = ws.getCell(2, 1);
+      d.value = p.name + '  ·  ' + (job.ref || '') + (job.name ? '  ·  ' + job.name : '') + (job.suburb ? ', ' + job.suburb : '') + '  ·  exported ' + prettyY(t0);
+      d.font = { size: 10, color: { argb: GREY } };
+      ws.getRow(1).height = 24;
+    };
+    var header = function (ws, rowNo, labels) {
+      var r = ws.getRow(rowNo); r.values = labels; r.height = 22;
+      r.eachCell(function (c) { c.font = { bold: true, color: { argb: WHITE } }; c.fill = fill(INK); c.alignment = { vertical: 'middle', wrapText: true }; c.border = box; });
+      return r;
+    };
+    var footer = function (ws, rowNo) { var c = ws.getCell(rowNo, 1); c.value = 'Modern Building Solutions · MBS Console · ' + prettyY(t0); c.font = { size: 9, italic: true, color: { argb: GREY } }; };
+    var ragFill = function (c) { return fill(c === 'green' ? 'FFDCFCE7' : c === 'amber' ? 'FFFEF3C7' : c === 'red' ? 'FFFDE2D8' : 'FFF1EEE6'); };
+    var num = {}; p.tasks.forEach(function (t, i) { num[t.id] = i + 1; });
+
+    /* 1. Overview */
+    var ov = wb.addWorksheet('Overview', { views: [{ showGridLines: false }] });
+    ov.columns = [{ width: 34 }, { width: 22 }, { width: 50 }];
+    titleBlock(ov, 'Project overview', 3);
+    var openRisks = (p.risks || []).filter(function (r) { return r.status !== 'Closed'; }), openIssues = (p.issues || []).filter(function (x) { return x.status !== 'Resolved'; });
+    header(ov, 4, ['Status', 'Value', 'Notes']);
+    var kp = [
+      ['Scope: % complete', R.pct / 100, R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8), '0%'],
+      ['Time: planned finish', D(R.finish), (R.SPI == null ? 'not started' : 'SPI ' + R.SPI) + (R.late.length ? ' · ' + R.late.length + ' late task' + (R.late.length === 1 ? '' : 's') : ''), R.late.length ? 'red' : rag(R.SPI, 0.95, 0.85), dateF],
+      ['Cost: spent so far (actual)', R.AC, 'of ' + money(R.BAC) + ' budget' + (R.CPI == null ? '' : ' · CPI ' + R.CPI + ' · forecast ' + money(R.EAC)), rag(R.CPI, 0.95, 0.85), money$],
+      ['Risks open (high)', openRisks.length, openRisks.filter(function (r) { return r.p * r.i >= 12; }).length + ' high risk(s)', openRisks.some(function (r) { return r.p * r.i >= 15; }) ? 'red' : 'green', '0'],
+      ['Issues open', openIssues.length, openIssues.filter(function (x) { return /High|Critical/.test(x.priority); }).length + ' high or critical', openIssues.some(function (x) { return /High|Critical/.test(x.priority); }) ? 'amber' : 'green', '0']
+    ];
+    kp.forEach(function (k, i) { var r = ov.getRow(5 + i); r.values = [k[0], k[1], k[2]]; r.getCell(2).numFmt = k[4]; r.getCell(2).font = { bold: true }; r.eachCell(function (c) { c.border = box; c.fill = ragFill(k[3]); }); });
+    header(ov, 11, ['Earned value (time & cost)', 'Value', 'What it means']);
+    var ev = [['Budget at completion (BAC)', R.BAC, 'Total planned cost', money$], ['Planned value (PV)', R.PV, 'Work that should be done by today', money$], ['Earned value (EV)', R.EV, 'Work actually done (cost × % complete)', money$],
+      ['Actual cost (AC)', R.AC, 'Money spent so far', money$], ['Schedule performance (SPI = EV ÷ PV)', R.SPI, R.SPI == null ? '' : R.SPI >= 1 ? 'on or ahead of schedule' : 'behind schedule', '0.00'],
+      ['Cost performance (CPI = EV ÷ AC)', R.CPI, R.CPI == null ? '' : R.CPI >= 1 ? 'on or under budget' : 'over budget', '0.00'], ['Forecast final cost (EAC = BAC ÷ CPI)', R.EAC, '', money$]];
+    ev.forEach(function (e, i) { var r = ov.getRow(12 + i); r.values = [e[0], e[1] == null ? '–' : e[1], e[2]]; r.getCell(2).numFmt = e[3]; r.eachCell(function (c) { c.border = box; }); });
+    var rr = 20;
+    ov.getCell(rr, 1).value = 'Project start'; ov.getCell(rr, 2).value = D(R.start); ov.getCell(rr, 2).numFmt = dateF;
+    ov.getCell(rr + 1, 1).value = 'Planned finish'; ov.getCell(rr + 1, 2).value = D(R.finish); ov.getCell(rr + 1, 2).numFmt = dateF;
+    if (p.baseline) { ov.getCell(rr + 2, 1).value = 'Baseline finish (set ' + M.day(p.baseline.at) + ')'; ov.getCell(rr + 2, 2).value = D(p.baseline.finish); ov.getCell(rr + 2, 2).numFmt = dateF; ov.getCell(rr + 2, 3).value = varDays(p.baseline.finish, R.finish); ov.getCell(rr + 3, 1).value = 'Baseline budget'; ov.getCell(rr + 3, 2).value = p.baseline.BAC; ov.getCell(rr + 3, 2).numFmt = money$; }
+    if (R.late.length) { var lr = rr + 5; ov.getCell(lr, 1).value = 'Late tasks'; ov.getCell(lr, 1).font = { bold: true }; R.late.forEach(function (t, i) { ov.getCell(lr + 1 + i, 1).value = t.name; ov.getCell(lr + 1 + i, 2).value = D(t.ef); ov.getCell(lr + 1 + i, 2).numFmt = dateF; ov.getCell(lr + 1 + i, 3).value = t.pct + '% done, was due ' + prettyY(t.ef); ov.getRow(lr + 1 + i).font = { color: { argb: 'FFB42318' } }; }); rr = lr + R.late.length + 1; }
+    footer(ov, rr + 7);
+
+    /* 2. Schedule (tasks + sub-tasks grouped under them) */
+    var sc = wb.addWorksheet('Schedule', { views: [{ state: 'frozen', xSplit: 2, ySplit: 4 }], properties: { outlineProperties: { summaryBelow: false } } });
+    var cols = ['#', 'Task / sub-task', 'People (lead first)', 'Lead', 'Days', 'Start', 'Finish', 'After #', 'Qty', 'Unit', 'Unit $', 'Cost', 'Actual $', 'Status', '% complete', 'Late', 'Stock item'];
+    sc.columns = [6, 40, 28, 14, 7, 13, 13, 9, 8, 8, 11, 13, 12, 15, 11, 7, 26].map(function (w) { return { width: w }; });
+    titleBlock(sc, 'Schedule', cols.length);
+    header(sc, 4, cols);
+    var row = 5, first = 5;
+    p.tasks.forEach(function (t, i) {
+      var late = t.pct < 100 && t.ef && t.ef < t0, it = invItem(t.item);
+      var r = sc.getRow(row);
+      r.values = [i + 1, (t.dur === 0 ? '◆ ' : '') + t.name, resText(t), t.lead || '', t.dur, D(t.es), D(t.ef), (t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', '),
+        Number(t.qty) || 0, t.unit || '', Number(t.rate) || 0, { formula: 'I' + row + '*K' + row, result: cost(t) }, Number(t.actual) || 0, stName[t.status], (t.pct || 0) / 100, late ? 'Yes' : '', it ? it.name : (t.item || '')];
+      r.font = { bold: !!(t.subs && t.subs.length), color: late ? { argb: 'FFB42318' } : undefined };
+      [6, 7].forEach(function (c) { r.getCell(c).numFmt = dateF; }); [11, 12, 13].forEach(function (c) { r.getCell(c).numFmt = money$; }); r.getCell(15).numFmt = '0%';
+      r.getCell(14).fill = fill(STC[t.status]); r.eachCell({ includeEmpty: true }, function (c) { c.border = box; c.alignment = { vertical: 'top', wrapText: c.col === 2 || c.col === 3 }; });
+      row++;
+      (t.subs || []).forEach(function (sb, j) {
+        var d = subDates(t, sb), sl = sb.status !== 'done' && d.ef && d.ef < t0, s2 = sc.getRow(row);
+        s2.values = [(i + 1) + '.' + (j + 1), '    ↳ ' + sb.name, sb.owner || '', '', sb.dur, D(d.es), D(d.ef), 'in #' + (i + 1), null, null, null, null, null, stName[sb.status], stPct[sb.status] / 100, sl ? 'Yes' : '', ''];
+        s2.outlineLevel = 1; s2.font = { size: 10, color: { argb: sl ? 'FFB42318' : 'FF4A463D' } };
+        [6, 7].forEach(function (c) { s2.getCell(c).numFmt = dateF; }); s2.getCell(15).numFmt = '0%'; s2.getCell(14).fill = fill(STC[sb.status]);
+        s2.eachCell({ includeEmpty: true }, function (c) { c.border = box; c.fill = c.col === 14 ? c.fill : fill('FFFCFBF8'); });
+        row++;
+      });
+    });
+    var tot = sc.getRow(row);
+    tot.values = ['', 'Total (budget at completion)', '', '', '', D(R.start), D(R.finish), '', '', '', '', { formula: 'SUBTOTAL(9,L' + first + ':L' + (row - 1) + ')', result: R.BAC }, { formula: 'SUBTOTAL(9,M' + first + ':M' + (row - 1) + ')', result: R.AC }, '', R.pct / 100, '', ''];
+    tot.font = { bold: true }; [6, 7].forEach(function (c) { tot.getCell(c).numFmt = dateF; }); [12, 13].forEach(function (c) { tot.getCell(c).numFmt = money$; }); tot.getCell(15).numFmt = '0%';
+    tot.eachCell({ includeEmpty: true }, function (c) { c.fill = fill(GOLDSOFT); c.border = box; });
+    sc.autoFilter = { from: { row: 4, column: 1 }, to: { row: row - 1, column: cols.length } };
+    footer(sc, row + 2);
+
+    /* 3. Gantt (one column per working day, or per week for long jobs) */
+    var gs = wb.addWorksheet('Gantt', { views: [{ state: 'frozen', xSplit: 5, ySplit: 5, showGridLines: false }] });
+    var startS = R.start || t0, endS = R.finish || t0, days = [], dd = startS;
+    if (t0 < startS) startS = t0;
+    var guard = 0; dd = nextWork(startS); while (dd <= endS && guard++ < 400) { days.push(dd); dd = addWork(dd, 1); }
+    var weekly = days.length > 90, slots = weekly ? days.filter(function (x, i) { return i === 0 || toD(x).getUTCDay() === 1; }) : days;
+    var slotOf = function (s) { if (!weekly) return days.indexOf(s); var k = -1; slots.forEach(function (x, i) { if (x <= s) k = i; }); return k; };
+    gs.columns = [{ width: 6 }, { width: 34 }, { width: 11 }, { width: 11 }, { width: 7 }].concat(slots.map(function () { return { width: weekly ? 4 : 3.2 }; }));
+    titleBlock(gs, 'Gantt chart (' + (weekly ? 'weeks' : 'working days') + ')', Math.min(5 + slots.length, 30));
+    var mRow = gs.getRow(4), dRow = gs.getRow(5);
+    dRow.values = ['#', 'Task', 'Start', 'Finish', '%'].concat(slots.map(function (x) { return +x.slice(8); }));
+    dRow.eachCell(function (c) { c.font = { bold: true, size: c.col > 5 ? 8 : 10, color: { argb: WHITE } }; c.fill = fill(INK); c.alignment = { horizontal: 'center', vertical: 'middle' }; });
+    var lastM = '';
+    slots.forEach(function (x, i) { var m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+x.slice(5, 7) - 1] + ' ' + x.slice(2, 4); if (m !== lastM) { mRow.getCell(6 + i).value = m; mRow.getCell(6 + i).font = { bold: true, size: 9 }; lastM = m; } if (x === t0 || (weekly && slotOf(t0) === i)) { dRow.getCell(6 + i).fill = fill('FFC2410C'); } });
+    var gr = 6;
+    var paint = function (r, es, ef, status, late, light) {
+      if (!es) return; var a = slotOf(es), b = slotOf(ef);
+      for (var k = Math.max(0, a); k <= b && k < slots.length; k++) { var c = r.getCell(6 + k); c.fill = fill(late ? 'FFFCA5A5' : light ? STC[status] : STB[status]); }
+    };
+    var tCol = slotOf(t0);
+    p.tasks.forEach(function (t, i) {
+      var r = gs.getRow(gr), late = t.pct < 100 && t.ef && t.ef < t0;
+      r.values = [i + 1, (t.dur === 0 ? '◆ ' : '') + t.name, D(t.es), D(t.ef), (t.pct || 0) / 100];
+      r.getCell(3).numFmt = 'd mmm'; r.getCell(4).numFmt = 'd mmm'; r.getCell(5).numFmt = '0%'; r.font = { bold: !!(t.subs && t.subs.length), size: 10 };
+      if (tCol >= 0) r.getCell(6 + tCol).border = { left: { style: 'thin', color: { argb: 'FFC2410C' } } };
+      if (t.dur === 0) { var mc = r.getCell(6 + Math.max(0, slotOf(t.es))); mc.value = '◆'; mc.font = { bold: true, color: { argb: t.pct >= 100 ? 'FF16A34A' : INK } }; mc.alignment = { horizontal: 'center' }; }
+      else paint(r, t.es, t.ef, t.status, late, false);
+      gr++;
+      (t.subs || []).forEach(function (sb, j) {
+        var d = subDates(t, sb), s2 = gs.getRow(gr);
+        s2.values = [(i + 1) + '.' + (j + 1), '    ↳ ' + sb.name, D(d.es), D(d.ef), stPct[sb.status] / 100];
+        s2.getCell(3).numFmt = 'd mmm'; s2.getCell(4).numFmt = 'd mmm'; s2.getCell(5).numFmt = '0%'; s2.font = { size: 9, color: { argb: 'FF4A463D' } }; s2.outlineLevel = 1;
+        paint(s2, d.es, d.ef, sb.status, sb.status !== 'done' && d.ef < t0, true); gr++;
+      });
+    });
+    var legend = gs.getRow(gr + 1);
+    legend.getCell(2).value = 'Colours: grey To do · blue In progress · purple In review / QA · green Done · red late · ◆ milestone · orange header = today'; legend.getCell(2).font = { size: 9, italic: true, color: { argb: GREY } };
+    footer(gs, gr + 3);
+
+    /* 4. Board */
+    var bd = wb.addWorksheet('Board', { views: [{ state: 'frozen', ySplit: 4, showGridLines: false }] });
+    bd.columns = STATUS.map(function () { return { width: 38 }; });
+    titleBlock(bd, 'Board', 4);
+    var bh = header(bd, 4, STATUS.map(function (x) { return x[1] + ' (' + x[2] + '%)'; }));
+    STATUS.forEach(function (x, i) { bh.getCell(i + 1).fill = fill(STB[x[0]]); });
+    STATUS.forEach(function (x, ci) {
+      var list = p.tasks.filter(function (t) { return t.status === x[0]; });
+      list.forEach(function (t, ri) {
+        var lines = [(t.dur === 0 ? '◆ ' : '') + t.name, (resShort(t) || 'No one assigned') + ' · ' + pretty(t.es) + (t.dur ? ' – ' + pretty(t.ef) : '') + ' · ' + t.pct + '%'];
+        (t.subs || []).forEach(function (sb) { lines.push((sb.status === 'done' ? '☑ ' : '☐ ') + sb.name + (sb.owner ? ' (' + sb.owner + ')' : '')); });
+        var c = bd.getCell(5 + ri, ci + 1); c.value = lines.join('\n'); c.alignment = { wrapText: true, vertical: 'top' }; c.border = box; c.fill = fill(STC[x[0]]);
+        var h = 16 * lines.length + 6; if ((bd.getRow(5 + ri).height || 0) < h) bd.getRow(5 + ri).height = h;
+        if (t.pct < 100 && t.ef < t0) c.font = { color: { argb: 'FFB42318' } };
+      });
+    });
+    footer(bd, 6 + Math.max.apply(null, STATUS.map(function (x) { return p.tasks.filter(function (t) { return t.status === x[0]; }).length; }).concat([1])));
+
+    /* 5. Scope (project charter) */
+    var sp = wb.addWorksheet('Scope', { views: [{ showGridLines: false }] });
+    sp.columns = [{ width: 30 }, { width: 90 }];
+    titleBlock(sp, 'Project charter (scope)', 2);
+    var c = p.charter || {};
+    header(sp, 4, ['Item', 'Details']);
+    [['Plan name', p.name], ['Customer (sponsor)', c.customer], ['Project manager', c.manager], ['Approved budget', c.budget ? Number(c.budget) : ''], ['Planned cost (BAC)', R.BAC], ['Objective', c.objective], ['In scope', c.inScope], ['Out of scope', c.outScope], ['Deliverables', c.deliverables], ['Acceptance criteria', c.acceptance], ['Assumptions & constraints', c.assumptions]]
+      .forEach(function (x, i) { var r = sp.getRow(5 + i); r.values = [x[0], x[1] == null ? '' : x[1]]; r.getCell(1).font = { bold: true }; r.getCell(1).fill = fill(GOLDSOFT); r.getCell(2).alignment = { wrapText: true, vertical: 'top' }; if (typeof x[1] === 'number') r.getCell(2).numFmt = money$; r.eachCell(function (cc) { cc.border = box; }); var len = String(x[1] || '').length; if (len > 90) r.height = 15 * Math.ceil(len / 90) + 4; });
+    footer(sp, 18);
+
+    /* 6. Risks (register + heat map) */
+    var rk = wb.addWorksheet('Risks', { views: [{ state: 'frozen', ySplit: 4 }] });
+    rk.columns = [6, 38, 30, 11, 9, 8, 12, 44, 16, 13, 10].map(function (w) { return { width: w }; });
+    titleBlock(rk, 'Risk register', 11);
+    header(rk, 4, ['#', 'Risk', 'Cause / trigger', 'Probability (1-5)', 'Impact (1-5)', 'Score', 'Response', 'Action', 'Owner', 'Review date', 'Status']);
+    var scoreFill = function (sv) { return fill(sv >= 15 ? 'FFFDE2D8' : sv >= 8 ? 'FFFEF3C7' : 'FFDCFCE7'); };
+    (p.risks || []).forEach(function (r, i) {
+      var x = rk.getRow(5 + i), sv = r.p * r.i;
+      x.values = [i + 1, r.title, r.cause, r.p, r.i, { formula: 'D' + (5 + i) + '*E' + (5 + i), result: sv }, r.response, r.action, r.owner, D(r.review), r.status];
+      x.getCell(6).fill = scoreFill(sv); x.getCell(6).font = { bold: true }; x.getCell(10).numFmt = dateF;
+      x.eachCell({ includeEmpty: true }, function (cc) { cc.border = box; cc.alignment = { vertical: 'top', wrapText: [2, 3, 8].indexOf(cc.col) >= 0 }; });
+      if (r.status === 'Closed') x.font = { color: { argb: 'FF8A867C' }, strike: true };
+    });
+    var hm = 7 + (p.risks || []).length;
+    rk.getCell(hm, 2).value = 'Heat map: open risks (probability down, impact across)'; rk.getCell(hm, 2).font = { bold: true };
+    for (var pr = 5; pr >= 1; pr--) {
+      var hr = rk.getRow(hm + 1 + (5 - pr)); hr.getCell(3).value = 'P' + pr; hr.getCell(3).alignment = { horizontal: 'right' };
+      for (var im = 1; im <= 5; im++) { var n = openRisks.filter(function (r) { return r.p === pr && r.i === im; }).length, cc = hr.getCell(3 + im); cc.value = n || ''; cc.fill = scoreFill(pr * im); cc.border = box; cc.alignment = { horizontal: 'center' }; cc.font = { bold: true }; }
+    }
+    var ix = rk.getRow(hm + 6); for (var im2 = 1; im2 <= 5; im2++) { ix.getCell(3 + im2).value = 'I' + im2; ix.getCell(3 + im2).alignment = { horizontal: 'center' }; }
+    footer(rk, hm + 8);
+
+    /* 7. Issues */
+    var is = wb.addWorksheet('Issues', { views: [{ state: 'frozen', ySplit: 4 }] });
+    is.columns = [6, 38, 40, 11, 16, 13, 13, 13, 44].map(function (w) { return { width: w }; });
+    titleBlock(is, 'Issue log', 9);
+    header(is, 4, ['#', 'Issue', 'Details', 'Priority', 'Owner', 'Raised', 'Due', 'Status', 'Resolution']);
+    var prFill = { Low: 'FFDCFCE7', Medium: 'FFFEF3C7', High: 'FFFED7AA', Critical: 'FFFDE2D8' };
+    (p.issues || []).forEach(function (x, i) {
+      var r = is.getRow(5 + i), overdue = x.status !== 'Resolved' && x.due && x.due < t0;
+      r.values = [i + 1, x.title, x.detail, x.priority, x.owner, D(x.raised), D(x.due), x.status, x.resolution];
+      r.getCell(4).fill = fill(prFill[x.priority] || 'FFF1EEE6'); [6, 7].forEach(function (cc) { r.getCell(cc).numFmt = dateF; });
+      if (overdue) r.getCell(7).font = { bold: true, color: { argb: 'FFB42318' } };
+      r.eachCell({ includeEmpty: true }, function (cc) { cc.border = box; cc.alignment = { vertical: 'top', wrapText: [2, 3, 9].indexOf(cc.col) >= 0 }; });
+      if (x.status === 'Resolved') r.font = { color: { argb: 'FF8A867C' } };
+    });
+    if (!(p.issues || []).length) is.getCell(5, 2).value = 'No issues logged.';
+    footer(is, 7 + (p.issues || []).length);
+
+    /* 8. Materials from stock (only when tasks use stock items) */
+    var by = {};
+    p.tasks.forEach(function (t) { if (!t.item) return; var b = by[t.item] = by[t.item] || { need: 0, used: 0, tasks: [] }; if (t.status === 'done') b.used += Number(t.qty) || 0; else b.need += Number(t.qty) || 0; b.tasks.push(t.name); });
+    if (Object.keys(by).length) {
+      var mt = wb.addWorksheet('Materials', { views: [{ state: 'frozen', ySplit: 4 }] });
+      mt.columns = [34, 10, 12, 12, 14, 12, 40].map(function (w) { return { width: w }; });
+      titleBlock(mt, 'Materials from stock', 7);
+      header(mt, 4, ['Stock item', 'Unit', 'Still needed', 'Used', 'Available now', 'Unit price', 'Tasks']);
+      Object.keys(by).forEach(function (id, i) {
+        var it = invItem(id) || { name: id, unit: '', available: '', price: 0 }, b = by[id], r = mt.getRow(5 + i);
+        r.values = [it.name, it.unit, b.need, b.used, it.available, it.price || 0, b.tasks.join(', ')]; r.getCell(6).numFmt = money$;
+        if (typeof it.available === 'number' && it.available < 0) r.getCell(5).font = { bold: true, color: { argb: 'FFB42318' } };
+        r.eachCell({ includeEmpty: true }, function (cc) { cc.border = box; cc.alignment = { vertical: 'top', wrapText: cc.col === 7 }; });
+      });
+    }
+    wb.eachSheet(function (ws) { ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 }; });
+    return wb;
+  }
+
+  /* ---------- the grid and the Gantt chart side by side, with a divider you can drag ---------- */
+  function splitPanes(todayX) {
+    var L = $('#gLeft'), Rt = $('#gRight'), bar = $('#gSplitter'), box = $('#gSplit');
+    if (!L || !Rt) return;
+    var sync = function () {
+      var pairs = [[L.querySelector('thead tr'), Rt.querySelector('thead tr')], [L.querySelector('tfoot tr'), Rt.querySelector('tfoot tr')]];
+      var lr = L.querySelectorAll('tbody tr'), rr = Rt.querySelectorAll('tbody tr');
+      for (var i = 0; i < lr.length; i++) pairs.push([lr[i], rr[i]]);
+      pairs.forEach(function (pr) { if (!pr[0] || !pr[1]) return; pr[0].style.height = pr[1].style.height = ''; });
+      pairs.forEach(function (pr) { if (!pr[0] || !pr[1]) return; var tk = pr[1].querySelector('.gtrack'); if (tk) tk.style.height = ''; });
+      pairs.forEach(function (pr) { if (!pr[0] || !pr[1]) return; var h = Math.max(pr[0].getBoundingClientRect().height, pr[1].getBoundingClientRect().height); pr[0].style.height = pr[1].style.height = h + 'px'; var tk = pr[1].querySelector('.gtrack'); if (tk) tk.style.height = (h - 1) + 'px'; });
+    };
+    sync();
+    if (window.ResizeObserver) { if (S.ro) S.ro.disconnect(); S.ro = new ResizeObserver(function () { window.requestAnimationFrame(sync); }); S.ro.observe(L.querySelector('table')); }
+    var lock = false;
+    L.addEventListener('scroll', function () { if (lock) { lock = false; return; } lock = true; Rt.scrollTop = L.scrollTop; });
+    Rt.addEventListener('scroll', function () { if (lock) { lock = false; return; } lock = true; L.scrollTop = Rt.scrollTop; });
+    if (S.scrollX != null && S.scrollCore === S.core) Rt.scrollLeft = S.scrollX; else { Rt.scrollLeft = Math.max(0, todayX - 140); S.scrollCore = S.core; }
+    Rt.addEventListener('scroll', function () { S.scrollX = Rt.scrollLeft; });
+    bar.addEventListener('pointerdown', function (e) {
+      e.preventDefault(); bar.setPointerCapture(e.pointerId); box.classList.add('dragging');
+      var x0 = box.getBoundingClientRect().left, maxW = box.getBoundingClientRect().width - 140;
+      var moveTo = function (ev) { var w = Math.max(220, Math.min(maxW, ev.clientX - x0)); L.style.flex = '0 0 ' + w + 'px'; L.style.maxWidth = 'none'; S.split = Math.round(w); };
+      var up = function () { bar.removeEventListener('pointermove', moveTo); bar.removeEventListener('pointerup', up); box.classList.remove('dragging'); try { localStorage.setItem('mbsPlanSplit', S.split); } catch (er) {} sync(); };
+      bar.addEventListener('pointermove', moveTo); bar.addEventListener('pointerup', up);
+    });
+    bar.addEventListener('dblclick', function () { S.split = 0; try { localStorage.removeItem('mbsPlanSplit'); } catch (er) {} L.style.flex = ''; L.style.maxWidth = ''; sync(); });
   }
   function reminderBox(t) {
     M.modal('<h2>Reminder for “' + esc(t.name) + '”</h2><p class="muted">Sent to Telegram (everyone who gets the job alerts).</p><div class="actions" style="margin:12px 0">' +
@@ -679,6 +943,6 @@
 
   M.addView('projects', 'Projects', projects);
   M.addView('plan', 'Project plan', planView, 'projects');
-  window.addEventListener('hashchange', function () { if (S.timer && !/^#plan\//.test(location.hash)) saveNow(); });
+  window.addEventListener('hashchange', function () { if (!/^#plan\//.test(location.hash)) { document.body.classList.remove('plan-wide'); if (S.timer) saveNow(); } });
   window.MBS.planState = S;   // for tests
 })();

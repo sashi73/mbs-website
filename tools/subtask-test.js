@@ -53,8 +53,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const subRows = await p.$$eval(`tr[data-ptid="${strip.id}"]`, (rs) => rs.map((r) => r.cells[0].textContent.trim()));
     ok('Grid', 'sub-tasks show under their task, numbered like 6.1, 6.2, 6.3', subRows.length === 3 && /^\d+\.1$/.test(subRows[0]) && /^\d+\.3$/.test(subRows[2]), subRows.join(','));
     const inside = async (tid) => p.evaluate((tid) => {
-      const tr = document.querySelector(`tr[data-tid="${tid}"]`), pb = tr.querySelector('.gbar').getBoundingClientRect();
-      return [...document.querySelectorAll(`tr[data-ptid="${tid}"]`)].every((r) => { const s = r.querySelector('.gsub').getBoundingClientRect(); return s.left >= pb.left - 1 && s.right <= pb.right + 1; })
+      const tr = document.querySelector(`tr[data-gtid="${tid}"]`), pb = tr.querySelector('.gbar').getBoundingClientRect();
+      return [...document.querySelectorAll(`tr[data-gptid="${tid}"]`)].every((r) => { const s = r.querySelector('.gsub').getBoundingClientRect(); return s.left >= pb.left - 1 && s.right <= pb.right + 1; })
         && [...document.querySelectorAll(`tr[data-ptid="${tid}"] [data-sk=start]`)].every((i) => i.value >= i.min && i.value <= i.max);
     }, tid);
     ok('Boundary', 'every sub-task date and Gantt bar is inside its task\'s bar', await inside(strip.id) && await inside(tile.id));

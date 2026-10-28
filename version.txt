@@ -1,2 +1,2 @@
-MBS website v25b (2026-10-28)
-Project planner sub-tasks: break a task into steps with an owner, start and days, always inside the task's dates (they move with it and are shortened if the task gets shorter); costs stay on the task; the task's % and status come from its sub-tasks; board cards show a sub-task checklist; SQL table plan_subtasks. Inventory & suppliers (v25).
+MBS website v25c (2026-10-28)
+Project planner: task list and Gantt chart side by side with a divider you can drag (remembered), "Wide view" hides the menu; "Excel" downloads the whole plan as a formatted workbook: Overview, Schedule (sub-tasks grouped), Gantt (coloured bars per working day), Board, Scope, Risks (with heat map), Issues, Materials. Sub-tasks (v25b), inventory (v25).
