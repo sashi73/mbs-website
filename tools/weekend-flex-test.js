@@ -11,8 +11,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const dmy = (x) => x.slice(8, 10) + '/' + x.slice(5, 7) + '/' + x.slice(0, 4);
 const dow = (s) => new Date(s + 'T00:00:00Z').getUTCDay();
 
-let asked = null;
+let asked = null, failAi = false;
 const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) => c.push(d)); req.on('end', () => {
+  if (failAi) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end('{"error":{"message":"down"}}'); return; }
   const body = JSON.parse(Buffer.concat(c).toString() || '{}'), user = JSON.parse(body.messages[1].content);
   asked = user;
   const out = { can_fit: false, summary: 'Nothing safe to change.', changes: [], tips: [], risks: [] };   // the AI finds nothing: the weekend option must still be offered
@@ -60,6 +61,9 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     const s1 = await p.locator('.dbox:has(#tplStart)').boundingBox(), w1 = await p.locator('.pdates label:has(#tplWeek)').boundingBox();
     ok('New plan', 'the "Weekends (Sat, Sun) allowed" tick box is in the same row as the dates and Emergency', w1 && s1 && w1.y < s1.y + 80);
     await p.selectOption('#tplType', 'deck-timber'); await p.click('#tplCreate'); await p.waitForSelector('table.gt');
+    await p.locator('#planBody .card').first().screenshot({ path: path.join(__dirname, 'shot42-toolbar.png') }).catch(() => {});
+    const yS = (await p.locator('.dbox:has(#pStart)').boundingBox()).y, yW = (await p.locator('.dbox:has(#pWork)').boundingBox()).y, yF = (await p.locator('.dbox:has(#pFinishBy)').boundingBox()).y, yV = (await p.locator('[data-cols="s"]').boundingBox()).y;
+    ok('Layout', 'Project start, Work starts and Finish by on one line; Dates/Costs/All columns/Days/Weeks on their own line below', Math.abs(yS - yW) < 4 && Math.abs(yW - yF) < 4 && yV > yF + 20, JSON.stringify([yS, yW, yF, yV]));
     let st = await stored();
     ok('New plan', 'not ticked: the plan is weekdays only', st.weekends === false && !(await p.isChecked('#pWeek')));
     const fWeekdays = await finishOf();
@@ -75,38 +79,42 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     await p.uncheck('#pWeek'); await saved();
     ok('Schedule', 'untick: back to weekdays only and the old finish', (await stored()).weekends === false && (await finishOf()) === fWeekdays);
 
-    // ---------- Finish by earlier than the weekday finish, but reachable with weekends ----------
+    // ---------- v42: an earlier Finish by re-plans straight away (the stand-in AI finds nothing safe to change) ----------
     const fb = fWeekend;   // weekends make it exactly; weekdays are late
     await p.fill('.dbox:has(#pFinishBy) .dtext', dmy(fb)); await p.press('.dbox:has(#pFinishBy) .dtext', 'Enter');
-    await p.waitForSelector('.fitopts', { timeout: 8000 });
-    const mt = await p.textContent('#modalBody');
-    ok('Late', 'setting an earlier Finish by asks what to do straight away', /The plan now finishes/.test(mt) && /late for your Finish by/.test(mt));
-    ok('Late', 'choices: Fit with AI (crashing and fast-tracking), Allow weekends (with its finish date), Move Finish by, Keep', /Fit it with AI/.test(mt) && /Crashing/.test(mt) && /fast-tracking/.test(mt) && new RegExp('Allow weekends \\(Sat, Sun\\)Finishes ' + dmy(fWeekend).replace(/\//g, '\\/') + ': on time').test(mt.replace(/\s+/g, ' ').replace(/\) Finishes/, ')Finishes')) && /Move Finish by/.test(mt) && /Keep it as it is/.test(mt), mt.slice(0, 500));
-    await p.screenshot({ path: path.join(__dirname, 'shot40-late.png') });
-    await p.click('#aoWeek'); await saved();
-    ok('Late', '"Allow weekends": ticked, saved, and the plan is on time (no second question)', (await stored()).weekends === true && /on time/.test(await p.textContent('.fitbar')) && !(await p.isVisible('.fitopts')));
-
-    // unticking makes it late again: asked again; this time move the Finish by
-    await p.uncheck('#pWeek'); await p.waitForSelector('.fitopts', { timeout: 8000 });
-    ok('Late', 'untick weekends: late again, so it asks again', /weekend work changed/i.test(await p.textContent('#modalBody')));
-    await p.click('#aoKeep').catch(async () => { await p.click('.fitopts [data-close]'); });
-    await sleep(300); await saved();
-    ok('Late', '"Keep it as it is": nothing changes, the late bar offers ✨ Fit and 📅 Allow weekends', /late/.test(await p.textContent('.fitbar')) && await p.isVisible('#fitGo') && /Allow weekends: finishes/.test(await p.textContent('#fitWeek')));
-
-    // ---------- the AI finds nothing: the preview still offers weekends ----------
-    await p.click('#fitGo'); await p.waitForSelector('#fitUseWeek', { timeout: 30000 });
+    await p.waitForSelector('#fitMove', { timeout: 30000 });
     const pv = await p.textContent('#modalBody');
+    ok('Re-plan', 'an earlier Finish by goes straight to new dates (no extra question first)', /New dates to finish by/.test(pv));
     ok('AI', 'the AI is told whether weekends are allowed', asked && asked.weekends_allowed === false);
-    ok('AI', 'no safe changes found, but the preview says weekends would make it on time', /Allowing weekends \(Sat, Sun\) on top of the plan would finish/.test(pv) && /on time/.test(pv), pv.slice(0, 400));
+    ok('Re-plan', 'nothing safe to change, so it offers weekends (on time), Move Finish by and Keep', /Allowing weekends \(Sat, Sun\) on top of the plan would finish/.test(pv) && /on time/.test(pv) && await p.isVisible('#fitUseWeek') && /Move Finish by to/.test(pv), pv.slice(0, 400));
+    await p.screenshot({ path: path.join(__dirname, 'shot42-replan.png') });
     await p.click('#fitUseWeek'); await saved();
-    ok('AI', '"Allow weekends" from the preview: ticked and on time, with Undo', (await stored()).weekends === true && /on time/.test(await p.textContent('.fitbar')) && await p.isVisible('#fitUndo'));
+    ok('Re-plan', '"Allow weekends": ticked, saved, on time, with Undo', (await stored()).weekends === true && /on time/.test(await p.textContent('.fitbar')) && await p.isVisible('#fitUndo'));
     await p.click('#fitUndo'); await saved();
-    ok('AI', 'Undo puts weekdays back', (await stored()).weekends === false);
+    ok('Re-plan', 'Undo puts weekdays back', (await stored()).weekends === false);
 
-    // ---------- Move Finish by ----------
+    // "Keep it as it is"
     await p.fill('.dbox:has(#pFinishBy) .dtext', dmy(P.prevWork(fb))); await p.press('.dbox:has(#pFinishBy) .dtext', 'Enter');
-    await p.waitForSelector('#aoMove', { timeout: 8000 }); await p.click('#aoMove'); await saved();
-    ok('Late', '"Move Finish by" sets it to the planned finish', (await stored()).finishBy === fWeekdays);
+    await p.waitForSelector('#fitMove', { timeout: 30000 }); await p.click('#modalBody [data-close]'); await sleep(300); await saved();
+    ok('Re-plan', '"Keep it as it is": nothing changes, the late bar offers ✨ Fit and 📅 Allow weekends', /late/.test(await p.textContent('.fitbar')) && await p.isVisible('#fitGo') && /Allow weekends: finishes/.test(await p.textContent('#fitWeek')));
+
+    // "Move Finish by"
+    await p.click('#fitGo'); await p.waitForSelector('#fitMove', { timeout: 30000 }); await p.click('#fitMove'); await saved();
+    ok('Re-plan', '"Move Finish by" sets it to the planned finish', (await stored()).finishBy === fWeekdays);
+
+    // the AI is not available: the built-in re-plan shortens critical tasks (crashing), never the protected ones
+    failAi = true;
+    await p.fill('.dbox:has(#pFinishBy) .dtext', dmy(P.prevWork(P.prevWork(fWeekdays)))); await p.press('.dbox:has(#pFinishBy) .dtext', 'Enter');
+    await p.waitForSelector('#fitMove', { timeout: 30000 });
+    const lv = await p.textContent('#modalBody');
+    ok('Built-in', 'AI not available: the plan is re-worked here instead (crashing), and it says so', /isn't available right now/.test(lv) && /critical tasks shortened with more crew/.test(lv) && await p.isVisible('#fitUse'), lv.slice(0, 300));
+    const before2 = await stored();
+    await p.click('#fitUse'); await saved();
+    const after2 = await stored(), fNow = await finishOf();
+    const changed = after2.tasks.filter((x) => x.dur !== before2.tasks.find((y) => y.id === x.id).dur);
+    ok('Built-in', 'it finishes by the new date, by shortening some tasks', fNow <= after2.finishBy && changed.length > 0, fNow + ' vs ' + after2.finishBy);
+    ok('Built-in', 'no protected task shortened, none below half its days', changed.every((x) => !/(council|approv|permit|order|deliver|cur(e|ing)|inspect|test|quote)/i.test(x.name) && x.dur >= Math.ceil(before2.tasks.find((y) => y.id === x.id).dur / 2)), changed.map((x) => x.name).join(', '));
+    failAi = false;
 
     // ---------- Work starts: shorter cooling-off instead of a refusal ----------
     await p.fill('.dbox:has(#pFinishBy) .dtext', ''); await p.press('.dbox:has(#pFinishBy) .dtext', 'Enter'); await saved();

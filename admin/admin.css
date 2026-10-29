@@ -627,3 +627,8 @@ input.predoff{text-decoration:line-through;color:#A8A397}
 .fitopts{display:grid;gap:8px;margin:10px 0 4px}
 .fitopts .btn{display:grid!important;justify-items:start!important;justify-content:start!important;text-align:left!important;width:100%;gap:2px;padding:10px 14px;height:auto;white-space:normal}
 .fitopts .btn small{font-weight:500;opacity:.8;font-size:12.5px}
+
+/* v42: Schedule tab: the three dates on their own line, the view buttons on the next */
+.phint{flex:1 1 100%}
+.pdline{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:#FBF8F1}
+.pviews{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:10px}

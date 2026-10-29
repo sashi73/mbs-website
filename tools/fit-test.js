@@ -74,8 +74,7 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     const before = JSON.stringify(st.tasks.map((t) => [t.id, t.dur, t.pred]));
     await p.locator('.qgate').screenshot({ path: path.join(__dirname, 'shot38-late.png') }).catch(() => {}); await p.locator('.fitbar').screenshot({ path: path.join(__dirname, 'shot38-latebar.png') });
 
-    ok('Finish by', 'v40: an earlier Finish by asks straight away what to do (Fit with AI, weekends, move, keep)', await p.isVisible('#aoFit') && await p.isVisible('#aoMove'));
-    await p.click('#aoFit');   // ✨ Fit it with AI, from that question
+    // v42: an earlier Finish by goes straight to the AI re-plan (no click needed)
     await p.waitForSelector('#fitUse', { timeout: 30000 });
     ok('AI', 'the AI is told which tasks are critical and which are locked', lastAsk && lastAsk.days_late === 2 && lastAsk.tasks.some((t) => t.crit) && lastAsk.tasks.find((t) => /inspection/i.test(t.n)).locked === true);
     ok('AI', 'no customer details are sent to the AI, and task names stay intact ("Lay tiles" for a customer called Tina Tiles)', !JSON.stringify(lastAsk).includes('Tina') && !JSON.stringify(lastAsk).includes('0400 111 222') && lastAsk.tasks.some((t) => t.n === 'Lay tiles'), JSON.stringify(lastAsk.tasks.map((t) => t.n)));
