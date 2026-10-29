@@ -99,14 +99,14 @@ export async function allocations(onlyIds = null) {
 }
 
 // write an item's summary into the index; send the Telegram alert once when it becomes low
-async function reindex(ids, by = '') {
+async function reindex(ids, by = '', opts = {}) {
   if (!ids.length) return [];
   const alloc = await allocations(ids), idx = await index(), newlyLow = [];
   for (const id of ids) {
     let it = await kv.get('inv:' + id);
     if (!it) continue;
     const st = status(it, (alloc[id] || {}).qty || 0);
-    if (st.low && !it.alerted && !it.archived) newlyLow.push(id);
+    if (st.low && !it.alerted && !it.archived && !opts.quiet) newlyLow.push(id);
     if ((st.low && !it.alerted) || (!st.low && it.alerted)) it = await kv.update('inv:' + id, (x) => { x.alerted = st.low; return x; }, null);
     idx.items[id] = itemSummary(it, (alloc[id] || {}).qty || 0, idx);
   }
@@ -287,6 +287,111 @@ export async function rebuild(by) {
   return items.length + suppliers.length;
 }
 
+// ---------- v44: 📊 insights for stock and suppliers (figures worked out here; ✨ AI analysis on top) ----------
+const DAY = 864e5;
+export async function insights(now = Date.now()) {
+  const { items, suppliers } = await full();
+  const alloc = await allocations(), idx = await index(), day0 = today();
+  const supById = Object.fromEntries(suppliers.map((s) => [s.id, s]));
+  let jobs = {};
+  try { const J = await import('./jobs.mjs'); jobs = Object.fromEntries((await J.all()).map((j) => [j.core, j])); } catch {}
+  const live = items.filter((i) => !i.archived);
+  const usedIn = (it, days) => r2((it.moves || []).filter((m) => (m.kind === 'out' || m.kind === 'plan') && m.qty < 0 && m.at >= now - days * DAY).reduce((a, m) => a - m.qty, 0));
+  const rows = live.map((it) => {
+    const a = (alloc[it.id] || {}).qty || 0, st = status(it, a), b = bestPrice(it), price = b.price || 0;
+    const u90 = usedIn(it, 90), u180 = usedIn(it, 180), lastOut = Math.max(0, ...(it.moves || []).filter((m) => (m.kind === 'out' || m.kind === 'plan') && m.qty < 0).map((m) => m.at));
+    const v = validPrices(it, day0), pref = v.find((p) => p.supplier === it.preferred), cheap = v.slice().sort((x, y) => x.price - y.price)[0];
+    const yearly = u180 * 2 || Number(it.reorderQty) || 0;
+    const saving = pref && cheap && cheap.price < pref.price ? { per: r2(pref.price - cheap.price), year: r2((pref.price - cheap.price) * yearly), from: it.preferred, to: cheap.supplier } : null;
+    return { id: it.id, name: it.name, category: it.category || 'Other', unit: it.unit, location: it.location || '', onHand: q3(it.onHand), available: st.available, low: st.low, state: st.state,
+      reorderLevel: it.reorderLevel, price, value: r2((it.onHand || 0) * price), supplier: b.supplier, used90: u90, used180: u180, usedValue90: r2(u90 * price), usedValue180: r2(u180 * price),
+      cover: u90 > 0 ? Math.round(st.available / (u90 / 90)) : null, lastOut, onOrder: it.onOrder || null, saving,
+      expired: (it.prices || []).filter((p) => p.validUntil && p.validUntil < day0).length, expiring: (it.prices || []).filter((p) => p.validUntil && p.validUntil >= day0 && p.validUntil <= new Date(now + 30 * DAY).toISOString().slice(0, 10)).map((p) => ({ supplier: p.supplier, until: p.validUntil, price: p.price })) };
+  });
+  const sum = (l, f) => r2(l.reduce((a, x) => a + f(x), 0));
+  const byCat = {};
+  for (const r of rows) { const c = byCat[r.category] = byCat[r.category] || { category: r.category, items: 0, value: 0, used90: 0, low: 0 }; c.items++; c.value = r2(c.value + r.value); c.used90 = r2(c.used90 + r.usedValue90); if (r.low) c.low++; }
+  // usage per month (last 6) and where the stock went (job suburbs)
+  const months = {}, bySub = {};
+  for (const it of live) {
+    const price = bestPrice(it).price || 0;
+    for (const m of it.moves || []) {
+      if (!((m.kind === 'out' || m.kind === 'plan') && m.qty < 0) || m.at < now - 183 * DAY) continue;
+      const mk = new Date(m.at + 10 * 3600e3).toISOString().slice(0, 7); months[mk] = r2((months[mk] || 0) - m.qty * price);
+      const j = m.job && (jobs[m.job] || Object.values(jobs).find((x) => x.ref === m.job));
+      if (j && j.suburb) { const s = bySub[j.suburb] = bySub[j.suburb] || { suburb: j.suburb, value: 0, moves: 0, jobs: new Set(), items: {} }; s.value = r2(s.value - m.qty * price); s.moves++; s.jobs.add(j.core); s.items[it.name] = r2((s.items[it.name] || 0) - m.qty * price); }
+    }
+  }
+  const supRows = suppliers.filter((s) => !s.archived).map((s) => {
+    const pref = rows.filter((r) => r.supplier === s.id), quoted = live.filter((i) => (i.prices || []).some((p) => p.supplier === s.id));
+    return { id: s.id, name: s.name, address: s.address || '', categories: s.categories || '', terms: s.terms || '', phone: !!s.phone, email: !!s.email,
+      items: pref.length, quoted: quoted.length, stockValue: sum(pref, (r) => r.value), spend180: sum(pref, (r) => r.usedValue180), low: pref.filter((r) => r.low).length,
+      onOrder: live.filter((i) => i.onOrder && i.onOrder.supplier === s.id).length };
+  });
+  const spendAll = sum(supRows, (s) => s.spend180), topSup = supRows.slice().sort((a, b) => b.spend180 - a.spend180);
+  const orders = rows.filter((r) => r.onOrder && r.onOrder.qty > 0).map((r) => ({ id: r.id, name: r.name, qty: r.onOrder.qty, unit: r.unit, supplier: (supById[r.onOrder.supplier] || {}).name || '', expected: r.onOrder.expected || '', overdue: !!(r.onOrder.expected && r.onOrder.expected < day0) }));
+  const dead = rows.filter((r) => r.onHand > 0 && (!r.lastOut || r.lastOut < now - 120 * DAY)).sort((a, b) => b.value - a.value);
+  return {
+    today: day0,
+    totals: { items: rows.length, suppliers: supRows.length, value: sum(rows, (r) => r.value), low: rows.filter((r) => r.low).length, onOrder: orders.length, overdue: orders.filter((o) => o.overdue).length,
+      used90: sum(rows, (r) => r.usedValue90), dead: dead.length, deadValue: sum(dead, (r) => r.value), savingYear: sum(rows.filter((r) => r.saving), (r) => r.saving.year),
+      expired: rows.filter((r) => r.expired).length, expiring: rows.filter((r) => r.expiring.length).length, topShare: spendAll ? Math.round((topSup[0] ? topSup[0].spend180 : 0) / spendAll * 100) : 0, noEmail: supRows.filter((s) => !s.email).length },
+    categories: Object.values(byCat).sort((a, b) => b.value - a.value),
+    months: Object.fromEntries(Object.entries(months).sort().slice(-6)),
+    fast: rows.filter((r) => r.usedValue90 > 0).sort((a, b) => b.usedValue90 - a.usedValue90).slice(0, 10),
+    atRisk: rows.filter((r) => r.low || (r.cover != null && r.cover < 21)).sort((a, b) => (a.cover ?? -1) - (b.cover ?? -1)).slice(0, 15),
+    dead: dead.slice(0, 12), over: rows.filter((r) => r.cover != null && r.cover > 365 && r.value > 150).sort((a, b) => b.value - a.value).slice(0, 10),
+    savings: rows.filter((r) => r.saving && r.saving.year > 0).sort((a, b) => b.saving.year - a.saving.year).slice(0, 10).map((r) => ({ ...r, fromName: (supById[r.saving.from] || {}).name || '', toName: (supById[r.saving.to] || {}).name || '' })),
+    expiring: rows.filter((r) => r.expiring.length).slice(0, 12).map((r) => ({ id: r.id, name: r.name, quotes: r.expiring.map((e) => ({ ...e, name: (supById[e.supplier] || {}).name || '' })) })),
+    orders: orders.sort((a, b) => (a.expected > b.expected ? 1 : -1)),
+    suppliers: topSup,
+    suburbs: Object.values(bySub).map((s) => ({ suburb: s.suburb, value: s.value, moves: s.moves, jobs: s.jobs.size, top: Object.entries(s.items).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, v]) => ({ name: n, value: v })) })).sort((a, b) => b.value - a.value)
+  };
+}
+async function analyse(I) {   // ✨ the AI reads the figures (supplier business names, no personal details)
+  if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.' };
+  try { await checkLimit(); } catch (e) { return { error: e.message, code: 429 }; }
+  const pick = (l, n, f) => l.slice(0, n).map(f);
+  const agg = { today: I.today, totals: I.totals, categories: I.categories, usage_by_month: I.months,
+    fast_movers: pick(I.fast, 8, (r) => ({ item: r.name, used_90_days: r.used90, unit: r.unit, value: r.usedValue90, days_of_cover: r.cover })),
+    running_low: pick(I.atRisk, 10, (r) => ({ item: r.name, available: r.available, reorder_at: r.reorderLevel, days_of_cover: r.cover })),
+    dead_stock: pick(I.dead, 8, (r) => ({ item: r.name, value: r.value })), overstocked: pick(I.over, 6, (r) => ({ item: r.name, value: r.value, days_of_cover: r.cover })),
+    cheaper_elsewhere: pick(I.savings, 8, (r) => ({ item: r.name, from: r.fromName, to: r.toName, saving_per_year: r.saving.year })),
+    suppliers: pick(I.suppliers, 12, (s) => ({ supplier: s.name, items: s.items, spend_6_months: s.spend180, stock_value: s.stockValue, terms: s.terms, low_items: s.low, has_email: s.email })),
+    orders: pick(I.orders, 10, (o) => ({ item: o.name, expected: o.expected, overdue: o.overdue })), top_suburbs_using_stock: pick(I.suburbs, 8, (s) => ({ suburb: s.suburb, value: s.value, jobs: s.jobs })) };
+  try {
+    const { data: o, used } = await llmJson([
+      { role: 'system', content: 'You are an operations and purchasing analyst for a small Sydney building, repair and maintenance company. Using ONLY these stock and supplier figures, write in plain Australian English: a 2-3 sentence summary, 4-6 insights with the key figures (stock value, running low, dead or over stock, fast movers, cheaper suppliers, supplier concentration, overdue orders, where stock is used), and 3-5 practical recommendations (what to re-order, what to stop buying, which supplier to switch or negotiate with, how much cash to free up). JSON only: {"summary":"","insights":[""],"recommendations":[""]}' },
+      { role: 'user', content: JSON.stringify(agg) }], { maxTokens: Math.max(300, Math.min(1500, Number(env('AI_INVENTORY_MAX_TOKENS', '800')) || 800)), temperature: 0.3 });
+    const today2 = await usage(true, used);
+    const list2 = (x, n) => (Array.isArray(x) ? x : []).slice(0, n).map((v) => str(v, 400)).filter(Boolean);
+    return { summary: str(o.summary, 800), insights: list2(o.insights, 6), recommendations: list2(o.recommendations, 5), tokens: used, today: today2 };
+  } catch (e) { return { error: e.message, code: e.mbs && e.code ? e.code : 502 }; }
+}
+// test site only: load sample suppliers / items in one go (no Telegram alerts; stock movements can be back-dated)
+export async function testLoad(body, by) {
+  if (String(env('SITE_ENV', '')).trim().toLowerCase() !== 'test') return { error: 'Test data can only be loaded on the test site.', code: 403 };
+  if (body.kind === 'suppliers') {
+    const ids = {};
+    for (const s of (Array.isArray(body.suppliers) ? body.suppliers : []).slice(0, 30)) { const r = await saveSupplier(s, by); if (r.supplier) ids[str(s.code, 20)] = r.supplier.id; }
+    return { ids };
+  }
+  if (body.kind === 'items') {
+    const made = [], now = Date.now();
+    for (const f of (Array.isArray(body.items) ? body.items : []).slice(0, 30)) {
+      const nid = await nextId('I'), c = cleanItem(f);
+      const moves = (Array.isArray(f.moves) ? f.moves : []).slice(0, 120).map((m, i) => ({ id: 'm' + nid + i, at: Math.min(now, Math.max(now - 400 * DAY, Number(m.at) || now)), kind: ['in', 'out', 'count', 'order'].includes(m.kind) ? m.kind : 'count',
+        qty: q3(m.qty), reason: str(m.reason, 160), job: str(m.job, 40), by })).sort((a, b) => b.at - a.at);
+      const it = { ...c, id: nid, onHand: Math.max(0, q3(f.onHand)), onOrder: f.onOrder && f.onOrder.qty > 0 ? { qty: q3(f.onOrder.qty), supplier: str(f.onOrder.supplier, 12), at: Number(f.onOrder.at) || now, expected: ymd(f.onOrder.expected), via: str(f.onOrder.via, 20) || 'phone', by } : null,
+        alerted: false, created: moves.length ? moves[moves.length - 1].at : now, updated: now, by, moves };
+      await kv.set('inv:' + nid, it); made.push(nid);
+    }
+    await reindex(made, by, { quiet: true });
+    return { ids: made };
+  }
+  return { error: 'Unknown test data' };
+}
+
 export async function invPost(action, body, { who, by, audit }) {
   const id = str(body.id, 12);
   const log = (t) => (audit ? audit(who, t) : null);
@@ -311,6 +416,9 @@ export async function invPost(action, body, { who, by, audit }) {
     }
     case 'supSave': { const r = await saveSupplier(body.supplier || {}, by); if (r.error) return out(400, r); await log(`Supplier ${r.supplier.id} ${r.supplier.name} saved`); return out(200, r); }
     case 'supGet': { const s = await kv.get('sup:' + id); return s ? out(200, { supplier: s }) : out(404, { error: 'Supplier not found' }); }
+    case 'invInsights': return out(200, await insights());
+    case 'invAnalyse': { const r = await analyse(await insights()); if (r.error) return out(r.code || 400, r); await log(`AI inventory and supplier analysis (${r.tokens} tokens)`); return out(200, r); }
+    case 'invTestLoad': { const r = await testLoad(body, by); if (r.error) return out(r.code || 400, r); await log(`Test data loaded: ${body.kind} (${Object.keys(r.ids).length || r.ids.length})`); return out(200, r); }
     case 'invRebuild': { const n = await rebuild(by); await log(`Inventory list rebuilt (${n} records)`); return out(200, { ok: true, n }); }
     default: return null;
   }

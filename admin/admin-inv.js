@@ -23,7 +23,7 @@
 
   /* ---------- pages ---------- */
   function page(args) {
-    if (args && args[0] === 'suppliers') S.tab = 'suppliers';
+    if (args && ['suppliers', 'insights', 'map'].indexOf(args[0]) >= 0) S.tab = args[0];
     else if (args && args[0]) S.tab = 'items';
     return load().then(function () { draw(); if (args && /^I-\d+$/.test(args[0] || '')) editItem(args[0]); });
   }
@@ -33,15 +33,153 @@
     var d = S.data, low = d.items.filter(function (i) { return i.low && !i.archived; });
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><div class="tabs" style="margin:0">' +
         '<button class="tab' + (S.tab === 'items' ? ' on' : '') + '" data-itab="items">📦 Stock items <b>' + d.items.filter(function (i) { return !i.archived; }).length + '</b></button>' +
-        '<button class="tab' + (S.tab === 'suppliers' ? ' on' : '') + '" data-itab="suppliers">🏭 Suppliers <b>' + d.suppliers.filter(function (s) { return !s.archived; }).length + '</b></button></div><span class="sp"></span>' +
+        '<button class="tab' + (S.tab === 'suppliers' ? ' on' : '') + '" data-itab="suppliers">🏭 Suppliers <b>' + d.suppliers.filter(function (s) { return !s.archived; }).length + '</b></button>' +
+        '<button class="tab' + (S.tab === 'insights' ? ' on' : '') + '" data-itab="insights">📊 Insights</button>' +
+        '<button class="tab' + (S.tab === 'map' ? ' on' : '') + '" data-itab="map">🗺 Map</button></div><span class="sp"></span>' +
         '<button class="btn btn-sm" id="newSup">＋ Supplier</button><button class="btn btn-sm btn-gold" id="newItem">＋ Stock item</button></div>' +
       (low.length ? '<div class="lowbar"><b>⚠️ ' + low.length + ' item' + (low.length === 1 ? ' is' : 's are') + ' low on stock:</b> ' + low.slice(0, 6).map(function (i) { return '<button class="btn btn-sm" data-reorder="' + esc(i.id) + '">' + esc(i.name) + ' (' + fmtQ(i.available) + ' ' + esc(i.unit) + ')</button>'; }).join(' ') + ' <span class="muted">Tap one to call or email the supplier.</span></div>' : '') +
       '<div class="card" id="invBody"></div>';
-    V().querySelectorAll('[data-itab]').forEach(function (b) { b.onclick = function () { S.tab = b.getAttribute('data-itab'); history.replaceState(null, '', S.tab === 'suppliers' ? '#inventory/suppliers' : '#inventory'); navOn(); draw(); }; });
+    V().querySelectorAll('[data-itab]').forEach(function (b) { b.onclick = function () { S.tab = b.getAttribute('data-itab'); history.replaceState(null, '', S.tab === 'items' ? '#inventory' : '#inventory/' + S.tab); navOn(); draw(); }; });
     $('#newItem').onclick = function () { editItem(null); };
     $('#newSup').onclick = function () { editSupplier(null); };
     V().querySelectorAll('.lowbar [data-reorder]').forEach(function (b) { b.onclick = function () { reorder(b.getAttribute('data-reorder'), true); }; });
-    if (S.tab === 'suppliers') suppliersTab(); else itemsTab();
+    if (S.tab === 'suppliers') suppliersTab(); else if (S.tab === 'insights') insightsTab(); else if (S.tab === 'map') mapTab(); else itemsTab();
+  }
+
+  /* ---------- v44: 📊 Insights (stock and suppliers) and 🗺 Map ---------- */
+  var esc2 = esc, money2 = function (n) { return M.money ? M.money(n) : '$' + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  function loadScript(src, test) { return test() ? Promise.resolve() : new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = function () { rej(new Error('Could not load ' + src)); }; document.head.appendChild(s); }); }
+  function loadCss(href) { if (!document.querySelector('link[href="' + href + '"]')) { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; document.head.appendChild(l); } }
+  function insightsData(force) { if (S.ins && !force && Date.now() - S.insAt < 60000) return Promise.resolve(S.ins); return api('invInsights').then(function (d) { S.ins = d; S.insAt = Date.now(); return d; }); }
+  function ikpi(k, v, s, cls) { return '<div class="card kpi' + (cls ? ' ' + cls : '') + '"><div class="k">' + esc2(k) + '</div><div class="v">' + esc2(v) + '</div><div class="s">' + esc2(s) + '</div></div>'; }
+  function itbl(list, cols, empty) {
+    if (!list.length) return '<p class="muted" style="margin:0">' + (empty || 'Nothing here.') + '</p>';
+    return '<table class="mini"><tbody>' + list.map(function (r) { return '<tr' + (r.id ? ' class="click" data-iid="' + esc2(r.id) + '"' : '') + '>' + cols.map(function (c, i) { return '<td' + (i ? ' class="num"' : '') + '>' + c(r) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>';
+  }
+  var nm = function (r) { return '<b>' + esc2(r.name) + '</b><br><small class="muted">' + esc2(r.category || '') + (r.location ? ' · ' + esc2(r.location) : '') + '</small>'; };
+  function insightsTab() {
+    var B = $('#invBody'); B.innerHTML = '<div class="empty">Working out the figures…</div>';
+    insightsData(true).then(function (I) {
+      var T = I.totals;
+      B.innerHTML = '<div class="grid kpis ckpis">' +
+          ikpi('Stock value', money2(T.value), T.items + ' items · ' + T.suppliers + ' suppliers') +
+          ikpi('Used in the last 90 days', money2(T.used90), 'at today\'s prices') +
+          ikpi('Running low', T.low, T.onOrder + ' on order' + (T.overdue ? ' · ' + T.overdue + ' overdue' : ''), T.low ? 'kpi-warn' : '') +
+          ikpi('Dead stock', money2(T.deadValue), T.dead + ' items not used for 4 months') +
+          ikpi('Cheaper elsewhere', money2(T.savingYear), 'a year, from better prices on file') +
+          ikpi('Biggest supplier', T.topShare + '%', 'of what you used in 6 months' + (T.noEmail ? ' · ' + T.noEmail + ' suppliers without email' : '')) + '</div>' +
+        '<div class="card cai" style="margin-top:14px"><div class="card-h"><h2>✨ AI analysis</h2><button class="btn btn-gold btn-sm" id="invAi">' + (S.ai ? '↻ Analyse again' : '✨ Analyse my stock and suppliers') + '</button></div>' +
+          '<div id="invAiOut">' + (S.ai ? aiHtml(S.ai) : '<p class="muted" style="margin:0">A short written analysis with what to re-order, what to stop buying and which suppliers to talk to. Only the stock and supplier figures go to the AI (DeepSeek).</p>') + '</div></div>' +
+        '<div class="grid two" style="margin-top:14px">' +
+          '<div class="card"><h2>Stock used per month</h2><div class="cchart"><canvas id="chInvMonths"></canvas></div></div>' +
+          '<div class="card"><h2>Stock value by category</h2><div class="cchart"><canvas id="chInvCats"></canvas></div></div>' +
+          '<div class="card"><h2>⚠️ Running low (re-order now)</h2><p class="muted" style="font-size:12.5px;margin:-4px 0 8px">Low, or less than 3 weeks left at the current rate of use.</p>' +
+            itbl(I.atRisk, [nm, function (r) { return '<b>' + r.available + '</b> ' + esc2(r.unit) + '<br><small class="muted">re-order at ' + r.reorderLevel + '</small>'; }, function (r) { return r.cover == null ? '<small class="muted">no recent use</small>' : '<b' + (r.cover < 14 ? ' class="bad"' : '') + '>' + r.cover + ' day' + (r.cover === 1 ? '' : 's') + '</b><br><small class="muted">left</small>'; }], 'Nothing is running low.') + '</div>' +
+          '<div class="card"><h2>🚀 Fast movers (90 days)</h2>' + itbl(I.fast, [nm, function (r) { return r.used90 + ' ' + esc2(r.unit); }, function (r) { return money2(r.usedValue90); }]) + '</div>' +
+          '<div class="card"><h2>💤 Dead stock (cash tied up)</h2><p class="muted" style="font-size:12.5px;margin:-4px 0 8px">In stock, not used for over 4 months.</p>' + itbl(I.dead, [nm, function (r) { return r.onHand + ' ' + esc2(r.unit); }, function (r) { return '<b>' + money2(r.value) + '</b>'; }], 'No dead stock.') + '</div>' +
+          '<div class="card"><h2>📦 Over-stocked (more than a year left)</h2>' + itbl(I.over, [nm, function (r) { return r.cover + ' days'; }, function (r) { return money2(r.value); }], 'Nothing is over-stocked.') + '</div>' +
+          '<div class="card"><h2>💲 Cheaper elsewhere</h2><p class="muted" style="font-size:12.5px;margin:-4px 0 8px">A current quote from another supplier beats your preferred one.</p>' + itbl(I.savings, [nm, function (r) { return esc2(r.toName) + '<br><small class="muted">instead of ' + esc2(r.fromName) + '</small>'; }, function (r) { return '<b>' + money2(r.saving.year) + '</b><br><small class="muted">a year</small>'; }], 'Your preferred suppliers are the cheapest on file.') + '</div>' +
+          '<div class="card"><h2>🏭 Suppliers by use (6 months)</h2>' + itbl(I.suppliers.slice(0, 12), [function (s) { return '<b>' + esc2(s.name) + '</b><br><small class="muted">' + esc2(s.terms || '') + (s.email ? '' : ' · <span class="bad">no email</span>') + '</small>'; }, function (s) { return s.items + ' items'; }, function (s) { return '<b>' + money2(s.spend180) + '</b>'; }]) + '</div>' +
+          '<div class="card"><h2>🚚 On order</h2>' + itbl(I.orders, [function (o) { return '<b>' + esc2(o.name) + '</b><br><small class="muted">' + esc2(o.supplier) + '</small>'; }, function (o) { return o.qty + ' ' + esc2(o.unit); }, function (o) { return o.expected ? '<span' + (o.overdue ? ' class="bad"' : '') + '>' + (o.overdue ? 'overdue: ' : 'due ') + esc2(o.expected.split('-').reverse().join('/')) + '</span>' : '–'; }], 'Nothing on order.') + '</div>' +
+          '<div class="card"><h2>📅 Supplier quotes ending in 30 days</h2>' + itbl(I.expiring, [function (r) { return '<b>' + esc2(r.name) + '</b>'; }, function (r) { return r.quotes.map(function (q) { return esc2(q.name) + ' ' + money2(q.price) + ' until ' + esc2(q.until.split('-').reverse().join('/')); }).join('<br>'); }], 'No quotes ending soon.') + (T.expired ? '<p class="muted" style="font-size:12.5px;margin:8px 0 0">' + T.expired + ' items also have a quote that has already ended: ask for new prices.</p>' : '') + '</div>' +
+        '</div>';
+      B.querySelectorAll('[data-iid]').forEach(function (tr) { tr.onclick = function () { editItem(tr.getAttribute('data-iid')); }; });
+      $('#invAi').onclick = function () {
+        var b = this; b.disabled = true; b.textContent = 'Analysing…';
+        $('#invAiOut').innerHTML = '<p class="ask-think" style="margin:0">The AI is reading your stock and supplier figures…</p>';
+        api('invAnalyse').then(function (r) { S.ai = r; $('#invAiOut').innerHTML = aiHtml(r); b.textContent = '↻ Analyse again'; })
+          .catch(function (e) { $('#invAiOut').innerHTML = '<p class="bad" style="margin:0">' + esc2(e.message) + '</p>'; b.textContent = '✨ Analyse my stock and suppliers'; }).then(function () { b.disabled = false; });
+      };
+      loadScript('vendor/chart.umd.min.js?v=451', function () { return !!window.Chart; }).then(function () { invCharts(I); }).catch(function () {});
+    }).catch(function (e) { B.innerHTML = '<div class="empty bad">' + esc2(e.message) + '</div>'; });
+  }
+  function aiHtml(r) {
+    return '<p style="margin:0 0 8px">' + esc2(r.summary) + '</p><div class="grid two" style="gap:12px"><div><b>What stands out</b><ul>' + r.insights.map(function (x) { return '<li>' + esc2(x) + '</li>'; }).join('') + '</ul></div>' +
+      '<div><b>What to do</b><ul>' + r.recommendations.map(function (x) { return '<li>' + esc2(x) + '</li>'; }).join('') + '</ul></div></div>' + (r.tokens ? '<small class="muted">Used about ' + r.tokens.toLocaleString('en-AU') + ' tokens.</small>' : '');
+  }
+  var CH = [];
+  function invCharts(I) {
+    CH.forEach(function (c) { try { c.destroy(); } catch (e) {} }); CH = [];
+    var mk = Object.keys(I.months), m1 = document.getElementById('chInvMonths'), m2 = document.getElementById('chInvCats');
+    var lab = function (k) { var a = k.split('-'); return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+a[1] - 1] + ' ' + a[0].slice(2); };
+    if (m1) CH.push(new Chart(m1, { type: 'bar', data: { labels: mk.map(lab), datasets: [{ label: 'Stock used ($)', data: mk.map(function (k) { return I.months[k]; }), backgroundColor: '#C9A227' }] }, options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: function (v) { return '$' + v.toLocaleString('en-AU'); } } } } } }));
+    var cats = I.categories.slice(0, 15);
+    if (m2) CH.push(new Chart(m2, { type: 'bar', data: { labels: cats.map(function (c) { return c.category; }), datasets: [{ label: 'Stock value ($)', data: cats.map(function (c) { return c.value; }), backgroundColor: '#1F2937' }, { label: 'Used in 90 days ($)', data: cats.map(function (c) { return c.used90; }), backgroundColor: '#C9A227' }] }, options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } }));
+  }
+  // map: suppliers (where they are) and where stock is used (job suburbs)
+  var SUB = null, MAP = null, LAYER = null;
+  function suburbs() {
+    if (SUB) return Promise.resolve(SUB);
+    return fetch('../assets/suburbs-sydney.json').then(function (r) { return r.json(); }).then(function (j) {
+      var byNP = {}, byN = {}; (j.suburbs || []).forEach(function (s) { var n = s[0].toLowerCase(); byNP[n + '|' + s[1]] = s; if (!byN[n]) byN[n] = s; }); SUB = { byNP: byNP, byN: byN }; return SUB;
+    });
+  }
+  function place(text) {   // "12 Trade Way, Smithfield NSW 2164", "Smithfield NSW 2164" or "Smithfield"
+    var t = String(text || ''); if (!t || !SUB) return null;
+    var m = t.match(/([A-Za-z][A-Za-z' .-]*?)\s+NSW\s*(2\d{3})?/i), name = m ? m[1] : t.replace(/^.*,\s*/, ''), pc = m && m[2] ? m[2] : (t.match(/\b(2\d{3})\b/) || [])[1] || '';
+    name = name.replace(/^\d+\s+/, '').trim().toLowerCase();
+    return SUB.byNP[name + '|' + pc] || SUB.byN[name] || null;
+  }
+  function mapTab() {
+    var B = $('#invBody'); S.mapMode = S.mapMode || 'suppliers';
+    B.innerHTML = '<div class="row" style="margin-bottom:8px"><div class="tabs" style="margin:0"><button class="tab' + (S.mapMode === 'suppliers' ? ' on' : '') + '" data-mm="suppliers">🏭 Suppliers</button><button class="tab' + (S.mapMode === 'usage' ? ' on' : '') + '" data-mm="usage">📍 Where stock is used</button></div>' +
+      '<label class="muted" id="mapCatWrap" style="display:flex;gap:6px;align-items:center;font-size:13px">Category<select id="mapCat" style="width:auto"><option value="">All</option></select></label><span class="sp"></span><span class="muted" id="mapNote" style="font-size:12.5px"></span></div>' +
+      '<div class="cmapwrap"><div class="card cmapcard"><div id="imap" class="cmap"></div><div class="cmkey" id="mapKey"></div></div><div class="card cmapside"><h2 id="mapSideH">Top</h2><div id="mapTop"><div class="empty">Loading…</div></div></div></div>';
+    B.querySelectorAll('[data-mm]').forEach(function (b) { b.onclick = function () { S.mapMode = b.getAttribute('data-mm'); mapTab(); }; });
+    loadCss('vendor/leaflet.css?v=194');
+    Promise.all([loadScript('vendor/leaflet.js?v=194', function () { return !!window.L; }), suburbs(), insightsData()]).then(function (r) { drawMap(r[2]); }).catch(function (e) { $('#imap').innerHTML = '<div class="empty">' + esc2(e.message) + '</div>'; });
+  }
+  function drawMap(I) {
+    var el = $('#imap'); if (!el || !window.L) return;
+    if (!MAP || MAP.getContainer() !== el) {
+      if (MAP) { try { MAP.remove(); } catch (e) {} }
+      MAP = L.map(el, { scrollWheelZoom: true }).setView([-33.80, 151.0], 10);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(MAP);
+      LAYER = null;
+    }
+    if (LAYER) LAYER.remove(); LAYER = L.layerGroup().addTo(MAP);
+    var pts = [], missing = 0, groups = [];
+    if (S.mapMode === 'suppliers') {
+      var cs = {}; I.suppliers.forEach(function (s) { (s.categories || '').split(/\s*,\s*/).filter(Boolean).forEach(function (c) { cs[c] = 1; }); });
+      var sel = $('#mapCat'); Object.keys(cs).sort().forEach(function (c) { sel.insertAdjacentHTML('beforeend', '<option' + (S.mapCat === c ? ' selected' : '') + '>' + esc2(c) + '</option>'); });
+      sel.onchange = function () { S.mapCat = this.value; drawMap(I); };
+      var by = {};
+      I.suppliers.filter(function (s) { return !S.mapCat || (s.categories || '').indexOf(S.mapCat) >= 0; }).forEach(function (s) {
+        var p = place(s.address); if (!p) { missing++; return; }
+        var k = p[0] + '|' + p[1], g = by[k] = by[k] || { s: p, list: [], spend: 0, items: 0 }; g.list.push(s); g.spend += s.spend180; g.items += s.items;
+      });
+      groups = Object.keys(by).map(function (k) { return by[k]; });
+      var max = Math.max.apply(null, groups.map(function (g) { return g.spend; }).concat([1]));
+      groups.sort(function (a, b) { return b.spend - a.spend; }).forEach(function (g) {
+        var r = 7 + 20 * Math.sqrt(g.spend / max), col = g.spend > max * 0.4 ? '#C9A227' : g.spend > 0 ? '#1F2937' : '#9CA3AF';
+        var m = L.circleMarker([g.s[2], g.s[3]], { radius: r, color: '#fff', weight: 1.5, fillColor: col, fillOpacity: 0.8 }).addTo(LAYER);
+        m.bindTooltip(g.s[0] + ': ' + g.list.length + ' supplier' + (g.list.length === 1 ? '' : 's'));
+        m.bindPopup('<div class="cpop"><b>' + esc2(g.s[0]) + ' ' + esc2(g.s[1]) + '</b><ul>' + g.list.map(function (s) { return '<li><b>' + esc2(s.name) + '</b><br><small>' + s.items + ' items · ' + money2(s.spend180) + ' used in 6 months · ' + esc2(s.terms || '') + '</small></li>'; }).join('') + '</ul></div>');
+        pts.push([g.s[2], g.s[3]]);
+      });
+      $('#mapCatWrap').style.display = '';
+      $('#mapKey').innerHTML = '<b>Bubble size = what you used from them in 6 months.</b><span><i style="background:#C9A227"></i>Main suppliers</span><span><i style="background:#1F2937"></i>Used</span><span><i style="background:#9CA3AF"></i>Not used yet</span>';
+      $('#mapSideH').textContent = 'Suppliers by use';
+      $('#mapTop').innerHTML = itbl(I.suppliers.filter(function (s) { return !S.mapCat || (s.categories || '').indexOf(S.mapCat) >= 0; }).slice(0, 12), [function (s) { var p = place(s.address); return '<b>' + esc2(s.name) + '</b><br><small class="muted">' + esc2(p ? p[0] : '') + '</small>'; }, function (s) { return money2(s.spend180); }], 'No suppliers.');
+      $('#mapNote').textContent = groups.length + ' suburbs' + (missing ? ' · ' + missing + ' supplier' + (missing === 1 ? '' : 's') + ' without a recognised address' : '');
+    } else {
+      $('#mapCatWrap').style.display = 'none';
+      var max2 = Math.max.apply(null, I.suburbs.map(function (s) { return s.value; }).concat([1]));
+      I.suburbs.forEach(function (s) {
+        var p = place(s.suburb); if (!p) { missing++; return; }
+        var r = 6 + 20 * Math.sqrt(s.value / max2);
+        var m = L.circleMarker([p[2], p[3]], { radius: r, color: '#fff', weight: 1.5, fillColor: '#C2410C', fillOpacity: 0.75 }).addTo(LAYER);
+        m.bindTooltip(p[0] + ': ' + money2(s.value) + ' of stock');
+        m.bindPopup('<div class="cpop"><b>' + esc2(p[0]) + '</b><br>' + money2(s.value) + ' of stock on ' + s.jobs + ' job' + (s.jobs === 1 ? '' : 's') + '<ul>' + s.top.map(function (x) { return '<li>' + esc2(x.name) + ' <small>' + money2(x.value) + '</small></li>'; }).join('') + '</ul></div>');
+        pts.push([p[2], p[3]]); groups.push(s);
+      });
+      $('#mapKey').innerHTML = '<b>Bubble size = value of stock used on jobs there (6 months).</b>';
+      $('#mapSideH').textContent = 'Where stock is used';
+      $('#mapTop').innerHTML = itbl(I.suburbs.slice(0, 12).map(function (s) { return { name: s.suburb.replace(/\s+NSW.*$/i, ''), value: s.value, jobs: s.jobs }; }), [function (s) { return '<b>' + esc2(s.name) + '</b>'; }, function (s) { return s.jobs + ' jobs'; }, function (s) { return money2(s.value); }], 'No stock has been used on jobs yet. Use stock on a job (Use, with the job number) and it shows here.');
+      $('#mapNote').textContent = groups.length + ' suburbs' + (missing ? ' · ' + missing + ' not recognised' : '');
+    }
+    if (pts.length > 1) MAP.fitBounds(pts, { padding: [30, 30], maxZoom: 12 }); else if (pts.length === 1) MAP.setView(pts[0], 12);
+    setTimeout(function () { try { MAP.invalidateSize(); } catch (e) {} }, 50);
   }
   function itemsTab() {
     var d = S.data, cats = Array.from(new Set(d.items.map(function (i) { return i.category; }).filter(Boolean))).sort();

@@ -1,4 +1,6 @@
-// v33: loads the 150 made-up enquiries in tools/test-data/enquiries-150.json into the TEST site, through the
+// v33/v44: loads the made-up test data into the TEST site: 150 enquiries (tools/test-data/enquiries-150.json),
+// 50 suppliers and 150 stock items with six months of stock movements (suppliers-50.json, inventory-150.json).
+// Enquiries go in through the
 // admin console's own API (the same as adding jobs by hand), then moves each one along the pipeline
 // (called, quoted, won, completed, invoiced, paid or lost) so the dashboard and reports have something to show.
 //
@@ -16,6 +18,7 @@ const args = process.argv.slice(2);
 const opt = (name, def = '') => { const i = args.indexOf(name); return i >= 0 && args[i + 1] ? args[i + 1] : def; };
 const SITE = opt('--site', 'https://fixittest.netlify.app').replace(/\/+$/, '');
 const AGAIN = args.includes('--again');
+const WHAT = ['enquiries', 'inventory'].includes(opt('--what')) ? opt('--what') : 'all';   // v44: enquiries, inventory (suppliers + stock), or all
 const USER = process.env.MBS_LOAD_USER || '', PASS = process.env.MBS_LOAD_PASS || '';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA = JSON.parse(fs.readFileSync(path.join(here, 'test-data', 'enquiries-150.json'), 'utf8')).enquiries;
@@ -49,12 +52,9 @@ say(`Test site confirmed: ${SITE}`, '\x1b[32m');
 try { await api('login', { username: USER, password: PASS }); } catch (e) { stop('Login failed: ' + e.message); }
 say('Logged in to the test console.');
 
-// 3. already loaded?
+// 3. enquiries (skipped if they are already there, unless --again)
 const existing = (await api('jobs', { stage: 'all' })).jobs || [];
 const already = existing.filter((j) => /^02 5550 /.test(j.phone || '')).length;
-if (already && !AGAIN) stop(`The test data is already there (${already} test enquiries). Nothing was loaded.\nTo add a second copy anyway, run it again with -Again.`);
-
-// 4. add them, then move each along the pipeline
 const STEPS = { new: [], called: ['called'], quoted: ['called', 'quoted'], won: ['called', 'quoted', 'won'],
   completed: ['called', 'quoted', 'won', 'completed'], invoiced: ['called', 'quoted', 'won', 'completed', 'invoiced'],
   paid: ['called', 'quoted', 'won', 'completed', 'invoiced', 'paid'], lost: ['called', 'quoted', 'lost'] };
@@ -68,22 +68,51 @@ async function one(e) {
     await api('stage', { ref: r.job.core, stage: st, ...extra });
   }
 }
-const queue = DATA.slice();
-async function worker() {
-  while (queue.length) {
-    const e = queue.shift();
-    for (let tries = 1; ; tries++) {
-      try { await one(e); done++; break; }
-      catch (err) {
-        if (/log in/i.test(err.message)) stop('The login ran out part way. Run it again with -Again to add the rest.');
-        if (tries >= 3) { failed++; say(`  could not add ${e.name}: ${err.message}`, '\x1b[33m'); break; }
-        await new Promise((res) => setTimeout(res, 800 * tries));
+if (WHAT !== 'inventory') {
+  if (already && !AGAIN) say(`Enquiries: already there (${already} test enquiries), skipped.`);
+  else {
+    say('Enquiries: adding 150...');
+    for (const e of DATA) {
+      for (let tries = 1; ; tries++) {
+        try { await one(e); done++; break; }   // one at a time: each new job takes the next running number and updates the shared index
+        catch (err) {
+          if (/log in/i.test(err.message)) stop('The login ran out part way. Run it again to add the rest.');
+          if (tries >= 3) { failed++; say(`  could not add ${e.name}: ${err.message}`, '\x1b[33m'); break; }
+          await new Promise((res) => setTimeout(res, 800 * tries));
+        }
       }
+      if ((done + failed) % 10 === 0) say(`  ${done + failed} of ${DATA.length}...`);
     }
-    if ((done + failed) % 10 === 0) say(`  ${done + failed} of ${DATA.length}...`);
+    say(`Enquiries: ${done} added${failed ? `, ${failed} could not be added` : ''}.`, failed ? '\x1b[33m' : '\x1b[32m');
   }
 }
-await worker();   // one at a time: each new job takes the next running number and updates the shared index
+
+// 4. v44: suppliers and stock items (skipped if the test suppliers are already there)
+if (WHAT !== 'enquiries') {
+  const inv = await api('invList');
+  const haveSup = (inv.suppliers || []).filter((s) => /\.example\.com$/.test(s.email || '') || /^02 5550 3/.test(s.phone || '')).length;
+  if (haveSup && !AGAIN) say(`Suppliers and stock: already there (${haveSup} test suppliers), skipped.`);
+  else {
+    const SUP = JSON.parse(fs.readFileSync(path.join(here, 'test-data', 'suppliers-50.json'), 'utf8')).suppliers;
+    const INV = JSON.parse(fs.readFileSync(path.join(here, 'test-data', 'inventory-150.json'), 'utf8')).items;
+    const ids = {};
+    for (let i = 0; i < SUP.length; i += 10) { const r = await api('invTestLoad', { kind: 'suppliers', suppliers: SUP.slice(i, i + 10) }); Object.assign(ids, r.ids); }
+    say(`Suppliers: ${Object.keys(ids).length} added.`, '\x1b[32m');
+    // stock used on jobs: link it to confirmed test jobs, so the map shows where stock goes
+    const jobsNow = ((await api('jobs', { stage: 'all' })).jobs || []).filter((j) => ['won', 'completed', 'invoiced', 'paid'].includes(j.stage));
+    const pool = jobsNow.length ? jobsNow : ((await api('jobs', { stage: 'all' })).jobs || []);
+    let k = 0; const pickJob = () => (pool.length ? pool[(k++ * 7) % pool.length].core : '');
+    const now = Date.now(), DAY = 864e5, ymdOf = (d) => new Date(now + d * DAY + 10 * 3600e3).toISOString().slice(0, 10);
+    const items = INV.map((it) => ({
+      name: it.name, sku: it.sku, category: it.category, unit: it.unit, location: it.location, reorderLevel: it.reorderLevel, reorderQty: it.reorderQty, packSize: it.packSize, notes: it.notes,
+      onHand: it.onHand, preferred: ids[it.preferred] || '',
+      prices: it.prices.map((p) => ({ supplier: ids[p.supplier] || '', price: p.price, ref: p.ref, quoted: ymdOf(p.quotedDays), validUntil: p.validDays == null ? '' : ymdOf(p.validDays) })).filter((p) => p.supplier),
+      onOrder: it.onOrder ? { qty: it.onOrder.qty, supplier: ids[it.onOrder.supplier] || '', at: now - it.onOrder.daysAgo * DAY, expected: ymdOf(it.onOrder.expectedDays), via: it.onOrder.via } : null,
+      moves: it.moves.map((m) => ({ at: now - m.daysAgo * DAY - Math.round(Math.random() * 8) * 3600e3, kind: m.kind, qty: m.kind === 'out' ? -Math.abs(m.qty) : m.qty, reason: m.reason, job: m.job === 'JOB' ? pickJob() : '' })) }));
+    let n = 0;
+    for (let i = 0; i < items.length; i += 10) { const r = await api('invTestLoad', { kind: 'items', items: items.slice(i, i + 10) }); n += r.ids.length; say(`  ${n} of ${items.length} stock items...`); }
+    say(`Stock items: ${n} added, with six months of stock movements.`, '\x1b[32m');
+  }
+}
 try { await api('logout'); } catch {}
-say(`\nDone: ${done} test enquiries added${failed ? `, ${failed} could not be added` : ''}.`, failed ? '\x1b[33m' : '\x1b[32m');
-say(`Open ${SITE}/admin/ and press Ctrl+F5.`);
+say(`\nDone. Open ${SITE}/admin/ and press Ctrl+F5.`, '\x1b[32m');
