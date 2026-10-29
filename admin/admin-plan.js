@@ -935,7 +935,7 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues']];
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues']];
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>' +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
       '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote" title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
@@ -971,7 +971,7 @@
         p.baseline = { at: Date.now(), finish: R.finish, BAC: R.BAC, tasks: tasks }; saveNow('baseline set'); toast('Baseline set'); render();
       });
     };
-    ({ overview: overview, schedule: scheduleTab, board: board, scope: scope, risks: risks, issues: issues }[S.tab] || scheduleTab)(R);
+    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues }[S.tab] || scheduleTab)(R);
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
@@ -1715,6 +1715,78 @@
   }
 
   /* ---------- overview (status report) ---------- */
+  /* ---------- v43: ⚡ Critical path ---------- */
+  // Total float of each task = how many working days it can start later before the project finish moves.
+  // Worked out with the same scheduler as the Gantt (working days or weekends, the quote and cooling-off,
+  // "After #" links, start dates set by hand), so it always agrees with the Schedule tab. Float 0 = critical.
+  function cpm(p) {
+    var base = JSON.parse(JSON.stringify(p)), R0 = rollup(base, today()), F = R0.finish, out = {};
+    var maxK = Math.max(5, workBetween(R0.start || F, F) + 5);
+    base.tasks.forEach(function (t) {
+      var moved = function (k) {
+        var q = JSON.parse(JSON.stringify(p)), qt = q.tasks.filter(function (x) { return x.id === t.id; })[0];
+        var later = addWork(nextWork(t.es), k);
+        if (!qt.snet || later > qt.snet) qt.snet = later;
+        schedule(q);
+        return q.tasks.reduce(function (m, x) { return x.ef > m ? x.ef : m; }, '') > F;
+      };
+      var lo = 0, hi = maxK;
+      if (!moved(hi)) { out[t.id] = { es: t.es, ef: t.ef, float: hi, open: true }; return; }
+      while (lo < hi) { var mid = Math.ceil((lo + hi) / 2); if (moved(mid)) hi = mid - 1; else lo = mid; }
+      out[t.id] = { es: t.es, ef: t.ef, float: lo };
+    });
+    rollup(p, today());   // put the working-day setting back for this plan
+    return { finish: F, start: R0.start, tasks: out };
+  }
+  function criticalTab(R) {
+    var p = S.plan, C = cpm(p), rows = ordered(), all = !!(p.emergency || p.weekends);
+    var fl = function (r) { return C.tasks[r.t.id] ? C.tasks[r.t.id].float : 0; };
+    var crit = rows.filter(function (r) { return fl(r) === 0; }).sort(function (a, b) { return a.t.es < b.t.es ? -1 : a.t.es > b.t.es ? 1 : a.n - b.n; });
+    var near = rows.filter(function (r) { var f = fl(r); return f > 0 && f <= 2; });
+    var unit = all ? 'day' : 'working day';
+    var kind = function (f) { return f === 0 ? 'crit' : f <= 2 ? 'near' : 'ok'; };
+    var word = { crit: 'Critical', near: 'Near-critical', ok: 'Has slack' };
+    var span = C.start && C.finish ? workBetween(C.start, C.finish) : 0;
+    // the chain, in date order (tasks that run at the same time are shown together)
+    var steps = [], last = null;
+    crit.forEach(function (r) { if (last && last.es === r.t.es) last.items.push(r); else { last = { es: r.t.es, items: [r] }; steps.push(last); } });
+    var chain = steps.map(function (s) {
+      return '<div class="cp-step">' + s.items.map(function (r) {
+        return '<div class="cp-box' + (r.t.dur === 0 ? ' mile' : '') + (r.t.pct >= 100 ? ' done' : '') + '"><b>#' + r.n + ' ' + esc(r.t.name) + '</b><small>' + (r.t.dur === 0 ? '◆ ' + esc(pretty(r.t.es)) : pl(r.t.dur, unit) + ' · ' + esc(pretty(r.t.es)) + (r.t.ef !== r.t.es ? ' – ' + esc(pretty(r.t.ef)) : '')) + (r.t.pct ? ' · ' + r.t.pct + '%' : '') + (r.t.fixed && r.t.snet ? ' · 📌 start set by hand' : '') + '</small></div>';
+      }).join('') + '</div>';
+    }).join('<div class="cp-arrow">→</div>');
+    // timeline: bars, with the slack shown as a faint tail
+    var d0 = C.start, dN = C.finish, maxEnd = dN;
+    rows.forEach(function (r) { var f = fl(r); if (f > 0 && r.t.ef) { var e = addWork(r.t.ef, f); if (e > maxEnd) maxEnd = e; } });
+    var days = Math.max(1, daysBetween(d0, maxEnd) + 1), pc = function (d) { return (daysBetween(d0, d) / days * 100).toFixed(3) + '%'; };
+    var finLine = '<i class="cp-fin" style="left:' + ((daysBetween(d0, dN) + 1) / days * 100).toFixed(3) + '%" title="Planned finish ' + esc(dmy(dN)) + '"></i>';
+    var tl = rows.map(function (r) {
+      var t = r.t, f = fl(r), k = kind(f); if (!t.es) return '';
+      var w = ((daysBetween(t.es, t.ef) + 1) / days * 100).toFixed(3) + '%';
+      var tail = f > 0 ? '<span class="cp-slack" style="left:calc(' + pc(t.ef) + ' + ' + (100 / days).toFixed(3) + '%);width:' + (daysBetween(t.ef, addWork(t.ef, f)) / days * 100).toFixed(3) + '%" title="Can slip ' + pl(f, unit) + '"></span>' : '';
+      return '<div class="cp-row"><span class="cp-name">#' + r.n + ' ' + esc(t.name) + '</span><span class="cp-track">' + finLine + tail +
+        (t.dur === 0 ? '<span class="cp-mile ' + k + '" style="left:' + pc(t.es) + '" title="' + esc(t.name + ' · ' + dmy(t.es)) + '"></span>'
+          : '<span class="cp-bar ' + k + '" style="left:' + pc(t.es) + ';width:' + w + '" title="' + esc(t.name + ' · ' + dmy(t.es) + ' – ' + dmy(t.ef) + ' · ' + (f ? 'slack ' + pl(f, unit) : 'critical')) + '"></span>') + '</span></div>';
+    }).join('');
+    var table = rows.map(function (r) {
+      var t = r.t, f = fl(r), k = kind(f);
+      return '<tr class="cp-' + k + '"><td>' + r.n + '</td><td>' + esc(t.name) + (t.dur === 0 ? ' <small class="muted">milestone</small>' : '') + '</td><td>' + t.dur + '</td><td>' + esc(dmy(t.es)) + '</td><td>' + esc(dmy(t.ef)) + '</td>' +
+        '<td><b>' + (f === 0 ? '0' : (C.tasks[t.id] && C.tasks[t.id].open ? f + '+' : f)) + '</b> <small class="muted">' + (f === 1 ? unit : unit + 's') + '</small></td><td><span class="cp-tag ' + k + '">' + word[k] + '</span></td></tr>';
+    }).join('');
+    var fb = p.finishBy ? (C.finish <= p.finishBy ? '✅ On time for Finish by (' + esc(dmy(p.finishBy)) + ').' : '⚠ ' + pl(workBetween(p.finishBy, C.finish) - 1, 'working day') + ' late for Finish by (' + esc(dmy(p.finishBy)) + '): shorten or overlap critical tasks, or press ✨ Fit to finish-by on the Schedule tab.') : '';
+    $('#planBody').innerHTML =
+      '<div class="card"><h2>⚡ Critical path</h2>' +
+        '<p>The <b>critical path</b> is the chain of tasks that sets the finish date: <b>' + pl(crit.length, 'task') + '</b> running from <b>' + esc(dmy(C.start)) + '</b> to <b>' + esc(dmy(C.finish)) + '</b> (' + pl(span, unit) + '). ' +
+        'A day lost on any of them moves the finish by a day; to finish sooner, shorten or overlap them. Other tasks have <b>slack</b> (float): they can slip that many ' + unit + 's without moving the finish.</p>' +
+        (fb ? '<p class="cp-fb">' + fb + '</p>' : '') +
+        '<div class="cp-chain">' + (chain || '<p class="muted">No tasks yet.</p>') + '</div>' +
+        (near.length ? '<p class="muted" style="margin:10px 0 0">Watch these too (only 1–2 ' + unit + 's of slack): ' + near.map(function (r) { return '#' + r.n + ' ' + esc(r.t.name) + ' (' + fl(r) + ')'; }).join(', ') + '.</p>' : '') +
+      '</div>' +
+      '<div class="card"><h2>Timeline</h2><div class="cp-key"><span><i class="cp-bar crit"></i>Critical</span><span><i class="cp-bar near"></i>Near-critical (1–2 ' + unit + 's slack)</span><span><i class="cp-bar ok"></i>Has slack</span><span><i class="cp-slack"></i>How far it can slip</span><span><i class="cp-fin"></i>Finish</span></div>' +
+        '<div class="cp-tl">' + tl + '</div></div>' +
+      '<div class="card"><h2>Slack (float) of every task</h2><div class="table-wrap"><table class="cp-table"><thead><tr><th>#</th><th>Task</th><th>Days</th><th>Start</th><th>Finish</th><th>Slack</th><th></th></tr></thead><tbody>' + table + '</tbody></table></div>' +
+        '<p class="muted" style="font-size:12.5px;margin:8px 0 0">Slack is worked out from the plan as it is now (working days' + (all ? ', weekends included' : ', Monday to Friday') + ', the quote and cooling-off, “After #” links and start dates set by hand). Change the plan on the Schedule tab and this updates.</p></div>';
+  }
   function overview(R) {
     var p = S.plan, t0 = today(), soon = toS(new Date(toD(t0).getTime() + 14 * 864e5));
     var coming = ordered().filter(function (r) { return r.t.pct < 100 && r.t.es <= soon && r.t.ef >= t0; });
