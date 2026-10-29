@@ -265,6 +265,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Overview', 'shows the reminders for this job', /Hire skip bin/.test(ov));
     const kp = await p.textContent('.pkpis');
     ok('Status', 'scope, time, cost and risk cards at the top', /Scope/.test(kp) && /Time/.test(kp) && /Cost/.test(kp) && /Risks & issues/.test(kp) && /1 issue(?!s)/.test(kp));
+    const td = await p.textContent('.pkpis .tdl'), nWd = P.workBetween(R.start, R.finish);
+    ok('Status', `Time card shows Start, Finish and Duration (${nWd} working days)`, /Start/.test(td) && /Finish/.test(td) && new RegExp('Duration' + nWd + ' working days').test(td.replace(/\s+/g, ' ').replace('Duration ', 'Duration')), td);
     await p.screenshot({ path: 'MBS_plan_overview.jpg', type: 'jpeg', quality: 80 });
     await p.click('#planBase'); await p.click('#okBtn'); await saved();
     st = await stored();

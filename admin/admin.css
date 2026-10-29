@@ -618,3 +618,8 @@ input.predoff{text-decoration:line-through;color:#A8A397}
 @media (max-width:1280px){.gkh-pow small{display:none}}
 @media (max-width:900px){.gkh-pow span{display:none}.gkh-pow{padding:2px;background:#000}.gkh-pow img{width:34px;height:34px}}
 @media (prefers-reduced-motion:reduce){.gkh-globe{animation:none}}
+
+/* plan Time card: Start / Finish / Duration */
+.tdl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:6px 0 6px;align-items:baseline}
+.tdl dt{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.tdl dd{margin:0;font-family:'Archivo',sans-serif;font-weight:800;font-size:15.5px;line-height:1.25}
