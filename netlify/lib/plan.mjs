@@ -151,7 +151,7 @@ function clean(p, core) {
   for (const t of tasks) t.pred = t.pred.filter((x) => tIds.has(x) && x !== t.id);
   const c = p.charter || {};
   return {
-    core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart), emergency: !!p.emergency, coolOff: int(p.coolOff, 0, 10, 3),
+    core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart), finishBy: ymdOk(p.finishBy), emergency: !!p.emergency, coolOff: int(p.coolOff, 0, 10, 3),
     charter: { objective: str(c.objective, 1500), inScope: str(c.inScope, 3000), outScope: str(c.outScope, 2000), deliverables: str(c.deliverables, 2000),
       acceptance: str(c.acceptance, 2000), assumptions: str(c.assumptions, 2000), notes: str(c.notes, 3000), budget: r2(c.budget), customer: str(c.customer, 120), manager: str(c.manager, 80) },
     phases, tasks,
@@ -381,6 +381,102 @@ export async function pipelineBoard(body = {}) {
       plan: p ? { name: p.name, pct: R ? R.pct : 0, SPI: R ? R.SPI : null, CPI: R ? R.CPI : null, start: R ? R.start : '', finish: R ? R.finish : '', late: R ? R.late : 0, done: R ? R.done : 0, total: R ? R.total : 0, highRisks: R ? R.highRisks : 0, openIssues: R ? R.openIssues : 0 } : null };
   });
   return { cards, cols: BOARD_COLS, closedDays: days, at: now, today };
+}
+
+// ---------- v38: ✨ fit the plan to a "Finish by" date (runs in the background function) ----------
+// The AI suggests fast-tracking (tasks alongside each other) and crashing (more crew / longer hours) on the critical path.
+// The code then checks every suggestion: nothing protected is shortened, no task below half its days or made longer,
+// no circular "after" links, and it reschedules to prove the new finish. Nothing is saved here: the console shows a preview.
+const PROTECTED = /(council|approv|permit|certif|engineer|strata|lead.?time|order|deliver|supply|cur(e|ing)|dry|drying|set(ting)? time|flood test|water test|inspect|test|quote|handover|invoice|payment)/i;
+function wouldLoop(byId, startId) {   // does following "after" links from startId come back to it?
+  const seen = new Set(), stack = [...(byId[startId].pred || [])];
+  while (stack.length) { const id = stack.pop(); if (id === startId) return true; if (seen.has(id) || !byId[id]) continue; seen.add(id); stack.push(...(byId[id].pred || [])); }
+  return false;
+}
+function clampSubs(t) {
+  const D = Math.max(1, t.dur);
+  for (const x of t.subs || []) { x.dur = Math.max(1, Math.min(D, Math.round(+x.dur || 1))); x.off = Math.max(0, Math.min(D - x.dur, Math.round(+x.off || 0))); }
+}
+// task names to the AI: take out the customer's full name, phone and email only (not every word of the name:
+// a customer called "Tina Tiles" must not turn "Lay tiles" into "Lay the customer")
+function scrubTask(s, job) {
+  let x = String(s || '');
+  const rx = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (job.name && job.name.trim().length >= 3) x = x.replace(new RegExp(rx(job.name.trim()), 'gi'), 'the customer');
+  if (job.email) x = x.replace(new RegExp(rx(job.email), 'gi'), '');
+  const ph = String(job.phone || '').replace(/\D/g, '');
+  if (ph.length >= 6) x = x.replace(/[\d][\d\s()+-]{5,}[\d]/g, (m) => (m.replace(/\D/g, '').includes(ph.slice(-6)) ? '' : m));
+  return x.trim();
+}
+export async function fitPlanAi({ core, finishBy }, by) {
+  const job = core ? await J.find(core) : null;
+  if (!job) return { error: 'Job not found' };
+  const p0 = await get(job.core);
+  if (!p0) return { error: 'This job has no plan' };
+  const fb = ymdOk(finishBy);
+  if (!fb) return { error: 'Set the "Finish by" date first.' };
+  const plan = JSON.parse(JSON.stringify(p0)), A = allDays(plan), today = sydToday();
+  const R = rollup(plan, today);
+  if (!R.finish) return { error: 'The plan has no dates yet.' };
+  if (R.finish <= fb) return { fits: true, already: true, before: R.finish, after: R.finish, finishBy: fb, changes: [], rev: p0.rev || 0 };
+  if (fb < (R.start || fb)) return { error: 'The "Finish by" date is before the project starts.' };
+  if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.' };
+  try { await checkLimit(); } catch (e) { return { error: e.message }; }
+  const late = workBetween(fb, R.finish, A) - 1;
+  // which tasks drive the finish date (one more day on them moves the finish)
+  const crit = new Set();
+  for (const t of plan.tasks) {
+    if (!(t.dur > 0) || (t.pct || 0) >= 100) continue;
+    const q = JSON.parse(JSON.stringify(plan)); const qt = q.tasks.find((x) => x.id === t.id); qt.dur += 1; schedule(q);
+    if (q.tasks.reduce((m, x) => (x.ef > m ? x.ef : m), '') > R.finish) crit.add(t.id);
+  }
+  const locked = (t) => t.dur === 0 || (t.pct || 0) > 0 || PROTECTED.test(t.name || '');
+  const tasks = plan.tasks.slice(0, 60).map((t) => ({ id: t.id, n: scrubTask(str(t.name, 120), job), d: t.dur, after: t.pred || [], start: t.es, finish: t.ef, crit: crit.has(t.id),
+    locked: locked(t), started: (t.pct || 0) > 0, start_set_by_hand: !!t.fixed, qty: t.qty || 0, unit: t.unit || '', rate: t.rate || 0, people: (t.res || []).length }));
+  const system = 'You are an experienced NSW residential building project scheduler. The plan below must finish by finish_by but currently finishes on current_finish, days_late working days late. ' +
+    'Compress the schedule with the least risk and cost, using two techniques: (1) FAST-TRACK: let a task start alongside its predecessor instead of after it, by changing its "after" list, only where the trades can safely work at the same time or on different areas; ' +
+    '(2) CRASH: shorten a task\'s days by adding crew or longer hours, and give extra_cost (ex GST, AUD) for the extra labour or overtime, 0 if none. ' +
+    'Work on critical tasks (crit=true) first: changing tasks that are not critical does not move the finish. NEVER change tasks with locked=true (milestones, approvals and council/certifier/engineer/strata, ordering, lead times and deliveries, curing/drying/setting times, inspections and tests, work already started). ' +
+    'Never make a task longer, never shorten a task below half its days, and keep the work order safe and sensible (for example waterproofing must cure and pass its flood test before tiling). ' +
+    'Days are ' + (A ? 'calendar days, Saturday and Sunday included (emergency job)' : 'working days, Monday to Friday') + '. If it truly cannot fit, do the best you can and set can_fit false with realistic_extra_days (days still late). ' +
+    'JSON only: {"changes":[{"id":"","d":0,"after":[""],"why":"short reason","extra_cost":0}],"can_fit":true,"realistic_extra_days":0,"summary":"two short sentences","risks":[["title","cause",3,3,"Mitigate","action"]],"tips":[""]}. ' +
+    'List only the tasks you change; leave out "d" if the days stay the same and "after" if the links stay the same.';
+  const user = { plan: scrubTask(str(plan.name, 120), job), emergency: !!plan.emergency, start: R.start, current_finish: R.finish, finish_by: fb, days_late: late,
+    working_days_available: workBetween(R.start, fb, A), tasks };
+  let o, used;
+  try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: 1800, timeoutMs: 150000, temperature: 0.2 })); }
+  catch (e) { return { error: e.message }; }
+  const todayUse = await usage(true, used);
+  // check and apply every suggestion on a copy
+  const q = JSON.parse(JSON.stringify(p0)), byId = Object.fromEntries(q.tasks.map((t) => [t.id, t])), orig = Object.fromEntries(p0.tasks.map((t) => [t.id, t]));
+  const changes = [], refused = [];
+  const seenIds = new Set();
+  for (const c of (Array.isArray(o.changes) ? o.changes : []).slice(0, 60)) {
+    const t = c && byId[c.id]; if (!t || seenIds.has(t.id)) continue;   // one change per task
+    seenIds.add(t.id);
+    const name = t.name, o0 = orig[t.id];
+    if (locked(o0)) { refused.push(`${name}: kept as it is (it can't be rushed)`); continue; }
+    const ch = { id: t.id, name, durFrom: o0.dur, durTo: o0.dur, afterFrom: [...(o0.pred || [])], afterTo: [...(o0.pred || [])], why: str(c.why, 200), extra: Math.max(0, Math.min(100000, r2(c.extra_cost))) };
+    if (c.d != null) {
+      const d = int(c.d, 0, 365, o0.dur);
+      if (d < o0.dur && d >= Math.ceil(o0.dur / 2)) { t.dur = d; clampSubs(t); ch.durTo = d; }
+      else if (d < o0.dur) refused.push(`${name}: not shortened below half its days`);
+    }
+    if (Array.isArray(c.after) && !t.fixed) {
+      const was = t.pred; t.pred = [...new Set(c.after.map(String).filter((x) => byId[x] && x !== t.id))];
+      if (wouldLoop(byId, t.id)) { t.pred = was; refused.push(`${name}: that order would go in a circle, so it was kept`); }
+      else ch.afterTo = [...t.pred];
+    }
+    const sameAfter = ch.afterTo.length === ch.afterFrom.length && ch.afterTo.every((x) => ch.afterFrom.includes(x));
+    if (ch.durTo !== ch.durFrom || !sameAfter) changes.push(ch);
+  }
+  const R2 = rollup(q, today);
+  const num = Object.fromEntries(q.tasks.map((t, i) => [t.id, i + 1]));
+  for (const c of changes) { c.num = num[c.id]; c.afterFromN = c.afterFrom.map((x) => num[x]).filter(Boolean); c.afterToN = c.afterTo.map((x) => num[x]).filter(Boolean); }
+  const risks = (Array.isArray(o.risks) ? o.risks : []).slice(0, 5).map((r) => Array.isArray(r) ? { title: str(r[0], 160), cause: str(r[1], 300), p: int(r[2], 1, 5, 3), i: int(r[3], 1, 5, 3), response: RESP.includes(r[4]) ? r[4] : 'Mitigate', action: str(r[5], 300) } : null).filter((r) => r && r.title);
+  return { fits: R2.finish <= fb, before: R.finish, after: R2.finish, finishBy: fb, late, stillLate: R2.finish > fb ? workBetween(fb, R2.finish, A) - 1 : 0, changes, refused,
+    extraTotal: r2(changes.reduce((a, c) => a + c.extra, 0)), summary: str(o.summary, 500), tips: (Array.isArray(o.tips) ? o.tips : []).slice(0, 5).map((x) => str(x, 200)).filter(Boolean),
+    risks, critical: [...crit].map((id) => num[id]).filter(Boolean), rev: p0.rev || 0, tokens: used, today: todayUse };
 }
 
 export async function planPost(action, body, { who, by, audit }) {

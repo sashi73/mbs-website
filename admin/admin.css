@@ -610,3 +610,10 @@ input.predoff{text-decoration:line-through;color:#A8A397}
 .tdl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:6px 0 6px;align-items:baseline}
 .tdl dt{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .tdl dd{margin:0;font-family:'Archivo',sans-serif;font-weight:800;font-size:15.5px;line-height:1.25}
+
+/* v38: finish-by status bar on the plan */
+.fitbar{flex:1 1 100%;width:100%;box-sizing:border-box;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 10px;padding:9px 12px;border-radius:12px;border:1px solid var(--line);background:#fff;font-size:13.5px}
+.fitbar.ok{border-color:#BBE5C8;background:#F0FBF3}
+.fitbar.late{border-color:#F5C2B0;background:#FFF4EF}
+.fitbar .btn{margin-left:auto}
+.fitbar .btn + .btn{margin-left:0}

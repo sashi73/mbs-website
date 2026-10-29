@@ -756,6 +756,85 @@
     p.workStart = v || ''; dirty('work start ' + (v || 'cleared')); render();
     var R = rollup(p, today()); if (v) toast('Work starts ' + dmy(holdDate(p)) + ', finishes ' + dmy(R.finish));
   }
+  /* ---------- v38: ✨ fit the plan to its "Finish by" date ---------- */
+  function fitBar(p, R) {
+    var undo = S.fitUndo && S.fitUndo.core === S.core ? '<button class="btn btn-sm" id="fitUndo" type="button" title="Put the plan back the way it was before the AI changes">↶ Undo the AI changes</button>' : '';
+    if (!p.finishBy) return undo ? '<div class="fitbar">' + undo + '</div>' : '';
+    if (!R.finish) return '';
+    if (R.finish <= p.finishBy) return '<div class="fitbar ok">✅ Planned finish <b>' + esc(dmy(R.finish)) + '</b>: on time for your finish-by date (' + esc(dmy(p.finishBy)) + ')' + (R.finish < p.finishBy ? ', ' + pl(workBetween(R.finish, p.finishBy) - 1, 'working day') + ' to spare' : '') + '.' + undo + '</div>';
+    var late = workBetween(p.finishBy, R.finish) - 1;
+    return '<div class="fitbar late">⚠ Planned finish <b>' + esc(dmy(R.finish)) + '</b> is <b>' + pl(late, 'working day') + ' late</b> for your finish-by date (' + esc(dmy(p.finishBy)) + '). ' +
+      '<button class="btn btn-sm btn-gold" id="fitGo" type="button" title="The AI looks at the critical path and suggests which tasks can run side by side or be done faster with more crew. You see the changes before anything is saved.">✨ Fit to finish-by</button>' + undo + '</div>';
+  }
+  function fitRun() {
+    var p = S.plan, core = S.core, id = rid(), b = $('#fitGo');
+    if (!p.finishBy) return;
+    if (b) { b.disabled = true; b.textContent = 'AI is working it out…'; }
+    S.fitId = id; var t0 = Date.now();
+    M.modal('<h2>✨ Fit the plan to finish by ' + esc(dmy(p.finishBy)) + '</h2><p class="ask-think">The AI is looking at the critical path and working out what can run side by side or be done faster… this usually takes 20–60 seconds.</p><div class="actions"><button class="btn" data-close type="button">Cancel</button></div>');
+    var poll = function () {
+      return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
+        if (S.fitId !== id) return;
+        if (d.status === 'done' && d.fit) return fitShow(d.fit);
+        if (d.status === 'error') throw new Error(d.error || 'The AI could not fit the plan');
+        if (Date.now() - t0 > 170000) throw new Error('The AI is taking too long. Try again in a minute.');
+        return poll();
+      });
+    };
+    (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () {
+      return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
+        body: JSON.stringify({ id: id, mode: 'fit', core: core, finishBy: p.finishBy }) });
+    }).then(function (r) {
+      if (r.status === 401 || r.status === 403) throw new Error('Your session has ended. Sign in again.');
+      if (r.status !== 202 && !r.ok) throw new Error('Could not start the AI (' + r.status + '). Try again.');
+      return poll();
+    }).catch(function (e) {
+      if (S.fitId !== id) return;
+      if (b) { b.disabled = false; b.textContent = '✨ Fit to finish-by'; }
+      M.modal('<h2>✨ Fit the plan</h2><p class="bad">' + esc(e.message) + '</p><div class="actions"><button class="btn" data-close type="button">Close</button></div>');
+    });
+  }
+  function fitShow(f) {
+    var p = S.plan; render();
+    if (f.already) { M.closeModal(); toast('The plan already finishes by ' + dmy(f.finishBy)); return; }
+    var head = f.fits ? '<div class="aifit ok">✅ With these changes the plan finishes <b>' + esc(dmy(f.after)) + '</b>, on time for ' + esc(dmy(f.finishBy)) + ' (it was ' + esc(dmy(f.before)) + ').</div>'
+      : '<div class="aifit">⚠ The best the AI could do: finish <b>' + esc(dmy(f.after)) + '</b>, still ' + pl(f.stillLate, 'working day') + ' after ' + esc(dmy(f.finishBy)) + ' (it was ' + esc(dmy(f.before)) + '). Talk to the customer about a later date, or change the scope.</div>';
+    var rows = (f.changes || []).map(function (c) {
+      var what = [];
+      if (c.durTo !== c.durFrom) what.push('Days ' + c.durFrom + ' → <b>' + c.durTo + '</b>');
+      if (c.afterToN.join() !== c.afterFromN.join()) what.push('After # ' + (c.afterFromN.join(', ') || '–') + ' → <b>' + (c.afterToN.join(', ') || 'start') + '</b>' + (function () { var gone = c.afterFromN.filter(function (n) { return c.afterToN.indexOf(n) < 0; }); return gone.length ? ' (runs alongside #' + gone.join(', #') + ')' : ''; })());
+      return '<tr><td>' + c.num + '</td><td>' + esc(c.name) + '</td><td>' + what.join('<br>') + '</td><td class="muted">' + esc(c.why || '') + '</td><td style="text-align:right">' + (c.extra ? money(c.extra) : '–') + '</td></tr>';
+    }).join('');
+    var html = '<h2>✨ Fit the plan to finish by ' + esc(dmy(f.finishBy)) + '</h2>' + head +
+      (f.summary ? '<p>' + esc(f.summary) + '</p>' : '') +
+      (rows ? '<div style="max-height:46vh;overflow:auto"><table class="mini"><thead><tr><th>#</th><th>Task</th><th>Change</th><th>Why</th><th style="text-align:right">Extra cost</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        (f.extraTotal ? '<p><b>Extra cost: ' + money(f.extraTotal) + ' ex GST</b> (more crew or overtime). Add it to the tasks\' costs if the customer agrees to pay for the faster finish.</p>' : '')
+        : '<p class="muted">The AI found nothing that could safely be changed.</p>') +
+      ((f.refused || []).length ? '<p class="muted" style="font-size:12.5px">Kept as they are: ' + esc(f.refused.join('; ')) + '.</p>' : '') +
+      ((f.tips || []).length ? '<ul class="muted" style="font-size:13px">' + f.tips.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
+      ((f.risks || []).length && rows ? '<label class="qchk" style="margin:6px 0"><input type="checkbox" id="fitRisks" checked> Add ' + pl(f.risks.length, 'risk') + ' of the faster schedule to the Risks tab (' + esc(f.risks.map(function (r) { return r.title; }).join(', ')) + ')</label>' : '') +
+      '<div class="actions">' + (rows ? '<button class="btn btn-gold" id="fitUse" type="button">Use these changes</button>' : '') + '<button class="btn" data-close type="button">' + (rows ? 'Discard' : 'Close') + '</button></div>';
+    M.modal(html);
+    var u = $('#fitUse'); if (u) u.onclick = function () { fitApply(f, !!($('#fitRisks') && $('#fitRisks').checked)); };
+  }
+  function fitApply(f, addRisks) {
+    var p = S.plan;
+    if ((p.rev || 0) !== (f.rev || 0) && S.rev !== f.rev) { M.closeModal(); toast('The plan changed while the AI was working. Press ✨ Fit to finish-by again.', true); return; }
+    S.fitUndo = { core: S.core, plan: JSON.parse(JSON.stringify(p)) };
+    var byId = {}; p.tasks.forEach(function (t) { byId[t.id] = t; });
+    f.changes.forEach(function (c) { var t = byId[c.id]; if (!t) return; t.dur = c.durTo; t.pred = c.afterTo.filter(function (x) { return byId[x]; }); fitSubs(t); derive(t); });
+    if (addRisks) (f.risks || []).forEach(function (r, i) { p.risks.push({ id: 'r' + Date.now().toString(36) + i, title: r.title, cause: r.cause, p: r.p, i: r.i, response: r.response, action: r.action, owner: (p.charter || {}).manager || '', review: '', status: 'Open', raised: today() }); });
+    p.charter = p.charter || {};
+    p.charter.assumptions = ('Schedule brought in to finish by ' + dmy(f.finishBy) + ' (' + pl(f.changes.length, 'task') + ' changed' + (f.extraTotal ? ', extra cost ' + money(f.extraTotal) + ' ex GST' : '') + ').\n' + (p.charter.assumptions || '')).trim().slice(0, 2000);
+    M.closeModal(); dirty('AI fitted the plan to finish by ' + f.finishBy); render();
+    var Rn = rollup(p, today());
+    toast('Plan updated: finishes ' + dmy(Rn.finish) + (Rn.finish <= f.finishBy ? ', on time' : '') + '. Press ↶ Undo the AI changes to put it back.');
+  }
+  function fitUndo() {
+    if (!S.fitUndo || S.fitUndo.core !== S.core) return;
+    var keepRev = S.plan.rev; S.plan = normalise(S.fitUndo.plan); S.plan.rev = keepRev; S.fitUndo = null;
+    dirty('undid the AI finish-by changes'); render(); toast('The plan is back the way it was before the AI changes');
+  }
   function render() {
     var L0 = $('#gLeft'), R0 = $('#gRight');
     var st = { y: window.scrollY, x: window.scrollX, lt: L0 ? L0.scrollTop : 0, ll: L0 ? L0.scrollLeft : 0, rl: R0 ? R0.scrollLeft : null, tab: S.tab, core: S.core };
@@ -886,9 +965,11 @@
     var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button>' +
       '<div class="qgate' + (p.emergency ? ' emerg' : p.gate && p.gate.accepted ? ' ok' : '') + '"><div class="qrow"><label class="qchk" title="Emergency work (burst pipe, storm damage, a leak that is doing damage): no cooling-off, the work can start straight away, the same day as the site inspection"><input type="checkbox" id="pEmerg"' + (p.emergency ? ' checked' : '') + '> 🚨 Emergency</label>' +
         '<label class="qchk" title="Days after the quote is accepted before the work can start. The full cooling-off period is 5 business days; most customers agree to start after 3.">Cooling-off <select id="pCool"' + (p.emergency ? ' disabled' : '') + '>' + [0, 1, 2, 3, 4, 5].map(function (n) { return '<option value="' + n + '"' + (coolOf(p) === n ? ' selected' : '') + '>' + n + (n === 3 ? ' (usual)' : n === 5 ? ' (full period)' : '') + '</option>'; }).join('') + '</select> business days</label></div><div>' + gateText(p) + '</div></div>' +
+      fitBar(p, R) +
       '<span class="muted" style="font-size:12.5px">To move a task, type its new number in <b>#</b> (1 = first) or drag <b>⠿</b>. Sub-tasks move inside their own task. Days are working days (' + (p.emergency ? 'emergency: every day, Saturday and Sunday included' : 'Mon–Fri') + '). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span><span class="sp"></span>' +
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700">Project start<input type="date" id="pStart" value="' + esc(p.start) + '" style="width:auto"></label>' +
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The day the work itself starts (after the quote is accepted). Tasks before the quote, like the site inspection, are not affected. Also on the quote.">Work starts<input type="date" id="pWork" value="' + esc(p.workStart || '') + '" min="' + esc(gateDate(p) || nextWork(p.start)) + '" style="width:auto"></label>' +
+      '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The date the customer needs it finished. If the plan finishes later, ✨ Fit to finish-by asks the AI how to bring it in.">Finish by<input type="date" id="pFinishBy" value="' + esc(p.finishBy || '') + '" min="' + esc(nextWork(p.start)) + '" style="width:auto"></label>' +
       '<div class="tabs" style="margin:0" title="Which columns to show"><button class="tab' + (S.cols === 's' ? ' on' : '') + '" data-cols="s">📅 Dates</button><button class="tab' + (S.cols === 'c' ? ' on' : '') + '" data-cols="c">$ Costs</button><button class="tab' + (S.cols === 'a' ? ' on' : '') + '" data-cols="a">All columns</button></div>' +
       '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button></div></div>' +
       '<div class="gsplit" id="gSplit"><div class="gpane gleft" id="gLeft"' + (S.split ? ' style="flex:0 0 ' + S.split + 'px;max-width:none"' : '') + '><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task</th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th>Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th></tr></thead><tbody>';
@@ -947,6 +1028,9 @@
     B.querySelectorAll('[data-zoom]').forEach(function (b) { b.onclick = function () { S.zoom = b.getAttribute('data-zoom'); render(); }; });
     $('#pStart').onchange = function () { if (this.value) { p.start = this.value; dirty(); render(); } };
     $('#pWork').onchange = function () { setWorkStart(this.value); };
+    $('#pFinishBy').onchange = function () { p.finishBy = this.value || ''; S.fitUndo = null; dirty('finish by ' + (p.finishBy || 'cleared')); render(); };
+    var fg = $('#fitGo'); if (fg) fg.onclick = fitRun;
+    var fu = $('#fitUndo'); if (fu) fu.onclick = fitUndo;
     $('#pEmerg').onchange = function () { p.emergency = this.checked; dirty(p.emergency ? 'emergency: work can start straight away' : 'not an emergency: cooling-off applies'); render(); var R = rollup(p, today()); toast(p.emergency ? 'Emergency: the work starts the same day as the site inspection (finish ' + dmy(R.finish) + ')' : 'Cooling-off applies again (finish ' + dmy(R.finish) + ')'); };
     $('#pCool').onchange = function () { p.coolOff = +this.value; dirty('cooling-off ' + p.coolOff + ' business days'); render(); };
     var task = function (el) { var id = el.closest('tr').getAttribute('data-tid'); return p.tasks.filter(function (t) { return t.id === id; })[0]; };
