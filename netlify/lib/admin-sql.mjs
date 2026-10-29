@@ -9,6 +9,8 @@ import LOGO from './logo-png.mjs';
 import { business, pdfLib } from './pdf.mjs';
 import * as PLAN from './plan.mjs';
 import * as INV from './inventory.mjs';
+import * as CU from './customers.mjs';
+import { statsFor } from './admin-cust.mjs';
 import { llmSetup, llmJson, usage, usageToday, tokCap, checkLimit, ping } from './ai.mjs';
 export { usageToday };
 
@@ -20,7 +22,9 @@ const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 // ---------- the tables (one row per record, plain columns) ----------
 export const SCHEMA = {
-  jobs: ['ref', 'core', 'stage', 'name', 'phone', 'email', 'suburb', 'service', 'trade', 'source', 'best_time', 'created', 'created_month', 'quote_inc', 'invoice_inc',
+  customers: ['id', 'name', 'phone', 'email', 'suburb', 'enquiries', 'confirmed_jobs', 'lost_jobs', 'open_quotes', 'open_jobs', 'quoted_value', 'total_value', 'paid_total', 'owed',
+    'first_contact', 'first_month', 'last_contact', 'days_since_contact', 'repeat_customer', 'main_source', 'last_stage', 'tags'],
+  jobs: ['ref', 'core', 'customer', 'stage', 'name', 'phone', 'email', 'suburb', 'service', 'trade', 'source', 'best_time', 'created', 'created_month', 'quote_inc', 'invoice_inc',
     'called_date', 'quoted_date', 'won_date', 'completed_date', 'invoiced_date', 'paid_date', 'lost_date', 'lost_reason', 'photos', 'notes'],
   quotes: ['id', 'job', 'customer', 'status', 'issued', 'issued_month', 'valid_until', 'ex', 'gst', 'inc', 'invoice_id'],
   invoices: ['id', 'job', 'customer', 'status', 'issued', 'issued_month', 'due', 'ex', 'gst', 'inc', 'paid', 'balance', 'days_overdue', 'from_quote'],
@@ -39,7 +43,7 @@ export const SCHEMA = {
   stock_moves: ['item_id', 'item', 'date', 'month', 'kind', 'qty', 'reason', 'job']
 };
 export const DESCRIBE = {
-  jobs: 'Every enquiry and job (pipeline stage, customer, suburb, trade, values)', quotes: 'Quotes (status, totals ex/inc GST)', invoices: 'Tax invoices (paid, balance, days overdue)',
+  customers: 'One row per customer (same phone + email = same customer) with their job counts and values', jobs: 'Every enquiry and job (pipeline stage, customer, suburb, trade, values)', quotes: 'Quotes (status, totals ex/inc GST)', invoices: 'Tax invoices (paid, balance, days overdue)',
   items: 'Line items of quotes and invoices', plan_tasks: 'Project plan tasks (dates, costs, % complete)', plan_risks: 'Risk registers of all plans', plan_issues: 'Issue logs of all plans', plan_subtasks: 'Sub-tasks inside plan tasks (no costs; costs stay on the task)', inventory: 'Stock items (on hand, set aside for jobs, re-order level)', suppliers: 'Suppliers', supplier_prices: 'Supplier quotes per stock item', stock_moves: 'Stock in and out', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
 };
 
@@ -52,12 +56,24 @@ export async function tables() {
     PLAN.list(), INV.full().catch(() => ({ items: [], suppliers: [] })), INV.allocations().catch(() => ({}))]);
   for (const j of jobRecs) {
     if (!j) continue;
-    jobs.push({ ref: J.refFor(j), core: j.core, stage: j.stage, name: j.name || '', phone: j.phone || '', email: j.email || '', suburb: j.suburb || '', service: j.service || '',
+    jobs.push({ ref: J.refFor(j), core: j.core, customer: '', stage: j.stage, name: j.name || '', phone: j.phone || '', email: j.email || '', suburb: j.suburb || '', service: j.service || '',
       trade: j.trade || (j.core || '')[0] || '', source: j.source || '', best_time: j.best_time || '', created: d10(j.created), created_month: d10(j.created).slice(0, 7),
       quote_inc: j.quote ? r2(j.quote.amount) : null, invoice_inc: j.invoice ? r2(j.invoice.amount) : null,
       called_date: d10(j.called_at), quoted_date: d10(j.quoted_at), won_date: d10(j.won_at), completed_date: d10(j.completed_at), invoiced_date: d10(j.invoiced_at),
       paid_date: d10(j.paid_at), lost_date: d10(j.lost_at), lost_reason: j.lost_reason || '', photos: (j.photos || []).length, notes: (j.notes || []).length });
   }
+  // customers (linked automatically from enquiries)
+  let cd = await CU.get().catch(() => null);
+  if (cd && !cd.built) cd = await CU.rebuild(jobRecs.filter(Boolean)).catch(() => cd);
+  const byCore = Object.fromEntries(jobRecs.filter(Boolean).map((j) => [j.core, j])), custOf = {};
+  const customers = Object.values((cd && cd.list) || {}).map((c) => {
+    c.jobs.forEach((k) => { custOf[k] = c.id; });
+    const st = statsFor(c, byCore), src = Object.entries(st.sources).sort((a, b) => b[1] - a[1])[0];
+    return { id: c.id, name: c.name || '', phone: c.phone || '', email: c.email || '', suburb: c.suburb || '', enquiries: st.enquiries, confirmed_jobs: st.confirmed, lost_jobs: st.lost,
+      open_quotes: st.openQuotes, open_jobs: st.open, quoted_value: st.quotedValue, total_value: st.value, paid_total: st.paid, owed: st.owed, first_contact: d10(st.first), first_month: d10(st.first).slice(0, 7),
+      last_contact: d10(st.last), days_since_contact: st.last ? Math.floor((now - st.last) / 86400000) : null, repeat_customer: st.enquiries > 1, main_source: src ? src[0] : '', last_stage: st.lastStage, tags: (c.tags || []).join(', ') };
+  }).filter((c) => c.enquiries > 0);
+  for (const r of jobs) r.customer = custOf[r.core] || '';
   const quotes = data.quotes.map((q) => ({ id: q.id, job: q.core || '', customer: q.customer.name, status: ACC.effectiveStatus(q, now), issued: q.issued, issued_month: (q.issued || '').slice(0, 7),
     valid_until: q.validUntil || '', ex: q.totals.ex, gst: q.totals.gst, inc: q.totals.inc, invoice_id: q.invoiceId || '' }));
   const invoices = data.invoices.map((i) => {
@@ -106,7 +122,7 @@ export async function tables() {
   }
   const suppliers = stock.suppliers.filter((x) => !x.archived).map((x) => ({ id: x.id, supplier: x.name, contact: x.contact || '', phone: x.phone || '', email: x.email || '', categories: x.categories || '', terms: x.terms || '',
     items_quoted: stock.items.filter((i) => (i.prices || []).some((p) => p.supplier === x.id)).length }));
-  return { jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves };
+  return { customers, jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves };
 }
 
 // ---------- AI narrative (DeepSeek) ----------
@@ -156,6 +172,7 @@ export async function narrative({ title, sql, columns, rows, focus }) {
 // short notes per table (only the tables a question needs are sent, to keep each AI call small)
 const NOTE = {
   jobs: 'core = id for joins, ref = job number staff see, stage new|called|quoted|won|completed|invoiced|paid|lost, created = enquiry date, *_date = date it reached that stage, quote_inc/invoice_inc $ inc GST, name = customer',
+  customers: 'id = jobs.customer; enquiries = all their jobs; confirmed_jobs = won or later; total_value = $ inc GST of confirmed jobs; owed = invoiced not paid; repeat_customer true when 2+ enquiries; dates YYYY-MM-DD',
   quotes: 'job = jobs.core; ex/gst/inc $', invoices: 'job = jobs.core; balance = $ owed; ex/gst/inc $', items: 'doc_id = quote or invoice id', payments: 'invoice_id = invoices.id',
   expenses: 'job = jobs.core (blank = overhead); ex/gst/inc $', reminders: 'job = jobs.core', visits: 'website visitors per day',
   plan_tasks: 'one plan per job, job = jobs.core, status To do|In progress|In review / QA|Done, days 0 = milestone, pct_complete 0-100, done/late true|false',
@@ -164,6 +181,7 @@ const NOTE = {
   suppliers: 'suppliers', supplier_prices: 'one row per supplier quote for a stock item', stock_moves: 'qty + in / - out; kind in|out|count|plan|order; job = jobs.core'
 };
 const WORDS = {
+  customers: /customer|client|repeat|loyal|most (orders|jobs)|biggest|spend|lapsed|win back|regular/i,
   quotes: /quot/i, invoices: /invoic|owe|owing|unpaid|overdue|paid|debt|balance|bill/i, items: /line item|items? on (the|a|my) (quote|invoice)/i, payments: /pay|paid|received|income|revenue|cash/i,
   expenses: /expens|spend|spent|cost|receipt|purchase|bought/i, reminders: /remind|follow/i, visits: /visit|traffic|website/i,
   plan_tasks: /plan|project|task|complet|progress|late|schedule|gantt|milestone|lead|resource|finish|behind/i, plan_subtasks: /sub-?task|step/i, plan_risks: /risk/i, plan_issues: /issue|problem/i,

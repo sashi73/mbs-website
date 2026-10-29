@@ -67,6 +67,13 @@
     { g: 'Projects', n: 'Late tasks', d: 'Past their finish date and not complete', sql: "SELECT job, task, resource, finish, pct_complete\nFROM plan_tasks\nWHERE late = true\nORDER BY finish", c: null },
     { g: 'Projects', n: 'Planned vs actual cost by job', d: 'Budget against money spent', sql: "SELECT job, SUM(planned_cost) AS planned, SUM(actual_cost) AS actual\nFROM plan_tasks\nGROUP BY job\nORDER BY planned DESC", c: ['bar', 'job', ['planned', 'actual']] },
     { g: 'Projects', n: 'Open risks by score', d: 'Highest risks first (probability x impact)', sql: "SELECT job, risk, probability, impact, score, response, owner\nFROM plan_risks\nWHERE status = 'Open'\nORDER BY score DESC", c: ['hbar', 'risk', ['score']] },
+    { g: 'Customers', n: 'Customers with the most orders', d: 'Confirmed jobs and value per customer', sql: "SELECT name, suburb, confirmed_jobs, enquiries, total_value, last_contact\nFROM customers\nWHERE confirmed_jobs > 0\nORDER BY confirmed_jobs DESC, total_value DESC\nLIMIT 20", c: ['bar', 'name', ['confirmed_jobs']] },
+    { g: 'Customers', n: 'Top customers by value', d: 'Who has spent the most (inc GST)', sql: "SELECT name, suburb, total_value, paid_total, owed, confirmed_jobs\nFROM customers\nORDER BY total_value DESC\nLIMIT 20", c: ['bar', 'name', ['total_value']] },
+    { g: 'Customers', n: 'Customers by suburb', d: 'Where customers are, and how many became jobs', sql: "SELECT suburb, COUNT(*) AS customers_count, SUM(confirmed_jobs) AS confirmed, SUM(total_value) AS value_inc\nFROM customers\nGROUP BY suburb\nORDER BY customers_count DESC\nLIMIT 20", c: ['bar', 'suburb', ['customers_count', 'confirmed']] },
+    { g: 'Customers', n: 'Repeat customers', d: 'Customers with two or more enquiries', sql: "SELECT name, suburb, enquiries, confirmed_jobs, total_value, first_contact, last_contact\nFROM customers\nWHERE repeat_customer = true\nORDER BY enquiries DESC", c: null },
+    { g: 'Customers', n: 'Quotes waiting (customers)', d: 'Customers with a quote they have not answered yet', sql: "SELECT name, phone, suburb, open_quotes, quoted_value, last_contact\nFROM customers\nWHERE open_quotes > 0\nORDER BY quoted_value DESC", c: null },
+    { g: 'Customers', n: 'New customers per month', d: 'First enquiry month', sql: "SELECT first_month, COUNT(*) AS new_customers\nFROM customers\nGROUP BY first_month\nORDER BY first_month", c: ['line', 'first_month', ['new_customers']] },
+    { g: 'Customers', n: 'Customers to win back', d: 'Had a job, nothing open, no contact for a year', sql: "SELECT name, phone, suburb, confirmed_jobs, total_value, last_contact\nFROM customers\nWHERE confirmed_jobs > 0 AND open_jobs = 0 AND days_since_contact > 365\nORDER BY total_value DESC", c: null },
     { g: 'Inventory', n: 'Low stock (time to re-order)', d: 'At or below the re-order level', sql: "SELECT item, unit, on_hand, allocated, available, on_order, reorder_level, price_supplier\nFROM inventory\nWHERE low = true\nORDER BY available", c: null },
     { g: 'Inventory', n: 'Stock value by category', d: 'What the stock on hand is worth (ex GST)', sql: "SELECT category, COUNT(*) AS items_count, SUM(stock_value) AS value_ex\nFROM inventory\nGROUP BY category\nORDER BY value_ex DESC", c: ['pie', 'category', ['value_ex']] },
     { g: 'Inventory', n: 'Supplier price comparison', d: 'Every quote for every item, cheapest first', sql: "SELECT item, supplier, price_ex, quote_ref, valid_until, expired, preferred\nFROM supplier_prices\nORDER BY item, price_ex", c: null },
@@ -170,7 +177,7 @@
         '<div class="period"><b>Period for quick numbers:</b><div class="tabs" style="margin:0">' + [['today', 'Today'], ['week', 'This week'], ['month', 'This month'], ['lastmonth', 'Last month'], ['year', 'This year'], ['fy', 'Financial year'], ['all', 'All time'], ['custom', 'Date range']].map(function (x) {
           return '<button class="tab' + (pr.key === x[0] ? ' on' : '') + '" data-per="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
         '<div class="row" id="perRange"' + (pr.key === 'custom' ? '' : ' hidden') + '><label style="display:flex;gap:6px;align-items:center;font-weight:600">From<input type="date" id="perFrom" value="' + esc(pr.from) + '" style="width:auto"></label><label style="display:flex;gap:6px;align-items:center;font-weight:600">to<input type="date" id="perTo" value="' + esc(pr.to) + '" style="width:auto"></label></div>' +
-        '<span class="muted" id="perShow">' + esc(prettyRange(pr)) + '</span></div>' + ['Quick numbers', 'Follow-ups', 'Jobs', 'Money', 'Projects', 'Inventory', 'Other'].filter(function (g) { return groups[g]; }).concat(Object.keys(groups).filter(function (g) { return ['Quick numbers', 'Follow-ups', 'Jobs', 'Money', 'Projects', 'Inventory', 'Other'].indexOf(g) < 0; })).map(function (g) {
+        '<span class="muted" id="perShow">' + esc(prettyRange(pr)) + '</span></div>' + ['Quick numbers', 'Follow-ups', 'Jobs', 'Customers', 'Money', 'Projects', 'Inventory', 'Other'].filter(function (g) { return groups[g]; }).concat(Object.keys(groups).filter(function (g) { return ['Quick numbers', 'Follow-ups', 'Jobs', 'Customers', 'Money', 'Projects', 'Inventory', 'Other'].indexOf(g) < 0; })).map(function (g) {
         return '<p class="side-h" style="color:var(--muted);margin:14px 0 8px">' + esc(g) + (g === 'Quick numbers' ? ' <span style="text-transform:none;letter-spacing:0">(' + esc(prettyRange(pr)) + ')</span>' : '') + '</p><div class="tpl-grid">' + groups[g].map(function (x) { return '<button class="tpl' + (x[0].p ? ' tpl-p' : '') + '" data-tpl="' + x[1] + '"><b>' + esc(x[0].n) + '</b><small>' + esc(x[0].d) + '</small></button>'; }).join('') + '</div>';
       }).join('');
       P.querySelectorAll('[data-tpl]').forEach(function (b) { b.onclick = function () { useTemplate(T[+b.getAttribute('data-tpl')]); }; });
@@ -217,7 +224,8 @@
       '<p style="margin:12px 0 0"><button type="button" class="btn btn-sm" id="aiPing">🔌 Test AI connection</button> <span class="muted" id="aiPingOut" style="font-size:12.5px"></span></p>' +
       '<p class="muted" style="font-size:12px;margin:12px 0 0">To write the query the AI only sees table and column names, today\'s dates and short lists like stages and plan names. To word the answer it sees the results with names, phone numbers and emails removed. Don\'t type phone numbers into the question.</p>';
     var last = S.askLog[S.askLog.length - 1];
-    if (last) showAnswer(last);
+    if (S.pendingQ) { var pq = S.pendingQ; S.pendingQ = ''; $('#askQ').value = pq; setTimeout(function () { ask(pq); }, 0); }
+    else if (last) showAnswer(last);
     api('sqlUsage').then(showUse).catch(function () {});
     $('#aiPing').onclick = function () {
       var o = $('#aiPingOut'); o.textContent = 'Checking…';
@@ -530,4 +538,6 @@
 
   M.addView('sql', 'SQL wizard', function (args) { if (args && ['ask', 'templates', 'wizard', 'editor', 'saved'].indexOf(args[0]) >= 0) S.tab = args[0]; return page(); });
   window.MBS.sqlState = S;   // for tests
+  // other pages (e.g. Customers) can send a question straight to the AI query
+  M.askAI = function (q) { S.pendingQ = String(q || ''); S.tab = 'ask'; if (location.hash === '#sql/ask') page(); else location.hash = '#sql/ask'; };
 })();

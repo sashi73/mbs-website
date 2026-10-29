@@ -5,6 +5,7 @@
 // The digits never change, so any of the three numbers (or just the running number, e.g. 1) finds the job.
 import * as kv from './kv.mjs';
 import { parts } from './calendar.mjs';
+import * as CU from './customers.mjs';
 
 export const STAGES = ['new', 'called', 'quoted', 'won', 'completed', 'invoiced', 'paid', 'lost'];
 export const OPEN = ['new', 'called', 'quoted', 'won', 'completed', 'invoiced'];
@@ -109,7 +110,9 @@ export async function create(fields, by = 'website') {
     name: fields.name || '', phone: fields.phone || '', email: fields.email || '', suburb: fields.suburb || '', service: fields.service || '',
     best_time: fields.best_time || '', summary: fields.summary || '', details: fields.details || '', mapsUrl: fields.mapsUrl || '', source: fields.source || '',
     history: [{ at: now, by, text: `Enquiry received (${fields.source || 'website'})` }], notes: [] };
-  return save(job);
+  const saved = await save(job);
+  await CU.attach(saved);   // customer database: same phone (+ email) = same customer
+  return saved;
 }
 
 // move a job to a stage. extra: { amount } for quoted / invoiced, { reason } for lost

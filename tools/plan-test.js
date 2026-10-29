@@ -55,7 +55,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.goto(`${BASE}/admin/`, { waitUntil: 'networkidle' });
     await p.fill('[name=username]', 'sashi73'); await p.fill('[name=password]', 'sashi98'); await p.click('#loginForm button');
     await p.waitForSelector('#app:not([hidden])');
-    ok('Menu', 'left column has "Projects" under CRM', /CRM\s*Dashboard\s*Jobs\s*New job\s*Reminders\s*Projects/.test((await p.textContent('.side-nav')).replace(/[^\w &]+/g, ' ').replace(/\s+/g, ' ')));
+    ok('Menu', 'left column has "Projects" under CRM', /CRM\s*Dashboard\s*Jobs\s*(Customers\s*)?New job\s*Reminders\s*Projects/.test((await p.textContent('.side-nav')).replace(/[^\w &]+/g, ' ').replace(/\s+/g, ' ')));
 
     // ---- start from the job page ----
     await p.goto(`${BASE}/admin/#job/${core}`); await p.waitForSelector('#jobPlan a.btn');

@@ -28,8 +28,13 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-29 v26 (dashboard pipeline board)';
+const VERSION = '2026-10-29 v27 (customers)';
 const NEEDS = [
+  ['netlify/functions/admin.mjs', 'custPost'],
+  ['netlify/lib/customers.mjs', 'applyJob'],
+  ['netlify/lib/jobs.mjs', 'CU.attach'],
+  ['admin/admin-cust.js', 'custList'],
+  ['admin/vendor/leaflet.js', 'Leaflet 1.9.4'],
   ['netlify/lib/plan.mjs', 'pipelineBoard'],
   ['admin/admin-board.js', 'pipelineBoard'],
   ['admin/admin.js', 'dashMode'],

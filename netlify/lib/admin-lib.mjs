@@ -126,6 +126,7 @@ export function kindOf(k) {
   if (k.startsWith('receipt:')) return 'receipt';
   if (k === 'acct-index') return 'accounts list';
   if (k === 'acct-seq') return 'accounts counter';
+  if (k === 'customers') return 'customer list (one record: every customer, linked to their jobs)';
   if (k.startsWith('inv:')) return 'stock item';
   if (k.startsWith('sup:')) return 'supplier';
   if (k === 'inv-index') return 'inventory list';

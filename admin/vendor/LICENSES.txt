@@ -3,3 +3,4 @@ Third-party libraries used by the MBS Console SQL wizard (all MIT licence):
 - Chart.js 4.5.1 (chart.umd.min.js) https://www.chartjs.org
 - CodeMirror 5.65.18 (codemirror.js/.css, cm-sql.js, show-hint.js/.css, sql-hint.js) https://codemirror.net/5/
 - ExcelJS 4.4.0 (exceljs.min.js) https://github.com/exceljs/exceljs (project plan export to Excel)
+- Leaflet 1.9.4 (leaflet.js, leaflet.css) https://leafletjs.com, BSD-2-Clause licence (customer map). Map tiles: (c) OpenStreetMap contributors, https://www.openstreetmap.org/copyright
