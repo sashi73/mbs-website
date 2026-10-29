@@ -514,12 +514,17 @@
       '<p class="jobline"><span class="ref">' + esc(j.ref) + '</span> <b>' + esc(j.title || '') + '</b>' + [j.suburb, j.source ? 'from ' + j.source : ''].filter(Boolean).map(function (x) { return ' · ' + esc(x); }).join('') + '</p>' +
       '<p class="muted" style="margin:0 0 8px">The tasks (WBS) and Gantt chart are built from this, so it is needed. It is filled in from the enquiry and notes: check it and add what is missing (what, where, sizes, materials, access, deadline).</p>' +
       '<textarea id="tplScope" rows="5" placeholder="e.g. Bathroom exhaust fan is noisy and has stopped working. Replace it with a quieter fan, duct it outside through the eave, patch and paint the ceiling around it.">' + esc(scope0) + '</textarea></div>' +
-      '<div class="card"><h2>2. How do you want to build the plan?</h2><div class="tpl-grid tmodes">' +
+      '<div class="card"><h2>2. How do you want to build the plan?</h2>' +
+      '<div class="row pdates">' +
+        '<label style="display:grid;gap:4px;font-weight:700">Start date<input type="date" id="tplStart" value="' + today() + '" style="width:auto"></label>' +
+        '<label style="display:grid;gap:4px;font-weight:700"><span>Finish by <small class="muted" style="font-weight:400">(optional)</small></span><input type="date" id="aiFinish" value="' + esc(S.aiFinish || '') + '" style="width:auto"></label>' +
+        '<label class="qchk emergpick" title="No cooling-off: the work can start straight away, the same day as the site inspection"><input type="checkbox" id="tplEmerg"' + (j.emergency || EMERG.test((j.title || '') + ' ' + scope0) ? ' checked' : '') + '> 🚨 Emergency job <small class="muted">(start straight away; otherwise the work waits for the quote to be accepted plus 3 business days cooling-off)</small></label>' +
+        '<p class="pdates-note">✨ <b>Not sure of the end date?</b> Leave <b>Finish by</b> empty and choose <b>Ask AI to build it</b>: the AI works out the end date for this job. If you set a Finish by date, the plan is checked against it (and ✨ Fit to finish-by can bring it in).</p>' +
+      '</div><div class="tpl-grid tmodes">' +
       [['type', '📋 Pick a job type', CATALOG.length + ' common job types, each with sub-types. Builds tasks, sub-tasks, example costs and risks.'], ['blank', '⬜ Blank plan', 'Two rows to start from. Add your own tasks.'], ['ai', '✨ Ask AI to build it', 'Describe the job; AI works out the tasks, sub-tasks, costs, scope and risks, plus tips to help you plan.']]
         .map(function (m) { return '<button class="tpl tmode' + (S.mode === m[0] ? ' on' : '') + '" data-mode="' + m[0] + '"><b>' + m[1] + '</b><small>' + m[2] + '</small></button>'; }).join('') + '</div>' +
       '<div id="modeBody" style="margin-top:14px"></div>' +
-      '<div class="row" style="margin-top:16px;align-items:flex-end"><label style="display:grid;gap:4px;font-weight:700">Start date<input type="date" id="tplStart" value="' + today() + '" style="width:auto"></label>' +
-      '<label class="qchk emergpick" title="No cooling-off: the work can start straight away, the same day as the site inspection"><input type="checkbox" id="tplEmerg"' + (j.emergency || EMERG.test((j.title || '') + ' ' + scope0) ? ' checked' : '') + '> 🚨 Emergency job <small class="muted">(start straight away; otherwise the work waits for the quote to be accepted plus 3 business days cooling-off)</small></label><span class="sp"></span><button class="btn btn-gold" id="tplCreate">Create plan</button></div></div>';
+      '<div class="row" style="margin-top:16px;align-items:flex-end"><span class="sp"></span><button class="btn btn-gold" id="tplCreate">Create plan</button></div></div>';
     var mode = function () {
       V().querySelectorAll('[data-mode]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-mode') === S.mode); });
       var mb = $('#modeBody'), create = $('#tplCreate');
@@ -533,10 +538,9 @@
         mb.innerHTML = '<p class="muted" style="margin:0">A plan with a site inspection and a handover. Add tasks, milestones and sub-tasks yourself on the Schedule tab.</p>';
       } else {
         mb.innerHTML = '<label style="display:grid;gap:4px;font-weight:700">Describe the plan for the AI <small class="muted" style="font-weight:400">(leave empty to use the scope above)</small><textarea id="aiDescribe" rows="4" placeholder="e.g. Replace the exhaust fan in a 2nd-floor unit bathroom, duct it outside through the eave, patch and paint the ceiling. Strata building; customer wants it done before Christmas.">' + esc(S.aiText || '') + '</textarea></label>' +
-          '<div class="row aidates" style="margin-top:8px"><span class="muted" style="font-size:13px">Starts on the <b>Start date</b> below.</span><label style="display:flex;gap:6px;align-items:center;font-weight:700">Finish by <small class="muted" style="font-weight:400">(optional)</small><input type="date" id="aiFinish" value="' + esc(S.aiFinish || '') + '" style="width:auto"></label><small class="muted">The AI fits the work between the two dates.</small></div>' +
+          '<p class="muted" style="font-size:13px;margin:8px 0 0">' + ($('#aiFinish') && $('#aiFinish').value ? 'The AI fits the work between the <b>Start date</b> and <b>Finish by</b> above.' : 'No <b>Finish by</b> date above, so ✨ <b>the AI works out the end date</b> for this job.') + '</p>' +
           '<div class="row" style="margin-top:8px"><button class="btn btn-gold btn-sm" id="aiGo">✨ Build the plan with AI</button><small class="muted">Usually 20–60 seconds. No names or contact details are sent.</small></div><div id="aiOut"></div>';
         $('#aiDescribe').oninput = function () { S.aiText = this.value; };
-        $('#aiFinish').onchange = function () { S.aiFinish = this.value; if (S.aiDraft) showDraft(); };
         dateBoxes(mb);
         $('#aiGo').onclick = aiRun;
         create.disabled = !S.aiDraft; create.textContent = 'Use this plan';
@@ -552,7 +556,7 @@
       var est = JSON.parse(JSON.stringify(p)); est.gate = em ? null : { date: p.start, accepted: true, id: 'quote' }; var ER = rollup(est, today());
       var fit = !fb ? '' : ER.finish <= fb ? '<div class="aifit ok">✅ Planned finish <b>' + esc(dmy(ER.finish)) + '</b>: within your finish-by date (' + esc(dmy(fb)) + ').</div>'
         : '<div class="aifit">⚠ Planned finish <b>' + esc(dmy(ER.finish)) + '</b>: ' + (workBetween(fb, ER.finish) - 1) + ' working day' + (workBetween(fb, ER.finish) - 1 === 1 ? '' : 's') + ' past your finish-by date (' + esc(dmy(fb)) + '). Shorten some tasks, run some in parallel, tick Emergency, or ask the AI again.</div>';
-      out.innerHTML = fit + (fb ? '' : '<div class="aifit plain">Planned ' + esc(dmy(ER.start)) + ' to <b>' + esc(dmy(ER.finish)) + '</b>' + (em ? ' (emergency: no cooling-off, Saturday and Sunday are work days)' : coolOf(p) ? ' (includes ' + coolOf(p) + ' business days cooling-off after the quote)' : ' (no cooling-off)') + '.</div>') + previewHtml(p, S.aiDraft.tips, S.aiDraft) + '<p class="muted" style="font-size:12.5px;margin:6px 0 0">This is an AI draft: check the tasks, days, prices, scope and risks (all go into the Scope and Risks tabs). People (resources) are left blank. Press <b>Use this plan</b> to create it, or <b>Build the plan with AI</b> again for another version.</p>';
+      out.innerHTML = fit + (fb ? '' : '<div class="aifit plain">✨ The AI worked out the end date: <b>' + esc(dmy(ER.finish)) + '</b> (starts ' + esc(dmy(ER.start)) + ', ' + pl(workBetween(ER.start, ER.finish), em ? 'day' : 'working day') + ')' + (em ? ' (emergency: no cooling-off, Saturday and Sunday are work days)' : coolOf(p) ? ' (includes ' + coolOf(p) + ' business days cooling-off after the quote)' : ' (no cooling-off)') + '.</div>') + previewHtml(p, S.aiDraft.tips, S.aiDraft) + '<p class="muted" style="font-size:12.5px;margin:6px 0 0">This is an AI draft: check the tasks, days, prices, scope and risks (all go into the Scope and Risks tabs). People (resources) are left blank. Press <b>Use this plan</b> to create it, or <b>Build the plan with AI</b> again for another version.</p>';
       $('#tplCreate').disabled = false;
     }
     function aiRun() {
@@ -586,6 +590,7 @@
     $('#tplStart').onchange = function () { if (S.mode === 'type' && $('#tplType') && $('#tplType').value) $('#tplType').onchange(); };
     mode();
     $('#tplEmerg').onchange = function () { S.emergTouched = true; if (S.mode === 'ai' && S.aiDraft) showDraft(); };
+    $('#aiFinish').onchange = function () { S.aiFinish = this.value; if (S.mode === 'ai') { if (S.aiDraft) showDraft(); else mode(); } };
     // saying it's an emergency (in the scope or the AI description) ticks the box, unless you have unticked it yourself
     S.emergTouched = false;
     var sayEmerg = function (text) {
@@ -602,7 +607,7 @@
       var key = JSON.stringify(d); if (key === S.lastDates) return; S.lastDates = key;
       var said = [];
       if (d.start) { setDate('tplStart', d.start); said.push('starts ' + dmy(d.start)); }
-      if (d.finish) { S.aiFinish = d.finish; setDate('aiFinish', d.finish); said.push('finishes by ' + dmy(d.finish) + (S.mode === 'ai' ? '' : ' (used by ✨ Ask AI)')); }
+      if (d.finish) { S.aiFinish = d.finish; setDate('aiFinish', d.finish); said.push('finish by ' + dmy(d.finish)); }
       var st = d.start || $('#tplStart').value, em = $('#tplEmerg') && $('#tplEmerg').checked;
       ALL = false;   // cooling-off is counted in business days (Mon-Fri)
       S.coolZero = !em && !!st && st < addWork(nextWork(today()), 3);
@@ -629,8 +634,9 @@
       } else {
         if (!S.aiDraft) return toast('Build the plan with AI first', true);
         plan = fromAi(S.aiDraft, j, start, scope); note = 'plan created (AI draft)';
-        var fb2 = $('#aiFinish') ? $('#aiFinish').value : ''; if (fb2) plan.charter.assumptions = ('Customer wants it finished by ' + dmy(fb2) + '.\n' + (plan.charter.assumptions || '')).trim();
       }
+      var fb2 = $('#aiFinish') ? $('#aiFinish').value : '';
+      if (fb2) { plan.finishBy = fb2; plan.charter.assumptions = ('Customer wants it finished by ' + dmy(fb2) + '.\n' + (plan.charter.assumptions || '')).trim(); }
       var btn = this; btn.disabled = true;
       plan.emergency = !!$('#tplEmerg').checked; plan.coolOff = S.coolZero && !plan.emergency ? 0 : 3;
       S.plan = plan; S.rev = 0; S.tab = 'schedule';

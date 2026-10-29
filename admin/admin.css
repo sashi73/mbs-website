@@ -617,3 +617,8 @@ input.predoff{text-decoration:line-through;color:#A8A397}
 .fitbar.late{border-color:#F5C2B0;background:#FFF4EF}
 .fitbar .btn{margin-left:auto}
 .fitbar .btn + .btn{margin-left:0}
+
+/* v39: Start date, Finish by and Emergency in one row on the new-plan page */
+.pdates{gap:10px 22px;align-items:flex-end;flex-wrap:wrap;margin:4px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#FBF8F1}
+.pdates .emergpick{flex:1 1 300px;align-self:center}
+.pdates-note{flex:1 1 100%;margin:2px 0 0;font-size:13px;color:var(--muted)}
