@@ -15,6 +15,8 @@
   var STORE = 'mbsFixit.v1';
 
   /* ================= state ================= */
+  // v35: "Start again" bumps gen, so any reply still on its way from an older conversation is dropped.
+  var gen = 0, sending = false;
   var S = { open: false, busy: false, log: [], chips: [], flow: null, lead: null, sent: false, greeted: false, mode: null };
   try {
     var saved = JSON.parse(sessionStorage.getItem(STORE) || 'null');
@@ -94,6 +96,14 @@
     html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>' });
   var fileInput = el('input', { type: 'file', accept: 'image/*', multiple: 'multiple', class: 'fx-file', tabindex: '-1', 'aria-hidden': 'true' });
   var form = el('form', { class: 'fx-form' }, [input, sendBtn, fileInput]);
+  // v35: clear the chat and go back to the main menu (asks first, so a half-finished enquiry isn't lost by accident)
+  var restartBtn = el('button', { type: 'button', class: 'fx-restart', title: 'Clear this chat and go back to the main menu',
+    html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg><span>Start again</span>' });
+  var confirmBar = el('div', { class: 'fx-confirm', role: 'alertdialog', 'aria-label': 'Start again?', hidden: 'hidden' }, [
+    el('span', { text: 'Clear this chat and start again from the main menu?' }),
+    el('button', { type: 'button', class: 'fx-cbtn primary fx-yes', text: 'Yes, start again', onclick: function () { startAgain(); } }),
+    el('button', { type: 'button', class: 'fx-cbtn fx-no', text: 'Keep chatting', onclick: function () { askRestart(false); } })
+  ]);
   var closeBtn = el('button', { type: 'button', class: 'fx-close', 'aria-label': 'Close chat',
     html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>' });
 
@@ -303,8 +313,9 @@
       closeBtn
     ]),
     el('div', { class: 'fx-screen' }, [list, chipsBox]),
+    confirmBar,
     form,
-    el('div', { class: 'fx-foot' }, ['Prefer to talk? ', el('a', { href: KB.tel, text: 'Call ' + KB.phone })])
+    el('div', { class: 'fx-foot' }, [restartBtn, el('span', {}, ['Prefer to talk? ', el('a', { href: KB.tel, text: 'Call ' + KB.phone })])])   // v32c: Start again on the left
   ]);
 
   document.body.appendChild(launcher);
@@ -354,11 +365,13 @@
     return b;
   }
 
+  // v36: no extra "Main menu" button: the chips are just the ones Mr. Fixit offers (↺ Start again, at the bottom, goes back to the main menu)
+  function chipEl(c) {
+    return el('button', { type: 'button', class: 'fx-chip' + (c.primary ? ' primary' : ''), text: c.label, onclick: function () { pick(c); } });
+  }
   function renderChips() {
     chipsBox.innerHTML = '';
-    S.chips.forEach(function (c) {
-      chipsBox.appendChild(el('button', { type: 'button', class: 'fx-chip' + (c.primary ? ' primary' : ''), text: c.label, onclick: function () { pick(c); } }));
-    });
+    S.chips.forEach(function (c) { chipsBox.appendChild(chipEl(c)); });
   }
   function render() {
     list.innerHTML = '';
@@ -372,9 +385,8 @@
     });
     if (S.busy) list.appendChild(el('div', { class: 'fx-msg bot fx-typing', 'aria-label': 'Mr. Fixit is typing' }, [el('i'), el('i'), el('i')]));
     chipsBox.innerHTML = '';
-    if (!S.busy) S.chips.forEach(function (c) {
-      chipsBox.appendChild(el('button', { type: 'button', class: 'fx-chip' + (c.primary ? ' primary' : ''), text: c.label, onclick: function () { pick(c); } }));
-    });
+    if (!S.busy) S.chips.forEach(function (c) { chipsBox.appendChild(chipEl(c)); });
+    restartBtn.disabled = sending;   // never in the middle of sending their details to the team
     requestAnimationFrame(function () { list.scrollTop = list.scrollHeight; });
   }
 
@@ -382,11 +394,12 @@
   function say(lines, chips, done) {
     if (!Array.isArray(lines)) lines = [lines];
     S.busy = true; S.chips = []; mood('thinking'); render();
-    var i = 0;
+    var i = 0, g = gen;
     (function next() {
       var t = lines[i];
       var delay = Math.min(1100, 380 + String(t).length * 9);
       setTimeout(function () {
+        if (g !== gen) return;   // the customer started again: this belongs to the old chat
         if (t === '__CARD__') S.log.push({ who: 'card' });
         else { S.log.push({ who: 'bot', text: t }); speak(t); }
         i++;
@@ -735,13 +748,14 @@
     askScope();
   }
   function askScope() {
-    var d = S.flow.data;
+    var d = S.flow.data, g = gen;
     S.busy = true; S.chips = []; mood('thinking'); render();
     fetch(API + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: 'scope', job: (d.service ? d.service + ': ' : '') + (d.details || ''), qa: d.scope || [] }) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return r.ok ? j : { done: true, failed: true, status: r.status, reason: j.reason || j.error }; }); })
       .catch(function () { return { done: true, failed: true, status: 0 }; })
       .then(function (j) {
+        if (g !== gen) return;
         S.busy = false;
         if (!S.flow || S.flow.step !== 'scope') return render();
         if (j.failed) {
@@ -923,6 +937,7 @@
       summary: d.name + (d.suburb ? ' in ' + d.suburb + (d.postcode ? ' ' + d.postcode : '') : '') + ' asked Mr. Fixit ' + q + ' and would like the team to follow up.' + (d.best_time ? ' Best time to call: ' + d.best_time + '.' : '') + (d.copy ? ' Customer asked for a copy of the conversation.' : '') };
     S.busy = true; S.chips = []; mood('thinking'); render();
     var info = { status: 0, reasons: null, saved: false };
+    sending = true;
     fetch(API + '/lead', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lead: S.lead, channels: ['email', 'telegram'], source: 'chat', send_copy: !!d.copy, photos: photoPayload(),
@@ -935,7 +950,7 @@
         });
       })
       .then(function (res) {
-        S.busy = false;
+        S.busy = false; sending = false;
         if (!res.ok) throw new Error('send');
         var nPhotos = PHOTOS.length;
         S.sent = true; S.flow = null; S.mode = null; mood('happy'); clearPhotos();
@@ -950,7 +965,7 @@
           function () { setTimeout(function () { mood(null); }, 2500); });
       })
       .catch(function () {
-        S.busy = false; mood(null);
+        S.busy = false; sending = false; mood(null);
         var tip = setupTip(info);
         say(['Sorry, I couldn’t reach the team from here. Please call ' + KB.phone + ' and they’ll sort it out straight away.'],
           [{ label: 'Try sending again', act: 'send_concern', primary: true }],
@@ -1033,6 +1048,7 @@
   function sendLead() {
     S.busy = true; S.chips = []; mood('thinking'); render();
     var info = { status: 0, reasons: null, saved: false };
+    sending = true;
     fetch(API + '/lead', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lead: S.lead, channels: ['email', 'telegram'], source: 'chat', photos: photoPayload(),
@@ -1045,7 +1061,7 @@
         });
       })
       .then(function (res) {
-        S.busy = false;
+        S.busy = false; sending = false;
         if (!res.ok) throw new Error('send');
         var nPhotos = PHOTOS.length;
         S.sent = true; S.flow = null; mood('happy'); clearPhotos();
@@ -1055,7 +1071,7 @@
           function () { mood('happy'); setTimeout(function () { mood(null); }, 2500); });
       })
       .catch(function () {
-        S.busy = false; mood(null);
+        S.busy = false; sending = false; mood(null);
         var tip = setupTip(info);
         say(['Sorry, I couldn’t reach the team from here. Please call ' + KB.phone + ' and they’ll sort it out straight away.'],
           [{ label: 'Try sending again', act: 'send', primary: true }],
@@ -1068,6 +1084,7 @@
     var expert = mode === 'expert';
     if (expert) { S.lastQ = String(text).slice(0, 600); }
     S.busy = true; S.chips = []; mood('thinking'); render();
+    var g = gen;
     var history = S.log.filter(function (m) { return m.who === 'me' || m.who === 'bot'; }).slice(expert ? -6 : -12)
       .map(function (m) { return { role: m.who === 'me' ? 'user' : 'assistant', content: m.text }; });
     var info = { status: 0, reasons: null, saved: false };
@@ -1081,12 +1098,14 @@
         });
       })
       .then(function (res) {
+        if (g !== gen) return;
         S.busy = false;
         if (!res.ok || !res.j.reply) throw new Error('no reply');
         if (expert) return say([res.j.reply, callLine()], EXPERT_CHIPS);
         say([res.j.reply], CALL_CHIPS);
       })
       .catch(function () {
+        if (g !== gen) return;
         S.busy = false;
         var tip = setupTip(info);
         var showTip = function () { if (tip) { S.log.push({ who: 'tip', text: tip }); save(); render(); } };
@@ -1123,6 +1142,8 @@
     if (!text || S.busy) return;
     S.log.push({ who: 'me', text: text.slice(0, 1000) });
     S.chips = []; save(); render();
+    if (/^(start (again|over)|restart|reset|clear( (the )?chat)?|new chat)[.!]*$/i.test(text)) return startAgain();
+    if (/^(main )?menu[.!]*$|^(go )?(back )?(to )?(the )?main menu[.!]*$/i.test(text)) return toMenu();
     if (/^(cancel|stop|never ?mind|quit)$/i.test(text) && S.flow) { S.flow = null; clearPhotos(); return say('No problem, cancelled. Anything else?', START_CHIPS); }
     if (S.flow) return flowInput(text);
     if (S.mode === 'expert') {
@@ -1204,6 +1225,29 @@
     }
   }
 
+  /* ================= v35: main menu and start again ================= */
+  // Main menu: keeps the chat on screen, stops whatever was going on (an enquiry, Q&A) and shows the main choices
+  function toMenu() {
+    S.flow = null; S.mode = null; clearTimeout(autoPickTimer); clearPhotos(); askRestart(false); save();
+    return say('No worries. Here’s the main menu. What can I help you with?', START_CHIPS);
+  }
+  // Start again: asks first if there's a conversation worth keeping, then clears it all
+  function askRestart(show) {
+    if (show && !S.log.some(function (m) { return m.who === 'me'; })) return startAgain();
+    confirmBar.hidden = !show; panel.classList.toggle('confirming', !!show);
+    if (show) { var y = confirmBar.querySelector('.fx-yes'); if (y) y.focus(); }
+  }
+  function startAgain() {
+    if (sending) return;
+    gen++;   // drop anything still on its way from the old chat
+    stopSpeaking(); clearTimeout(autoPickTimer); askRestart(false);
+    S.log = []; S.chips = []; S.flow = null; S.mode = null; S.lastQ = ''; S.busy = false;
+    clearPhotos(); input.value = ''; input.style.height = ''; mood(null); save(); render();
+    say(['Fresh start! I’m Mr. Fixit.', 'What can I help you with?'], START_CHIPS);
+    setTimeout(function () { input.focus(); }, 200);
+  }
+  restartBtn.addEventListener('click', function () { if (!sending) askRestart(confirmBar.hidden); });
+
   /* ================= open / close ================= */
   function setOpen(v) {
     S.open = v;
@@ -1225,7 +1269,7 @@
   tip.addEventListener('click', function () { setOpen(true); });
   closeBtn.addEventListener('click', function () { stopSpeaking(); setOpen(false); launcher.focus(); });
   drawSound();
-  panel.addEventListener('keydown', function (e) { if (e.key === 'Escape') { stopSpeaking(); setOpen(false); launcher.focus(); } });
+  panel.addEventListener('keydown', function (e) { if (e.key === 'Escape') { if (!confirmBar.hidden) { askRestart(false); restartBtn.focus(); return; } stopSpeaking(); setOpen(false); launcher.focus(); } });
 
   form.addEventListener('submit', function (e) {
     e.preventDefault();
