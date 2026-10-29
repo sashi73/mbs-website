@@ -105,7 +105,7 @@ export async function buildPdf(doc, opts = {}) {
     };
     boxIn(M, isInv ? 'BILL TO' : 'PREPARED FOR', [['', c.name || 'Customer', true], ...wrap(c.address || '', bw - 28).slice(0, 2).map((l) => ['', l]), ['', c.phone], ['', c.email]]);
     boxIn(M + bw + 16, 'DETAILS', [[isInv ? 'Invoice no.' : 'Quote no.', doc.id, true], ['Date', pd(doc.issued)], isInv ? ['Due date', pd(doc.due)] : ['Valid until', pd(doc.validUntil)], ['Job', doc.core],
-      ['Start', pd(plan.start)], ['Finish', pd(plan.finish) + (plan.days ? ` (${plan.days} working days)` : '')]]);
+      ['Start', pd(plan.start)], ['Finish', pd(plan.finish) + (plan.days ? ` (${plan.days} ${plan.emergency ? 'days, weekends included' : 'working days'})` : '')]]);
     cy = by0 - 26;
     page.drawRectangle({ x: M, y: cy - 34, width: W - 2 * M, height: 48, color: INK });
     text(isInv ? (doc.paid > 0 ? 'Balance due (inc GST)' : 'Total (inc GST)') : 'Total quote (inc GST)', M + 18, cy - 15, { bold: true, size: 12, color: rgb(1, 1, 1) });
@@ -154,7 +154,7 @@ export async function buildPdf(doc, opts = {}) {
     // ---- page: the plan ----
     head(isInv ? 'Project summary' : 'Project management plan', `${plan.name}  -  ${doc.customer.name || ''}  -  ${doc.id}`);
     const ov = [['Project', plan.name], ['Customer', doc.customer.name], ['Site', doc.customer.address], ['Job', doc.core], ['Project manager', ch.manager || B.name],
-      ['Planned start', pd(plan.start)], ['Planned finish', pd(plan.finish)], ['Duration', plan.days ? `${plan.days} working days` : '-'], [isInv ? 'Invoice value' : 'Quote value', money(t.inc) + ' inc GST'],
+      ['Planned start', pd(plan.start)], ['Planned finish', pd(plan.finish)], ['Duration', plan.days ? `${plan.days} ${plan.emergency ? 'days (emergency: weekends included)' : 'working days'}` : '-'], [isInv ? 'Invoice value' : 'Quote value', money(t.inc) + ' inc GST'],
       isInv ? ['Progress', `${plan.pct}% complete (${plan.done} of ${plan.total} tasks done)`] : ['Tasks', `${plan.total} tasks, ${plan.tasks.filter((x) => x.mile).length} milestones`]];
     const cw = (W - 2 * M - 20) / 2, rowsN = Math.ceil(ov.length / 2);
     page.drawRectangle({ x: M, y: y - rowsN * 15 - 6, width: W - 2 * M, height: rowsN * 15 + 18, color: PALE });
@@ -234,7 +234,7 @@ export async function buildPdf(doc, opts = {}) {
       y = ry - 16;
     }
     if (y > 60) {
-      for (const l of wrap('Dates are working days (Monday to Friday) and may move with weather, access, approvals and material supply. We will keep you updated if anything changes.', W - 2 * M, 8.5)) { text(l, M, y, { size: 8.5, color: GREY }); y -= 11; }
+      for (const l of wrap((plan.emergency ? 'Emergency job: dates include Saturday and Sunday' : 'Dates are working days (Monday to Friday)') + ' and may move with weather, access, approvals and material supply. We will keep you updated if anything changes.', W - 2 * M, 8.5)) { text(l, M, y, { size: 8.5, color: GREY }); y -= 11; }
     }
     // what happens next (quote) / where the job is at (invoice)
     const steps = isInv

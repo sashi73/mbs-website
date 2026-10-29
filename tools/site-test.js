@@ -221,7 +221,7 @@ const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !
     return { cx, q };
   };
   const chatText = q => q.$eval('.fx-list', e => e.innerText);
-  const chipList = q => q.$$eval('.fx-chip', x => x.map(c => c.textContent.trim()));
+  const chipList = q => q.$$eval('.fx-chip:not(.fx-menu)', x => x.map(c => c.textContent.trim()))   // the answer buttons (v35: the always-there Main menu is checked in chat-restart-test);
   // wait until Mr. Fixit has finished typing his reply (its buttons appear at the end)
   const settle = async q => { await q.waitForTimeout(400); await q.waitForFunction(() => document.querySelectorAll('.fx-chip').length > 0, null, { timeout: 15000 }).catch(() => {}); await q.waitForTimeout(300); };
   const type = async (q, t) => { await q.fill('.fx-input', t); await q.press('.fx-input', 'Enter'); await settle(q); };

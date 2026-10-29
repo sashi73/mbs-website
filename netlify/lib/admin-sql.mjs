@@ -103,7 +103,7 @@ export async function tables() {
     for (const t of p.tasks) plan_tasks.push({ job: p.core, plan_name: p.name, task: t.name, resource: t.resource || '', lead: t.lead || '', status: STN[t.status] || (t.pct >= 100 ? 'Done' : t.pct > 0 ? 'In progress' : 'To do'), start: t.es, finish: t.ef, days: t.dur, qty: t.qty, unit: t.unit,
       unit_cost: t.rate, planned_cost: r2(t.qty * t.rate), actual_cost: t.actual, pct_complete: t.pct, done: t.pct >= 100, late: t.pct < 100 && t.ef < todayS });
     for (const t of p.tasks) for (const x of t.subs || []) {
-      const es = t.es ? (x.off ? PLAN.addWork(t.es, x.off) : t.es) : '', ef = es ? (x.dur > 1 ? PLAN.addWork(es, x.dur - 1) : es) : '';
+      const A = PLAN.allDays(p), es = t.es ? (x.off ? PLAN.addWork(t.es, x.off, A) : t.es) : '', ef = es ? (x.dur > 1 ? PLAN.addWork(es, x.dur - 1, A) : es) : '';
       plan_subtasks.push({ job: p.core, plan_name: p.name, task: t.name, subtask: x.name, owner: x.owner || '', start: es, finish: ef, days: x.dur, status: STN[x.status] || 'To do', done: x.status === 'done', late: x.status !== 'done' && !!ef && ef < todayS });
     }
     for (const r of p.risks || []) plan_risks.push({ job: p.core, plan_name: p.name, risk: r.title, probability: r.p, impact: r.i, score: r.p * r.i, response: r.response, owner: r.owner, status: r.status, review: r.review });

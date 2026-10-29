@@ -10,7 +10,9 @@
   /* ---------- working days (same rules as the server) ---------- */
   var toD = function (s) { var a = s.split('-').map(Number); return new Date(Date.UTC(a[0], a[1] - 1, a[2])); };
   var toS = function (d) { return d.toISOString().slice(0, 10); };
-  var wk = function (d) { var w = d.getUTCDay(); return w !== 0 && w !== 6; };
+  // Mon-Fri; an emergency plan (v34) also works Saturday and Sunday. ALL follows the plan being scheduled (set in schedule()).
+  var ALL = false;
+  var wk = function (d) { if (ALL) return true; var w = d.getUTCDay(); return w !== 0 && w !== 6; };
   function nextWork(s) { var d = toD(s); while (!wk(d)) d = new Date(d.getTime() + 864e5); return toS(d); }
   function addWork(s, n) { var d = toD(s); while (n > 0) { d = new Date(d.getTime() + 864e5); if (wk(d)) n--; } return toS(d); }
   function workBetween(a, b) { if (!a || !b || b < a) return 0; var n = 0, d = toD(a), e = toD(b); while (d <= e) { if (wk(d)) n++; d = new Date(d.getTime() + 864e5); } return n; }
@@ -64,6 +66,7 @@
   // Otherwise: quote accepted (until then: the quote date) + cooling-off (default 3 business days). "Work starts" can only make it later.
   function coolOf(p) { return p.coolOff == null || p.coolOff === '' ? 3 : Math.max(0, Math.min(10, Math.round(+p.coolOff) || 0)); }
   function gateOf(p) {
+    ALL = !!p.emergency;
     var re = /^\d{4}-\d{2}-\d{2}$/, ws = re.test(p.workStart || '') ? nextWork(p.workStart) : '';
     if (p.emergency) return { date: ws, why: ws ? 'work' : 'emergency' };
     var g = p.gate, q = g && re.test(g.date || '') ? addWork(nextWork(g.date), coolOf(p)) : '';
@@ -74,13 +77,14 @@
   function holdDate(p) { return gateOf(p).date; }
   function gateText(p) {
     var G = gateOf(p), c = coolOf(p), g = p.gate, days = c + ' business day' + (c === 1 ? '' : 's');
-    if (p.emergency) return '🚨 <b>Emergency:</b> the work can start straight away, the same day as the site inspection' + (G.date ? '; "Work starts" set to <b>' + esc(dmy(G.date)) + '</b>' : '') + '.';
+    if (p.emergency) return '🚨 <b>Emergency:</b> the work can start straight away, the same day as the site inspection, and Saturday and Sunday are work days' + (G.date ? '; "Work starts" set to <b>' + esc(dmy(G.date)) + '</b>' : '') + '.';
     var w = G.why === 'work' ? '📅 Work starts <b>' + esc(dmy(G.date)) + '</b> ("Work starts" date). ' : '';
     if (!g) return w + 'Once there is a quote, the work waits for it to be accepted plus a cooling-off period of ' + days + ' (tick Emergency to start straight away).';
     if (g.accepted) return w + '✅ Quote <b>' + esc(g.id) + '</b> accepted on ' + esc(dmy(g.date)) + '; after the ' + days + ' cooling-off the work starts <b>' + esc(dmy(gateDate(p))) + '</b>.';
     return w + '🔒 Quote <b>' + esc(g.id) + '</b> is not accepted yet. The work waits for acceptance plus ' + days + ' cooling-off: assuming acceptance on the quote date (' + esc(dmy(g.date)) + '), the work starts <b>' + esc(dmy(gateDate(p))) + '</b>. It moves if the customer accepts later.';
   }
   function schedule(p) {
+    ALL = !!p.emergency;   // emergency: weekends are work days
     var start = nextWork(p.start || today()), byId = {}, gate = holdDate(p), gated = gate ? gatedTasks(p) : [];
     var quoteMs = p.emergency ? p.tasks.filter(function (t) { return t.dur === 0 && /quote/i.test(t.name); })[0] : null;   // emergency: work the same day as the inspection
     p.tasks.forEach(function (t) { byId[t.id] = t; t.es = ''; t.ef = ''; });
@@ -548,7 +552,7 @@
       var est = JSON.parse(JSON.stringify(p)); est.gate = em ? null : { date: p.start, accepted: true, id: 'quote' }; var ER = rollup(est, today());
       var fit = !fb ? '' : ER.finish <= fb ? '<div class="aifit ok">✅ Planned finish <b>' + esc(dmy(ER.finish)) + '</b>: within your finish-by date (' + esc(dmy(fb)) + ').</div>'
         : '<div class="aifit">⚠ Planned finish <b>' + esc(dmy(ER.finish)) + '</b>: ' + (workBetween(fb, ER.finish) - 1) + ' working day' + (workBetween(fb, ER.finish) - 1 === 1 ? '' : 's') + ' past your finish-by date (' + esc(dmy(fb)) + '). Shorten some tasks, run some in parallel, tick Emergency, or ask the AI again.</div>';
-      out.innerHTML = fit + (fb ? '' : '<div class="aifit plain">Planned ' + esc(dmy(ER.start)) + ' to <b>' + esc(dmy(ER.finish)) + '</b>' + (em ? ' (emergency: no cooling-off)' : coolOf(p) ? ' (includes ' + coolOf(p) + ' business days cooling-off after the quote)' : ' (no cooling-off)') + '.</div>') + previewHtml(p, S.aiDraft.tips, S.aiDraft) + '<p class="muted" style="font-size:12.5px;margin:6px 0 0">This is an AI draft: check the tasks, days, prices, scope and risks (all go into the Scope and Risks tabs). People (resources) are left blank. Press <b>Use this plan</b> to create it, or <b>Build the plan with AI</b> again for another version.</p>';
+      out.innerHTML = fit + (fb ? '' : '<div class="aifit plain">Planned ' + esc(dmy(ER.start)) + ' to <b>' + esc(dmy(ER.finish)) + '</b>' + (em ? ' (emergency: no cooling-off, Saturday and Sunday are work days)' : coolOf(p) ? ' (includes ' + coolOf(p) + ' business days cooling-off after the quote)' : ' (no cooling-off)') + '.</div>') + previewHtml(p, S.aiDraft.tips, S.aiDraft) + '<p class="muted" style="font-size:12.5px;margin:6px 0 0">This is an AI draft: check the tasks, days, prices, scope and risks (all go into the Scope and Risks tabs). People (resources) are left blank. Press <b>Use this plan</b> to create it, or <b>Build the plan with AI</b> again for another version.</p>';
       $('#tplCreate').disabled = false;
     }
     function aiRun() {
@@ -600,6 +604,7 @@
       if (d.start) { setDate('tplStart', d.start); said.push('starts ' + dmy(d.start)); }
       if (d.finish) { S.aiFinish = d.finish; setDate('aiFinish', d.finish); said.push('finishes by ' + dmy(d.finish) + (S.mode === 'ai' ? '' : ' (used by ✨ Ask AI)')); }
       var st = d.start || $('#tplStart').value, em = $('#tplEmerg') && $('#tplEmerg').checked;
+      ALL = false;   // cooling-off is counted in business days (Mon-Fri)
       S.coolZero = !em && !!st && st < addWork(nextWork(today()), 3);
       if (S.coolZero) said.push('cooling-off set to 0 days so the work can start then (the customer must agree to waive it)');
       toast('📅 From what you wrote: ' + said.join(', '));
@@ -850,7 +855,7 @@
     var dayW = S.zoom === 'week' ? 7 : 20, days = daysBetween(from, to) + 1, W = days * dayW;
     var x = function (s) { return daysBetween(from, s) * dayW; };
     var firstW = toD(from).getUTCDay(), satOff = ((6 - firstW + 7) % 7) * dayW;
-    var weekendBg = 'background-image:repeating-linear-gradient(90deg,transparent 0,transparent ' + satOff + 'px,rgba(0,0,0,.045) ' + satOff + 'px,rgba(0,0,0,.045) ' + (satOff + 2 * dayW) + 'px,transparent ' + (satOff + 2 * dayW) + 'px,transparent ' + 7 * dayW + 'px);background-size:' + 7 * dayW + 'px 100%';
+    var weekendBg = p.emergency ? '' : 'background-image:repeating-linear-gradient(90deg,transparent 0,transparent ' + satOff + 'px,rgba(0,0,0,.045) ' + satOff + 'px,rgba(0,0,0,.045) ' + (satOff + 2 * dayW) + 'px,transparent ' + (satOff + 2 * dayW) + 'px,transparent ' + 7 * dayW + 'px);background-size:' + 7 * dayW + 'px 100%';
     var scale = '<div class="gscale" style="width:' + W + 'px">';
     for (var i = 0; i < days; i++) {
       var d = toS(new Date(toD(from).getTime() + i * 864e5)), dd = +d.slice(8), wd = toD(d).getUTCDay();
@@ -871,7 +876,7 @@
     var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button>' +
       '<div class="qgate' + (p.emergency ? ' emerg' : p.gate && p.gate.accepted ? ' ok' : '') + '"><div class="qrow"><label class="qchk" title="Emergency work (burst pipe, storm damage, a leak that is doing damage): no cooling-off, the work can start straight away, the same day as the site inspection"><input type="checkbox" id="pEmerg"' + (p.emergency ? ' checked' : '') + '> 🚨 Emergency</label>' +
         '<label class="qchk" title="Days after the quote is accepted before the work can start. The full cooling-off period is 5 business days; most customers agree to start after 3.">Cooling-off <select id="pCool"' + (p.emergency ? ' disabled' : '') + '>' + [0, 1, 2, 3, 4, 5].map(function (n) { return '<option value="' + n + '"' + (coolOf(p) === n ? ' selected' : '') + '>' + n + (n === 3 ? ' (usual)' : n === 5 ? ' (full period)' : '') + '</option>'; }).join('') + '</select> business days</label></div><div>' + gateText(p) + '</div></div>' +
-      '<span class="muted" style="font-size:12.5px">To move a task, type its new number in <b>#</b> (1 = first) or drag <b>⠿</b>. Sub-tasks move inside their own task. Days are working days (Mon–Fri). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span><span class="sp"></span>' +
+      '<span class="muted" style="font-size:12.5px">To move a task, type its new number in <b>#</b> (1 = first) or drag <b>⠿</b>. Sub-tasks move inside their own task. Days are working days (' + (p.emergency ? 'emergency: every day, Saturday and Sunday included' : 'Mon–Fri') + '). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span><span class="sp"></span>' +
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700">Project start<input type="date" id="pStart" value="' + esc(p.start) + '" style="width:auto"></label>' +
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The day the work itself starts (after the quote is accepted). Tasks before the quote, like the site inspection, are not affected. Also on the quote.">Work starts<input type="date" id="pWork" value="' + esc(p.workStart || '') + '" min="' + esc(gateDate(p) || nextWork(p.start)) + '" style="width:auto"></label>' +
       '<div class="tabs" style="margin:0" title="Which columns to show"><button class="tab' + (S.cols === 's' ? ' on' : '') + '" data-cols="s">📅 Dates</button><button class="tab' + (S.cols === 'c' ? ' on' : '') + '" data-cols="c">$ Costs</button><button class="tab' + (S.cols === 'a' ? ' on' : '') + '" data-cols="a">All columns</button></div>' +

@@ -19,7 +19,7 @@ export function snapshot(plan, today = sydToday()) {
   const R = PLAN.rollup(p, today);
   const c = p.charter || {};
   return {
-    name: str(p.name, 120), rev: p.rev || 0, at: Date.now(), today, start: R.start, finish: R.finish, days: R.start ? PLAN.workBetween(R.start, R.finish) : 0,
+    name: str(p.name, 120), rev: p.rev || 0, at: Date.now(), today, start: R.start, finish: R.finish, days: R.start ? PLAN.workBetween(R.start, R.finish, PLAN.allDays(p)) : 0,
     BAC: R.BAC, pct: R.pct, done: R.done, total: R.total, late: R.late, emergency: !!p.emergency, coolOff: PLAN.coolOf(p),
     charter: { objective: str(c.objective, 600), inScope: str(c.inScope, 1500), outScope: str(c.outScope, 700), deliverables: str(c.deliverables, 700), acceptance: str(c.acceptance, 600), assumptions: str(c.assumptions, 700), manager: str(c.manager, 80) },
     ...workSpan(p),
@@ -39,7 +39,7 @@ function workSpan(p) {
   if (!g.length) return { workStart: '', workFinish: '' };
   return { workStart: g.reduce((m, t) => (!m || t.es < m ? t.es : m), ''), workFinish: g.reduce((m, t) => (t.ef > m ? t.ef : m), '') };
 }
-const datesLine = (snap) => (snap.workStart || snap.start) ? `Work planned to start ${ACC.prettyDate(snap.workStart || snap.start)} and finish ${ACC.prettyDate(snap.workFinish || snap.finish)} (about ${PLAN.workBetween(snap.workStart || snap.start, snap.workFinish || snap.finish)} working days), subject to acceptance, access and weather.` : '';
+const datesLine = (snap) => (snap.workStart || snap.start) ? `Work planned to start ${ACC.prettyDate(snap.workStart || snap.start)} and finish ${ACC.prettyDate(snap.workFinish || snap.finish)} (about ${PLAN.workBetween(snap.workStart || snap.start, snap.workFinish || snap.finish, !!snap.emergency)} ${snap.emergency ? 'days, weekends included' : 'working days'}), subject to acceptance, access and weather.` : '';
 // what the price depends on: if this changes after a quote was made, the quote is out of date
 export function fingerprint(plan) {
   return JSON.stringify([(plan.tasks || []).map((t) => [t.name, r2(t.qty), t.unit || '', r2(t.rate), t.dur]), str((plan.charter || {}).inScope, 1500)]);
@@ -101,7 +101,7 @@ export async function planQuotePost(action, body, { who, by, audit }) {
   const accepted = ACC.gateFrom((await ACC.index()).quotes, job.core);
   const snap = snapshot({ ...plan, gate: accepted && accepted.accepted ? accepted : { date: ACC.today(), id: body.update || 'new', accepted: false } });
   const notes = [datesLine(snap),
-    plan.emergency ? 'Emergency work: we can start straight away, usually the same day as the site inspection.'
+    plan.emergency ? 'Emergency work: we can start straight away, usually the same day as the site inspection, and keep working on Saturday and Sunday where needed.'
       : accepted && accepted.accepted ? '' : `Work starts once this quote is accepted, after a cooling-off period of ${PLAN.coolOf(plan)} business day${PLAN.coolOf(plan) === 1 ? '' : 's'}. The dates assume you accept today; they move by the same number of days if you accept later.`,
     'The attached high-level project management plan sets out the scope, schedule, milestones and key risks. Any change to the scope will be agreed in writing (variation) before the work is done.', str(body.notes, 800)].filter(Boolean).join('\n');
   const fields = { core: job.core, customer, items, pricesInc: false, title: str(body.title, 160) || snap.name, notes, validUntil };
@@ -226,9 +226,9 @@ export async function quoteStart(body, { who, by, audit }) {
   const plan = await PLAN.get(d.core);
   if (!plan) return out(404, { error: 'The project plan for this job has been deleted' });
   if (date) {
-    if (PLAN.nextWork(date) < PLAN.nextWork(plan.start)) return out(400, { error: `The work can't start before the project start (${ACC.prettyDate(PLAN.nextWork(plan.start))})` });
+    if (PLAN.nextWork(date, PLAN.allDays(plan)) < PLAN.nextWork(plan.start, PLAN.allDays(plan))) return out(400, { error: `The work can't start before the project start (${ACC.prettyDate(PLAN.nextWork(plan.start, PLAN.allDays(plan)))})` });
     const g = PLAN.gateOf({ ...plan, workStart: '' }).date;   // the quote and cooling-off (not the old "Work starts")
-    if (g && PLAN.nextWork(date) < g) return out(400, { error: `${gateWords(plan)} Pick ${ACC.prettyDate(g)} or later${plan.gate && !plan.gate.accepted ? ', or tick Emergency on the project plan' : ''}.` });
+    if (g && PLAN.nextWork(date, PLAN.allDays(plan)) < g) return out(400, { error: `${gateWords(plan)} Pick ${ACC.prettyDate(g)} or later${plan.gate && !plan.gate.accepted ? ', or tick Emergency on the project plan' : ''}.` });
   }
   const saved = await savePlan(d.core, (p) => { p.workStart = date; }, by);
   if (!saved) return out(409, { error: 'The plan is being changed by someone else. Try again.' });

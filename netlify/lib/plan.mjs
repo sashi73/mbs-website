@@ -1,5 +1,5 @@
 // MBS project planner (PMI style, waterfall): one plan per job, stored in Netlify Blobs as plan:<job core>.
-// Scheduling uses working days (Mon-Fri). Tasks: duration, finish-to-start predecessors, "start no earlier than",
+// Scheduling uses working days (Mon-Fri; emergency jobs also Sat and Sun). Tasks: duration, finish-to-start predecessors, "start no earlier than",
 // resource, quantity x unit cost, actual cost, % complete. Plus charter (scope), risks, issues and a baseline.
 import * as kv from './kv.mjs';
 import * as J from './jobs.mjs';
@@ -15,20 +15,24 @@ const ymdOk = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? String(s) : '
 const int = (n, lo, hi, d = lo) => { const v = Math.round(Number(n)); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; };
 
 // ---------- working days ----------
+// Normal jobs: Monday to Friday. Emergency jobs (v34): every day counts, Saturday and Sunday included.
+// Each helper takes "all" = true to count weekends; allDays(plan) says which a plan uses.
 const toD = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
 const toS = (d) => d.toISOString().slice(0, 10);
-export const isWork = (s) => { const w = toD(s).getUTCDay(); return w !== 0 && w !== 6; };
-export function nextWork(s) { let d = toD(s); while ([0, 6].includes(d.getUTCDay())) d = new Date(d.getTime() + 86400000); return toS(d); }
-export function prevWork(s) { let d = new Date(toD(s).getTime() - 86400000); while ([0, 6].includes(d.getUTCDay())) d = new Date(d.getTime() - 86400000); return toS(d); }
-export function addWork(s, n) {   // n working days after s (s must be a working day)
+const off = (d, all) => !all && [0, 6].includes(d.getUTCDay());   // a day off?
+export const allDays = (plan) => !!(plan && plan.emergency);
+export const isWork = (s, all = false) => !off(toD(s), all);
+export function nextWork(s, all = false) { let d = toD(s); while (off(d, all)) d = new Date(d.getTime() + 86400000); return toS(d); }
+export function prevWork(s, all = false) { let d = new Date(toD(s).getTime() - 86400000); while (off(d, all)) d = new Date(d.getTime() - 86400000); return toS(d); }
+export function addWork(s, n, all = false) {   // n working days after s (s must be a working day)
   let d = toD(s), left = n;
-  while (left > 0) { d = new Date(d.getTime() + 86400000); if (![0, 6].includes(d.getUTCDay())) left--; }
+  while (left > 0) { d = new Date(d.getTime() + 86400000); if (!off(d, all)) left--; }
   return toS(d);
 }
-export function workBetween(a, b) {   // working days from a up to and including b (0 if b < a)
+export function workBetween(a, b, all = false) {   // working days from a up to and including b (0 if b < a)
   if (!a || !b || b < a) return 0;
   let n = 0, d = toD(a); const e = toD(b);
-  while (d <= e) { if (![0, 6].includes(d.getUTCDay())) n++; d = new Date(d.getTime() + 86400000); }
+  while (d <= e) { if (!off(d, all)) n++; d = new Date(d.getTime() + 86400000); }
   return n;
 }
 
@@ -52,14 +56,15 @@ export function gatedTasks(plan) {
 //   Until the quote is accepted the plan assumes acceptance on the quote date. A "Work starts" date can only make it later.
 export const coolOf = (plan) => (plan.coolOff == null || plan.coolOff === '' ? 3 : Math.max(0, Math.min(10, Math.round(Number(plan.coolOff)) || 0)));
 export function gateOf(plan) {
-  const ymd = /^\d{4}-\d{2}-\d{2}$/, ws = ymd.test(plan.workStart || '') ? nextWork(plan.workStart) : '';
+  const A = allDays(plan), ymd = /^\d{4}-\d{2}-\d{2}$/, ws = ymd.test(plan.workStart || '') ? nextWork(plan.workStart, A) : '';
   if (plan.emergency) return { date: ws, why: ws ? 'work' : 'emergency' };
   const g = plan.gate, q = g && ymd.test(g.date || '') ? addWork(nextWork(g.date), coolOf(plan)) : '';
   if (ws && ws > q) return { date: ws, why: 'work' };
   return { date: q, why: q ? (g.accepted ? 'accepted' : 'quoted') : '' };
 }
 export function schedule(plan) {
-  const start = nextWork(plan.start || new Date().toISOString().slice(0, 10));
+  const A = allDays(plan);   // emergency: weekends are work days
+  const start = nextWork(plan.start || new Date().toISOString().slice(0, 10), A);
   const byId = Object.fromEntries(plan.tasks.map((t) => [t.id, t]));
   const gate = gateOf(plan).date;
   const gated = gate ? gatedTasks(plan) : new Set();
@@ -70,13 +75,13 @@ export function schedule(plan) {
     for (const t of plan.tasks) {
       let es = start;
       if (gated.has(t) && gate > es) es = gate;   // no work before the quote is accepted (or, until then, before it expires)
-      if (t.fixed && t.snet) { if (t.snet > es) es = nextWork(t.snet); }   // start set by hand: runs in parallel, the "After #" link is not used
+      if (t.fixed && t.snet) { if (t.snet > es) es = nextWork(t.snet, A); }   // start set by hand: runs in parallel, the "After #" link is not used
       else {
-        for (const p of t.pred || []) { const q = byId[p]; if (q && q.ef && q !== t) { const after = t === quoteMs ? q.es : q.dur === 0 ? nextWork(q.ef) : addWork(nextWork(q.ef), 1); if (after > es) es = after; } }
-        if (t.snet && t.snet > es) es = nextWork(t.snet);
+        for (const p of t.pred || []) { const q = byId[p]; if (q && q.ef && q !== t) { const after = t === quoteMs ? q.es : q.dur === 0 ? nextWork(q.ef, A) : addWork(nextWork(q.ef, A), 1, A); if (after > es) es = after; } }
+        if (t.snet && t.snet > es) es = nextWork(t.snet, A);
       }
-      es = nextWork(es);
-      const ef = t.dur === 0 ? es : addWork(es, Math.max(1, t.dur) - 1);
+      es = nextWork(es, A);
+      const ef = t.dur === 0 ? es : addWork(es, Math.max(1, t.dur) - 1, A);
       if (es !== t.es || ef !== t.ef) { t.es = es; t.ef = ef; changed = true; }
     }
     if (!changed) break;
@@ -86,7 +91,7 @@ export function schedule(plan) {
 export function rollup(plan, today) {
   schedule(plan);
   const tasks = plan.tasks;
-  const frac = (t) => (!t.es ? 0 : today < t.es ? 0 : today >= t.ef ? 1 : workBetween(t.es, today) / Math.max(1, workBetween(t.es, t.ef)));
+  const A = allDays(plan), frac = (t) => (!t.es ? 0 : today < t.es ? 0 : today >= t.ef ? 1 : workBetween(t.es, today, A) / Math.max(1, workBetween(t.es, t.ef, A)));
   const cost = (t) => r2((Number(t.qty) || 0) * (Number(t.rate) || 0));
   const BAC = r2(tasks.reduce((a, t) => a + cost(t), 0));
   const PV = r2(tasks.reduce((a, t) => a + cost(t) * frac(t), 0));
@@ -185,7 +190,7 @@ export async function remind(core, taskId, when, by) {
   schedule(p);
   let at = null;
   const day = (s, h) => { const [y, m, d] = s.split('-').map(Number); return sydneyTime(y, m, d, h, 0); };
-  if (when === 'daybefore') at = day(prevWork(t.es), 7);
+  if (when === 'daybefore') at = day(prevWork(t.es, allDays(p)), 7);
   else if (when === 'start') at = day(t.es, 7);
   else if (when === 'due') at = day(t.ef, 7);
   else at = parseWhen(when);
@@ -308,7 +313,7 @@ export async function buildAiPlan({ core, describe, scope, type, start, finish, 
   try { await checkLimit(); } catch (e) { return { error: e.message }; }
   const system = 'You are an experienced NSW residential building and remedial project manager. Build a practical WATERFALL project plan for a small builder from the job description. ' +
     'Include: site inspection, quote accepted (milestone, 0 days), any approvals needed (council, strata, engineer), ordering materials with realistic lead times, the trade work in the right order (with sub-steps where useful), inspections/tests (e.g. flood test), clean-up, handover and invoice (milestone). ' +
-    'Days are working days. "after" lists the task numbers (1-based) that must finish first. Sub-tasks must fit inside their task: [name, start offset in days from the task start, days]. ' +
+    'Days are working days (Monday to Friday; if emergency is true, every day counts, Saturday and Sunday included). "after" lists the task numbers (1-based) that must finish first. Sub-tasks must fit inside their task: [name, start offset in days from the task start, days]. ' +
     'Costs: qty, unit (h, m², L, lot, each) and a typical Sydney rate ex GST for labour or materials; use 0 if unsure. Do not invent council rules; say "check with council" where relevant. ' +
     'Also work out the SCOPE for this job: in_scope (the work included, as short "- " lines), out_of_scope (what is NOT included, to avoid arguments later), deliverables (e.g. certificates, photos, finished work), acceptance (how the customer knows it is done) and assumptions/constraints. ' +
     'And the RISKS specific to this job (4-6): [title, cause, probability 1-5, impact 1-5, response Avoid|Mitigate|Transfer|Accept, action]. Plus 3-6 short planning tips (lead times, permits, weather, inspections, access, safety). Keep every text short. ' +
@@ -318,7 +323,7 @@ export async function buildAiPlan({ core, describe, scope, type, start, finish, 
     'JSON only: {"emergency":false,"name":"short plan name","objective":"one sentence","in_scope":"","out_of_scope":"","deliverables":"","acceptance":"","assumptions":"","tips":[""],"tasks":[{"n":"","d":1,"after":[],"q":0,"u":"h","r":0,"s":[["",0,1]]}],"risks":[["","",3,3,"Mitigate",""]]}';
   const st = ymdOk(start) || new Date().toISOString().slice(0, 10), fin = ymdOk(finish);
   const user = { job_type: str(type, 120), work: str(job.service, 120), suburb: str(job.suburb, 60), start_date: st, emergency: !!emergency, cooling_off_days: emergency ? 0 : 3, description: text };
-  if (fin && fin >= st) { user.finish_by = fin; user.working_days_available = workBetween(nextWork(st), fin); }
+  if (fin && fin >= st) { user.finish_by = fin; user.working_days_available = workBetween(nextWork(st, !!emergency), fin, !!emergency); }
   let o, used;
   try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: planCap(), timeoutMs: 150000, temperature: 0.3 })); }
   catch (e) { return { error: e.message }; }
