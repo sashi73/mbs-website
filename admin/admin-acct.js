@@ -120,6 +120,8 @@
         '<div class="grid" style="align-content:start">' +
           (d.plan ? '<div class="card" id="docPlan"><h2>📅 Project plan</h2><p style="margin:0 0 8px;font-size:13.5px">' + (isQ ? 'Made from the project plan' : 'Linked to the project plan' + (d.plan.fromQuote ? ' (via quote ' + esc(d.plan.fromQuote) + ')' : '')) + ' of job <b>' + esc(d.core) + '</b>' + (d.plan.at ? ', ' + esc(M.date(d.plan.at)) : '') + '.</p>' +
             '<p class="muted" style="margin:0 0 10px;font-size:12.5px">The PDF is a pack: a cover page with the MBS logo, this ' + (isQ ? 'quote' : 'tax invoice') + ', and 2 pages of high-level project plan' + (isQ ? ' (scope, risks, milestones, Gantt chart) as it was when the quote was made.' : ' showing today\'s progress.') + '</p>' +
+            (isQ && d.plan.snapshot ? '<div class="wstart"><label><b>Work starts</b><input type="date" id="wStart" value="' + esc(d.plan.snapshot.workStart || d.plan.snapshot.start || '') + '"' + (d.invoiceId || d.status === 'void' ? ' disabled' : '') + '></label>' +
+              '<small class="muted" id="wInfo">Finishes ' + esc(M.dmy ? M.dmy(d.plan.snapshot.workFinish || d.plan.snapshot.finish || '') : (d.plan.snapshot.workFinish || d.plan.snapshot.finish || '')) + '. Change the start and the project plan, its Gantt chart and this quote\'s plan pages move with it.</small></div>' : '') +
             '<a class="btn btn-sm" href="#plan/' + esc(d.core) + '">Open the plan →</a></div>' : '') +
           '<div class="card"><h2>Actions</h2><div class="actions" id="docActions"></div><p class="muted" id="saveState" style="margin:10px 0 0;font-size:13px"></p></div>' +
           (!isQ && d.id ? '<div class="card"><h2>Payments</h2><div id="payList"></div></div>' : '') +
@@ -179,6 +181,17 @@
       });
     }
     function reload() { return api('docGet', { id: d.id }).then(function (r) { editor(r.doc, r); }); }
+    // "Work starts" on a quote made from a project plan: moves the plan's schedule and Gantt chart, and this quote's plan pages
+    var ws = $('#wStart');
+    if (ws) {
+      if (M.dateBoxes) M.dateBoxes($('#docPlan'));
+      ws.addEventListener('change', function () {
+        var v = ws.value; if (!v) return;
+        (dirty ? save(true) : Promise.resolve(d)).then(function () { return api('quoteStart', { id: d.id, date: v }); })
+          .then(function (r) { toast('Work starts ' + (M.dmy ? M.dmy(r.workStart) : r.workStart) + ', finishes ' + (M.dmy ? M.dmy(r.finish) : r.finish) + ': plan and Gantt chart updated'); return reload(); })
+          .catch(function (e) { fail(e); reload(); });
+      });
+    }
 
     // ---- actions ----
     var A = [];

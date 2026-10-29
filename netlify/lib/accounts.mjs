@@ -53,13 +53,29 @@ function summaryOf(d) {
   if (d.type === 'expense') return { id: d.id, date: d.date, supplier: d.supplier, desc: d.desc, category: d.category, inc: d.inc, gst: d.gst, core: d.core || '', receipt: !!d.receipt, updated: d.updated };
   return { id: d.id, type: d.type, core: d.core || '', name: d.customer.name, status: d.status, issued: d.issued, due: d.due || '', validUntil: d.validUntil || '',
     inc: d.totals.inc, gst: d.totals.gst, ex: d.totals.ex, paid: d.paid || 0, balance: d.type === 'invoice' ? r2(d.totals.inc - (d.paid || 0)) : 0,
-    fromQuote: d.fromQuote || '', invoiceId: d.invoiceId || '', sentAt: d.sentAt || null, plan: d.plan ? 1 : 0, updated: d.updated };
+    fromQuote: d.fromQuote || '', invoiceId: d.invoiceId || '', sentAt: d.sentAt || null, acceptedAt: d.acceptedAt || null, plan: d.plan ? 1 : 0, updated: d.updated };
 }
 async function save(d) {
   d.updated = Date.now();
   await kv.set(KEY[d.type] + d.id, d);
   await kv.update('acct-index', (x) => { x[GROUP[d.type]][d.id] = summaryOf(d); return x; }, () => ({ quotes: {}, invoices: {}, expenses: {} }));
+  if (d.type === 'quote' && d.core) await refreshGate(d.core).catch((e) => console.error('Plan quote gate:', e.message));
   return d;
+}
+// Work on a job can only start once its quote is accepted. The plan keeps a "gate": the accepted date, or (not accepted yet)
+// the date the quote is valid until, so a quote dated the 30th and valid until the 5th schedules the work from the 5th.
+export function gateFrom(quotes, core) {
+  const live = Object.values(quotes || {}).filter((x) => x.core === core && !['void', 'declined'].includes(x.status)).sort((a, b) => (a.id > b.id ? 1 : -1));
+  const acc = live.filter((q) => q.status === 'accepted' || q.invoiceId)[0];   // once a quote is accepted the job is on (a later variation doesn't hold it back)
+  if (acc) return { date: acc.acceptedAt ? today(acc.acceptedAt) : acc.issued, id: acc.id, accepted: true };
+  const q = live.pop();
+  return q ? { date: q.validUntil || q.issued, id: q.id, accepted: false } : null;
+}
+export async function gateFor(core) { return gateFrom((await index()).quotes, core); }
+export async function refreshGate(core) {
+  if (!(await kv.get('plan:' + core))) return;
+  const gate = await gateFor(core);
+  await kv.update('plan:' + core, (p) => { if (p) p.gate = gate; return p; }, null);
 }
 export async function index() { return (await kv.get('acct-index')) || { quotes: {}, invoices: {}, expenses: {} }; }
 export async function get(id) { const k = kindFromId(id); return k ? kv.get(KEY[k] + id) : null; }
@@ -116,6 +132,7 @@ export async function setStatus(id, status, by, note = '') {
   if (d.type === 'invoice' && status === 'void' && d.paid > 0) return { error: 'This invoice has payments. Remove them first.' };
   d.status = status;
   if (status === 'sent') d.sentAt = Date.now();
+  if (status === 'accepted' && !d.acceptedAt) d.acceptedAt = Date.now();
   d.history.push({ at: Date.now(), by, text: ({ sent: 'Sent', accepted: 'Accepted by the customer', declined: 'Declined', void: 'Voided', draft: 'Back to draft' })[status] + (note ? ': ' + note : '') });
   return { doc: await save(d) };
 }
@@ -133,7 +150,7 @@ export async function quoteToInvoice(qid, by) {
   if (q.invoiceId) return { error: `Already invoiced as ${q.invoiceId}` };
   const inv = await createDoc('invoice', { customer: q.customer, items: q.items, pricesInc: q.pricesInc, title: q.title, notes: '', core: q.core }, by);
   inv.fromQuote = q.id; if (q.plan) inv.plan = { ...q.plan, fromQuote: q.id }; inv.history.push({ at: Date.now(), by, text: `Made from quote ${q.id}` }); await save(inv);
-  q.invoiceId = inv.id; if (q.status === 'sent' || q.status === 'draft') q.status = 'accepted';
+  q.invoiceId = inv.id; if (q.status === 'sent' || q.status === 'draft') q.status = 'accepted'; if (!q.acceptedAt) q.acceptedAt = Date.now();
   q.history.push({ at: Date.now(), by, text: `Invoiced as ${inv.id}` }); await save(q);
   return { doc: inv, quote: q };
 }

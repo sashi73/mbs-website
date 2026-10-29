@@ -16,18 +16,65 @@
   function workBetween(a, b) { if (!a || !b || b < a) return 0; var n = 0, d = toD(a), e = toD(b); while (d <= e) { if (wk(d)) n++; d = new Date(d.getTime() + 864e5); } return n; }
   function daysBetween(a, b) { return Math.round((toD(b) - toD(a)) / 864e5); }
   function today() { var o = {}; new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).forEach(function (p) { o[p.type] = p.value; }); return o.year + '-' + o.month + '-' + o.day; }
+  var dmy = function (s) { return s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : ''; };
+  function parseDmy(v) {
+    var m = String(v || '').trim().match(/^(\d{1,2})[\/.\-\s](\d{1,2})[\/.\-\s](\d{2}|\d{4})$/); if (!m) return null;
+    var d = +m[1], mo = +m[2], y = +m[3]; if (y < 100) y += 2000;
+    var dt = new Date(Date.UTC(y, mo - 1, d)); return dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d ? dt.toISOString().slice(0, 10) : null;
+  }
+  // every date box in the planner shows and takes DD/MM/YYYY (the browser's own date box follows the computer's region, e.g. MM/DD/YYYY);
+  // the real date input stays underneath (for the 📅 calendar and for the code), so nothing else changes
+  function dateBoxes(root) {
+    (root || document).querySelectorAll('input[type=date]:not([data-dmy])').forEach(function (n) {
+      n.setAttribute('data-dmy', '1');
+      var w = document.createElement('span'); w.className = 'dbox' + (n.classList.contains('pinned') ? ' pinned' : '');
+      var t = document.createElement('input'); t.type = 'text'; t.className = 'dtext'; t.placeholder = 'DD/MM/YYYY'; t.inputMode = 'numeric'; t.maxLength = 10; t.autocomplete = 'off';
+      t.value = dmy(n.value); t.title = n.title; t.disabled = n.disabled; if (n.id) t.setAttribute('data-for', n.id);
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'dpick'; b.textContent = '📅'; b.title = 'Pick from a calendar'; b.tabIndex = -1; b.disabled = n.disabled;
+      n.parentNode.insertBefore(w, n); w.appendChild(t); w.appendChild(b); w.appendChild(n); n.classList.add('dnative'); n.tabIndex = -1;
+      var fire = function () { n.dispatchEvent(new Event('input', { bubbles: true })); n.dispatchEvent(new Event('change', { bubbles: true })); };
+      t.addEventListener('input', function () { var v = t.value.replace(/[^\d]/g, ''); if (/^\d{8}$/.test(v) && !/\D/.test(t.value)) t.value = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4); });
+      t.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); t.blur(); } });
+      t.addEventListener('change', function () {
+        if (!t.value.trim()) { n.value = ''; fire(); return; }
+        var iso = parseDmy(t.value);
+        if (!iso) { toast('Type the date as DD/MM/YYYY, e.g. ' + dmy(today()), true); t.value = dmy(n.value); return; }
+        n.value = iso; t.value = dmy(iso); fire();
+      });
+      var back = function () { if (document.activeElement !== t) t.value = dmy(n.value); };
+      n.addEventListener('input', back); n.addEventListener('change', back);
+      b.onclick = function () { try { n.showPicker(); } catch (e) { n.focus(); } };
+    });
+  }
   var pretty = function (s) { if (!s) return ''; var a = s.split('-').map(Number); return a[2] + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][a[1] - 1]; };
   var prettyY = function (s) { return s ? pretty(s) + ' ' + s.slice(0, 4) : ''; };
 
+  // which tasks wait for the quote (same rule as the server): the "Quote accepted" milestone and everything not leading up to it
+  function gatedTasks(p) {
+    var byId = {}, out = []; p.tasks.forEach(function (t) { byId[t.id] = t; });
+    var m = p.tasks.filter(function (t) { return t.dur === 0 && /quote/i.test(t.name); })[0];
+    if (m) {
+      var before = [], walk = function (t) { (t.pred || []).forEach(function (id) { var q = byId[id]; if (q && before.indexOf(q) < 0) { before.push(q); walk(q); } }); };
+      walk(m);
+      p.tasks.forEach(function (t) { if (before.indexOf(t) < 0 && !((t.pct || 0) > 0)) out.push(t); });
+    } else p.tasks.forEach(function (t) { if (!/inspect|measure|quot|site visit/i.test(t.name) && !((t.pct || 0) > 0)) out.push(t); });
+    return out;
+  }
+  function gateDate(p) { return p.gate && /^\d{4}-\d{2}-\d{2}$/.test(p.gate.date || '') ? nextWork(p.gate.date) : ''; }
+  function holdDate(p) { var g = gateDate(p), w = /^\d{4}-\d{2}-\d{2}$/.test(p.workStart || '') ? nextWork(p.workStart) : ''; return w > g ? w : g; }   // the work waits for the quote and the "Work starts" date
   function schedule(p) {
-    var start = nextWork(p.start || today()), byId = {};
+    var start = nextWork(p.start || today()), byId = {}, gate = holdDate(p), gated = gate ? gatedTasks(p) : [];
     p.tasks.forEach(function (t) { byId[t.id] = t; t.es = ''; t.ef = ''; });
     for (var pass = 0; pass < 30; pass++) {
       var changed = false;
       p.tasks.forEach(function (t) {
         var es = start;
-        (t.pred || []).forEach(function (id) { var q = byId[id]; if (q && q.ef && q !== t) { var after = q.dur === 0 ? nextWork(q.ef) : addWork(nextWork(q.ef), 1); if (after > es) es = after; } });
-        if (t.snet && t.snet > es) es = t.snet;
+        if (gate && gated.indexOf(t) >= 0 && gate > es) es = gate;   // no work before the quote is accepted (or until it expires)
+        if (t.fixed && t.snet) { if (t.snet > es) es = t.snet; }   // start date set by hand: runs in parallel, "After #" not used
+        else {
+          (t.pred || []).forEach(function (id) { var q = byId[id]; if (q && q.ef && q !== t) { var after = q.dur === 0 ? nextWork(q.ef) : addWork(nextWork(q.ef), 1); if (after > es) es = after; } });
+          if (t.snet && t.snet > es) es = t.snet;
+        }
         es = nextWork(es);
         var ef = t.dur === 0 ? es : addWork(es, Math.max(1, t.dur) - 1);
         if (es !== t.es || ef !== t.ef) { t.es = es; t.ef = ef; changed = true; }
@@ -343,13 +390,13 @@
 
   function planView(args) {
     var core = args[0], tab = args[1] || S.tab;
-    if (S.plan && S.job && (core === S.core || core === S.job.ref) && args[1]) { S.tab = tab; render(); loadChain(); return; }   // just a tab change (the quote/invoice may have moved on)
+    if (S.plan && S.job && (core === S.core || core === S.job.ref) && args[1] && !S.away) { S.tab = tab; render(); loadChain(); return; }   // just a tab change (the quote/invoice may have moved on)
     var pending = S.timer ? saveNow() : (S.q || Promise.resolve());
     return pending.then(function () { return api('planGet', { core: core }); }).then(function (d) {
       S.plan = null;
       S.core = d.job.core; S.job = d.job; S.reminders = d.reminders; S.expensesEx = d.expensesEx; S.tab = tab;
       if (!d.plan) return chooser();
-      S.plan = normalise(d.plan); S.rev = d.plan.rev; S.chain = null;
+      S.plan = normalise(d.plan); S.rev = d.plan.rev; S.chain = null; S.away = false;
       loadChain();
       return loadInv().then(render);
     });
@@ -402,6 +449,7 @@
       scopeBox + riskBox + (!full && p.risks.length ? '<div class="muted" style="font-size:12.5px"><b>Risks:</b> ' + p.risks.map(function (r) { return esc(r.title); }).join(' · ') + '</div>' : '') + '</div>';
   }
   function chooser() {
+    setTimeout(function () { dateBoxes(V()); }, 0);
     $('#title').textContent = 'Project plan';
     var j = S.job, scope0 = j.scope || '';
     var guess = guessType(j.title + ' ' + scope0);
@@ -491,7 +539,11 @@
   var DOCST = { draft: 'Draft', sent: 'Sent', accepted: 'Accepted', declined: 'Declined', void: 'Void', expired: 'Expired', overdue: 'Overdue', 'part-paid': 'Part-paid', paid: 'Paid' };
   function loadChain() {
     var core = S.core;
-    return api('planQuoteInfo', { core: core }).then(function (d) { if (S.core !== core) return; S.chain = d; drawChain(); return d; }).catch(function () {});
+    return api('planQuoteInfo', { core: core }).then(function (d) {
+      if (S.core !== core) return; S.chain = d;
+      if (S.plan && JSON.stringify(d.gate || null) !== JSON.stringify(S.plan.gate || null)) { S.plan.gate = d.gate || null; render(); } else drawChain();
+      return d;
+    }).catch(function () {});
   }
   function liveQuote(c) { var q = (c.quotes || []).filter(function (x) { return x.status !== 'void'; }); return q[q.length - 1] || null; }
   function liveInvoice(c) { var v = (c.invoices || []).filter(function (x) { return x.status !== 'void'; }); return v[v.length - 1] || null; }
@@ -584,7 +636,48 @@
     };
   }
 
+  var KEYS = ['data-k', 'data-sk', 'data-pos', 'data-spos', 'data-radd', 'data-c', 'data-p', 'data-r', 'data-i'];
+  var ROWS = ['data-tid', 'data-sid', 'data-rid', 'data-iid'];
+  // "Work starts": on the plan or on the quote; both stay in step (the quote's plan pages and Gantt chart follow)
+  function setWorkStart(v) {
+    var p = S.plan, g = gateDate(p);
+    if (v && v < nextWork(p.start)) { toast('The work can\'t start before the project start (' + dmy(nextWork(p.start)) + ')', true); render(); return; }
+    if (v && g && nextWork(v) < g) { toast('Work can only start once the quote is accepted: ' + p.gate.id + (p.gate.accepted ? ' was accepted on ' : ' is valid until ') + dmy(p.gate.date) + '. Pick ' + dmy(g) + ' or later.', true); render(); return; }
+    var q = S.chain && liveQuote(S.chain);
+    if (q && q.fromPlan && !q.invoiceId) {   // the server moves the plan and refreshes the quote together
+      (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () { return api('quoteStart', { id: q.id, date: v || '' }); }).then(function (r) {
+        return api('planGet', { core: S.core }).then(function (d) { S.plan = normalise(d.plan); S.rev = d.plan.rev; render(); toast(v ? 'Work starts ' + dmy(r.workStart) + ', finishes ' + dmy(r.finish) + ' (quote ' + q.id + ' updated too)' : '"Work starts" cleared'); loadChain(); });
+      }).catch(function (e) { fail(e); render(); });
+      return;
+    }
+    p.workStart = v || ''; dirty('work start ' + (v || 'cleared')); render();
+    var R = rollup(p, today()); if (v) toast('Work starts ' + dmy(holdDate(p)) + ', finishes ' + dmy(R.finish));
+  }
   function render() {
+    var L0 = $('#gLeft'), R0 = $('#gRight');
+    var st = { y: window.scrollY, x: window.scrollX, lt: L0 ? L0.scrollTop : 0, ll: L0 ? L0.scrollLeft : 0, rl: R0 ? R0.scrollLeft : null, tab: S.tab, core: S.core };
+    var a = document.activeElement, focus = null;
+    if (a && a !== document.body && a.closest && a.closest('#view')) {
+      var row = a.closest('[' + ROWS.join('],[') + ']'), dt = a.classList.contains('dtext'), el = dt ? a.parentNode.querySelector('.dnative') : a;
+      var key = KEYS.filter(function (k) { return el.hasAttribute(k); })[0];
+      focus = { id: el.id, row: row ? ROWS.filter(function (k) { return row.hasAttribute(k); }).map(function (k) { return '[' + k + '="' + row.getAttribute(k) + '"]'; })[0] : '', key: key ? '[' + key + (el.getAttribute(key) ? '="' + el.getAttribute(key) + '"' : '') + ']' : '', dt: dt,
+        s: typeof a.selectionStart === 'number' ? a.selectionStart : null, e: typeof a.selectionEnd === 'number' ? a.selectionEnd : null };
+    }
+    renderNow();
+    dateBoxes(V());
+    if (st.tab === S.tab && st.core === S.core) {
+      var L1 = $('#gLeft'), R1 = $('#gRight');
+      if (L1) { L1.scrollTop = st.lt; L1.scrollLeft = st.ll; }
+      if (R1) { R1.scrollTop = st.lt; if (st.rl != null) R1.scrollLeft = st.rl; }
+      window.scrollTo(st.x, st.y);
+    }
+    if (focus) {
+      var n = focus.id ? document.getElementById(focus.id) : focus.key ? V().querySelector((focus.row ? focus.row + ' ' : '') + focus.key) : null;
+      if (n && focus.dt) n = n.parentNode.querySelector('.dtext');
+      if (n && !n.disabled) { try { n.focus({ preventScroll: true }); if (focus.s != null && n.setSelectionRange && /^(text|search|tel|url|)$/.test(n.type || '')) n.setSelectionRange(focus.s, focus.e); } catch (e) {} }
+    }
+  }
+  function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
     var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues']];
@@ -678,8 +771,11 @@
       return b + '<span class="gbar st-' + t.status + (late ? ' late' : '') + '" style="left:' + left + 'px;width:' + w + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' – ' + pretty(t.ef) + ' · ' + stName[t.status] + ' ' + t.pct + '%') + '"><span class="gfill" style="width:' + t.pct + '%"></span></span>' + lab;
     };
     var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button>' +
+      (holdDate(p) && !gateDate(p) ? '<div class="qgate ok">📅 Work starts <b>' + esc(dmy(holdDate(p))) + '</b> ("Work starts" date).</div>' : '') +
+      (gateDate(p) ? '<div class="qgate' + (p.gate.accepted ? ' ok' : '') + '">' + (holdDate(p) > gateDate(p) ? '📅 Work starts <b>' + esc(dmy(holdDate(p))) + '</b> ("Work starts" date). ' : '') + (p.gate.accepted ? '✅ Quote <b>' + esc(p.gate.id) + '</b> accepted on ' + esc(dmy(p.gate.date)) + ': the work is scheduled from ' + esc(dmy(gateDate(p))) + '.' : '🔒 Work starts once quote <b>' + esc(p.gate.id) + '</b> is accepted. It is valid until ' + esc(dmy(p.gate.date)) + ', so the work is scheduled from <b>' + esc(dmy(gateDate(p))) + '</b> (it moves earlier when the customer accepts).') + '</div>' : '') +
       '<span class="muted" style="font-size:12.5px">To move a task, type its new number in <b>#</b> (1 = first) or drag <b>⠿</b>. Sub-tasks move inside their own task. Days are working days (Mon–Fri). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span><span class="sp"></span>' +
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700">Project start<input type="date" id="pStart" value="' + esc(p.start) + '" style="width:auto"></label>' +
+      '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The day the work itself starts (after the quote is accepted). Tasks before the quote, like the site inspection, are not affected. Also on the quote.">Work starts<input type="date" id="pWork" value="' + esc(p.workStart || '') + '" min="' + esc(gateDate(p) || nextWork(p.start)) + '" style="width:auto"></label>' +
       '<div class="tabs" style="margin:0" title="Which columns to show"><button class="tab' + (S.cols === 's' ? ' on' : '') + '" data-cols="s">📅 Dates</button><button class="tab' + (S.cols === 'c' ? ' on' : '') + '" data-cols="c">$ Costs</button><button class="tab' + (S.cols === 'a' ? ' on' : '') + '" data-cols="a">All columns</button></div>' +
       '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button></div></div>' +
       '<div class="gsplit" id="gSplit"><div class="gpane gleft" id="gLeft"' + (S.split ? ' style="flex:0 0 ' + S.split + 'px;max-width:none"' : '') + '><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task</th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th>Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th></tr></thead><tbody>';
@@ -693,9 +789,9 @@
           (t.dur === 0 ? '' : '<button class="subadd" type="button" data-addsub title="Break this task into smaller steps (they stay inside its dates)">＋ sub-task' + (subs.length ? ' · ' + subs.filter(function (x) { return x.status === 'done'; }).length + '/' + subs.length + ' done' : '') + '</button>') + '</td>' +
         '<td>' + resCell(t) + '</td>' +
         '<td><input data-k="dur" type="number" min="0" max="365" value="' + t.dur + '" style="width:50px" title="0 days = milestone"></td>' +
-        '<td><input data-k="snet" type="date" value="' + esc(t.es) + '" class="' + (t.snet ? 'pinned' : '') + '" title="' + (t.snet ? 'Starts no earlier than ' + pretty(t.snet) + ' (clear the date box to remove)' : 'Worked out from the tasks before it. Pick a later date to hold it back.') + '"></td>' +
-        '<td class="nowrap">' + esc(pretty(t.ef)) + (base && base.ef && base.ef !== t.ef ? '<br><small class="' + (t.ef > base.ef ? 'bad' : 'good') + '">base ' + esc(pretty(base.ef)) + '</small>' : '') + '</td>' +
-        '<td><input data-k="pred" value="' + esc((t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', ')) + '" placeholder="e.g. 2,3" style="width:58px"></td>' +
+        '<td><input data-k="snet" type="date" value="' + esc(t.es) + '" min="' + esc(nextWork(p.start)) + '" max="' + esc(R.finish || '') + '" class="' + (t.snet ? 'pinned' : '') + '" title="' + (t.fixed && t.snet ? 'Start set by hand: ' + dmy(t.snet) + '. It runs in parallel (the After # link is not used). Clear the date to follow After # again.' : t.snet ? 'Starts no earlier than ' + dmy(t.snet) + ' (clear the date box to remove)' : 'Worked out from the tasks before it. Type or pick a date to start it earlier (in parallel) or later: between the project start and finish.') + '"></td>' +
+        '<td class="nowrap">' + esc(dmy(t.ef)) + (base && base.ef && base.ef !== t.ef ? '<br><small class="' + (t.ef > base.ef ? 'bad' : 'good') + '">base ' + esc(dmy(base.ef)) + '</small>' : '') + '</td>' +
+        '<td><input data-k="pred" value="' + esc((t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', ')) + '" placeholder="e.g. 2,3" style="width:58px"' + (t.fixed && t.snet ? ' class="predoff" title="Not used while the start date is set by hand (runs in parallel)"' : '') + '></td>' +
         '<td><input data-k="qty" inputmode="decimal" value="' + esc(t.qty || '') + '" style="width:60px"></td>' +
         '<td><input data-k="unit" value="' + esc(t.unit || '') + '" placeholder="h, m², lot" style="width:56px"></td>' +
         '<td><input data-k="rate" inputmode="decimal" value="' + esc(t.rate || '') + '" style="width:74px"></td>' +
@@ -714,8 +810,8 @@
           '<td><div class="subname"><span class="subarrow">↳</span><input data-sk="name" value="' + esc(sb.name) + '"></div></td>' +
           '<td><input data-sk="owner" list="resList" value="' + esc(sb.owner || '') + '" placeholder="Who" style="min-width:90px;width:110px"></td>' +
           '<td><input data-sk="dur" type="number" min="1" max="' + maxDur + '" value="' + sb.dur + '" style="width:50px" title="At most ' + maxDur + ' day' + (maxDur === 1 ? '' : 's') + ' (to stay inside the task)"></td>' +
-          '<td><input data-sk="start" type="date" value="' + esc(d.es) + '" min="' + esc(t.es) + '" max="' + esc(t.ef) + '" title="Between ' + esc(pretty(t.es)) + ' and ' + esc(pretty(t.ef)) + ' (the task\'s dates)"></td>' +
-          '<td class="nowrap">' + esc(pretty(d.ef)) + '</td><td class="muted" style="font-size:11.5px">in #' + r.n + '</td><td></td><td></td><td></td>' +
+          '<td><input data-sk="start" type="date" value="' + esc(d.es) + '" min="' + esc(t.es) + '" max="' + esc(t.ef) + '" title="Between ' + esc(dmy(t.es)) + ' and ' + esc(dmy(t.ef)) + ' (the task\'s dates)"></td>' +
+          '<td class="nowrap">' + esc(dmy(d.ef)) + '</td><td class="muted" style="font-size:11.5px">in #' + r.n + '</td><td></td><td></td><td></td>' +
           '<td class="muted subcost" title="Costs stay on the task">–</td><td></td>' +
           '<td><select data-sk="status" class="stsel st-' + sb.status + '">' + STATUS.map(function (o) { return '<option value="' + o[0] + '"' + (sb.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></td>' +
           '<td class="muted">' + stPct[sb.status] + '</td>' +
@@ -732,10 +828,12 @@
       '<datalist id="resList">' + Array.from(new Set([].concat.apply([], p.tasks.map(function (t) { return t.res || []; })).concat(['Labourer', 'Tiler', 'Plumber', 'Electrician', 'Painter', 'Carpenter', 'Waterproofer', 'Supplier', 'Customer']))).filter(Boolean).map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist></div>';
     $('#planBody').innerHTML = html;
     var B = $('#planBody');
+    dateBoxes(B);   // before the rows are lined up with the Gantt chart
     splitPanes(x(t0));
     B.querySelectorAll('[data-cols]').forEach(function (b) { b.onclick = function () { S.cols = b.getAttribute('data-cols'); try { localStorage.setItem('mbsPlanCols', S.cols); } catch (e) {} render(); }; });
     B.querySelectorAll('[data-zoom]').forEach(function (b) { b.onclick = function () { S.zoom = b.getAttribute('data-zoom'); render(); }; });
     $('#pStart').onchange = function () { if (this.value) { p.start = this.value; dirty(); render(); } };
+    $('#pWork').onchange = function () { setWorkStart(this.value); };
     var task = function (el) { var id = el.closest('tr').getAttribute('data-tid'); return p.tasks.filter(function (t) { return t.id === id; })[0]; };
     B.querySelectorAll('tr[data-tid] [data-k]').forEach(function (el) {
       var k = el.getAttribute('data-k');
@@ -746,12 +844,27 @@
         else if (k === 'status') { setStatus(t, el.value); }
         else if (k === 'pct') { t.pct = Math.max(0, Math.min(100, Math.round(+el.value || 0))); t.status = statusFromPct(t.pct); }
         else if (k === 'dur') { t.dur = Math.max(0, Math.min(365, Math.round(+el.value || 0))); if (fitSubs(t)) toast(t.dur === 0 ? 'A milestone has no sub-tasks, so they were removed' : 'Sub-tasks were shortened to fit inside the task\'s ' + t.dur + ' day' + (t.dur === 1 ? '' : 's')); derive(t); }
-        else if (k === 'snet') { t.snet = el.value || ''; }
+        else if (k === 'snet') {
+          var v = el.value || '';
+          if (!v) { var was = t.fixed; t.snet = ''; t.fixed = false; if (was) toast('Start date cleared: it follows "After #" again'); }
+          else {
+            var R0 = rollup(p, today()), ps = nextWork(p.start || today()), said = [], warn = false;
+            if (v < ps) { said.push('A task can\'t start before the project start (' + dmy(ps) + ').'); warn = true; v = ps; }
+            else if (R0.finish && v > R0.finish) { said.push('A task can\'t start after the project finish (' + dmy(R0.finish) + '): make it longer, or change the project start, instead.'); warn = true; v = R0.finish; }
+            v = nextWork(v); if (R0.finish && v > R0.finish) v = R0.finish;
+            var gd = holdDate(p);
+            if (gd && v < gd && gatedTasks(p).indexOf(t) >= 0) { said.push(gd === gateDate(p) ? 'Work can only start once the quote is accepted: ' + (p.gate.accepted ? p.gate.id + ' was accepted on ' + dmy(p.gate.date) : p.gate.id + ' is valid until ' + dmy(p.gate.date)) + ', so it starts ' + dmy(gd) + '.' : 'The work starts on ' + dmy(gd) + ' ("Work starts" date).'); warn = true; v = gd; }
+            var probe = JSON.parse(JSON.stringify(p)), pt = probe.tasks.filter(function (x) { return x.id === t.id; })[0]; pt.snet = ''; pt.fixed = false; schedule(probe);
+            t.snet = v; t.fixed = true;
+            if (v < pt.es) said.push('Runs in parallel: starts ' + dmy(v) + ' instead of waiting for #' + (t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', #') + ' (' + dmy(pt.es) + '). Clear the date to follow "After #" again.');
+            if (said.length) toast(said.join(' '), warn);
+          }
+        }
         else if (k === 'pred') { t.pred = el.value.split(/[,\s]+/).map(function (s) { return idOf[+s]; }).filter(function (id) { return id && id !== t.id; }); }
         else if (['qty', 'rate', 'actual'].indexOf(k) >= 0) { t[k] = r2(String(el.value).replace(/[$,]/g, '')); }
         else t[k] = el.value;
         dirty(k === 'done' || k === 'status' ? stName[t.status] + ': ' + t.name : '');
-        if (!live) render();
+        if (!live) setTimeout(render, 0);
       });
     });
     // resources: several people per task, one lead
@@ -1371,8 +1484,9 @@
     }).catch(function () {});
   });
 
+  M.dateBoxes = dateBoxes; M.dmy = dmy;
   M.addView('projects', 'Projects', projects);
   M.addView('plan', 'Project plan', planView, 'projects');
-  window.addEventListener('hashchange', function () { if (!/^#plan\//.test(location.hash)) { document.body.classList.remove('plan-wide'); if (S.timer) saveNow(); } });
+  window.addEventListener('hashchange', function () { if (!/^#plan\//.test(location.hash)) { S.away = true; document.body.classList.remove('plan-wide'); if (S.timer) saveNow(); } });
   window.MBS.planState = S;   // for tests
 })();

@@ -106,7 +106,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.goto(`${BASE}/admin/`, { waitUntil: 'networkidle' });
     await p.fill('[name=username]', 'sashi73'); await p.fill('[name=password]', 'sashi98'); await p.click('#loginForm button');
     await p.waitForSelector('#app:not([hidden])');
-    ok('Find it', 'the left menu has "✨ Ask AI (plain English)" and the console shows its version', /Ask AI \(plain English\)/.test(await p.textContent('.side-nav')) && /^v2[4-9]/.test(await p.textContent('.side-foot .ver')));
+    ok('Find it', 'the left menu has "✨ Ask AI (plain English)" and the console shows its version', /Ask AI \(plain English\)/.test(await p.textContent('.side-nav')) && /^v(2[4-9]|[3-9]\d)/.test(await p.textContent('.side-foot .ver')));
     await p.click('[data-nav=ask]'); await p.waitForSelector('#askQ');
     ok('Find it', '"Ask AI" in the menu opens the AI query straight away (and is highlighted)', /AI query/.test(await p.textContent('#sqlTabs .tab.on')) && (await p.getAttribute('[data-nav=ask]', 'class')) === 'on');
     ok('Open', 'SQL wizard opens on "✨ AI query" with a question box and example questions', /AI query/.test(await p.textContent('#sqlTabs .tab.on')) && (await p.$$('[data-ex]')).length >= 6);

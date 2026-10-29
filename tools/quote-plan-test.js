@@ -67,7 +67,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Quote', `quote ${qid} made in Quotes as a draft, linked to the job`, q && q.status === 'draft' && q.core === core && q.type === 'quote');
     ok('Quote', 'customer name, address, phone and email transferred', q.customer.name === 'Sashi Kumar' && q.customer.address === '12 Smith St, Cabramatta West NSW 2166' && q.customer.phone === '0412 345 678' && q.customer.email === 'sashi@example.com');
     ok('Quote', 'one line per costed task (milestones left out), sub-steps listed, 10% margin on unit prices', q.items.length === 4 && q.items[0].price === 99 && /Install new fan and duct outside \(3 h\): Cut opening, Duct to eave/.test(q.items[2].desc) && q.totals.inc === 1185.8, JSON.stringify(q.items));
-    ok('Quote', 'title, planned dates in the notes, and a frozen copy of the plan', q.title === 'Bathroom exhaust fan repair' && /Planned start 2 Nov 2026/.test(q.notes) && q.plan && q.plan.snapshot && q.plan.snapshot.tasks.length === 6 && q.plan.snapshot.risks.length === 1);
+    ok('Quote', 'title, planned dates in the notes, and a frozen copy of the plan', q.title === 'Bathroom exhaust fan repair' && /Work planned to start/.test(q.notes) && q.plan && q.plan.snapshot && q.plan.snapshot.tasks.length === 6 && q.plan.snapshot.risks.length === 1);
     const cd = await kv.get('customers');
     ok('Customer', 'the full address is saved to the customer record too', Object.values(cd.list).some((c) => c.address === '12 Smith St, Cabramatta West NSW 2166'));
     let pdf = await pdfPages(qid);

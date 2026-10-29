@@ -122,10 +122,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Schedule', 'still matches the server after changing predecessors', await check());
 
     // ---- start no earlier than ----
-    const later = P.addWork(P.nextWork(today), 25);
+    const finA = (await S()).tasks.find((t) => t.name === 'Final inspection & defects'), later = P.addWork(finA.es, 2);
     await setCell('Final inspection & defects', 'snet', later);
     st = await stored();
-    ok('Schedule', 'picking a later start date holds the task back (start no earlier than)', st.tasks.find((t) => t.name === 'Final inspection & defects').snet === later && (await S()).tasks.find((t) => t.name === 'Final inspection & defects').es >= later);
+    ok('Schedule', 'picking a later start date moves the task to that date (set by hand)', st.tasks.find((t) => t.name === 'Final inspection & defects').snet === later && st.tasks.find((t) => t.name === 'Final inspection & defects').fixed === true && (await S()).tasks.find((t) => t.name === 'Final inspection & defects').es === later);
+    ok('Schedule', 'still matches the server with a start date set by hand', await check());
 
     // ---- add a task with unit costing ----
     await p.click('#addTask'); await p.waitForTimeout(100);
@@ -174,6 +175,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Edit', 'no ↑ ↓ arrow buttons any more', !(await p.$('[data-move]')) && !(await p.$('[data-smove]')));
     // drag the ⠿ handle: last task onto the top
     const dragTo = async (fromSel, toSel, after) => {
+      await p.$eval('#gLeft', (e) => { e.scrollLeft = 0; });   // the ⠿ handle is in the first column
+      await p.$eval(fromSel, (e) => e.scrollIntoView({ block: 'center' }));
       const g = await p.$(fromSel + ' [data-grip]'); const gb = await g.boundingBox(); const tb = await (await p.$(toSel)).boundingBox();
       await p.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2); await p.mouse.down();
       const y = after ? tb.y + tb.height - 3 : tb.y + 3;

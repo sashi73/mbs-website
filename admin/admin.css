@@ -581,3 +581,17 @@ body.pdragging,body.pdragging *{cursor:grabbing!important}
 .mvopt:has(input:checked){border-color:var(--gold);background:var(--gold-soft)}
 .mvrow{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:13px}
 .mvchk{display:flex;gap:8px;align-items:center;font-weight:400;font-size:13.5px}.mvchk input{width:auto}
+
+/* v30: DD/MM/YYYY date boxes, parallel tasks */
+.dbox{position:relative;display:inline-flex;align-items:center;gap:2px;white-space:nowrap}
+.dbox .dtext{width:104px;font-variant-numeric:tabular-nums}
+.dbox .dpick{border:0;background:none;cursor:pointer;padding:2px;font-size:13px;line-height:1;opacity:.7}
+.dbox .dpick:hover{opacity:1}
+.dbox .dnative{position:absolute;right:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
+.dbox.pinned .dtext{border-color:var(--gold);background:var(--gold-soft);font-weight:700}
+tr.tsub .dbox .dtext{width:96px}
+input.predoff{text-decoration:line-through;color:#A8A397}
+.qgate{flex-basis:100%;background:#FFF7E0;border:1px solid #F1E0A6;border-radius:10px;padding:7px 12px;font-size:13px;color:#5C4500}
+.qgate.ok{background:#F0FAF3;border-color:#BFE5CB;color:#14532D}
+.wstart{display:grid;gap:4px;margin:0 0 10px;padding:8px 10px;background:#FBF8F1;border:1px solid var(--line);border-radius:10px}
+.wstart label{display:flex;gap:8px;align-items:center}

@@ -33,16 +33,36 @@ export function workBetween(a, b) {   // working days from a up to and including
 }
 
 // ---------- schedule (forward pass) ----------
+// which tasks wait for the quote: the "Quote accepted" milestone and everything not leading up to it (site inspection,
+// measure and quoting can happen before). With no such milestone: every task except inspection / measure / quote / site visit.
+export function gatedTasks(plan) {
+  const tasks = plan.tasks || [], byId = Object.fromEntries(tasks.map((t) => [t.id, t]));
+  const m = tasks.find((t) => t.dur === 0 && /quote/i.test(t.name));
+  const out = new Set();
+  if (m) {
+    const before = new Set(), walk = (t) => { for (const id of t.pred || []) { const q = byId[id]; if (q && !before.has(q)) { before.add(q); walk(q); } } };
+    walk(m);
+    for (const t of tasks) if (!before.has(t) && !((t.pct || 0) > 0)) out.add(t);
+  } else for (const t of tasks) if (!/inspect|measure|quot|site visit/i.test(t.name) && !((t.pct || 0) > 0)) out.add(t);
+  return out;
+}
 export function schedule(plan) {
   const start = nextWork(plan.start || new Date().toISOString().slice(0, 10));
   const byId = Object.fromEntries(plan.tasks.map((t) => [t.id, t]));
+  let gate = plan.gate && /^\d{4}-\d{2}-\d{2}$/.test(plan.gate.date || '') ? nextWork(plan.gate.date) : '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(plan.workStart || '') && nextWork(plan.workStart) > gate) gate = nextWork(plan.workStart);   // "Work starts" date (set on the plan or the quote)
+  const gated = gate ? gatedTasks(plan) : new Set();
   for (const t of plan.tasks) { t.es = ''; t.ef = ''; }
   for (let pass = 0; pass < 30; pass++) {
     let changed = false;
     for (const t of plan.tasks) {
       let es = start;
-      for (const p of t.pred || []) { const q = byId[p]; if (q && q.ef && q !== t) { const after = q.dur === 0 ? nextWork(q.ef) : addWork(nextWork(q.ef), 1); if (after > es) es = after; } }
-      if (t.snet && t.snet > es) es = nextWork(t.snet);
+      if (gated.has(t) && gate > es) es = gate;   // no work before the quote is accepted (or, until then, before it expires)
+      if (t.fixed && t.snet) { if (t.snet > es) es = nextWork(t.snet); }   // start set by hand: runs in parallel, the "After #" link is not used
+      else {
+        for (const p of t.pred || []) { const q = byId[p]; if (q && q.ef && q !== t) { const after = q.dur === 0 ? nextWork(q.ef) : addWork(nextWork(q.ef), 1); if (after > es) es = after; } }
+        if (t.snet && t.snet > es) es = nextWork(t.snet);
+      }
       es = nextWork(es);
       const ef = t.dur === 0 ? es : addWork(es, Math.max(1, t.dur) - 1);
       if (es !== t.es || ef !== t.ef) { t.es = es; t.ef = ef; changed = true; }
@@ -103,7 +123,7 @@ function clean(p, core) {
   const tasks = (Array.isArray(p.tasks) ? p.tasks : []).slice(0, 300).map((t) => {
     const o = {
     id: uid(t.id, 't'), name: str(t.name, 160) || 'New task', phase: phIds.has(t.phase) ? t.phase : phases[0].id,
-    dur: int(t.dur, 0, 365, 1), snet: ymdOk(t.snet), pred: (Array.isArray(t.pred) ? t.pred : []).map((x) => str(x, 20)).slice(0, 10),
+    dur: int(t.dur, 0, 365, 1), snet: ymdOk(t.snet), fixed: !!(t.fixed && ymdOk(t.snet)), pred: (Array.isArray(t.pred) ? t.pred : []).map((x) => str(x, 20)).slice(0, 10),
     item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000)
     };
     o.subs = cleanSubs(t.subs, o, uid);
@@ -114,7 +134,7 @@ function clean(p, core) {
   for (const t of tasks) t.pred = t.pred.filter((x) => tIds.has(x) && x !== t.id);
   const c = p.charter || {};
   return {
-    core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10),
+    core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart),
     charter: { objective: str(c.objective, 1500), inScope: str(c.inScope, 3000), outScope: str(c.outScope, 2000), deliverables: str(c.deliverables, 2000),
       acceptance: str(c.acceptance, 2000), assumptions: str(c.assumptions, 2000), notes: str(c.notes, 3000), budget: r2(c.budget), customer: str(c.customer, 120), manager: str(c.manager, 80) },
     phases, tasks,
@@ -132,9 +152,10 @@ export async function get(core) { return kv.get('plan:' + core); }
 export async function save(core, plan, rev, by) {
   const c = clean(plan, core);
   let conflict = null, saved = null;
+  const first = await ACC.gateFor(core).catch(() => null);   // the quote (if any) decides the earliest start of the work
   await kv.update('plan:' + core, (cur) => {
     if (cur && cur.rev && Number(rev) !== cur.rev) { conflict = cur; return cur; }
-    saved = { ...c, rev: ((cur && cur.rev) || 0) + 1, created: (cur && cur.created) || Date.now(), updated: Date.now(), by };
+    saved = { ...c, gate: cur ? (cur.gate === undefined ? first : cur.gate) : first, rev: ((cur && cur.rev) || 0) + 1, created: (cur && cur.created) || Date.now(), updated: Date.now(), by };
     return saved;
   }, null);
   return conflict ? { conflict } : { plan: saved };

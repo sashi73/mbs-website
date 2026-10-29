@@ -184,7 +184,7 @@ export async function buildPdf(doc, opts = {}) {
     }
     // how the job is run
     if (y > 120) {
-      const how = ['Communication: you will have one point of contact and a progress update at least weekly (phone, SMS or email).',
+      const how = ['Communication: you will have one point of contact and frequent progress updates (phone, SMS or email).',
         'Safety: safe work method statements, site protection and tidy work areas every day.',
         'Quality: work checked against the acceptance criteria and Australian Standards; photos kept of key stages (e.g. waterproofing).',
         'Changes: any change to scope, price or dates is agreed in writing (a variation) before the work is done.'];
@@ -244,7 +244,7 @@ export async function buildPdf(doc, opts = {}) {
         `Questions about this invoice or the work: call ${B.phone} or email ${B.email}.`]
       : [`Accept the quote: reply to the email or call ${B.phone} before ${pd(doc.validUntil)}.`,
         'We confirm the start date with you and order the materials.',
-        'The work follows this schedule. You get an update at least weekly, and any change is agreed in writing first.',
+        'The work follows this schedule. You get an update frequently, and any change is agreed in writing first.',
         'Final check with you against the acceptance criteria, then clean-up and handover.',
         `Tax invoice at completion, payable within 7 days.`];
     if (y > 150) {
