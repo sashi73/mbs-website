@@ -4,6 +4,7 @@ import * as J from './jobs.mjs';
 import * as ACC from './accounts.mjs';
 import * as kv from './kv.mjs';
 import { buildPdf, business } from './pdf.mjs';
+import { packPlan } from './plan-quote.mjs';
 import { audit, deleteKeys, LIVE } from './admin-lib.mjs';
 
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
@@ -30,7 +31,7 @@ function emailHtml(doc, message) {
   const msg = String(message || '').trim();
   return `<div style="max-width:600px">` +
     p(`Hi ${escapeHtml((doc.customer.name || '').split(' ')[0] || 'there')},`) +
-    (msg ? p(escapeHtml(msg).replace(/\n/g, '<br>')) : p(isInv ? `Please find attached tax invoice <b>${doc.id}</b> for ${bal}, due ${ACC.prettyDate(doc.due)}.` : `Thanks for the opportunity. Please find attached our quote <b>${doc.id}</b> for ${ACC.money(doc.totals.inc)} (inc GST), valid until ${ACC.prettyDate(doc.validUntil)}.`)) +
+    (msg ? p(escapeHtml(msg).replace(/\n/g, '<br>')) : p(isInv ? `Please find attached tax invoice <b>${doc.id}</b> for ${bal}, due ${ACC.prettyDate(doc.due)}.` : `Thanks for the opportunity. Please find attached our quote <b>${doc.id}</b> for ${ACC.money(doc.totals.inc)} (inc GST), valid until ${ACC.prettyDate(doc.validUntil)}${doc.plan ? ', together with a high-level project plan (scope, schedule, milestones and key risks)' : ''}.`)) +
     (isInv && B.bsb && B.account ? p(`<b>Bank transfer:</b> ${escapeHtml(B.bankName || B.name)} · BSB ${escapeHtml(B.bsb)} · Account ${escapeHtml(B.account)} · Reference <b>${doc.id}</b>`) : '') +
     (!isInv ? p(`To go ahead, just reply to this email or call ${escapeHtml(B.phone)}.`) : '') +
     p(`Kind regards,<br><b>${escapeHtml(B.name)}</b><br>${escapeHtml(B.phone)} · <a href="https://${escapeHtml(B.web)}">${escapeHtml(B.web)}</a><br><span style="color:#777;font-size:13px">ABN ${escapeHtml(B.abn)} · Builder licence ${escapeHtml(B.licence)}</span>`) +
@@ -41,7 +42,7 @@ export async function acctGet(action, url) {
   if (action === 'pdf') {
     const d = await ACC.get(url.searchParams.get('id') || '');
     if (!d || d.type === 'expense') return bad('Not found', 404);
-    const bytes = await buildPdf(d);
+    const bytes = await buildPdf(d, { plan: await packPlan(d).catch(() => null) });
     return new Response(bytes, { status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `${url.searchParams.get('download') ? 'attachment' : 'inline'}; filename="${d.id}.pdf"`, 'Cache-Control': 'no-store' } });
   }
   if (action === 'receipt') {
@@ -124,7 +125,7 @@ export async function acctPost(action, body, { who, by }) {
       if (!d.items.length) return bad('Add at least one line first');
       const to = String(body.to || d.customer.email || '').trim();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return bad('Enter the customer\'s email address');
-      const pdf = Buffer.from(await buildPdf(d));
+      const pdf = Buffer.from(await buildPdf(d, { plan: await packPlan(d).catch(() => null) }));
       const B = business();
       const subject = `${d.type === 'invoice' ? 'Tax invoice' : 'Quote'} ${d.id} from ${B.name}`;
       const owner = env('OWNER_EMAIL').split(',')[0].trim();

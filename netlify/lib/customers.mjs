@@ -79,6 +79,7 @@ export async function edit(id, fields) {
     const c = d.list && d.list[id]; if (!c) return d;
     if (fields.name !== undefined) c.name = tidy(fields.name, 120) || c.name;
     if (fields.suburb !== undefined) c.suburb = tidy(fields.suburb, 80);
+    if (fields.address !== undefined) c.address = tidy(fields.address, 300);
     if (fields.notes !== undefined) c.notes = String(fields.notes || '').slice(0, 3000);
     if (fields.tags !== undefined) c.tags = (Array.isArray(fields.tags) ? fields.tags : String(fields.tags || '').split(',')).map((t) => tidy(t, 30)).filter(Boolean).slice(0, 10);
     c.updated = Date.now(); out = c; return d;

@@ -236,12 +236,13 @@
             '<dt>Came from</dt><dd>' + esc(Object.keys(c.sources || {}).map(function (k) { return srcTxt(k) + ' (' + c.sources[k] + ')'; }).join(', ') || '–') + '</dd></dl>' +
             '<p class="muted" style="font-size:12px;margin:4px 0 10px">Phone and email come from the enquiries and identify the customer (same phone + email = same customer).</p>' +
             '<form id="custForm" class="form"><label>Name<input name="name" value="' + esc(c.name) + '" maxlength="120"></label><label>Suburb<input name="suburb" value="' + esc(c.suburb) + '" maxlength="80"></label>' +
+            '<label class="full">Address <small class="muted">(used on quotes)</small><input name="address" value="' + esc(c.address || '') + '" maxlength="300" placeholder="e.g. 12 Smith St, Box Hill NSW 2765"></label>' +
             '<label class="full">Tags <small class="muted">(comma between them, e.g. strata, VIP, landlord)</small><input name="tags" value="' + esc((c.tags || []).join(', ')) + '"></label>' +
             '<label class="full">Notes<textarea name="notes" rows="4" maxlength="3000">' + esc(c.notes) + '</textarea></label><div class="full"><button class="btn btn-gold btn-sm">Save</button></div></form></div></div>';
       V().querySelectorAll('[data-job]').forEach(function (tr) { tr.onclick = function (e) { if (e.target.closest('a')) return; location.hash = '#job/' + tr.getAttribute('data-job'); }; });
       $('#custForm').onsubmit = function (e) {
         e.preventDefault(); var f = e.target;
-        api('custSave', { id: c.id, name: f.name.value, suburb: f.suburb.value, tags: f.tags.value, notes: f.notes.value }).then(function () { toast('Customer saved'); C.data = null; customerView([c.id]); }).catch(fail);
+        api('custSave', { id: c.id, name: f.name.value, suburb: f.suburb.value, address: f.address.value, tags: f.tags.value, notes: f.notes.value }).then(function () { toast('Customer saved'); C.data = null; customerView([c.id]); }).catch(fail);
       };
     });
   }

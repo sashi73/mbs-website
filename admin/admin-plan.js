@@ -280,6 +280,7 @@
         if (plan.tasks.some(function (t) { return t.item; })) loadInv().then(function () { if (S.plan === plan && (S.tab === 'schedule' || S.tab === 'overview') && !S.timer && !document.activeElement.closest('#planBody')) render(); });
         if (r.low && r.low.length && M.inv) M.inv.prompt(r.low);
         var el = $('#planSave'); if (el && !S.timer) el.textContent = 'Saved ✓';
+        if (S.chain && liveQuote(S.chain)) { clearTimeout(S.chainT); S.chainT = setTimeout(loadChain, 1500); }   // is the quote still in step with the plan?
       }).catch(function (e) {
         S.busy = false;
         if (/changed this plan/.test(e.message)) { return api('planGet', { core: core }).then(function (d) { S.plan = normalise(d.plan); S.rev = d.plan.rev; toast(e.message, true); render(); }); }
@@ -342,13 +343,14 @@
 
   function planView(args) {
     var core = args[0], tab = args[1] || S.tab;
-    if (S.plan && S.job && (core === S.core || core === S.job.ref) && args[1]) { S.tab = tab; render(); return; }   // just a tab change
+    if (S.plan && S.job && (core === S.core || core === S.job.ref) && args[1]) { S.tab = tab; render(); loadChain(); return; }   // just a tab change (the quote/invoice may have moved on)
     var pending = S.timer ? saveNow() : (S.q || Promise.resolve());
     return pending.then(function () { return api('planGet', { core: core }); }).then(function (d) {
       S.plan = null;
       S.core = d.job.core; S.job = d.job; S.reminders = d.reminders; S.expensesEx = d.expensesEx; S.tab = tab;
       if (!d.plan) return chooser();
-      S.plan = normalise(d.plan); S.rev = d.plan.rev;
+      S.plan = normalise(d.plan); S.rev = d.plan.rev; S.chain = null;
+      loadChain();
       return loadInv().then(render);
     });
   }
@@ -382,7 +384,7 @@
     var p = newPlan({ name: d.name || (job.title || 'Project plan'), objective: d.objective || '', scope: d.inScope ? d.inScope : '', rows: rows, risks: d.risks || [] }, job, start, scope,
       { outScope: d.outScope, deliverables: d.deliverables, acceptance: d.acceptance, assumptions: d.assumptions, notes: (d.tips || []).map(function (x) { return '• ' + x; }).join('\n') });
     var cs = String(scope || '').trim();
-    p.charter.inScope = cs && d.inScope ? cs + '\n\nPlanned work (AI): ' + d.inScope : cs || d.inScope || '';
+    p.charter.inScope = cs && d.inScope ? cs + '\n\nPlanned work (AI):\n' + d.inScope : cs || d.inScope || '';
     return p;
   }
   function typeOptions(sel) {
@@ -481,7 +483,104 @@
       }
       var btn = this; btn.disabled = true;
       S.plan = plan; S.rev = 0; S.tab = 'schedule';
-      api('planSave', { core: S.core, plan: S.plan, rev: 0, note: note }).then(function (r) { S.plan = normalise(r.plan); S.rev = r.plan.rev; S.aiDraft = null; S.aiText = ''; S.tplType = ''; toast('Plan created'); history.replaceState(null, '', '#plan/' + S.core + '/schedule'); render(); }).catch(function (e) { btn.disabled = false; S.plan = null; fail(e); });
+      api('planSave', { core: S.core, plan: S.plan, rev: 0, note: note }).then(function (r) { S.plan = normalise(r.plan); S.rev = r.plan.rev; S.aiDraft = null; S.chain = null; loadChain(); S.aiText = ''; S.tplType = ''; toast('Plan created'); history.replaceState(null, '', '#plan/' + S.core + '/schedule'); render(); }).catch(function (e) { btn.disabled = false; S.plan = null; fail(e); });
+    };
+  }
+
+  /* ---------- 📄 Quote & PM plan: plan -> quote -> invoice (value chain) ---------- */
+  var DOCST = { draft: 'Draft', sent: 'Sent', accepted: 'Accepted', declined: 'Declined', void: 'Void', expired: 'Expired', overdue: 'Overdue', 'part-paid': 'Part-paid', paid: 'Paid' };
+  function loadChain() {
+    var core = S.core;
+    return api('planQuoteInfo', { core: core }).then(function (d) { if (S.core !== core) return; S.chain = d; drawChain(); return d; }).catch(function () {});
+  }
+  function liveQuote(c) { var q = (c.quotes || []).filter(function (x) { return x.status !== 'void'; }); return q[q.length - 1] || null; }
+  function liveInvoice(c) { var v = (c.invoices || []).filter(function (x) { return x.status !== 'void'; }); return v[v.length - 1] || null; }
+  function drawChain() {
+    var el = $('#planChain'); if (!el) return;
+    var c = S.chain; if (!c) { el.innerHTML = ''; return; }
+    var q = liveQuote(c), inv = liveInvoice(c), won = ['won', 'completed', 'invoiced', 'paid'].indexOf(c.stage) >= 0;
+    var acc = q && (q.status === 'accepted' || q.invoiceId) || (won && !!q);
+    var step = function (done, cur, icon, title, sub, href) {
+      return '<' + (href ? 'a href="' + href + '"' : 'div') + ' class="vstep' + (done ? ' done' : '') + (cur ? ' cur' : '') + '"><b>' + icon + ' ' + esc(title) + '</b><small>' + sub + '</small></' + (href ? 'a' : 'div') + '>';
+    };
+    var R = rollup(S.plan, today());
+    var html = '<div class="vchain">' +
+      step(true, !q, '📅', 'Plan', esc(money(R.BAC)) + ' cost') +
+      step(!!q, q && !acc, '📄', 'Quote', q ? esc(q.id) + ' · ' + esc(DOCST[q.shown || q.status] || q.status) + ' · ' + money(q.inc) + (q.changed && !q.invoiceId ? ' · <b class="warn">plan changed</b>' : '') : 'not quoted yet', q ? '#doc/' + encodeURIComponent(q.id) : '') +
+      step(acc, acc && !inv, '✅', 'Accepted', acc ? 'job won' : q && q.status === 'declined' ? 'declined' : 'waiting') +
+      step(!!inv, inv && inv.status !== 'paid', '🧾', 'Invoice', inv ? esc(inv.id) + ' · ' + esc(DOCST[inv.shown || inv.status] || inv.status) + ' · ' + money(inv.inc) : 'not invoiced', inv ? '#doc/' + encodeURIComponent(inv.id) : '') +
+      step(inv && inv.status === 'paid', false, '💰', 'Paid', inv ? (inv.status === 'paid' ? 'paid in full' : inv.paid ? money(inv.paid) + ' paid · ' + money(inv.balance) + ' owing' : money(inv.balance || inv.inc) + ' owing') : '–') + '</div>';
+    var act = '';
+    if (!q) act = '<button class="btn btn-sm btn-gold" data-qact="new">📄 Make the quote &amp; PM plan</button>';
+    else if (q.changed && q.status === 'draft' && q.fromPlan) act = '<span class="warn" style="font-size:12.5px">The plan changed since ' + esc(q.id) + ' was made.</span><button class="btn btn-sm btn-gold" data-qact="update">↻ Update ' + esc(q.id) + ' from the plan</button>';
+    else {
+      if (acc && !inv) act = '<button class="btn btn-sm btn-gold" data-qact="invoice">🧾 Make the tax invoice from ' + esc(q.id) + '</button>';
+      if (q.changed && !q.invoiceId) act += '<span class="warn" style="font-size:12.5px">The plan changed since ' + esc(q.id) + ' was ' + esc((DOCST[q.status] || q.status).toLowerCase()) + '.</span><button class="btn btn-sm" data-qact="new">📄 Make a revised quote' + (acc ? ' (variation)' : '') + '</button>';
+    }
+    if (q) act += '<a class="btn btn-sm" target="_blank" rel="noopener" href="' + M.API + '?action=pdf&id=' + encodeURIComponent((inv || q).id) + '">👁 ' + (inv ? 'Invoice' : 'Quote') + ' PDF</a>';
+    el.innerHTML = html + (act ? '<div class="vact">' + act + '</div>' : '');
+    el.querySelectorAll('[data-qact]').forEach(function (b) {
+      b.onclick = function () {
+        var a = b.getAttribute('data-qact');
+        if (a === 'new') return quoteDialog(null);
+        if (a === 'update') return quoteDialog(q);
+        if (a === 'invoice') {
+          M.confirmBox('Make the tax invoice?', 'Copies the lines of ' + esc(q.id) + ' (' + money(q.inc) + ') into a new draft tax invoice for ' + esc(S.job.name) + '. The invoice PDF carries the project summary with progress. You can still change it before sending.', 'Make invoice').then(function (ok) {
+            if (!ok) return;
+            api('docToInvoice', { id: q.id }).then(function (r) { toast('Tax invoice ' + r.doc.id + ' made'); loadChain(); location.hash = '#doc/' + r.doc.id; }).catch(fail);
+          });
+        }
+      };
+    });
+  }
+  function quoteLines(mode, margin) {   // same rule as the server (plan-quote.mjs)
+    var k = 1 + Math.max(0, Math.min(200, +margin || 0)) / 100;
+    var costed = S.plan.tasks.filter(function (t) { return r2(t.qty) * r2(t.rate) > 0; });
+    if (mode === 'lump') { var tot = r2(costed.reduce(function (a, t) { return a + r2(t.qty) * r2(t.rate); }, 0) * k); return tot > 0 ? [{ qty: 1, price: tot }] : []; }
+    return costed.map(function (t) { return { qty: r2(t.qty), price: r2(r2(t.rate) * k) }; });
+  }
+  function quoteDialog(updating) {
+    var c = (S.chain && S.chain.customer) || {}, p = S.plan;
+    var keep = function () { try { return JSON.parse(localStorage.getItem('mbsQuoteOpts') || '{}'); } catch (e) { return {}; } }();
+    var mode = updating && updating.mode ? updating.mode : keep.mode || 'tasks', margin = updating ? updating.margin || 0 : keep.margin || 0;
+    var R = rollup(p, today());
+    M.modal('<h2>📄 ' + (updating ? 'Update ' + esc(updating.id) + ' from the plan' : 'Quote &amp; project management plan') + '</h2>' +
+      '<p class="muted" style="margin:-4px 0 12px">' + (updating ? 'The draft quote gets the plan\'s current lines, dates and scope.' : 'Makes a quote in Quotes from this plan with the customer\'s details.') + ' Its PDF is a pack: <b>cover page</b> (MBS logo and slogan), the <b>quote</b>, and <b>2 pages of high-level project management plan</b> (scope, risks, milestones and a Gantt chart).</p>' +
+      '<form id="qForm" class="form">' +
+        '<label>Customer name<input name="name" value="' + esc(c.name || S.job.name || '') + '" required maxlength="120"></label><label>Phone<input name="phone" value="' + esc(c.phone || '') + '" maxlength="40"></label>' +
+        '<label>Email<input name="email" type="email" value="' + esc(c.email || '') + '" maxlength="160"></label><label>Valid for (days)<input name="validDays" type="number" min="1" max="120" value="' + (keep.validDays || 30) + '"></label>' +
+        '<label class="full">Site address <small class="muted">(street, suburb, postcode: printed on the quote and saved to the customer)</small><input name="address" value="' + esc(c.address || '') + '" maxlength="300" placeholder="e.g. 12 Smith St, Box Hill NSW 2765"></label>' +
+        '<label class="full">Quote title<input name="title" value="' + esc(p.name) + '" maxlength="160"></label>' +
+        '<div class="full qmode"><b>Lines on the quote</b><label><input type="radio" name="mode" value="tasks"' + (mode !== 'lump' ? ' checked' : '') + '> One line per task with a cost (sub-steps listed)</label><label><input type="radio" name="mode" value="lump"' + (mode === 'lump' ? ' checked' : '') + '> One total line (the plan pages show the detail)</label></div>' +
+        '<label>Margin on the plan\'s unit costs (%)<input name="margin" type="number" min="0" max="200" step="0.5" value="' + margin + '"></label>' +
+        '<div class="qprev" id="qPrev"></div>' +
+        (S.chain && !updating && liveQuote(S.chain) ? '<p class="full muted" style="font-size:12.5px;margin:0">A new quote is made (a revision of ' + esc(liveQuote(S.chain).id) + '). The old one stays in Quotes: void or decline it there if it is replaced.</p>' : '') +
+        '<div class="full actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="qGo">' + (updating ? '↻ Update ' + esc(updating.id) : '📄 Make the quote') + '</button></div></form>');
+    var f = $('#qForm');
+    var prev = function () {
+      var m = f.querySelector('[name=mode]:checked').value, lines = quoteLines(m, f.margin.value);
+      var ex = r2(lines.reduce(function (a, l) { return a + r2(l.qty * l.price); }, 0)), gst = r2(ex * 0.1);
+      $('#qPrev').innerHTML = lines.length ? '<b>' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + '</b> · ex GST ' + money(ex) + ' · GST ' + money(gst) + ' · <b>total ' + money(ex + gst) + '</b><br><small class="muted">Plan cost ' + money(R.BAC) + (+f.margin.value ? ' + ' + f.margin.value + '% margin' : '') + ' · planned ' + esc(prettyY(R.start)) + ' to ' + esc(prettyY(R.finish)) + '</small>'
+        : '<b class="bad">No task has a cost yet.</b> Fill in Qty and Unit $ on the Schedule first (the "$ Costs" view).';
+      $('#qGo').disabled = !lines.length;
+    };
+    f.oninput = prev; prev();
+    f.onsubmit = function (e) {
+      e.preventDefault();
+      var b = $('#qGo'); b.disabled = true; b.textContent = 'Making it…';
+      var opts = { mode: f.querySelector('[name=mode]:checked').value, margin: +f.margin.value || 0, validDays: +f.validDays.value || 30 };
+      try { localStorage.setItem('mbsQuoteOpts', JSON.stringify(opts)); } catch (x) {}
+      var go = function () {
+        return api('planQuote', { core: S.core, update: updating ? updating.id : '', mode: opts.mode, margin: opts.margin, validDays: opts.validDays, title: f.title.value,
+          customer: { name: f.name.value, phone: f.phone.value, email: f.email.value, address: f.address.value } });
+      };
+      (S.timer ? saveNow() : (S.q || Promise.resolve())).then(go).then(function (r) {
+        var d = r.doc;
+        M.modal('<h2>✅ Quote ' + esc(d.id) + ' ' + (updating ? 'updated' : 'made') + '</h2><p>' + money(d.totals.inc) + ' inc GST (GST ' + money(d.totals.gst) + '), valid until ' + esc(prettyY(d.validUntil)) + '. It is a draft in <b>Quotes</b>: check it, then email it to the customer from there.</p>' +
+          '<div class="actions" style="justify-content:flex-end;flex-wrap:wrap"><button class="btn" data-close type="button">Close</button><a class="btn" target="_blank" rel="noopener" href="' + M.API + '?action=pdf&id=' + encodeURIComponent(d.id) + '&t=' + Date.now() + '">👁 Preview the PDF pack</a><a class="btn btn-gold" href="#doc/' + encodeURIComponent(d.id) + '" id="qOpen">Open in Quotes →</a></div>');
+        var o = $('#qOpen'); if (o) o.onclick = function () { M.closeModal(); };
+        loadChain();
+      }).catch(function (e2) { b.disabled = false; b.textContent = updating ? '↻ Update ' + updating.id : '📄 Make the quote'; fail(e2); });
     };
   }
 
@@ -491,7 +590,8 @@
     var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues']];
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>' +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
-      '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
+      '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote" title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
+      '<div id="planChain"></div>' +
       '<div class="grid pkpis">' +
         mini('Scope', R.pct + '% complete', R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8)) +
         mini('Time', 'Finish ' + prettyY(R.finish), (R.SPI == null ? 'not started' : 'SPI ' + R.SPI) + (R.late.length ? ' · ' + R.late.length + ' late' : '') + (p.baseline && p.baseline.finish && R.finish ? ' · ' + varDays(p.baseline.finish, R.finish) : ''), R.late.length ? 'red' : evRag(R.SPI)) +
@@ -500,6 +600,12 @@
       '</div>' +
       '<div class="tabs" id="planTabs">' + tabs.map(function (t) { return '<a class="tab' + (S.tab === t[0] ? ' on' : '') + '" href="#plan/' + esc(S.core) + '/' + t[0] + '" style="text-decoration:none">' + t[1] + '</a>'; }).join('') + '</div><div id="planBody"></div>';
     $('#planWide').onclick = function () { document.body.classList.toggle('plan-wide'); render(); };
+    $('#planQuote').onclick = function () {
+      var q = S.chain && liveQuote(S.chain);
+      if (q && q.fromPlan && q.status === 'draft' && !q.invoiceId) return quoteDialog(q);   // keep one draft in step with the plan
+      quoteDialog(null);
+    };
+    drawChain();
     $('#planXls').onclick = function () { exportExcel(); };
     $('#planDel').onclick = function () {
       M.confirmBox('Delete this project plan?', 'The plan “' + esc(p.name) + '” for ' + esc(S.job.ref) + ' will be deleted: tasks, dates, costs, risks and issues. The job itself, its quotes and invoices stay. This can\'t be undone.', 'Delete plan', true).then(function (ok) {

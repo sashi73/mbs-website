@@ -79,7 +79,7 @@ export async function custPost(action, body, { who, by, audit }) {
     return out(200, { customer: c ? statsFor(c, byCore) : null });
   }
   if (action === 'custSave') {
-    const c = await CU.edit(str(body.id, 12), { name: body.name, suburb: body.suburb, notes: body.notes, tags: body.tags });
+    const c = await CU.edit(str(body.id, 12), { name: body.name, suburb: body.suburb, address: body.address, notes: body.notes, tags: body.tags });
     if (!c) return out(404, { error: 'Customer not found' });
     if (audit) await audit(who, `Customer ${c.id} updated`);
     return out(200, { customer: c });

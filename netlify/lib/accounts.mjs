@@ -53,7 +53,7 @@ function summaryOf(d) {
   if (d.type === 'expense') return { id: d.id, date: d.date, supplier: d.supplier, desc: d.desc, category: d.category, inc: d.inc, gst: d.gst, core: d.core || '', receipt: !!d.receipt, updated: d.updated };
   return { id: d.id, type: d.type, core: d.core || '', name: d.customer.name, status: d.status, issued: d.issued, due: d.due || '', validUntil: d.validUntil || '',
     inc: d.totals.inc, gst: d.totals.gst, ex: d.totals.ex, paid: d.paid || 0, balance: d.type === 'invoice' ? r2(d.totals.inc - (d.paid || 0)) : 0,
-    fromQuote: d.fromQuote || '', invoiceId: d.invoiceId || '', sentAt: d.sentAt || null, updated: d.updated };
+    fromQuote: d.fromQuote || '', invoiceId: d.invoiceId || '', sentAt: d.sentAt || null, plan: d.plan ? 1 : 0, updated: d.updated };
 }
 async function save(d) {
   d.updated = Date.now();
@@ -119,12 +119,20 @@ export async function setStatus(id, status, by, note = '') {
   d.history.push({ at: Date.now(), by, text: ({ sent: 'Sent', accepted: 'Accepted by the customer', declined: 'Declined', void: 'Voided', draft: 'Back to draft' })[status] + (note ? ': ' + note : '') });
   return { doc: await save(d) };
 }
+// link a quote/invoice to its project plan (a frozen copy for the PDF; see plan-quote.mjs)
+export async function setPlan(id, plan, by, note) {
+  const d = await get(id);
+  if (!d || d.type === 'expense') return null;
+  d.plan = plan;
+  if (note) d.history.push({ at: Date.now(), by, text: note });
+  return save(d);
+}
 export async function quoteToInvoice(qid, by) {
   const q = await get(qid);
   if (!q || q.type !== 'quote') return { error: 'Quote not found' };
   if (q.invoiceId) return { error: `Already invoiced as ${q.invoiceId}` };
   const inv = await createDoc('invoice', { customer: q.customer, items: q.items, pricesInc: q.pricesInc, title: q.title, notes: '', core: q.core }, by);
-  inv.fromQuote = q.id; inv.history.push({ at: Date.now(), by, text: `Made from quote ${q.id}` }); await save(inv);
+  inv.fromQuote = q.id; if (q.plan) inv.plan = { ...q.plan, fromQuote: q.id }; inv.history.push({ at: Date.now(), by, text: `Made from quote ${q.id}` }); await save(inv);
   q.invoiceId = inv.id; if (q.status === 'sent' || q.status === 'draft') q.status = 'accepted';
   q.history.push({ at: Date.now(), by, text: `Invoiced as ${inv.id}` }); await save(q);
   return { doc: inv, quote: q };

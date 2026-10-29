@@ -118,6 +118,9 @@
           '<div class="card"><h2>Notes on the document</h2><textarea id="dNotes" rows="3" placeholder="e.g. 7-year waterproofing warranty. Work starts within 2 weeks of acceptance."' + dis + '>' + esc(d.notes) + '</textarea></div>' +
         '</div>' +
         '<div class="grid" style="align-content:start">' +
+          (d.plan ? '<div class="card" id="docPlan"><h2>📅 Project plan</h2><p style="margin:0 0 8px;font-size:13.5px">' + (isQ ? 'Made from the project plan' : 'Linked to the project plan' + (d.plan.fromQuote ? ' (via quote ' + esc(d.plan.fromQuote) + ')' : '')) + ' of job <b>' + esc(d.core) + '</b>' + (d.plan.at ? ', ' + esc(M.date(d.plan.at)) : '') + '.</p>' +
+            '<p class="muted" style="margin:0 0 10px;font-size:12.5px">The PDF is a pack: a cover page with the MBS logo, this ' + (isQ ? 'quote' : 'tax invoice') + ', and 2 pages of high-level project plan' + (isQ ? ' (scope, risks, milestones, Gantt chart) as it was when the quote was made.' : ' showing today\'s progress.') + '</p>' +
+            '<a class="btn btn-sm" href="#plan/' + esc(d.core) + '">Open the plan →</a></div>' : '') +
           '<div class="card"><h2>Actions</h2><div class="actions" id="docActions"></div><p class="muted" id="saveState" style="margin:10px 0 0;font-size:13px"></p></div>' +
           (!isQ && d.id ? '<div class="card"><h2>Payments</h2><div id="payList"></div></div>' : '') +
           (d.history && d.history.length ? '<div class="card"><h2>History</h2><ul class="timeline">' + d.history.slice().reverse().map(function (h) { return '<li>' + esc(h.text) + '<small>' + esc(h.by) + ' · ' + esc(M.date(h.at)) + '</small></li>'; }).join('') + '</ul></div>' : '') +
