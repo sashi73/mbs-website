@@ -2,7 +2,7 @@ MBS TEST SITE - step-by-step setup (once, about 30 minutes)
 ==========================================================
             Website                              Branch              Folder on your PC                  Claude chat
 LIVE (Prod) https://mbsplc.com.au                MBS-FixIT-ver-21    C:\Workzone\2026\MBSFIXITVER21    the Prod chat
-TEST        https://mbs-fixit-test.netlify.app   MBS-FixIT-test      C:\Workzone\2026\FIXITVER1        the Test chat
+TEST        https://fixittest.netlify.app   MBS-FixIT-test      C:\Workzone\2026\FIXITVER1        the Test chat
 
 Each folder stays on its own branch. You never switch branches by hand.
 
@@ -11,7 +11,7 @@ Same code on both. Only the Netlify settings differ:
 - Every email from the test site goes only to sashi1973@gmail.com with [TEST] in the subject. Even an email meant for
   a customer comes to you instead, and the subject says who it would have gone to.
 - Telegram alerts come from your test bot TestFixIT, marked 🧪 TEST.
-- Every page shows an orange "TEST SITE" badge, and Google is told not to list the test site.
+- Every page starts with a black GKH bar (spinning globe, "Powered by GKH", a TEST SITE tag), and Google is told not to list the test site.
 
 Golden rule: tokens, API keys, passwords and secrets only ever go into Netlify. Never into chat, GitHub, email or files.
 
@@ -105,8 +105,8 @@ A. Create it
    4. Click Deploy. This first deploy has no settings yet; that's fine.
 
 B. Give it its name
-   Project configuration > General > Project details > Change project name:   mbs-fixit-test
-   Your address is now  https://mbs-fixit-test.netlify.app
+   Project configuration > General > Project details > Change project name:   fixittest
+   Your address is now  https://fixittest.netlify.app
    (If that name is taken, choose another and use your address everywhere below.)
 
 C. Make two secrets with PowerShell (they go to the clipboard, not the screen)
@@ -123,7 +123,7 @@ D. Settings: Project configuration > Environment variables > Add a variable > Ad
    -------------------------  -----------------------------------------------------------
    SITE_ENV                   test
    OWNER_EMAIL                sashi1973@gmail.com
-   PUBLIC_WEBSITE             mbs-fixit-test.netlify.app
+   PUBLIC_WEBSITE             fixittest.netlify.app
    TELEGRAM_BOT_TOKEN         the TestFixIT token from BotFather (step 2)          [secret]
    TELEGRAM_WEBHOOK_SECRET    the secret from make-secret.ps1 (C)                  [secret]
    TELEGRAM_CHAT_ID           your Telegram ID (step 2.6)
@@ -136,7 +136,7 @@ D. Settings: Project configuration > Environment variables > Add a variable > Ad
    LLM_API_KEY                copy from live, or the new DeepSeek key (step 4)     [secret]
 
    Copy from live too, if the live site has them:
-   ALLOWED_ORIGIN             set to  https://mbs-fixit-test.netlify.app   (NOT the live address)
+   ALLOWED_ORIGIN             set to  https://fixittest.netlify.app   (NOT the live address)
    LLM_BASE_URL, LLM_MODEL, AI_PLAN_MAX_TOKENS and the other AI_... settings
    BUSINESS_ABN, BUSINESS_ADDRESS, BUSINESS_LEGAL_NAME, BUILDER_LICENCE, BUSINESS_SLOGAN,
    BANK_ACCOUNT_NAME, BANK_BSB, BANK_ACCOUNT_NUMBER, PUBLIC_CONTACT_EMAIL, PUBLIC_PHONE
@@ -156,7 +156,7 @@ STEP 6 - Connect TestFixIT to the test site
 -------------------------------------------
 In your browser, open (TEST address, then your NEW webhook secret from the private note):
 
-   https://mbs-fixit-test.netlify.app/.netlify/functions/telegram?setup=YOUR-NEW-SECRET
+   https://fixittest.netlify.app/.netlify/functions/telegram?setup=YOUR-NEW-SECRET
 
 It says "Telegram bot connected", and TestFixIT messages you "MBS job tracker is connected".
 Never open the live address with the test secret, or the test address with the live secret.
@@ -165,12 +165,12 @@ Then delete the private note with the secret.
 
 STEP 7 - Check everything
 -------------------------
-[ ] https://mbs-fixit-test.netlify.app : orange "TEST SITE" badge at the top, tab title starts "TEST ·"
+[ ] https://fixittest.netlify.app : black GKH bar at the top left (spinning globe, Powered by GKH, TEST SITE tag), tab title starts "TEST ·"
 [ ] Leave a test enquiry with Mr. Fixit (any name, your own phone):
     - email arrives at sashi1973@gmail.com with [TEST] in the subject
     - TestFixIT (not the live bot) sends the alert, marked 🧪 TEST
 [ ] In TestFixIT send /help: the command list appears
-[ ] https://mbs-fixit-test.netlify.app/admin/ : log in with the TEST login. Footer says v32b. It starts empty.
+[ ] https://fixittest.netlify.app/admin/ : log in with the TEST login. Footer says v32b. It starts empty.
 [ ] https://mbsplc.com.au : no badge, footer v32b, the live bot still works
 
 
@@ -184,7 +184,7 @@ NEW FEATURE (Test chat)
 2. Put it on the TEST site, from the TEST folder:
    cd C:\Workzone\2026\FIXITVER1
    powershell -ExecutionPolicy Bypass -File .\deploy\push-to-test.ps1 -Version v33 -Message "what changed"
-   -> wait 1-2 minutes, open https://mbs-fixit-test.netlify.app, Ctrl+F5, try it.
+   -> wait 1-2 minutes, open https://fixittest.netlify.app, Ctrl+F5, try it.
 3. Happy with it? Send it LIVE, from the PROD folder:
    cd C:\Workzone\2026\MBSFIXITVER21
    powershell -ExecutionPolicy Bypass -File .\deploy\go-live.ps1
@@ -200,6 +200,22 @@ URGENT LIVE FIX (Prod chat), the same 6 lines as always, in the PROD folder:
 Then bring that fix into TEST too, so the next test version doesn't undo it:
    cd C:\Workzone\2026\FIXITVER1
    powershell -ExecutionPolicy Bypass -File .\deploy\sync-test-from-live.ps1
+
+TEST DATA (v33): 150 made-up enquiries for the test site
+-------------------------------------------------------
+Sydney, Western Sydney and surrounding areas, spread along the pipeline (new, called, quoted, won, completed,
+invoiced, paid, lost) so the dashboard, pipeline board, customers and reports have something to show.
+Made-up names, phones in the 02 5550 xxxx range (set aside in Australia for fictional use), emails @example.com.
+   cd C:\Workzone\2026\FIXITVER1
+   powershell -ExecutionPolicy Bypass -File .\deploy\load-test-data.ps1
+   -> type TEST, then the TEST console username and password. Takes a few minutes. No emails or Telegram alerts.
+It refuses to run against any site without the TEST SITE bar, so it can't load into the live site,
+and it won't load the same data twice (add -Again if you really want a second copy).
+
+GKH BRANDING (v33): on the test site the console shows "Global Knowledge House · AI-Powered Business Intelligence".
+Change the words with CONSOLE_BRAND and CONSOLE_TAGLINE in the test site's Netlify settings (then redeploy);
+CONSOLE_BRAND = off turns it off. The live site never shows it.
+
 
 Good to know
 - Which branch is this folder on?   git branch --show-current

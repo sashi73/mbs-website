@@ -1,5 +1,5 @@
 # Puts a new MBS version on the TEST site.
-# TEST folder C:\Workzone\2026\FIXITVER1, branch MBS-FixIT-test, site mbs-fixit-test.netlify.app
+# TEST folder C:\Workzone\2026\FIXITVER1, branch MBS-FixIT-test, site fixittest.netlify.app
 # Run from PowerShell:
 #   cd C:\Workzone\2026\FIXITVER1
 #   powershell -ExecutionPolicy Bypass -File .\deploy\push-to-test.ps1 -Version v33 -Message "what changed"
@@ -36,4 +36,4 @@ if ($LASTEXITCODE -ne 0) { Write-Host "Push failed. Check the message above." -F
 
 Write-Host ""
 Write-Host "Done. $Version is on its way to the TEST site." -ForegroundColor Green
-Write-Host "Netlify takes 1-2 minutes. Then open https://mbs-fixit-test.netlify.app and press Ctrl+F5."
+Write-Host "Netlify takes 1-2 minutes. Then open https://fixittest.netlify.app and press Ctrl+F5."

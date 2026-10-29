@@ -35,6 +35,20 @@ const snap = (d) => htmlFiles(d).map((f) => fs.readFileSync(f, 'utf8')).join('\n
   ok('Build', 'robots.txt blocks the whole test site; _headers says noindex', fs.readFileSync(path.join(test, 'robots.txt'), 'utf8') === 'User-agent: *\nDisallow: /\n' && /X-Robots-Tag: noindex, nofollow/.test(fs.readFileSync(path.join(test, '_headers'), 'utf8')));
   execFileSync('node', ['tools/site-env.mjs'], { cwd: test, env: { ...envNo, SITE_ENV: 'test' } });
   ok('Build', 'running it twice does not add a second badge', htmlFiles(test).every((f) => (fs.readFileSync(f, 'utf8').match(/id="mbs-test-badge"/g) || []).length === 1 && (fs.readFileSync(f, 'utf8').match(/TEST · /g) || []).length === 1));
+  const adm = fs.readFileSync(path.join(test, 'admin', 'index.html'), 'utf8');
+  ok('Brand', 'v33 test site: the console says Global Knowledge House, AI-Powered Business Intelligence', /<title>TEST · Global Knowledge House · AI-Powered Business Intelligence<\/title>/.test(adm) && (adm.match(/class="gkh-bar"/g) || []).length === 1 && /class="login-logo"[^>]*|gkh-globe\.webp/.test(adm) && (adm.match(/gkh-globe\.webp/g) || []).length >= 4 && !/mbs-logo\.svg/.test(adm) && /<h1>Global Knowledge House<\/h1>/.test(adm) && /branded "Global Knowledge House"/.test(out));
+  const pub = htmlFiles(test).filter((f) => !f.includes(path.sep + 'admin' + path.sep)).map((f) => fs.readFileSync(f, 'utf8'));
+  ok('Brand', 'every public test page has one left-aligned GKH test bar (globe, Powered by GKH, TEST SITE); the MBS brand stays', pub.length >= 6 && pub.every((h) => (h.match(/class="gkh-testbar"/g) || []).length === 1 && /Powered by GKH/.test(h) && /gkh-globe\.webp/.test(h) && /class="gkh-chip">Test site</.test(h) && /mbs-logo/.test(h) && !/#ea580c/.test(h)));
+  ok('Brand', 'the console has no page bar (its own GKH banner with a TEST SITE tag instead)', !/class="gkh-testbar"/.test(adm) && /Powered by GKH/.test(adm) && (adm.match(/class="gkh-chip">Test site</g) || []).length === 2);
+  ok('Brand', 'live site: no GKH branding anywhere', !/gkh-|Powered by GKH|gkh-globe/.test(snap(live)));
+  const t2 = path.join(os.tmpdir(), 'mbs33-brand'); copySite(t2);
+  execFileSync('node', ['tools/site-env.mjs'], { cwd: t2, env: { ...envNo, SITE_ENV: 'test', CONSOLE_BRAND: 'Acme <Co>', CONSOLE_TAGLINE: 'Smart & fast' } });
+  const adm2 = fs.readFileSync(path.join(t2, 'admin', 'index.html'), 'utf8');
+  ok('Brand', 'CONSOLE_BRAND and CONSOLE_TAGLINE change the words (made safe for HTML)', /<b>Acme &lt;Co&gt;<\/b><span>Smart &amp; fast<\/span>/.test(adm2) && !/Acme <Co>/.test(adm2));
+  copySite(t2);
+  execFileSync('node', ['tools/site-env.mjs'], { cwd: t2, env: { ...envNo, SITE_ENV: 'test', CONSOLE_BRAND: 'off' } });
+  const adm3 = fs.readFileSync(path.join(t2, 'admin', 'index.html'), 'utf8');
+  ok('Brand', 'CONSOLE_BRAND = off: TEST tag only, no GKH branding', !/gkh-bar"|gkh-globe\.webp|Powered by GKH/.test(adm3) && /id="mbs-test-badge"/.test(adm3) && /<title>TEST · MBS Console/.test(adm3));
   const toml = fs.readFileSync(path.join(SITE, 'netlify.toml'), 'utf8');
   ok('Build', 'netlify.toml runs the build step; the setup guide is not public', /command = "node tools\/site-env\.mjs"/.test(toml) && /from = "\/TEST-SITE-SETUP\.txt"/.test(toml) && fs.existsSync(path.join(SITE, 'TEST-SITE-SETUP.txt')));
 
@@ -82,9 +96,11 @@ const snap = (d) => htmlFiles(d).map((f) => fs.readFileSync(f, 'utf8')).join('\n
       p.on('pageerror', (e) => errors.push(e.message));
       await p.goto('http://127.0.0.1:8932/', { waitUntil: 'networkidle' });
       const box = await p.locator('#mbs-test-badge').boundingBox();
-      ok('Looks', `${name}: the badge shows at the top of the website`, box && box.y === 0 && box.width < w && /TEST SITE/.test(await p.textContent('#mbs-test-badge')));
+      ok('Looks', `${name}: the TEST bar is at the very top, starting on the left`, box && box.y === 0 && box.x === 0 && /test site/i.test(await p.textContent('#mbs-test-badge')) && (await p.locator('#mbs-test-badge .gkh-chip').boundingBox()).x < w / 2);
       ok('Looks', `${name}: the badge does not block clicks`, (await p.evaluate(() => getComputedStyle(document.getElementById('mbs-test-badge')).pointerEvents)) === 'none');
-      await p.screenshot({ path: path.join(__dirname, `shot32-site-${name}.png`) });
+      const tb = await p.locator('.topbar').boundingBox(), gl = await p.locator('#mbs-test-badge img').boundingBox();
+      ok('Brand', `${name}: globe and Powered by GKH on the left; the bar sits above the MBS bar and covers nothing`, gl && gl.x < 40 && /Powered by GKH/.test(await p.textContent('#mbs-test-badge')) && tb && tb.y >= box.y + box.height - 1 && (await p.evaluate(() => getComputedStyle(document.getElementById('mbs-test-badge')).position)) === 'relative' && (await p.evaluate(() => document.documentElement.scrollWidth)) <= w + 1);
+      await p.screenshot({ path: path.join(__dirname, `shot33-site-${name}.png`) });
       await p.close();
     }
     const p = await br.newPage({ viewport: { width: 1400, height: 900 } });
@@ -93,8 +109,15 @@ const snap = (d) => htmlFiles(d).map((f) => fs.readFileSync(f, 'utf8')).join('\n
     ok('Looks', 'the MBS Console login also shows the badge', await p.isVisible('#mbs-test-badge') && /^TEST · /.test(await p.title()));
     await p.fill('[name=username]', 'sashi73'); await p.fill('[name=password]', 'sashi98'); await p.click('#loginForm button');
     await p.waitForSelector('#app:not([hidden])');
-    ok('Looks', 'after logging in the Console works with the badge', await p.isVisible('#mbs-test-badge'));
-    await p.screenshot({ path: path.join(__dirname, 'shot32-admin.png') });
+    ok('Looks', 'after logging in the Console shows the TEST SITE tag in the GKH banner', await p.isVisible('.gkh-bar .gkh-chip'));
+    const bar = await p.locator('.gkh-bar').boundingBox(), chip = await p.locator('.gkh-bar .gkh-chip').boundingBox(), txt = await p.locator('.gkh-bar b').boundingBox();
+    ok('Brand', 'the GKH banner shows above the dashboard with its globe, words and TEST SITE tag in a row', bar && bar.width > 800 && txt && chip && chip.x > txt.x + txt.width && Math.abs((chip.y + chip.height / 2) - (txt.y + txt.height / 2)) < 12 && /AI-Powered Business Intelligence/.test(await p.textContent('.gkh-bar')));
+    await p.setViewportSize({ width: 390, height: 800 });
+    await p.screenshot({ path: path.join(__dirname, 'shot33-admin-phone.png') });
+    const pb = await p.locator('.gkh-bar').boundingBox();
+    ok('Brand', 'phone: the banner fits the screen', pb && pb.width <= 390 && (await p.evaluate(() => document.documentElement.scrollWidth)) <= 391);
+    await p.setViewportSize({ width: 1400, height: 900 });
+    await p.screenshot({ path: path.join(__dirname, 'shot33-admin.png') });
     ok('Console', 'no JavaScript errors', errors.length === 0, errors.join(' | '));
     await br.close();
   } catch (e) { try { await br.close(); } catch {} ok('Run', 'completed', false, e.stack.split('\n').slice(0, 3).join(' / ') + '\n' + log.slice(-800)); }

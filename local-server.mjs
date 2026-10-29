@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-29 v32b (test site switch, two folders)';
+const VERSION = '2026-10-29 v33 (GKH console branding on the test site)';
 const NEEDS = [
   ['netlify/lib/shared.mjs', 'isTestSite'],
   ['netlify/lib/plan.mjs', 'gateOf'],
