@@ -1,4 +1,4 @@
-// v35: Mr. Fixit "Start again" (clears the chat, back to the main menu) and an always-available "Main menu".
+// v35-v36: Mr. Fixit "Start again" (clears the chat, back to the main menu). v36: no extra "Main menu" button on every step.
 // Local site, real Blobs, Chromium. The chat's AI is not set up here, so free questions get the "team will answer" reply.
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
@@ -28,7 +28,7 @@ const START = ['Ask a repair question', 'I have a leak', 'Something else is brok
     p.on('pageerror', (e) => errors.push(e.message)); p.on('dialog', (x) => { errors.push('dialog: ' + x.message()); x.dismiss(); });
     const chips = () => p.$$eval('.fx-chips .fx-chip', (x) => x.map((c) => c.textContent.trim()));
     const msgs = () => p.$$eval('.fx-list .fx-msg:not(.fx-typing)', (x) => x.map((c) => c.textContent.trim()));
-    const idle = async () => { await sleep(300); await p.waitForFunction(() => !document.querySelector('.fx-typing') && document.querySelectorAll('.fx-chips .fx-chip').length > 0, null, { timeout: 15000 }); await sleep(250); };
+    const idle = async () => { await sleep(300); await p.waitForFunction(() => { const m = document.querySelectorAll('.fx-list > *'); const last = m[m.length - 1]; return !document.querySelector('.fx-typing') && last && !last.classList.contains('me'); }, null, { timeout: 15000 }); await sleep(250); };   // Mr. Fixit has finished his reply
     const tap = async (label) => { await p.locator('.fx-chips .fx-chip', { hasText: label }).first().click(); await idle(); };
     const type = async (t) => { await p.fill('.fx-input', t); await p.press('.fx-input', 'Enter'); await idle(); };
     const stored = () => p.evaluate(() => JSON.parse(sessionStorage.getItem('mbsFixit.v1') || 'null'));
@@ -39,24 +39,22 @@ const START = ['Ask a repair question', 'I have a leak', 'Something else is brok
     ok('Menu', 'opens on the main menu, with no extra "Main menu" chip there', JSON.stringify(c) === JSON.stringify(START), c.join(' | '));
     ok('Start again', 'the footer has a "Start again" button next to the phone number', /Start again/.test(await p.textContent('.fx-foot .fx-restart')) && /Call/.test(await p.textContent('.fx-foot')));
 
-    // Main menu from the middle of an enquiry
+    // v36: no extra Main menu button added anywhere
     await tap('Get a free quote');
     c = await chips();
-    ok('Menu', 'in the middle of a quote request, "☰ Main menu" is on offer', c.includes('☰ Main menu'), c.join(' | '));
-    const before = (await msgs()).length;
-    await tap('Main menu');
-    c = await chips(); const s1 = await stored();
-    ok('Menu', 'Main menu: stops the quote request and shows the main choices', JSON.stringify(c) === JSON.stringify(START) && s1.flow === null, c.join(' | '));
-    ok('Menu', '...and keeps the conversation so far on screen', (await msgs()).length > before);
-
-    // Main menu from Q&A mode: exactly one menu chip
-    await tap('Ask a repair question');
+    ok('No extra menu', 'in the middle of a quote request there is no added "Main menu" button', !c.some((x) => /Main menu/.test(x)), c.join(' | '));
+    await type('Sam Smith');
     c = await chips();
-    ok('Menu', 'in repair Q&A there is exactly one "☰ Main menu"', c.filter((x) => /Main menu/.test(x)).length === 1, c.join(' | '));
+    ok('No extra menu', '...and still none on the next question', !c.some((x) => /Main menu/.test(x)) && c.includes('Yes') && c.includes('No'), c.join(' | '));
+    // Start again from the middle of a quote request: back to the main menu
+    await p.click('.fx-restart'); await p.click('.fx-confirm .fx-yes'); await idle();
+    const s0 = await stored();
+    ok('Start again', 'Start again in the middle of a quote request: back on the main menu, the request is dropped', JSON.stringify(await chips()) === JSON.stringify(START) && s0.flow === null && s0.log.length === 2);
+    // the repair Q&A keeps its own "Main menu" button, as before
+    await tap('Ask a repair question');
     await type('My gutter is overflowing');
     c = await chips();
-    ok('Menu', 'after any answer, Main menu is still there', c.some((x) => /Main menu/.test(x)), c.join(' | '));
-
+    ok('No extra menu', 'repair Q&A still has its own "Main menu" button after an answer (as before), just one', c.filter((x) => /Main menu/.test(x)).length === 1, c.join(' | '));
     // typed "main menu"
     await type('main menu');
     ok('Menu', 'typing "main menu" goes to the main menu', JSON.stringify(await chips()) === JSON.stringify(START));

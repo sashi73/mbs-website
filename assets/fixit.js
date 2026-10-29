@@ -365,21 +365,13 @@
     return b;
   }
 
-  // v35: "Main menu" is always on offer, except on the main menu itself (or when the chips already have it)
-  var MENU_CHIP = { label: '☰ Main menu', act: 'menu', menu: true };
-  function atMain(chips) { return chips.length === START_CHIPS.length && chips.every(function (c, i) { return c.label === START_CHIPS[i].label; }); }
-  function chipsWithMenu() {
-    var c = S.chips.slice();
-    var last = S.log[S.log.length - 1];   // just after the customer speaks, Mr. Fixit is about to answer: no menu yet
-    if (S.log.length && last.who !== 'me' && !atMain(c) && !c.some(function (x) { return x.act === 'exit_expert' || x.act === 'menu'; })) c.push(MENU_CHIP);
-    return c;
-  }
+  // v36: no extra "Main menu" button: the chips are just the ones Mr. Fixit offers (↺ Start again, at the bottom, goes back to the main menu)
   function chipEl(c) {
-    return el('button', { type: 'button', class: 'fx-chip' + (c.primary ? ' primary' : '') + (c.act === 'exit_expert' || c.act === 'menu' ? ' fx-menu' : ''), text: c.act === 'exit_expert' ? '☰ Main menu' : c.label, onclick: function () { pick(c); } });
+    return el('button', { type: 'button', class: 'fx-chip' + (c.primary ? ' primary' : ''), text: c.label, onclick: function () { pick(c); } });
   }
   function renderChips() {
     chipsBox.innerHTML = '';
-    chipsWithMenu().forEach(function (c) { chipsBox.appendChild(chipEl(c)); });
+    S.chips.forEach(function (c) { chipsBox.appendChild(chipEl(c)); });
   }
   function render() {
     list.innerHTML = '';
@@ -393,7 +385,7 @@
     });
     if (S.busy) list.appendChild(el('div', { class: 'fx-msg bot fx-typing', 'aria-label': 'Mr. Fixit is typing' }, [el('i'), el('i'), el('i')]));
     chipsBox.innerHTML = '';
-    if (!S.busy) chipsWithMenu().forEach(function (c) { chipsBox.appendChild(chipEl(c)); });
+    if (!S.busy) S.chips.forEach(function (c) { chipsBox.appendChild(chipEl(c)); });
     restartBtn.disabled = sending;   // never in the middle of sending their details to the team
     requestAnimationFrame(function () { list.scrollTop = list.scrollHeight; });
   }
@@ -1192,9 +1184,8 @@
         S.mode = 'expert';
         return say('Go ahead, what else needs fixing?', [{ label: 'Main menu', act: 'exit_expert' }]);
       case 'exit_expert':
-      case 'menu':
-        S.log.push({ who: 'me', text: 'Main menu' }); save();
-        return toMenu();
+        S.log.push({ who: 'me', text: c.label }); S.mode = null; save();
+        return say('No worries. What can I help you with?', START_CHIPS);
       case 'yes_more':
         S.log.push({ who: 'me', text: 'Yes' }); save();
         return say('Sure, what would you like to know?', START_CHIPS);
