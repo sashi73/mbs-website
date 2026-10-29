@@ -1,4 +1,4 @@
-// v39: new-plan page: Start date, Finish by and Emergency job in one row, with the remark that the AI can work out the end date.
+// v39-v41: new-plan page: Start date, Finish by and Emergency job in one row, with the remark that the AI can work out the end date.
 // A Finish by date carries into the new plan. Stand-in AI, real Blobs, local site, Chromium.
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
@@ -74,11 +74,31 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     await p.fill('.dbox:has(#aiFinish) .dtext', dmy(fb)); await p.press('.dbox:has(#aiFinish) .dtext', 'Enter');
     await p.click('[data-mode=ai]');
     ok('AI', 'with a Finish by, AI mode says it fits the work between the two dates', /fits the work between the Start date and Finish by/.test(await p.textContent('#modeBody')));
+    // v41: Finish by can't be before the Start date
+    const st0 = await p.inputValue('#tplStart');
+    ok('Order', 'new plan: Finish by greys out dates before the Start date', (await p.getAttribute('#aiFinish', 'min')) === st0);
+    const before = P.addWork(st0, -0) > st0 ? st0 : st0;
+    const bad = new Date(Date.parse(st0 + 'T00:00:00Z') - 3 * 864e5).toISOString().slice(0, 10);
+    await p.fill('.dbox:has(#aiFinish) .dtext', dmy(bad)); await p.press('.dbox:has(#aiFinish) .dtext', 'Enter'); await sleep(400);
+    ok('Order', 'new plan: a Finish by before the Start date is refused (cleared, with a message)', (await p.inputValue('#aiFinish')) === '' && /can't be before the Start date/.test(await p.textContent('#toast')));
+    await p.fill('.dbox:has(#aiFinish) .dtext', dmy(fb)); await p.press('.dbox:has(#aiFinish) .dtext', 'Enter'); await sleep(300);
     await p.click('[data-mode=type]'); await p.waitForSelector('#tplType');
     await p.selectOption('#tplType', 'crack-repair'); await p.click('#tplCreate'); await p.waitForSelector('table.gt');
     const pb = await kv.get('plan:' + b);
     ok('Carry', 'the Finish by date is saved on the new plan, and noted in the assumptions', pb.finishBy === fb && /Customer wants it finished by/.test(pb.charter.assumptions), pb.finishBy);
     ok('Carry', 'the Schedule tab shows it straight away (on time or late)', /finish-by date/.test(await p.textContent('.fitbar')));
+    // v41: Schedule tab keeps Project start <= Work starts <= Finish by
+    await p.click('#planTabs >> text=Schedule').catch(() => {}); await p.waitForSelector('#pWork');
+    ok('Order', 'Schedule: Work starts and Project start grey out dates after Finish by; Finish by greys out dates before the start', (await p.getAttribute('#pWork', 'max')) === fb && (await p.getAttribute('#pStart', 'max')) === fb && !!(await p.getAttribute('#pFinishBy', 'min')));
+    const after = P.addWork(fb, 2);
+    await p.fill('.dbox:has(#pWork) .dtext', dmy(after)); await p.press('.dbox:has(#pWork) .dtext', 'Enter'); await sleep(500);
+    ok('Order', 'Schedule: a Work starts after Finish by is refused, with a message', !((await kv.get('plan:' + b)).workStart) && /can't start after your Finish by/.test(await p.textContent('#toast')));
+    await p.fill('.dbox:has(#pStart) .dtext', dmy(after)); await p.press('.dbox:has(#pStart) .dtext', 'Enter'); await sleep(500);
+    ok('Order', 'Schedule: a Project start after Finish by is refused, with a message', (await kv.get('plan:' + b)).start < fb && /project can't start after your Finish by/.test(await p.textContent('#toast')));
+    const pb2 = await kv.get('plan:' + b);
+    const early = new Date(Date.parse(pb2.start + 'T00:00:00Z') - 2 * 864e5).toISOString().slice(0, 10);
+    await p.fill('.dbox:has(#pFinishBy) .dtext', dmy(early)); await p.press('.dbox:has(#pFinishBy) .dtext', 'Enter'); await sleep(500);
+    ok('Order', 'Schedule: a Finish by before the start is refused, with a message', (await kv.get('plan:' + b)).finishBy === fb && /Finish by can't be before the/.test(await p.textContent('#toast')));
     // phone
     await p.setViewportSize({ width: 390, height: 844 }); await p.goto(`${BASE}/admin/#plan/${a}/schedule`); await sleep(600);
     ok('Phone', 'no sideways scrolling on a phone', (await p.evaluate(() => document.documentElement.scrollWidth)) <= 391);

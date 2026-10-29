@@ -592,6 +592,15 @@
     mode();
     $('#tplEmerg').onchange = function () { S.emergTouched = true; if (S.mode === 'ai' && S.aiDraft) showDraft(); };
     $('#tplWeek').onchange = function () { S.tplWeek = this.checked; if (S.mode === 'ai' && S.aiDraft) showDraft(); else if (S.mode === 'type' && $('#tplType') && $('#tplType').value) $('#tplType').onchange(); };
+    var keepOrder = function (changed) {
+      var s = $('#tplStart').value, f = $('#aiFinish').value;
+      $('#aiFinish').min = s || ''; if (f) $('#tplStart').max = f; else $('#tplStart').removeAttribute('max');
+      if (s && f && f < s) { if (changed === 'finish') { setDate('aiFinish', ''); S.aiFinish = ''; toast('Finish by can\'t be before the Start date (' + dmy(s) + ').', true); } else { setDate('tplStart', f); toast('The Start date can\'t be after Finish by (' + dmy(f) + '), so it was set to ' + dmy(f) + '.', true); } return false; }
+      return true;
+    };
+    $('#tplStart').addEventListener('change', function () { keepOrder('start'); });
+    $('#aiFinish').addEventListener('change', function () { keepOrder('finish'); });
+    setTimeout(function () { keepOrder(''); }, 0);
     $('#aiFinish').onchange = function () { S.aiFinish = this.value; if (S.mode === 'ai') { if (S.aiDraft) showDraft(); else mode(); } };
     // saying it's an emergency (in the scope or the AI description) ticks the box, unless you have unticked it yourself
     S.emergTouched = false;
@@ -753,6 +762,7 @@
   function setWorkStart(v) {
     var p = S.plan, g = gateDate(p);
     if (v && v < nextWork(p.start)) { toast('The work can\'t start before the project start (' + dmy(nextWork(p.start)) + ')', true); render(); return; }
+    if (v && p.finishBy && v > p.finishBy) { toast('The work can\'t start after your Finish by date (' + dmy(p.finishBy) + '). Pick an earlier date, or move Finish by later first.', true); render(); return; }
     var f0 = rollup(p, today()).finish, waived = '';
     if (v && g && nextWork(v) < g && p.gate && /^\d{4}-\d{2}-\d{2}$/.test(p.gate.date || '')) {
       // v40: more flexible: shorten the cooling-off so the work can start then (the customer must agree to waive the rest)
@@ -1008,9 +1018,9 @@
         '<label class="qchk" title="Days after the quote is accepted before the work can start. The full cooling-off period is 5 business days; most customers agree to start after 3.">Cooling-off <select id="pCool"' + (p.emergency ? ' disabled' : '') + '>' + [0, 1, 2, 3, 4, 5].map(function (n) { return '<option value="' + n + '"' + (coolOf(p) === n ? ' selected' : '') + '>' + n + (n === 3 ? ' (usual)' : n === 5 ? ' (full period)' : '') + '</option>'; }).join('') + '</select> business days</label></div><div>' + gateText(p) + '</div></div>' +
       fitBar(p, R) +
       '<span class="muted" style="font-size:12.5px">To move a task, type its new number in <b>#</b> (1 = first) or drag <b>⠿</b>. Sub-tasks move inside their own task. Days are working days (' + (p.emergency ? 'emergency: every day, Saturday and Sunday included' : p.weekends ? 'weekends allowed: every day, Saturday and Sunday included' : 'Mon–Fri') + '). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span><span class="sp"></span>' +
-      '<label style="display:flex;gap:6px;align-items:center;font-weight:700">Project start<input type="date" id="pStart" value="' + esc(p.start) + '" style="width:auto"></label>' +
-      '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The day the work itself starts (after the quote is accepted). Tasks before the quote, like the site inspection, are not affected. Also on the quote.">Work starts<input type="date" id="pWork" value="' + esc(p.workStart || '') + '" min="' + esc(nextWork(p.start)) + '" style="width:auto"></label>' +
-      '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The date the customer needs it finished. If the plan finishes later, ✨ Fit to finish-by asks the AI how to bring it in.">Finish by<input type="date" id="pFinishBy" value="' + esc(p.finishBy || '') + '" min="' + esc(nextWork(p.start)) + '" style="width:auto"></label>' +
+      '<label style="display:flex;gap:6px;align-items:center;font-weight:700">Project start<input type="date" id="pStart" value="' + esc(p.start) + '"' + (p.finishBy ? ' max="' + esc(p.finishBy) + '"' : '') + ' style="width:auto"></label>' +
+      '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The day the work itself starts (after the quote is accepted). Tasks before the quote, like the site inspection, are not affected. Also on the quote.">Work starts<input type="date" id="pWork" value="' + esc(p.workStart || '') + '" min="' + esc(nextWork(p.start)) + '"' + (p.finishBy ? ' max="' + esc(p.finishBy) + '"' : '') + ' style="width:auto"></label>' +
+      '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The date the customer needs it finished. If the plan finishes later, ✨ Fit to finish-by asks the AI how to bring it in.">Finish by<input type="date" id="pFinishBy" value="' + esc(p.finishBy || '') + '" min="' + esc(p.workStart && p.workStart > p.start ? p.workStart : nextWork(p.start)) + '" style="width:auto"></label>' +
       '<div class="tabs" style="margin:0" title="Which columns to show"><button class="tab' + (S.cols === 's' ? ' on' : '') + '" data-cols="s">📅 Dates</button><button class="tab' + (S.cols === 'c' ? ' on' : '') + '" data-cols="c">$ Costs</button><button class="tab' + (S.cols === 'a' ? ' on' : '') + '" data-cols="a">All columns</button></div>' +
       '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button></div></div>' +
       '<div class="gsplit" id="gSplit"><div class="gpane gleft" id="gLeft"' + (S.split ? ' style="flex:0 0 ' + S.split + 'px;max-width:none"' : '') + '><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task</th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th>Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th></tr></thead><tbody>';
@@ -1067,9 +1077,9 @@
     splitPanes(x(t0));
     B.querySelectorAll('[data-cols]').forEach(function (b) { b.onclick = function () { S.cols = b.getAttribute('data-cols'); try { localStorage.setItem('mbsPlanCols', S.cols); } catch (e) {} render(); }; });
     B.querySelectorAll('[data-zoom]').forEach(function (b) { b.onclick = function () { S.zoom = b.getAttribute('data-zoom'); render(); }; });
-    $('#pStart').onchange = function () { if (this.value) { var f0 = rollup(p, today()).finish; p.start = this.value; dirty(); render(); afterDates(f0, 'the project start changed'); } };
+    $('#pStart').onchange = function () { if (this.value && p.finishBy && this.value > p.finishBy) { toast('The project can\'t start after your Finish by date (' + dmy(p.finishBy) + '). Move Finish by later first, or clear it.', true); render(); return; } if (this.value) { var f0 = rollup(p, today()).finish; p.start = this.value; dirty(); render(); afterDates(f0, 'the project start changed'); } };
     $('#pWork').onchange = function () { setWorkStart(this.value); };
-    $('#pFinishBy').onchange = function () { p.finishBy = this.value || ''; S.fitUndo = null; dirty('finish by ' + (p.finishBy || 'cleared')); render(); afterDates('', 'Finish by changed'); };
+    $('#pFinishBy').onchange = function () { var first = p.workStart && p.workStart > p.start ? p.workStart : p.start; if (this.value && this.value < first) { toast('Finish by can\'t be before the ' + (first === p.start ? 'project starts' : 'work starts') + ' (' + dmy(first) + ').', true); render(); return; } p.finishBy = this.value || ''; S.fitUndo = null; dirty('finish by ' + (p.finishBy || 'cleared')); render(); afterDates('', 'Finish by changed'); };
     $('#pWeek').onchange = function () { var f0 = rollup(p, today()).finish; p.weekends = this.checked; dirty(p.weekends ? 'weekends allowed' : 'weekdays only'); render(); var Rw = rollup(p, today()); toast(p.weekends ? '📅 Saturday and Sunday are work days now: finishes ' + dmy(Rw.finish) : 'Weekdays only (Mon–Fri): finishes ' + dmy(Rw.finish)); afterDates(f0, 'weekend work changed'); };
     var fw = $('#fitWeek'); if (fw) fw.onclick = function () { var f0 = rollup(p, today()).finish; p.weekends = true; dirty('weekends allowed'); render(); toast('📅 Weekends allowed: finishes ' + dmy(rollup(p, today()).finish)); afterDates(f0, ''); };
     var fg = $('#fitGo'); if (fg) fg.onclick = fitRun;
