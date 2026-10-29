@@ -25,6 +25,7 @@
   function flags(c) {
     var a = ageDays(c.since), f = [];
     var w = function (txt, lvl) { f.push('<span class="pflag pf-' + lvl + '">' + esc(txt) + '</span>'); };
+    if (c.emergency && c.col !== 'closed') w('🚨 Emergency', 'red');
     if (c.col === 'new' && a >= 1) w('Not called yet: ' + a + ' day' + (a === 1 ? '' : 's'), a >= 3 ? 'red' : 'amber');
     if (c.col === 'called' && a >= 3 && !c.next) w('No visit booked', 'amber');
     if (c.col === 'visit' && c.stage !== 'quoted' && c.visit) w('Site visit booked', 'blue');

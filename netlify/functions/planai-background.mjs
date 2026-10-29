@@ -17,7 +17,7 @@ export default async (req) => {
     id = String(body.id || '').replace(/[^a-z0-9]/gi, '').slice(0, 40);
     if (id.length < 12) return new Response('', { status: 400 });
     await kv.set('aiplan:' + id, { status: 'working', at: Date.now() });
-    const r = await buildAiPlan({ core: body.core, describe: body.describe, scope: body.scope, type: body.type, start: body.start }, `Admin (${session.u})`);
+    const r = await buildAiPlan({ core: body.core, describe: body.describe, scope: body.scope, type: body.type, start: body.start, finish: body.finish, emergency: !!body.emergency }, `Admin (${session.u})`);
     await kv.set('aiplan:' + id, { ...r, status: r.error ? 'error' : 'done', at: Date.now() });
     if (!r.error) await A.audit(session.u, `AI built a plan draft for ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
   } catch (e) {

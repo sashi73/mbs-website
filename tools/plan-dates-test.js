@@ -101,34 +101,46 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.fill('tr[data-tid="t5"] .dtext', '31/02/2027'); await p.press('tr[data-tid="t5"] .dtext', 'Enter'); await sleep(200);
     ok('Dates', 'a date that does not exist (31/02) is refused with a hint', /DD\/MM\/YYYY/.test(await p.textContent('.toast')) && (await ui('t5')).es === t5.es);
 
-    // ---- 4. the quote gates the work ----
+    // ---- 4. the quote gates the work: accepted + cooling-off (3 business days); emergency = straight away ----
     const q = await api('planQuote', { core, validDays: 10 });
-    const valid = ACC.addDays(today, 10), gate = P.nextWork(valid);
+    const G3 = P.addWork(P.nextWork(today), 3), G5 = P.addWork(P.nextWork(today), 5);
     st = await kv.get('plan:' + core);
-    ok('Quote gate', 'making the quote records the gate on the plan (valid until = earliest start of the work)', st.gate && st.gate.date === valid && st.gate.accepted === false && st.gate.id === q.doc.id, JSON.stringify(st.gate));
-    await p.reload(); await p.waitForSelector('.qgate');
+    ok('Quote gate', 'making the quote records it on the plan (not accepted yet: the quote date counts as acceptance)', st.gate && st.gate.date === today && st.gate.accepted === false && st.gate.id === q.doc.id, JSON.stringify(st.gate));
+    await p.reload(); await p.waitForSelector('.qgate #pEmerg');
     const g3 = await ui('t3'), g1 = await ui('t1'), g2 = await ui('t2');
-    ok('Quote gate', 'not accepted yet: the work is scheduled from the day the quote expires', g2.es === gate && g3.es >= gate, JSON.stringify([g2.es, g3.es, gate]));
-    ok('Quote gate', 'tasks before the quote (site inspection) are not held back', g1.es === P.nextWork(today));
-    ok('Quote gate', 'the plan says so: 🔒 work starts once the quote is accepted, valid until DD/MM/YYYY', /Work starts once quote/.test(await p.textContent('.qgate')) && (await p.textContent('.qgate')).includes(dmy(valid)));
+    ok('Cooling-off', 'not an emergency: the work starts 3 business days after the quote (cooling-off)', g2.es === G3 && g3.es >= G3, JSON.stringify([g2.es, g3.es, G3]));
+    ok('Cooling-off', 'tasks before the quote (site inspection) are not held back', g1.es === P.nextWork(today));
+    ok('Cooling-off', 'the plan says so: not accepted yet, 3 business days cooling-off, work starts DD/MM/YYYY', /not accepted yet/.test(await p.textContent('.qgate')) && /3 business days cooling-off/.test(await p.textContent('.qgate')) && (await p.textContent('.qgate')).includes(dmy(G3)), await p.textContent('.qgate'));
     const pdf = await api('docGet', { id: q.doc.id });
-    ok('Quote gate', 'the quote\'s plan pages (PDF) use the same dates, and the quote notes explain it', pdf.doc.plan.snapshot.tasks.find((t) => t.n === 'Quote accepted').es === gate && /Work starts once this quote is accepted/.test(pdf.doc.notes));
-    // a hand-set start can't go before the gate
+    ok('Cooling-off', 'the quote\'s plan pages use the same dates and the quote notes explain the cooling-off', pdf.doc.plan.snapshot.tasks.find((t) => t.n === 'Quote accepted').es === G3 && /cooling-off period of 3 business days/.test(pdf.doc.notes), pdf.doc.notes);
     await p.$eval('tr[data-tid="t6"]', (e) => e.scrollIntoView({ block: 'center' }));
     await p.fill('tr[data-tid="t6"] .dtext', dmy(P.nextWork(today))); await p.press('tr[data-tid="t6"] .dtext', 'Enter'); await saved();
-    ok('Quote gate', 'a hand-set start before the quote can be accepted is moved to the gate, with a message', (await ui('t6')).es >= gate && /quote is accepted/.test(await p.textContent('.toast')), (await ui('t6')).es);
-    // accepted today: the work comes forward
+    ok('Cooling-off', 'a hand-set start inside the cooling-off is moved to the first allowed day, with a message', (await ui('t6')).es >= G3 && /cooling-off/.test(await p.textContent('.toast')), (await ui('t6')).es);
+    await p.fill('tr[data-tid="t6"] .dtext', ''); await p.press('tr[data-tid="t6"] .dtext', 'Enter'); await saved();
+    // cooling-off can be changed (full period = 5)
+    await p.selectOption('#pCool', '5'); await saved();
+    ok('Cooling-off', 'cooling-off set to 5 business days (the full period): the work moves 2 days later', (await ui('t2')).es === G5 && (await kv.get('plan:' + core)).coolOff === 5);
+    await p.selectOption('#pCool', '3'); await saved();
+    // emergency: straight away, the same day as the site inspection
+    await p.check('#pEmerg'); await saved();
+    let e2 = await ui('t2'), e3 = await ui('t3');
+    ok('Emergency', 'Emergency ticked: the work starts the same day as the site inspection (no cooling-off)', e2.es === g1.es && e3.es === g1.es && (await kv.get('plan:' + core)).emergency === true, JSON.stringify([g1.es, e2.es, e3.es]));
+    ok('Emergency', 'the plan says so and the cooling-off box is off', /Emergency:/.test(await p.textContent('.qgate')) && await p.isDisabled('#pCool'));
+    ok('Emergency', 'the server schedules it the same way', P.schedule(JSON.parse(JSON.stringify(await kv.get('plan:' + core)))).tasks.find((t) => t.id === 't3').es === g1.es);
+    await p.uncheck('#pEmerg'); await saved();
+    ok('Emergency', 'untick: the cooling-off applies again', (await ui('t2')).es === G3);
+    // accepted (today): accepted date + cooling-off
     await api('docStatus', { id: q.doc.id, status: 'accepted' });
     st = await kv.get('plan:' + core);
-    ok('Quote gate', 'quote accepted: the gate moves to the acceptance date', st.gate.accepted === true && st.gate.date === today, JSON.stringify(st.gate));
-    await p.click('[data-tab], a.tab[href$="/overview"]'); await p.goto(`${BASE}/admin/#plan/${core}/schedule`); await p.waitForFunction(() => /accepted on/.test((document.querySelector('.qgate') || {}).textContent || ''));
-    ok('Quote gate', 'the plan updates by itself: ✅ accepted, work moves forward', (await ui('t2')).es < gate && (await ui('t3')).es < gate, JSON.stringify([(await ui('t2')).es, (await ui('t3')).es, gate]));
+    ok('Cooling-off', 'quote accepted: the gate is the acceptance date', st.gate.accepted === true && st.gate.date === today, JSON.stringify(st.gate));
+    await p.goto(`${BASE}/admin/#plan/${core}/overview`); await p.goto(`${BASE}/admin/#plan/${core}/schedule`); await p.waitForFunction(() => /accepted on/.test((document.querySelector('.qgate') || {}).textContent || ''));
+    ok('Cooling-off', 'the plan updates by itself: ✅ accepted on DD/MM/YYYY, work 3 business days later', (await ui('t2')).es === G3 && (await p.textContent('.qgate')).includes(dmy(today)));
     const board = await api('pipelineBoard', {});
-    ok('Quote gate', 'the pipeline board uses the same dates', board.cards.find((c) => c.core === core).plan.finish === (await p.evaluate(() => window.MBS.planState.plan.tasks.reduce((m, t) => (t.ef > m ? t.ef : m), ''))));
-    // later variation quote doesn't hold the job back again
+    ok('Cooling-off', 'the pipeline board uses the same dates', board.cards.find((c) => c.core === core).plan.finish === (await p.evaluate(() => window.MBS.planState.plan.tasks.reduce((m, t) => (t.ef > m ? t.ef : m), ''))));
     await api('planQuote', { core });
     st = await kv.get('plan:' + core);
-    ok('Quote gate', 'a later quote (variation) does not hold the job back again: the accepted quote still counts', st.gate.accepted === true && st.gate.id === q.doc.id);
+    ok('Cooling-off', 'a later quote (variation) does not hold the job back again: the accepted quote still counts', st.gate.accepted === true && st.gate.id === q.doc.id);
+
     // ---- 5. "Work starts" on the quote moves the plan and its Gantt chart ----
     const ws = P.addWork(P.nextWork(today), 15);
     await p.goto(`${BASE}/admin/#doc/${q.doc.id}`); await p.waitForSelector('#docPlan .dtext');

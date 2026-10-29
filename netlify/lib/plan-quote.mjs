@@ -20,12 +20,18 @@ export function snapshot(plan, today = sydToday()) {
   const c = p.charter || {};
   return {
     name: str(p.name, 120), rev: p.rev || 0, at: Date.now(), today, start: R.start, finish: R.finish, days: R.start ? PLAN.workBetween(R.start, R.finish) : 0,
-    BAC: R.BAC, pct: R.pct, done: R.done, total: R.total, late: R.late,
+    BAC: R.BAC, pct: R.pct, done: R.done, total: R.total, late: R.late, emergency: !!p.emergency, coolOff: PLAN.coolOf(p),
     charter: { objective: str(c.objective, 600), inScope: str(c.inScope, 1500), outScope: str(c.outScope, 700), deliverables: str(c.deliverables, 700), acceptance: str(c.acceptance, 600), assumptions: str(c.assumptions, 700), manager: str(c.manager, 80) },
     ...workSpan(p),
     tasks: p.tasks.slice(0, 40).map((t) => ({ n: str(t.name, 90), es: t.es, ef: t.ef, dur: t.dur, mile: t.dur === 0, pct: t.pct || 0, status: t.status || 'todo', subs: (t.subs || []).length })),
     risks: (p.risks || []).filter((r) => r.status !== 'Closed').sort((a, b) => b.p * b.i - a.p * a.i).slice(0, 6).map((r) => ({ t: str(r.title, 120), p: r.p, i: r.i, resp: r.response, act: str(r.action, 160) }))
   };
+}
+// why the work can't start earlier (for messages)
+export function gateWords(plan) {
+  const g = plan.gate, c = PLAN.coolOf(plan);
+  if (plan.emergency || !g) return '';
+  return `Work can only start once the quote is accepted, plus a cooling-off period of ${c} business day${c === 1 ? '' : 's'}: ${g.id} ${g.accepted ? 'was accepted on ' + ACC.prettyDate(g.date) : 'is not accepted yet (the plan assumes acceptance on the quote date, ' + ACC.prettyDate(g.date) + ')'}.`;
 }
 // when the work itself runs (the tasks that wait for the quote), as opposed to the whole project (site inspection first)
 function workSpan(p) {
@@ -93,9 +99,10 @@ export async function planQuotePost(action, body, { who, by, audit }) {
   const days = Math.max(1, Math.min(120, Number(body.validDays) || ACC.QUOTE_VALID_DAYS)), validUntil = ACC.addDays(ACC.today(), days);
   // the work can only start once this quote is accepted: until then it is scheduled from the date the quote is valid until
   const accepted = ACC.gateFrom((await ACC.index()).quotes, job.core);
-  const snap = snapshot({ ...plan, gate: accepted && accepted.accepted ? accepted : { date: validUntil, id: body.update || 'new', accepted: false } });
+  const snap = snapshot({ ...plan, gate: accepted && accepted.accepted ? accepted : { date: ACC.today(), id: body.update || 'new', accepted: false } });
   const notes = [datesLine(snap),
-    accepted && accepted.accepted ? '' : `Work starts once this quote is accepted; the dates assume acceptance by ${ACC.prettyDate(validUntil)} and come forward if it is accepted earlier.`,
+    plan.emergency ? 'Emergency work: we can start straight away, usually the same day as the site inspection.'
+      : accepted && accepted.accepted ? '' : `Work starts once this quote is accepted, after a cooling-off period of ${PLAN.coolOf(plan)} business day${PLAN.coolOf(plan) === 1 ? '' : 's'}. The dates assume you accept today; they move by the same number of days if you accept later.`,
     'The attached high-level project management plan sets out the scope, schedule, milestones and key risks. Any change to the scope will be agreed in writing (variation) before the work is done.', str(body.notes, 800)].filter(Boolean).join('\n');
   const fields = { core: job.core, customer, items, pricesInc: false, title: str(body.title, 160) || snap.name, notes, validUntil };
   const planInfo = { core: job.core, rev: plan.rev || 0, fp, mode, margin, at: Date.now(), snapshot: snap, customerId: cust ? cust.id : '' };
@@ -220,8 +227,8 @@ export async function quoteStart(body, { who, by, audit }) {
   if (!plan) return out(404, { error: 'The project plan for this job has been deleted' });
   if (date) {
     if (PLAN.nextWork(date) < PLAN.nextWork(plan.start)) return out(400, { error: `The work can't start before the project start (${ACC.prettyDate(PLAN.nextWork(plan.start))})` });
-    const g = plan.gate && plan.gate.date ? PLAN.nextWork(plan.gate.date) : '';
-    if (g && PLAN.nextWork(date) < g) return out(400, { error: `Work can only start once the quote is accepted: ${plan.gate.id} ${plan.gate.accepted ? 'was accepted on' : 'is valid until'} ${ACC.prettyDate(plan.gate.date)}. Pick ${ACC.prettyDate(g)} or later${plan.gate.accepted ? '' : ', or make "Valid until" earlier first'}.` });
+    const g = PLAN.gateOf({ ...plan, workStart: '' }).date;   // the quote and cooling-off (not the old "Work starts")
+    if (g && PLAN.nextWork(date) < g) return out(400, { error: `${gateWords(plan)} Pick ${ACC.prettyDate(g)} or later${plan.gate && !plan.gate.accepted ? ', or tick Emergency on the project plan' : ''}.` });
   }
   const saved = await savePlan(d.core, (p) => { p.workStart = date; }, by);
   if (!saved) return out(409, { error: 'The plan is being changed by someone else. Try again.' });

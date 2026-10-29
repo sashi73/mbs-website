@@ -243,7 +243,8 @@ export async function buildPdf(doc, opts = {}) {
         'Warranty and any certificates (e.g. waterproofing, electrical compliance) are handed over with the final payment.',
         `Questions about this invoice or the work: call ${B.phone} or email ${B.email}.`]
       : [`Accept the quote: reply to the email or call ${B.phone} before ${pd(doc.validUntil)}.`,
-        'We confirm the start date with you and order the materials.',
+        plan.emergency ? 'Emergency work: we can start straight away, usually the same day as the site inspection.'
+          : `After you accept there is a cooling-off period of ${plan.coolOff == null ? 3 : plan.coolOff} business day${plan.coolOff === 1 ? '' : 's'}; then we confirm the start date with you and order the materials.`,
         'The work follows this schedule. You get an update frequently, and any change is agreed in writing first.',
         'Final check with you against the acceptance criteria, then clean-up and handover.',
         `Tax invoice at completion, payable within 7 days.`];

@@ -60,10 +60,29 @@
     } else p.tasks.forEach(function (t) { if (!/inspect|measure|quot|site visit/i.test(t.name) && !((t.pct || 0) > 0)) out.push(t); });
     return out;
   }
-  function gateDate(p) { return p.gate && /^\d{4}-\d{2}-\d{2}$/.test(p.gate.date || '') ? nextWork(p.gate.date) : ''; }
-  function holdDate(p) { var g = gateDate(p), w = /^\d{4}-\d{2}-\d{2}$/.test(p.workStart || '') ? nextWork(p.workStart) : ''; return w > g ? w : g; }   // the work waits for the quote and the "Work starts" date
+  // When can the work start (same rule as the server)? Emergency: straight away, the same day as the site inspection.
+  // Otherwise: quote accepted (until then: the quote date) + cooling-off (default 3 business days). "Work starts" can only make it later.
+  function coolOf(p) { return p.coolOff == null || p.coolOff === '' ? 3 : Math.max(0, Math.min(10, Math.round(+p.coolOff) || 0)); }
+  function gateOf(p) {
+    var re = /^\d{4}-\d{2}-\d{2}$/, ws = re.test(p.workStart || '') ? nextWork(p.workStart) : '';
+    if (p.emergency) return { date: ws, why: ws ? 'work' : 'emergency' };
+    var g = p.gate, q = g && re.test(g.date || '') ? addWork(nextWork(g.date), coolOf(p)) : '';
+    if (ws && ws > q) return { date: ws, why: 'work' };
+    return { date: q, why: q ? (g.accepted ? 'accepted' : 'quoted') : '' };
+  }
+  function gateDate(p) { return gateOf(Object.assign({}, p, { workStart: '' })).date; }   // quote + cooling-off only
+  function holdDate(p) { return gateOf(p).date; }
+  function gateText(p) {
+    var G = gateOf(p), c = coolOf(p), g = p.gate, days = c + ' business day' + (c === 1 ? '' : 's');
+    if (p.emergency) return '🚨 <b>Emergency:</b> the work can start straight away, the same day as the site inspection' + (G.date ? '; "Work starts" set to <b>' + esc(dmy(G.date)) + '</b>' : '') + '.';
+    var w = G.why === 'work' ? '📅 Work starts <b>' + esc(dmy(G.date)) + '</b> ("Work starts" date). ' : '';
+    if (!g) return w + 'Once there is a quote, the work waits for it to be accepted plus a cooling-off period of ' + days + ' (tick Emergency to start straight away).';
+    if (g.accepted) return w + '✅ Quote <b>' + esc(g.id) + '</b> accepted on ' + esc(dmy(g.date)) + '; after the ' + days + ' cooling-off the work starts <b>' + esc(dmy(gateDate(p))) + '</b>.';
+    return w + '🔒 Quote <b>' + esc(g.id) + '</b> is not accepted yet. The work waits for acceptance plus ' + days + ' cooling-off: assuming acceptance on the quote date (' + esc(dmy(g.date)) + '), the work starts <b>' + esc(dmy(gateDate(p))) + '</b>. It moves if the customer accepts later.';
+  }
   function schedule(p) {
     var start = nextWork(p.start || today()), byId = {}, gate = holdDate(p), gated = gate ? gatedTasks(p) : [];
+    var quoteMs = p.emergency ? p.tasks.filter(function (t) { return t.dur === 0 && /quote/i.test(t.name); })[0] : null;   // emergency: work the same day as the inspection
     p.tasks.forEach(function (t) { byId[t.id] = t; t.es = ''; t.ef = ''; });
     for (var pass = 0; pass < 30; pass++) {
       var changed = false;
@@ -72,7 +91,7 @@
         if (gate && gated.indexOf(t) >= 0 && gate > es) es = gate;   // no work before the quote is accepted (or until it expires)
         if (t.fixed && t.snet) { if (t.snet > es) es = t.snet; }   // start date set by hand: runs in parallel, "After #" not used
         else {
-          (t.pred || []).forEach(function (id) { var q = byId[id]; if (q && q.ef && q !== t) { var after = q.dur === 0 ? nextWork(q.ef) : addWork(nextWork(q.ef), 1); if (after > es) es = after; } });
+          (t.pred || []).forEach(function (id) { var q = byId[id]; if (q && q.ef && q !== t) { var after = t === quoteMs ? q.es : q.dur === 0 ? nextWork(q.ef) : addWork(nextWork(q.ef), 1); if (after > es) es = after; } });
           if (t.snet && t.snet > es) es = t.snet;
         }
         es = nextWork(es);
@@ -401,6 +420,38 @@
       return loadInv().then(render);
     });
   }
+  // dates written in plain words: "starts tomorrow and ends in one day", "start Monday, takes 3 days", "start 5/11, finish by 12/11", "done by Friday"
+  var NUMW = { one: 1, a: 1, an: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, fortnight: 10 };
+  var WD = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'], MON = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  function dayWord(w, base) {   // "today", "tomorrow", "monday", "next friday", "5/11", "5/11/2026", "5 nov", "5th"
+    w = String(w || '').toLowerCase().trim(); var d = toD(base);
+    if (/^today$/.test(w)) return base;
+    if (/^(tomorrow|tmrw|tmr)$/.test(w)) return toS(new Date(d.getTime() + 864e5));
+    if (/^next week$/.test(w)) return toS(new Date(d.getTime() + (((8 - d.getUTCDay()) % 7) || 7) * 864e5));   // next Monday
+    var m = w.match(/^(next |this )?(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)[a-z]*$/);
+    if (m) { var want = WD.map(function (x) { return x.slice(0, 3); }).indexOf(m[2].slice(0, 3)), diff = (want - d.getUTCDay() + 7) % 7 || 7; if (m[1] === 'next ' && diff < 7 && d.getUTCDay() !== 0) diff += 0; return toS(new Date(d.getTime() + diff * 864e5)); }
+    m = w.match(/^(\d{1,2})[\/.\-](\d{1,2})(?:[\/.\-](\d{2,4}))?$/);
+    if (m) { var y = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : d.getUTCFullYear(), r = parseDmy(m[1] + '/' + m[2] + '/' + y); if (r && !m[3] && r < base) r = parseDmy(m[1] + '/' + m[2] + '/' + (y + 1)); return r; }
+    m = w.match(/^(\d{1,2})(?:st|nd|rd|th)?(?: of)? ?([a-z]{3})?[a-z]*$/);
+    if (m) { var mo = m[2] ? MON.indexOf(m[2]) : d.getUTCMonth(); if (mo < 0) return null; var yy = d.getUTCFullYear(), r2 = parseDmy(m[1] + '/' + (mo + 1) + '/' + yy); if (r2 && r2 < base) r2 = m[2] ? parseDmy(m[1] + '/' + (mo + 1) + '/' + (yy + 1)) : parseDmy(m[1] + '/' + (mo + 2 > 12 ? 1 : mo + 2) + '/' + (mo + 2 > 12 ? yy + 1 : yy)); return r2; }
+    return null;
+  }
+  function readDates(text) {
+    var t = ' ' + String(text || '').toLowerCase().replace(/[,;]/g, ' ').replace(/\s+/g, ' ') + ' ', base = today(), out = {};
+    var DAYW = '(today|tomorrow|tmrw|tmr|next week|(?:next |this )?(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)[a-z]*|\\d{1,2}[\\/.\\-]\\d{1,2}(?:[\\/.\\-]\\d{2,4})?|\\d{1,2}(?:st|nd|rd|th)?(?: of)? (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|\\d{1,2}(?:st|nd|rd|th))';
+    var m = t.match(new RegExp('(?:start(?:s|ing)?|begin(?:s|ning)?|commenc(?:e|es|ing)|kick(?:s)? off|work (?:can )?start(?:s)?)(?: work)?(?: on| from)? ' + DAYW + '\\b'));
+    if (m) out.start = dayWord(m[1], base);
+    else if ((m = t.match(new RegExp('\\b(?:do it|come|on site) ' + DAYW + '\\b')))) out.start = dayWord(m[1], base);
+    var st = out.start || null;
+    m = t.match(/(?:end(?:s)?|finish(?:es|ed)?|done|complete(?:d)?|takes?|last(?:s)?|over) (?:in |within )?(\d+|one|a|an|two|three|four|five|six|seven|eight|nine|ten|half a) (working |business )?(day|days|week|weeks)\b/);
+    if (m) { var n = /half/.test(m[1]) ? 1 : (+m[1] || NUMW[m[1]] || 1); if (/week/.test(m[3])) n *= 5; out.days = Math.max(1, n); }
+    else if (/\b(one|1|a|single) ?-?day (job|job only|work)|\bin (a|one) day\b/.test(t)) out.days = 1;
+    m = t.match(new RegExp('(?:finish(?:ed)?|done|complete(?:d)?|end(?:s|ed)?|ready)(?: by| on| before) ' + DAYW + '\\b'));
+    if (m) out.finish = dayWord(m[1], base);
+    if (out.days && !out.finish) out.finish = addWork(nextWork(st || base), out.days - 1);
+    return out;
+  }
+  var EMERG = /\bemergenc|\burgent|\basap\b|straight away|right away|immediately|burst (pipe|water)|flood(ing|ed)?\b|storm damage|water (is )?(pouring|coming in|everywhere)/i;
   /* ---------- new plan: scope of work + job type / blank / ✨ AI ---------- */
   var GUESS = [[/exhaust|\bfan\b/, 'exhaust-fan'], [/shower.{0,40}leak|leak.{0,40}shower/, 'shower-leak'], [/vanity|toilet|tapware|\btaps?\b/, 'vanity'], [/bathroom.{0,40}(waterproof|retil)|(waterproof|retil).{0,40}bathroom/, 'bathroom'], [/bathroom|ensuite/, 'bath-reno'],
     [/splashback/, 'splashback'], [/benchtop/, 'benchtop'], [/kitchen/, 'kitchen-reno'], [/laundry/, 'laundry-reno'], [/concrete cancer|spall/, 'concrete-cancer'], [/balcony/, 'wp-balcony'], [/planter/, 'wp-planter'],
@@ -453,7 +504,7 @@
     $('#title').textContent = 'Project plan';
     var j = S.job, scope0 = j.scope || '';
     var guess = guessType(j.title + ' ' + scope0);
-    S.mode = 'type'; S.aiDraft = null; S.aiId = ''; S.aiText = ''; S.tplType = '';
+    S.mode = 'type'; S.aiDraft = null; S.aiId = ''; S.aiText = ''; S.tplType = ''; S.aiFinish = ''; S.coolZero = false; S.datesTouched = false; S.lastDates = '';
     V().innerHTML = '<div class="row" style="margin-bottom:14px"><a class="btn btn-sm" href="#job/' + esc(j.core) + '">← ' + esc(j.ref) + '</a><h2 style="font-size:22px">Plan this job: ' + esc(j.name) + ': ' + esc(j.title || j.service || 'Job') + '</h2></div>' +
       '<div class="card"><h2>1. What the customer wants (scope of work)</h2>' +
       '<p class="jobline"><span class="ref">' + esc(j.ref) + '</span> <b>' + esc(j.title || '') + '</b>' + [j.suburb, j.source ? 'from ' + j.source : ''].filter(Boolean).map(function (x) { return ' · ' + esc(x); }).join('') + '</p>' +
@@ -463,7 +514,8 @@
       [['type', '📋 Pick a job type', CATALOG.length + ' common job types, each with sub-types. Builds tasks, sub-tasks, example costs and risks.'], ['blank', '⬜ Blank plan', 'Two rows to start from. Add your own tasks.'], ['ai', '✨ Ask AI to build it', 'Describe the job; AI works out the tasks, sub-tasks, costs, scope and risks, plus tips to help you plan.']]
         .map(function (m) { return '<button class="tpl tmode' + (S.mode === m[0] ? ' on' : '') + '" data-mode="' + m[0] + '"><b>' + m[1] + '</b><small>' + m[2] + '</small></button>'; }).join('') + '</div>' +
       '<div id="modeBody" style="margin-top:14px"></div>' +
-      '<div class="row" style="margin-top:16px;align-items:flex-end"><label style="display:grid;gap:4px;font-weight:700">Start date<input type="date" id="tplStart" value="' + today() + '" style="width:auto"></label><span class="sp"></span><button class="btn btn-gold" id="tplCreate">Create plan</button></div></div>';
+      '<div class="row" style="margin-top:16px;align-items:flex-end"><label style="display:grid;gap:4px;font-weight:700">Start date<input type="date" id="tplStart" value="' + today() + '" style="width:auto"></label>' +
+      '<label class="qchk emergpick" title="No cooling-off: the work can start straight away, the same day as the site inspection"><input type="checkbox" id="tplEmerg"' + (j.emergency || EMERG.test((j.title || '') + ' ' + scope0) ? ' checked' : '') + '> 🚨 Emergency job <small class="muted">(start straight away; otherwise the work waits for the quote to be accepted plus 3 business days cooling-off)</small></label><span class="sp"></span><button class="btn btn-gold" id="tplCreate">Create plan</button></div></div>';
     var mode = function () {
       V().querySelectorAll('[data-mode]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-mode') === S.mode); });
       var mb = $('#modeBody'), create = $('#tplCreate');
@@ -477,8 +529,11 @@
         mb.innerHTML = '<p class="muted" style="margin:0">A plan with a site inspection and a handover. Add tasks, milestones and sub-tasks yourself on the Schedule tab.</p>';
       } else {
         mb.innerHTML = '<label style="display:grid;gap:4px;font-weight:700">Describe the plan for the AI <small class="muted" style="font-weight:400">(leave empty to use the scope above)</small><textarea id="aiDescribe" rows="4" placeholder="e.g. Replace the exhaust fan in a 2nd-floor unit bathroom, duct it outside through the eave, patch and paint the ceiling. Strata building; customer wants it done before Christmas.">' + esc(S.aiText || '') + '</textarea></label>' +
+          '<div class="row aidates" style="margin-top:8px"><span class="muted" style="font-size:13px">Starts on the <b>Start date</b> below.</span><label style="display:flex;gap:6px;align-items:center;font-weight:700">Finish by <small class="muted" style="font-weight:400">(optional)</small><input type="date" id="aiFinish" value="' + esc(S.aiFinish || '') + '" style="width:auto"></label><small class="muted">The AI fits the work between the two dates.</small></div>' +
           '<div class="row" style="margin-top:8px"><button class="btn btn-gold btn-sm" id="aiGo">✨ Build the plan with AI</button><small class="muted">Usually 20–60 seconds. No names or contact details are sent.</small></div><div id="aiOut"></div>';
         $('#aiDescribe').oninput = function () { S.aiText = this.value; };
+        $('#aiFinish').onchange = function () { S.aiFinish = this.value; if (S.aiDraft) showDraft(); };
+        dateBoxes(mb);
         $('#aiGo').onclick = aiRun;
         create.disabled = !S.aiDraft; create.textContent = 'Use this plan';
         if (S.aiDraft) showDraft();
@@ -487,7 +542,13 @@
     function showDraft() {
       var out = $('#aiOut'); if (!out) return;
       var p = fromAi(S.aiDraft, j, $('#tplStart').value || today(), $('#tplScope').value);
-      out.innerHTML = previewHtml(p, S.aiDraft.tips, S.aiDraft) + '<p class="muted" style="font-size:12.5px;margin:6px 0 0">This is an AI draft: check the tasks, days, prices, scope and risks (all go into the Scope and Risks tabs). People (resources) are left blank. Press <b>Use this plan</b> to create it, or <b>Build the plan with AI</b> again for another version.</p>';
+      var fb = $('#aiFinish') ? $('#aiFinish').value : '', em = !!($('#tplEmerg') && $('#tplEmerg').checked);
+      p.emergency = em; p.coolOff = S.coolZero && !em ? 0 : 3; if (fb) p.charter.assumptions = ('Customer wants it finished by ' + dmy(fb) + '.\n' + (p.charter.assumptions || '')).trim();
+      // estimate with the quote accepted on the start date and the usual cooling-off (unless emergency)
+      var est = JSON.parse(JSON.stringify(p)); est.gate = em ? null : { date: p.start, accepted: true, id: 'quote' }; var ER = rollup(est, today());
+      var fit = !fb ? '' : ER.finish <= fb ? '<div class="aifit ok">✅ Planned finish <b>' + esc(dmy(ER.finish)) + '</b>: within your finish-by date (' + esc(dmy(fb)) + ').</div>'
+        : '<div class="aifit">⚠ Planned finish <b>' + esc(dmy(ER.finish)) + '</b>: ' + (workBetween(fb, ER.finish) - 1) + ' working day' + (workBetween(fb, ER.finish) - 1 === 1 ? '' : 's') + ' past your finish-by date (' + esc(dmy(fb)) + '). Shorten some tasks, run some in parallel, tick Emergency, or ask the AI again.</div>';
+      out.innerHTML = fit + (fb ? '' : '<div class="aifit plain">Planned ' + esc(dmy(ER.start)) + ' to <b>' + esc(dmy(ER.finish)) + '</b>' + (em ? ' (emergency: no cooling-off)' : coolOf(p) ? ' (includes ' + coolOf(p) + ' business days cooling-off after the quote)' : ' (no cooling-off)') + '.</div>') + previewHtml(p, S.aiDraft.tips, S.aiDraft) + '<p class="muted" style="font-size:12.5px;margin:6px 0 0">This is an AI draft: check the tasks, days, prices, scope and risks (all go into the Scope and Risks tabs). People (resources) are left blank. Press <b>Use this plan</b> to create it, or <b>Build the plan with AI</b> again for another version.</p>';
       $('#tplCreate').disabled = false;
     }
     function aiRun() {
@@ -500,14 +561,17 @@
       var poll = function () {
         return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
           if (S.aiId !== id) return;
-          if (d.status === 'done' && d.plan) { S.aiDraft = d.plan; go.disabled = false; showDraft(); if (d.today != null) toast('AI plan ready (' + (d.tokens || 0) + ' tokens)'); return; }
+          if (d.status === 'done' && d.plan) {
+            S.aiDraft = d.plan; go.disabled = false;
+            var eb = $('#tplEmerg'), aiEm = d.plan.emergency && eb && !eb.checked && !S.emergTouched; if (aiEm) eb.checked = true;
+            showDraft(); toast(aiEm ? '🚨 The AI reads this as an emergency, so Emergency is ticked (untick it if not)' : 'AI plan ready (' + (d.tokens || 0) + ' tokens)'); return; }
           if (d.status === 'error') throw new Error(d.error || 'The AI plan could not be made');
           if (Date.now() - t0 > 170000) throw new Error('The AI is taking too long. Try again, or pick a job type instead.');
           return poll();
         });
       };
       fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
-        body: JSON.stringify({ id: id, core: j.core, describe: desc, scope: scope, type: cat ? cat.cat + ': ' + cat.item.n : '', start: $('#tplStart').value || today() }) })
+        body: JSON.stringify({ id: id, core: j.core, describe: desc, scope: scope, type: cat ? cat.cat + ': ' + cat.item.n : '', start: $('#tplStart').value || today(), finish: $('#aiFinish').value || '', emergency: !!($('#tplEmerg') && $('#tplEmerg').checked) }) })
         .then(function (r) {
           if (r.status === 401 || r.status === 403) throw new Error('Your session has ended. Sign in again.');
           if (r.status !== 202 && !r.ok) throw new Error('Could not start the AI (' + r.status + '). Try again.');
@@ -517,6 +581,38 @@
     V().querySelectorAll('[data-mode]').forEach(function (b) { b.onclick = function () { S.mode = b.getAttribute('data-mode'); mode(); }; });
     $('#tplStart').onchange = function () { if (S.mode === 'type' && $('#tplType') && $('#tplType').value) $('#tplType').onchange(); };
     mode();
+    $('#tplEmerg').onchange = function () { S.emergTouched = true; if (S.mode === 'ai' && S.aiDraft) showDraft(); };
+    // saying it's an emergency (in the scope or the AI description) ticks the box, unless you have unticked it yourself
+    S.emergTouched = false;
+    var sayEmerg = function (text) {
+      var b = $('#tplEmerg'); if (!b || b.checked || S.emergTouched || !EMERG.test(text || '')) return;
+      b.checked = true; toast('🚨 Emergency ticked: you said it is an emergency, so the work can start straight away (untick it if not)');
+      if (S.mode === 'ai' && S.aiDraft) showDraft();
+    };
+    // dates written in words ("starts tomorrow and ends in one day") fill in Start date and Finish by, unless you set them yourself
+    var setDate = function (id, iso) { var n = document.getElementById(id); if (!n) return; n.value = iso; n.dispatchEvent(new Event('input', { bubbles: true })); n.dispatchEvent(new Event('change', { bubbles: true })); };
+    var sayDates = function () {
+      if (S.datesTouched || !$('#tplScope')) return;
+      var d = readDates(($('#tplScope').value || '') + ' . ' + (($('#aiDescribe') || {}).value || S.aiText || ''));
+      if (!d.start && !d.finish) return;
+      var key = JSON.stringify(d); if (key === S.lastDates) return; S.lastDates = key;
+      var said = [];
+      if (d.start) { setDate('tplStart', d.start); said.push('starts ' + dmy(d.start)); }
+      if (d.finish) { S.aiFinish = d.finish; setDate('aiFinish', d.finish); said.push('finishes by ' + dmy(d.finish) + (S.mode === 'ai' ? '' : ' (used by ✨ Ask AI)')); }
+      var st = d.start || $('#tplStart').value, em = $('#tplEmerg') && $('#tplEmerg').checked;
+      S.coolZero = !em && !!st && st < addWork(nextWork(today()), 3);
+      if (S.coolZero) said.push('cooling-off set to 0 days so the work can start then (the customer must agree to waive it)');
+      toast('📅 From what you wrote: ' + said.join(', '));
+      if (S.mode === 'ai' && S.aiDraft) showDraft();
+    };
+    var dT = null, later = function () { clearTimeout(dT); dT = setTimeout(sayDates, 600); };
+    // (the view stays between pages, so its listeners are swapped, not added again)
+    if (S.vCh) V().removeEventListener('change', S.vCh); if (S.vIn) V().removeEventListener('input', S.vIn);
+    S.vCh = function (e) { var t = e.target; if (e.isTrusted && t && (t.id === 'tplStart' || t.id === 'aiFinish' || (t.classList && t.classList.contains('dtext') && /^(tplStart|aiFinish)$/.test(t.getAttribute('data-for') || '')))) S.datesTouched = true; };
+    S.vIn = function (e) { if (e.target && e.target.id === 'aiDescribe') { sayEmerg(e.target.value); later(); } };
+    V().addEventListener('change', S.vCh); V().addEventListener('input', S.vIn);
+    $('#tplScope').addEventListener('input', function () { sayEmerg(this.value); later(); });
+    if (j.emergency && $('#tplEmerg').checked && /emergenc/i.test(j.urgency || '')) toast('🚨 The customer said this is an emergency (in the chat), so Emergency is ticked');
     $('#tplCreate').onclick = function () {
       var scope = $('#tplScope').value.trim(), start = $('#tplStart').value || today(), plan, note;
       if (scope.length < 10 && !(S.mode === 'ai' && S.aiDraft)) { toast('Write the scope of work first: what the customer wants done', true); $('#tplScope').focus(); return; }
@@ -528,8 +624,10 @@
       } else {
         if (!S.aiDraft) return toast('Build the plan with AI first', true);
         plan = fromAi(S.aiDraft, j, start, scope); note = 'plan created (AI draft)';
+        var fb2 = $('#aiFinish') ? $('#aiFinish').value : ''; if (fb2) plan.charter.assumptions = ('Customer wants it finished by ' + dmy(fb2) + '.\n' + (plan.charter.assumptions || '')).trim();
       }
       var btn = this; btn.disabled = true;
+      plan.emergency = !!$('#tplEmerg').checked; plan.coolOff = S.coolZero && !plan.emergency ? 0 : 3;
       S.plan = plan; S.rev = 0; S.tab = 'schedule';
       api('planSave', { core: S.core, plan: S.plan, rev: 0, note: note }).then(function (r) { S.plan = normalise(r.plan); S.rev = r.plan.rev; S.aiDraft = null; S.chain = null; loadChain(); S.aiText = ''; S.tplType = ''; toast('Plan created'); history.replaceState(null, '', '#plan/' + S.core + '/schedule'); render(); }).catch(function (e) { btn.disabled = false; S.plan = null; fail(e); });
     };
@@ -642,7 +740,7 @@
   function setWorkStart(v) {
     var p = S.plan, g = gateDate(p);
     if (v && v < nextWork(p.start)) { toast('The work can\'t start before the project start (' + dmy(nextWork(p.start)) + ')', true); render(); return; }
-    if (v && g && nextWork(v) < g) { toast('Work can only start once the quote is accepted: ' + p.gate.id + (p.gate.accepted ? ' was accepted on ' : ' is valid until ') + dmy(p.gate.date) + '. Pick ' + dmy(g) + ' or later.', true); render(); return; }
+    if (v && g && nextWork(v) < g) { toast('Work can only start once the quote is accepted plus the ' + coolOf(p) + '-day cooling-off: the earliest is ' + dmy(g) + '. Pick that or later, or tick Emergency.', true); render(); return; }
     var q = S.chain && liveQuote(S.chain);
     if (q && q.fromPlan && !q.invoiceId) {   // the server moves the plan and refreshes the quote together
       (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () { return api('quoteStart', { id: q.id, date: v || '' }); }).then(function (r) {
@@ -771,8 +869,8 @@
       return b + '<span class="gbar st-' + t.status + (late ? ' late' : '') + '" style="left:' + left + 'px;width:' + w + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' – ' + pretty(t.ef) + ' · ' + stName[t.status] + ' ' + t.pct + '%') + '"><span class="gfill" style="width:' + t.pct + '%"></span></span>' + lab;
     };
     var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button>' +
-      (holdDate(p) && !gateDate(p) ? '<div class="qgate ok">📅 Work starts <b>' + esc(dmy(holdDate(p))) + '</b> ("Work starts" date).</div>' : '') +
-      (gateDate(p) ? '<div class="qgate' + (p.gate.accepted ? ' ok' : '') + '">' + (holdDate(p) > gateDate(p) ? '📅 Work starts <b>' + esc(dmy(holdDate(p))) + '</b> ("Work starts" date). ' : '') + (p.gate.accepted ? '✅ Quote <b>' + esc(p.gate.id) + '</b> accepted on ' + esc(dmy(p.gate.date)) + ': the work is scheduled from ' + esc(dmy(gateDate(p))) + '.' : '🔒 Work starts once quote <b>' + esc(p.gate.id) + '</b> is accepted. It is valid until ' + esc(dmy(p.gate.date)) + ', so the work is scheduled from <b>' + esc(dmy(gateDate(p))) + '</b> (it moves earlier when the customer accepts).') + '</div>' : '') +
+      '<div class="qgate' + (p.emergency ? ' emerg' : p.gate && p.gate.accepted ? ' ok' : '') + '"><div class="qrow"><label class="qchk" title="Emergency work (burst pipe, storm damage, a leak that is doing damage): no cooling-off, the work can start straight away, the same day as the site inspection"><input type="checkbox" id="pEmerg"' + (p.emergency ? ' checked' : '') + '> 🚨 Emergency</label>' +
+        '<label class="qchk" title="Days after the quote is accepted before the work can start. The full cooling-off period is 5 business days; most customers agree to start after 3.">Cooling-off <select id="pCool"' + (p.emergency ? ' disabled' : '') + '>' + [0, 1, 2, 3, 4, 5].map(function (n) { return '<option value="' + n + '"' + (coolOf(p) === n ? ' selected' : '') + '>' + n + (n === 3 ? ' (usual)' : n === 5 ? ' (full period)' : '') + '</option>'; }).join('') + '</select> business days</label></div><div>' + gateText(p) + '</div></div>' +
       '<span class="muted" style="font-size:12.5px">To move a task, type its new number in <b>#</b> (1 = first) or drag <b>⠿</b>. Sub-tasks move inside their own task. Days are working days (Mon–Fri). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span><span class="sp"></span>' +
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700">Project start<input type="date" id="pStart" value="' + esc(p.start) + '" style="width:auto"></label>' +
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The day the work itself starts (after the quote is accepted). Tasks before the quote, like the site inspection, are not affected. Also on the quote.">Work starts<input type="date" id="pWork" value="' + esc(p.workStart || '') + '" min="' + esc(gateDate(p) || nextWork(p.start)) + '" style="width:auto"></label>' +
@@ -834,6 +932,8 @@
     B.querySelectorAll('[data-zoom]').forEach(function (b) { b.onclick = function () { S.zoom = b.getAttribute('data-zoom'); render(); }; });
     $('#pStart').onchange = function () { if (this.value) { p.start = this.value; dirty(); render(); } };
     $('#pWork').onchange = function () { setWorkStart(this.value); };
+    $('#pEmerg').onchange = function () { p.emergency = this.checked; dirty(p.emergency ? 'emergency: work can start straight away' : 'not an emergency: cooling-off applies'); render(); var R = rollup(p, today()); toast(p.emergency ? 'Emergency: the work starts the same day as the site inspection (finish ' + dmy(R.finish) + ')' : 'Cooling-off applies again (finish ' + dmy(R.finish) + ')'); };
+    $('#pCool').onchange = function () { p.coolOff = +this.value; dirty('cooling-off ' + p.coolOff + ' business days'); render(); };
     var task = function (el) { var id = el.closest('tr').getAttribute('data-tid'); return p.tasks.filter(function (t) { return t.id === id; })[0]; };
     B.querySelectorAll('tr[data-tid] [data-k]').forEach(function (el) {
       var k = el.getAttribute('data-k');
@@ -853,7 +953,7 @@
             else if (R0.finish && v > R0.finish) { said.push('A task can\'t start after the project finish (' + dmy(R0.finish) + '): make it longer, or change the project start, instead.'); warn = true; v = R0.finish; }
             v = nextWork(v); if (R0.finish && v > R0.finish) v = R0.finish;
             var gd = holdDate(p);
-            if (gd && v < gd && gatedTasks(p).indexOf(t) >= 0) { said.push(gd === gateDate(p) ? 'Work can only start once the quote is accepted: ' + (p.gate.accepted ? p.gate.id + ' was accepted on ' + dmy(p.gate.date) : p.gate.id + ' is valid until ' + dmy(p.gate.date)) + ', so it starts ' + dmy(gd) + '.' : 'The work starts on ' + dmy(gd) + ' ("Work starts" date).'); warn = true; v = gd; }
+            if (gd && v < gd && gatedTasks(p).indexOf(t) >= 0) { said.push(gateOf(p).why === 'work' ? 'The work starts on ' + dmy(gd) + ' ("Work starts" date).' : 'Work can only start once the quote is accepted plus the ' + coolOf(p) + '-day cooling-off, so it starts ' + dmy(gd) + ' (tick Emergency to start straight away).'); warn = true; v = gd; }
             var probe = JSON.parse(JSON.stringify(p)), pt = probe.tasks.filter(function (x) { return x.id === t.id; })[0]; pt.snet = ''; pt.fixed = false; schedule(probe);
             t.snet = v; t.fixed = true;
             if (v < pt.es) said.push('Runs in parallel: starts ' + dmy(v) + ' instead of waiting for #' + (t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', #') + ' (' + dmy(pt.es) + '). Clear the date to follow "After #" again.');

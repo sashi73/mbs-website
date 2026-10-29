@@ -28,8 +28,11 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-29 v30 (plan editing: keeps your place, DD/MM/YYYY, parallel tasks)';
+const VERSION = '2026-10-29 v31 (emergency + cooling-off, AI start/finish dates)';
 const NEEDS = [
+  ['netlify/lib/plan.mjs', 'gateOf'],
+  ['admin/admin-plan.js', 'tplEmerg'],
+  ['netlify/functions/planai-background.mjs', 'emergency'],
   ['admin/admin-plan.js', 'dateBoxes'],
   ['netlify/lib/plan.mjs', 't.fixed && t.snet'],
   ['netlify/lib/plan-quote.mjs', 'boardMove'],

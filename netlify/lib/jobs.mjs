@@ -108,7 +108,7 @@ export async function create(fields, by = 'website') {
   const now = Date.now();
   const job = { core: fields.core, trade: fields.core[0], stage: 'new', created: now, updated: now,
     name: fields.name || '', phone: fields.phone || '', email: fields.email || '', suburb: fields.suburb || '', service: fields.service || '',
-    best_time: fields.best_time || '', summary: fields.summary || '', details: fields.details || '', mapsUrl: fields.mapsUrl || '', source: fields.source || '',
+    best_time: fields.best_time || '', summary: fields.summary || '', details: fields.details || '', urgency: fields.urgency || '', mapsUrl: fields.mapsUrl || '', source: fields.source || '',
     history: [{ at: now, by, text: `Enquiry received (${fields.source || 'website'})` }], notes: [] };
   const saved = await save(job);
   await CU.attach(saved);   // customer database: same phone (+ email) = same customer

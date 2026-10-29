@@ -46,12 +46,24 @@ export function gatedTasks(plan) {
   } else for (const t of tasks) if (!/inspect|measure|quot|site visit/i.test(t.name) && !((t.pct || 0) > 0)) out.add(t);
   return out;
 }
+// When can the work (everything after the quote) start?
+//   Emergency ticked: straight away (the same day as the site inspection).
+//   Otherwise: once the quote is accepted plus a cooling-off period (default 3 business days; the full period is 5).
+//   Until the quote is accepted the plan assumes acceptance on the quote date. A "Work starts" date can only make it later.
+export const coolOf = (plan) => (plan.coolOff == null || plan.coolOff === '' ? 3 : Math.max(0, Math.min(10, Math.round(Number(plan.coolOff)) || 0)));
+export function gateOf(plan) {
+  const ymd = /^\d{4}-\d{2}-\d{2}$/, ws = ymd.test(plan.workStart || '') ? nextWork(plan.workStart) : '';
+  if (plan.emergency) return { date: ws, why: ws ? 'work' : 'emergency' };
+  const g = plan.gate, q = g && ymd.test(g.date || '') ? addWork(nextWork(g.date), coolOf(plan)) : '';
+  if (ws && ws > q) return { date: ws, why: 'work' };
+  return { date: q, why: q ? (g.accepted ? 'accepted' : 'quoted') : '' };
+}
 export function schedule(plan) {
   const start = nextWork(plan.start || new Date().toISOString().slice(0, 10));
   const byId = Object.fromEntries(plan.tasks.map((t) => [t.id, t]));
-  let gate = plan.gate && /^\d{4}-\d{2}-\d{2}$/.test(plan.gate.date || '') ? nextWork(plan.gate.date) : '';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(plan.workStart || '') && nextWork(plan.workStart) > gate) gate = nextWork(plan.workStart);   // "Work starts" date (set on the plan or the quote)
+  const gate = gateOf(plan).date;
   const gated = gate ? gatedTasks(plan) : new Set();
+  const quoteMs = plan.emergency ? plan.tasks.find((t) => t.dur === 0 && /quote/i.test(t.name)) : null;   // emergency: work starts the same day as the inspection
   for (const t of plan.tasks) { t.es = ''; t.ef = ''; }
   for (let pass = 0; pass < 30; pass++) {
     let changed = false;
@@ -60,7 +72,7 @@ export function schedule(plan) {
       if (gated.has(t) && gate > es) es = gate;   // no work before the quote is accepted (or, until then, before it expires)
       if (t.fixed && t.snet) { if (t.snet > es) es = nextWork(t.snet); }   // start set by hand: runs in parallel, the "After #" link is not used
       else {
-        for (const p of t.pred || []) { const q = byId[p]; if (q && q.ef && q !== t) { const after = q.dur === 0 ? nextWork(q.ef) : addWork(nextWork(q.ef), 1); if (after > es) es = after; } }
+        for (const p of t.pred || []) { const q = byId[p]; if (q && q.ef && q !== t) { const after = t === quoteMs ? q.es : q.dur === 0 ? nextWork(q.ef) : addWork(nextWork(q.ef), 1); if (after > es) es = after; } }
         if (t.snet && t.snet > es) es = nextWork(t.snet);
       }
       es = nextWork(es);
@@ -134,7 +146,7 @@ function clean(p, core) {
   for (const t of tasks) t.pred = t.pred.filter((x) => tIds.has(x) && x !== t.id);
   const c = p.charter || {};
   return {
-    core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart),
+    core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart), emergency: !!p.emergency, coolOff: int(p.coolOff, 0, 10, 3),
     charter: { objective: str(c.objective, 1500), inScope: str(c.inScope, 3000), outScope: str(c.outScope, 2000), deliverables: str(c.deliverables, 2000),
       acceptance: str(c.acceptance, 2000), assumptions: str(c.assumptions, 2000), notes: str(c.notes, 3000), budget: r2(c.budget), customer: str(c.customer, 120), manager: str(c.manager, 80) },
     phases, tasks,
@@ -221,6 +233,10 @@ export async function advise(core, kind, id, ask, draft) {
   return { kind, title: str(item.title, 200), options, watch: str(o.watch, 200), tokens: used, today };
 }
 
+// ---------- emergency? (the customer picked "Emergency" in the chat, or the enquiry says so) ----------
+export const EMERGENCY_RE = /\bemergenc|\burgent|\basap\b|straight away|right away|immediately|burst (pipe|water)|flood(ing|ed)?\b|storm damage|water (is )?(pouring|coming in|everywhere)/i;
+export function isEmergency(job) { return /emergenc/i.test(job.urgency || '') || EMERGENCY_RE.test(`${job.service || ''} ${job.summary || ''} ${job.details || ''}`); }
+
 // ---------- what the job is: a short title and the scope, from the enquiry ----------
 const GENERIC = /^((general|website|web|online|new|phone|chat|customer)\s*)?(general|question|enquiry|inquiry|other|ask(ed)?( a)? question|chat|website|quote( request)?|request|contact( us)?|call ?back|message|n\/a|-)?s?$/i;
 function tidy(t) { return String(t || '').replace(/\s+/g, ' ').trim(); }
@@ -283,7 +299,7 @@ export function privateOut(text, job = {}) {
 
 // ---------- ✨ AI builds a plan (runs in a background function, so it can take longer than a normal request) ----------
 const planCap = () => Math.max(800, Math.min(4000, Number(env('AI_PLAN_MAX_TOKENS', '3000')) || 3000));   // AI plan reply cap: default 3000, AI_PLAN_MAX_TOKENS 800-4000
-export async function buildAiPlan({ core, describe, scope, type, start }, by) {
+export async function buildAiPlan({ core, describe, scope, type, start, finish, emergency }, by) {
   const job = core ? await J.find(core) : null;
   if (!job) return { error: 'Job not found' };
   const text = privateOut(str(describe, 1500) || str(scope, 1500), job);   // never send the customer's name, phone or email
@@ -296,8 +312,13 @@ export async function buildAiPlan({ core, describe, scope, type, start }, by) {
     'Costs: qty, unit (h, m², L, lot, each) and a typical Sydney rate ex GST for labour or materials; use 0 if unsure. Do not invent council rules; say "check with council" where relevant. ' +
     'Also work out the SCOPE for this job: in_scope (the work included, as short "- " lines), out_of_scope (what is NOT included, to avoid arguments later), deliverables (e.g. certificates, photos, finished work), acceptance (how the customer knows it is done) and assumptions/constraints. ' +
     'And the RISKS specific to this job (4-6): [title, cause, probability 1-5, impact 1-5, response Avoid|Mitigate|Transfer|Accept, action]. Plus 3-6 short planning tips (lead times, permits, weather, inspections, access, safety). Keep every text short. ' +
-    'JSON only: {"name":"short plan name","objective":"one sentence","in_scope":"","out_of_scope":"","deliverables":"","acceptance":"","assumptions":"","tips":[""],"tasks":[{"n":"","d":1,"after":[],"q":0,"u":"h","r":0,"s":[["",0,1]]}],"risks":[["","",3,3,"Mitigate",""]]}';
-  const user = { job_type: str(type, 120), work: str(job.service, 120), suburb: str(job.suburb, 60), start_date: str(start, 10), description: text };
+    'Dates: start_date is when the plan starts (site inspection). Unless emergency is true, the work after "quote accepted" waits cooling_off_days business days; if emergency is true, the work starts the same day as the site inspection. ' +
+    'If finish_by is given, the whole plan must finish by then: everything has to fit in working_days_available (order long-lead items first, run tasks in parallel only where it is safe and give those tasks the same "after"). If it truly cannot fit, say so in the FIRST tip with the realistic number of working days. ' +
+    'Set "emergency": true only if the description says it is an emergency or urgent (e.g. burst pipe, active leak doing damage, storm damage, "ASAP"). ' +
+    'JSON only: {"emergency":false,"name":"short plan name","objective":"one sentence","in_scope":"","out_of_scope":"","deliverables":"","acceptance":"","assumptions":"","tips":[""],"tasks":[{"n":"","d":1,"after":[],"q":0,"u":"h","r":0,"s":[["",0,1]]}],"risks":[["","",3,3,"Mitigate",""]]}';
+  const st = ymdOk(start) || new Date().toISOString().slice(0, 10), fin = ymdOk(finish);
+  const user = { job_type: str(type, 120), work: str(job.service, 120), suburb: str(job.suburb, 60), start_date: st, emergency: !!emergency, cooling_off_days: emergency ? 0 : 3, description: text };
+  if (fin && fin >= st) { user.finish_by = fin; user.working_days_available = workBetween(nextWork(st), fin); }
   let o, used;
   try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: planCap(), timeoutMs: 150000, temperature: 0.3 })); }
   catch (e) { return { error: e.message }; }
@@ -318,7 +339,7 @@ export async function buildAiPlan({ core, describe, scope, type, start }, by) {
     const [t, c, p, i, resp, act] = old ? [r[0], '', r[1], r[2], r[3], r[4]] : r;
     return [str(t, 160), int(p, 1, 5, 3), int(i, 1, 5, 3), RESP.includes(resp) ? resp : 'Mitigate', str(act, 300), str(c, 300)];
   }).filter((r) => r && r[0]);
-  return { plan: { name: str(o.name, 100), objective: str(o.objective, 400), inScope: txt(o.in_scope, 1500), outScope: txt(o.out_of_scope, 800), deliverables: txt(o.deliverables, 800), acceptance: txt(o.acceptance, 600),
+  return { plan: { emergency: o.emergency === true, name: str(o.name, 100), objective: str(o.objective, 400), inScope: txt(o.in_scope, 1500), outScope: txt(o.out_of_scope, 800), deliverables: txt(o.deliverables, 800), acceptance: txt(o.acceptance, 600),
     assumptions: txt(o.assumptions, 800), tips: list(o.tips, 8, 240), tasks, risks }, tokens: used, today };
 }
 
@@ -350,7 +371,7 @@ export async function pipelineBoard(body = {}) {
     const since = { new: j.created, called: j.called_at, quoted: j.quoted_at, won: j.won_at, completed: j.completed_at, invoiced: j.invoiced_at, paid: j.paid_at, lost: j.lost_at }[j.stage] || j.updated || j.created;
     return { core: j.core, ref: J.refFor(j), name: j.name || 'Customer', suburb: j.suburb || '', title: jobTitle(j), kind: jobKind(j), stage: j.stage, col, since: since || 0,
       value: j.invoice ? j.invoice.amount : j.quote ? j.quote.amount : 0, valueKind: j.invoice ? 'invoice' : j.quote ? 'quote' : '', source: j.source || '', photos: (j.photos || []).length,
-      quote: (docOf[j.core] || {}).q || null, invoice: (docOf[j.core] || {}).i || null,
+      quote: (docOf[j.core] || {}).q || null, invoice: (docOf[j.core] || {}).i || null, emergency: !!(p && p.emergency) || isEmergency(j),
       next: rem ? { at: rem.at, text: String(rem.text || '').slice(0, 120), when: whenText(rem.at) } : null, visit: !!visit,
       plan: p ? { name: p.name, pct: R ? R.pct : 0, SPI: R ? R.SPI : null, CPI: R ? R.CPI : null, start: R ? R.start : '', finish: R ? R.finish : '', late: R ? R.late : 0, done: R ? R.done : 0, total: R ? R.total : 0, highRisks: R ? R.highRisks : 0, openIssues: R ? R.openIssues : 0 } : null };
   });
@@ -373,7 +394,7 @@ export async function planPost(action, body, { who, by, audit }) {
     const rems = remsAll.filter((r) => r.core === job.core).map((r) => ({ ...r, when: whenText(r.at) }));
     let costs = 0;
     try { costs = r2(Object.values((idx && idx.expenses) || {}).filter((e) => e.core === job.core).reduce((a, e) => a + (e.inc - e.gst), 0)); } catch {}
-    return out(200, { plan, job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), scope: jobScope(job) }, reminders: rems, expensesEx: costs });
+    return out(200, { plan, job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), scope: jobScope(job), urgency: job.urgency || '', emergency: isEmergency(job) }, reminders: rems, expensesEx: costs });
   }
   if (action === 'planSave') {
     if (!core || !(await J.find(core))) return out(404, { error: 'Job not found' });

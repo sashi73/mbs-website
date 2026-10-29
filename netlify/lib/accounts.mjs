@@ -68,8 +68,8 @@ export function gateFrom(quotes, core) {
   const live = Object.values(quotes || {}).filter((x) => x.core === core && !['void', 'declined'].includes(x.status)).sort((a, b) => (a.id > b.id ? 1 : -1));
   const acc = live.filter((q) => q.status === 'accepted' || q.invoiceId)[0];   // once a quote is accepted the job is on (a later variation doesn't hold it back)
   if (acc) return { date: acc.acceptedAt ? today(acc.acceptedAt) : acc.issued, id: acc.id, accepted: true };
-  const q = live.pop();
-  return q ? { date: q.validUntil || q.issued, id: q.id, accepted: false } : null;
+  const q = live.pop();   // not accepted yet: the plan assumes it is accepted on the quote date (the cooling-off period then applies)
+  return q ? { date: q.issued, id: q.id, accepted: false, validUntil: q.validUntil || '' } : null;
 }
 export async function gateFor(core) { return gateFrom((await index()).quotes, core); }
 export async function refreshGate(core) {
