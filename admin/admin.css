@@ -558,3 +558,26 @@ a.vstep:hover{filter:brightness(.97)}
 .qmode{display:grid;gap:4px}.qmode label{display:flex;gap:8px;align-items:center;font-weight:400}.qmode input{width:auto}
 .qprev{align-self:end;background:#FBF8F1;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13.5px}
 @media (max-width:820px){.vchain{flex-wrap:wrap}.vstep{flex:1 1 45%;border-bottom:1px solid var(--line)}}
+
+/* v29: drag cards between pipeline columns */
+.pcard{user-select:none}
+.pc-move{border:0;background:none;cursor:pointer;color:#8A867C;font-size:13px;padding:0 2px;line-height:1;margin-left:4px}
+.pc-move:hover{color:#1B2A41}
+.pc-top{gap:4px}.pc-top .pc-age{margin-left:auto}
+.pcard.dragging{opacity:.35}
+.pcard.moving{opacity:.6;outline:2px dashed var(--pc)}
+.pghost{position:fixed;z-index:1000;pointer-events:none;transform:rotate(2deg);box-shadow:0 12px 28px rgba(0,0,0,.22);opacity:.95}
+body.pdragging,body.pdragging *{cursor:grabbing!important}
+.pcol.dropok{outline:3px solid var(--pc);outline-offset:-1px;background:#fff}
+.pcol.dropok .pcol-b{background:color-mix(in srgb,var(--pc) 8%,transparent)}
+.pmenu{position:fixed;z-index:1001;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:6px;display:grid;min-width:220px}
+.pmenu b{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:4px 8px}
+.pmenu button{display:flex;gap:8px;align-items:center;border:0;background:none;text-align:left;padding:8px;border-radius:8px;font:inherit;font-size:13.5px;cursor:pointer}
+.pmenu button:hover,.pmenu button:focus{background:#F4F2EC;outline:none}
+.pmenu i{width:10px;height:10px;border-radius:50%;background:var(--pc)}
+.mvform{display:grid;gap:8px}
+.mvopt{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-weight:400;cursor:pointer}
+.mvopt input[type=radio]{width:auto;margin-top:3px}
+.mvopt:has(input:checked){border-color:var(--gold);background:var(--gold-soft)}
+.mvrow{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:13px}
+.mvchk{display:flex;gap:8px;align-items:center;font-weight:400;font-size:13.5px}.mvchk input{width:auto}

@@ -7,6 +7,7 @@ import * as ACC from './accounts.mjs';
 import * as CU from './customers.mjs';
 import * as PLAN from './plan.mjs';
 import { sydToday } from './ai.mjs';
+import { parseWhen, whenText } from './calendar.mjs';
 
 const out = (status, data) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 const str = (s, n) => String(s ?? '').trim().slice(0, n);
@@ -58,6 +59,7 @@ export async function packPlan(doc) {
 }
 
 export async function planQuotePost(action, body, { who, by, audit }) {
+  if (action === 'boardMove') return boardMove(body, { who, by, audit });
   if (action !== 'planQuoteInfo' && action !== 'planQuote') return null;
   const job = await J.find(str(body.core, 40));
   if (!job) return out(404, { error: 'Job not found' });
@@ -100,4 +102,97 @@ export async function planQuotePost(action, body, { who, by, audit }) {
     if (audit) await audit(who, `${d.id} made from the project plan of ${job.core}`);
   }
   return out(200, { doc: { id: doc.id, status: doc.status, totals: doc.totals, issued: doc.issued, validUntil: doc.validUntil } });
+}
+
+// ---------- pipeline board: drag a job card to another column ----------
+// Moving a card changes the job's stage AND the paperwork / plan that go with it, so every page stays in step:
+// quoted (amount), site visit (reminder), won (quote accepted), in progress (plan started), completed (plan tasks done),
+// invoiced (tax invoice made from the quote), paid (payment recorded) or lost (reason).
+const STARTED = (p) => !!(p && p.tasks && p.tasks.some((t) => (t.pct || 0) > 0 || ['doing', 'review', 'done'].includes(t.status)));
+const setTask = (t, st) => { const pct = { todo: 0, doing: 33, review: 67, done: 100 }[st]; t.status = st; t.pct = pct; (t.subs || []).forEach((x) => { x.status = st; }); };
+async function savePlan(core, fn, by) {
+  for (let i = 0; i < 3; i++) {
+    const cur = await PLAN.get(core); if (!cur) return null;
+    fn(cur);
+    const r = await PLAN.save(core, cur, cur.rev, by);
+    if (r.plan) return r.plan;
+  }
+  return null;
+}
+export async function boardMove(body, { who, by, audit }) {
+  const job = await J.find(str(body.core, 40));
+  if (!job) return out(404, { error: 'Job not found' });
+  const to = str(body.to, 20), o = body.opts || {}, today = sydToday();
+  const [plan, links] = await Promise.all([PLAN.get(job.core), linked(job.core)]);
+  const live = (l) => l.filter((d) => !['void', 'declined'].includes(d.status));
+  const q = live(links.quotes).pop() || null, inv = live(links.invoices).pop() || null;
+  const did = [];
+  const stage = async (s, extra = {}) => { if (job.stage === s && !extra.amount) return; const r = await J.setStage(job.core, s, by, extra); if (r.error) throw new Error(r.error); job.stage = s; did.push(J.LABEL[s] + (extra.amount ? ' ' + ACC.money(extra.amount) : '')); };
+  const accept = async () => { if (q && ['draft', 'sent'].includes(q.status) && o.acceptQuote !== false) { await ACC.setStatus(q.id, 'accepted', by, 'moved to Job won on the pipeline board'); did.push(`quote ${q.id} accepted`); } };
+  const noBack = () => out(400, { error: 'This job has a project plan, so it stays in "Site visit, planned & quoted" or a later column. Delete the plan first if the job really is back at the start.' });
+  const BAC = plan ? PLAN.rollup(JSON.parse(JSON.stringify(plan)), today).BAC : 0;
+  try {
+    if (to === 'new') { if (plan) return noBack(); await stage('new'); }
+    else if (to === 'called') { if (plan) return noBack(); await stage('called'); }
+    else if (to === 'visit') {
+      if (o.mode === 'visit') {
+        const at = parseWhen(o.when);
+        if (!at || at < Date.now() - 60000) return out(400, { error: 'When is the site visit? e.g. "tomorrow 10am" or "mon 9am"' });
+        const r = await J.addReminder({ at, text: 'Site visit: ' + (str(o.note, 200) || job.service || job.name || 'measure and quote'), core: job.core, chat: 'alerts', by });
+        did.push('site visit booked for ' + whenText(r.at));
+        if (job.stage === 'new') await stage('called');
+        else if (!['new', 'called'].includes(job.stage)) await stage('called');
+      } else {   // quoted
+        const amount = r2(o.amount) || (q ? q.inc : 0) || r2(BAC * 1.1);
+        if (!(amount > 0)) return out(400, { error: 'Enter the quote amount (inc GST)' });
+        await stage('quoted', { amount });
+      }
+    } else if (to === 'won') {
+      if (STARTED(plan)) {
+        if (!o.resetPlan) return out(409, { error: 'The project plan has started, so the job shows as "in progress". Moving it back to Job won puts every plan task back to To do.', need: 'resetPlan' });
+        await savePlan(job.core, (p) => p.tasks.forEach((t) => setTask(t, 'todo')), by); did.push('plan tasks back to To do');
+      }
+      await accept(); await stage('won');
+    } else if (to === 'progress') {
+      if (!plan || !plan.tasks || !plan.tasks.length) return out(409, { error: 'Make a project plan first: the work is tracked in the plan.', need: 'plan' });
+      await accept(); if (!['won'].includes(job.stage)) await stage('won');
+      await savePlan(job.core, (p) => {
+        if (o.startToday && p.start > today) { p.start = today; did.push('plan starts today'); }
+        if (!STARTED(p)) {
+          PLAN.schedule(p);
+          const first = p.tasks.filter((t) => (t.pct || 0) < 100).sort((a, b) => (a.es > b.es ? 1 : a.es < b.es ? -1 : 0))[0];
+          if (first) { if (first.dur === 0) { setTask(first, 'done'); const next = p.tasks.filter((t) => t !== first && (t.pct || 0) < 100).sort((a, b) => (a.es > b.es ? 1 : -1))[0]; if (next) setTask(next, 'doing'); did.push(`"${first.name}" done${next ? `, "${next.name}" in progress` : ''}`); } else { setTask(first, 'doing'); did.push(`"${first.name}" in progress`); } }
+        }
+      }, by);
+    } else if (to === 'completed') {
+      await accept();
+      if (plan && o.finishPlan !== false) { await savePlan(job.core, (p) => p.tasks.forEach((t) => setTask(t, 'done')), by); did.push('all plan tasks Done'); }
+      await stage('completed');
+    } else if (to === 'invoiced') {
+      let amount = inv ? inv.inc : 0, invId = inv ? inv.id : '';
+      if (!inv && q && o.makeInvoice !== false) {
+        const r = await ACC.quoteToInvoice(q.id, by);
+        if (r.error) return out(400, { error: r.error });
+        amount = r.doc.totals.inc; invId = r.doc.id; did.push(`tax invoice ${invId} made from ${q.id} (draft: check and send it)`);
+      }
+      amount = amount || r2(o.amount);
+      if (!(amount > 0)) return out(400, { error: 'Enter the invoice amount (inc GST)' });
+      if (plan && o.finishPlan !== false && !['completed'].includes(job.stage)) { await savePlan(job.core, (p) => p.tasks.forEach((t) => setTask(t, 'done')), by); did.push('all plan tasks Done'); }
+      await stage('invoiced', { amount });
+      if (invId) did.invoice = invId;
+    } else if (to === 'closed') {
+      if (o.outcome === 'lost') {
+        await stage('lost', { reason: str(o.reason, 200) });
+        if (q && ['draft', 'sent'].includes(q.status)) { await ACC.setStatus(q.id, 'declined', by, 'job lost'); did.push(`quote ${q.id} declined`); }
+      } else {
+        if (inv && o.recordPayment) {
+          const bal = r2(inv.inc - (inv.paid || 0));
+          if (bal > 0) { if (inv.status === 'draft') await ACC.setStatus(inv.id, 'sent', by, 'marked sent when paid'); const r = await ACC.addPayment(inv.id, { amount: bal, method: o.method || 'Bank transfer', ref: 'pipeline board' }, by); if (r.error) return out(400, { error: r.error }); did.push(`payment ${ACC.money(bal)} recorded on ${inv.id}`); }
+        }
+        await stage('paid');
+      }
+    } else return out(400, { error: 'Unknown column' });
+  } catch (e) { return out(400, { error: e.message }); }
+  if (audit) await audit(who, `Pipeline board: ${J.refFor(job)} → ${to}${did.length ? ' (' + did.join('; ') + ')' : ''}`);
+  return out(200, { ok: true, did: [...did], invoice: did.invoice || '', stage: job.stage });
 }

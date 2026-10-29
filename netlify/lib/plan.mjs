@@ -7,6 +7,7 @@ import { parseWhen, whenText, sydneyTime } from './calendar.mjs';
 import { env } from './shared.mjs';
 import { llmJson, usage, checkLimit, llmSetup, sydToday } from './ai.mjs';
 import * as INV from './inventory.mjs';
+import * as ACC from './accounts.mjs';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const str = (s, max = 300) => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
@@ -306,7 +307,9 @@ const VISIT_RE = /site visit|inspect|measure|look at|on site|quote visit|visit/i
 export async function pipelineBoard(body = {}) {
   const now = Date.now(), today = /^\d{4}-\d{2}-\d{2}$/.test(String(body.today || '')) ? body.today : sydToday(now);
   const days = int(body.closedDays, 0, 3650, 30);
-  const [list, planKeys, rems] = await Promise.all([J.all(), kv.keys('plan:'), J.reminders()]);
+  const [list, planKeys, rems, acc] = await Promise.all([J.all(), kv.keys('plan:'), J.reminders(), ACC.index().catch(() => ({ quotes: {}, invoices: {} }))]);
+  const docOf = {};   // latest quote / invoice (not void) per job, for the drag-and-drop choices
+  for (const g of ['quotes', 'invoices']) for (const d of Object.values(acc[g] || {}).sort((a, b) => (a.id > b.id ? 1 : -1))) if (d.core && d.status !== 'void') { docOf[d.core] = docOf[d.core] || {}; docOf[d.core][g === 'quotes' ? 'q' : 'i'] = { id: d.id, status: d.status, inc: d.inc, balance: d.balance || 0 }; }
   const planned = new Set(planKeys.map((k) => k.slice(5)));
   const closedAt = (j) => j.paid_at || j.lost_at || j.updated || j.created || 0;
   const keep = list.filter((j) => J.OPEN.includes(j.stage) || (['paid', 'lost'].includes(j.stage) && (!days || closedAt(j) >= now - days * 864e5)));
@@ -326,6 +329,7 @@ export async function pipelineBoard(body = {}) {
     const since = { new: j.created, called: j.called_at, quoted: j.quoted_at, won: j.won_at, completed: j.completed_at, invoiced: j.invoiced_at, paid: j.paid_at, lost: j.lost_at }[j.stage] || j.updated || j.created;
     return { core: j.core, ref: J.refFor(j), name: j.name || 'Customer', suburb: j.suburb || '', title: jobTitle(j), kind: jobKind(j), stage: j.stage, col, since: since || 0,
       value: j.invoice ? j.invoice.amount : j.quote ? j.quote.amount : 0, valueKind: j.invoice ? 'invoice' : j.quote ? 'quote' : '', source: j.source || '', photos: (j.photos || []).length,
+      quote: (docOf[j.core] || {}).q || null, invoice: (docOf[j.core] || {}).i || null,
       next: rem ? { at: rem.at, text: String(rem.text || '').slice(0, 120), when: whenText(rem.at) } : null, visit: !!visit,
       plan: p ? { name: p.name, pct: R ? R.pct : 0, SPI: R ? R.SPI : null, CPI: R ? R.CPI : null, start: R ? R.start : '', finish: R ? R.finish : '', late: R ? R.late : 0, done: R ? R.done : 0, total: R ? R.total : 0, highRisks: R ? R.highRisks : 0, openIssues: R ? R.openIssues : 0 } : null };
   });
