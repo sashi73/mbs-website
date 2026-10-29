@@ -23,7 +23,7 @@ export default async (req) => {
       if (!r.error && !r.already) await A.audit(session.u, `AI suggested how to fit plan ${String(body.core || '').slice(0, 20)} to finish by ${r.finishBy} (${r.tokens || 0} tokens)`);
       return ok();
     }
-    const r = await buildAiPlan({ core: body.core, describe: body.describe, scope: body.scope, type: body.type, start: body.start, finish: body.finish, emergency: !!body.emergency }, `Admin (${session.u})`);
+    const r = await buildAiPlan({ core: body.core, describe: body.describe, scope: body.scope, type: body.type, start: body.start, finish: body.finish, emergency: !!body.emergency, weekends: !!body.weekends }, `Admin (${session.u})`);
     await kv.set('aiplan:' + id, { ...r, status: r.error ? 'error' : 'done', at: Date.now() });
     if (!r.error) await A.audit(session.u, `AI built a plan draft for ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
   } catch (e) {

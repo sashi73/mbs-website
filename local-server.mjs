@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-29 v39 (new plan: start, finish by and emergency in one row)';
+const VERSION = '2026-10-29 v40 (weekends allowed, flexible dates, AI re-plan when late)';
 const NEEDS = [
   ['netlify/lib/shared.mjs', 'isTestSite'],
   ['netlify/lib/plan.mjs', 'gateOf'],

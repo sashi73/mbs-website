@@ -20,7 +20,7 @@ export function snapshot(plan, today = sydToday()) {
   const c = p.charter || {};
   return {
     name: str(p.name, 120), rev: p.rev || 0, at: Date.now(), today, start: R.start, finish: R.finish, days: R.start ? PLAN.workBetween(R.start, R.finish, PLAN.allDays(p)) : 0,
-    BAC: R.BAC, pct: R.pct, done: R.done, total: R.total, late: R.late, emergency: !!p.emergency, coolOff: PLAN.coolOf(p),
+    BAC: R.BAC, pct: R.pct, done: R.done, total: R.total, late: R.late, emergency: !!p.emergency, weekends: !!p.weekends, coolOff: PLAN.coolOf(p),
     charter: { objective: str(c.objective, 600), inScope: str(c.inScope, 1500), outScope: str(c.outScope, 700), deliverables: str(c.deliverables, 700), acceptance: str(c.acceptance, 600), assumptions: str(c.assumptions, 700), manager: str(c.manager, 80) },
     ...workSpan(p),
     tasks: p.tasks.slice(0, 40).map((t) => ({ n: str(t.name, 90), es: t.es, ef: t.ef, dur: t.dur, mile: t.dur === 0, pct: t.pct || 0, status: t.status || 'todo', subs: (t.subs || []).length })),
@@ -39,7 +39,7 @@ function workSpan(p) {
   if (!g.length) return { workStart: '', workFinish: '' };
   return { workStart: g.reduce((m, t) => (!m || t.es < m ? t.es : m), ''), workFinish: g.reduce((m, t) => (t.ef > m ? t.ef : m), '') };
 }
-const datesLine = (snap) => (snap.workStart || snap.start) ? `Work planned to start ${ACC.prettyDate(snap.workStart || snap.start)} and finish ${ACC.prettyDate(snap.workFinish || snap.finish)} (about ${PLAN.workBetween(snap.workStart || snap.start, snap.workFinish || snap.finish, !!snap.emergency)} ${snap.emergency ? 'days, weekends included' : 'working days'}), subject to acceptance, access and weather.` : '';
+const datesLine = (snap) => (snap.workStart || snap.start) ? `Work planned to start ${ACC.prettyDate(snap.workStart || snap.start)} and finish ${ACC.prettyDate(snap.workFinish || snap.finish)} (about ${PLAN.workBetween(snap.workStart || snap.start, snap.workFinish || snap.finish, !!(snap.emergency || snap.weekends))} ${snap.emergency || snap.weekends ? 'days, weekends included' : 'working days'}), subject to acceptance, access and weather.` : '';
 // what the price depends on: if this changes after a quote was made, the quote is out of date
 export function fingerprint(plan) {
   return JSON.stringify([(plan.tasks || []).map((t) => [t.name, r2(t.qty), t.unit || '', r2(t.rate), t.dur]), str((plan.charter || {}).inScope, 1500)]);
@@ -102,6 +102,7 @@ export async function planQuotePost(action, body, { who, by, audit }) {
   const snap = snapshot({ ...plan, gate: accepted && accepted.accepted ? accepted : { date: ACC.today(), id: body.update || 'new', accepted: false } });
   const notes = [datesLine(snap),
     plan.emergency ? 'Emergency work: we can start straight away, usually the same day as the site inspection, and keep working on Saturday and Sunday where needed.'
+      : plan.weekends && !(accepted && accepted.accepted) ? 'The schedule includes Saturday and Sunday work, as agreed. ' + `Work starts once this quote is accepted, after a cooling-off period of ${PLAN.coolOf(plan)} business day${PLAN.coolOf(plan) === 1 ? '' : 's'}.`
       : accepted && accepted.accepted ? '' : `Work starts once this quote is accepted, after a cooling-off period of ${PLAN.coolOf(plan)} business day${PLAN.coolOf(plan) === 1 ? '' : 's'}. The dates assume you accept today; they move by the same number of days if you accept later.`,
     'The attached high-level project management plan sets out the scope, schedule, milestones and key risks. Any change to the scope will be agreed in writing (variation) before the work is done.', str(body.notes, 800)].filter(Boolean).join('\n');
   const fields = { core: job.core, customer, items, pricesInc: false, title: str(body.title, 160) || snap.name, notes, validUntil };

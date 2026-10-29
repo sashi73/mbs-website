@@ -89,10 +89,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const prev = P.prevWork(today);
     await p.fill('tr[data-tid="t5"] .dtext', dmy(prev)); await p.press('tr[data-tid="t5"] .dtext', 'Enter'); await saved();
     ok('Limits', 'a start before the project start is not allowed (moved to the project start, with a message)', (await ui('t5')).es === P.nextWork(today) && /before the project start/.test(await p.textContent('.toast')), (await ui('t5')).es);
-    // after the project finish: refused
+    // after the project finish: allowed since v40 (the project gets longer)
     const fin = (await p.evaluate(() => window.MBS.planState.plan.tasks.reduce((m, t) => (t.ef > m ? t.ef : m), '')));
     await p.fill('tr[data-tid="t5"] .dtext', dmy(P.addWork(fin, 10))); await p.press('tr[data-tid="t5"] .dtext', 'Enter'); await saved();
-    ok('Limits', 'a start after the project finish is not allowed (moved to the finish, with a message)', (await ui('t5')).es <= fin && /after the project finish/.test(await p.textContent('.toast')));
+    ok('Limits', 'v40: a start after the project finish is allowed: the task keeps the date and the project gets longer (with a message)', (await ui('t5')).es === P.addWork(fin, 10) && /project gets longer/.test(await p.textContent('.toast')), (await ui('t5')).es);
     // clearing the date follows "After #" again
     await p.fill('tr[data-tid="t5"] .dtext', ''); await p.press('tr[data-tid="t5"] .dtext', 'Enter'); await saved();
     x5 = await ui('t5');

@@ -10,7 +10,7 @@
   /* ---------- working days (same rules as the server) ---------- */
   var toD = function (s) { var a = s.split('-').map(Number); return new Date(Date.UTC(a[0], a[1] - 1, a[2])); };
   var toS = function (d) { return d.toISOString().slice(0, 10); };
-  // Mon-Fri; an emergency plan (v34) also works Saturday and Sunday. ALL follows the plan being scheduled (set in schedule()).
+  // Mon-Fri; an emergency plan (v34), or one with "Weekends allowed" ticked (v40), also works Saturday and Sunday. ALL follows the plan being scheduled (set in schedule()).
   var ALL = false;
   var wk = function (d) { if (ALL) return true; var w = d.getUTCDay(); return w !== 0 && w !== 6; };
   function nextWork(s) { var d = toD(s); while (!wk(d)) d = new Date(d.getTime() + 864e5); return toS(d); }
@@ -66,7 +66,7 @@
   // Otherwise: quote accepted (until then: the quote date) + cooling-off (default 3 business days). "Work starts" can only make it later.
   function coolOf(p) { return p.coolOff == null || p.coolOff === '' ? 3 : Math.max(0, Math.min(10, Math.round(+p.coolOff) || 0)); }
   function gateOf(p) {
-    ALL = !!p.emergency;
+    ALL = !!(p.emergency || p.weekends);
     var re = /^\d{4}-\d{2}-\d{2}$/, ws = re.test(p.workStart || '') ? nextWork(p.workStart) : '';
     if (p.emergency) return { date: ws, why: ws ? 'work' : 'emergency' };
     var g = p.gate, q = g && re.test(g.date || '') ? addWork(nextWork(g.date), coolOf(p)) : '';
@@ -84,7 +84,7 @@
     return w + '🔒 Quote <b>' + esc(g.id) + '</b> is not accepted yet. The work waits for acceptance plus ' + days + ' cooling-off: assuming acceptance on the quote date (' + esc(dmy(g.date)) + '), the work starts <b>' + esc(dmy(gateDate(p))) + '</b>. It moves if the customer accepts later.';
   }
   function schedule(p) {
-    ALL = !!p.emergency;   // emergency: weekends are work days
+    ALL = !!(p.emergency || p.weekends);   // emergency, or "Weekends (Sat, Sun) allowed": weekends are work days
     var start = nextWork(p.start || today()), byId = {}, gate = holdDate(p), gated = gate ? gatedTasks(p) : [];
     var quoteMs = p.emergency ? p.tasks.filter(function (t) { return t.dur === 0 && /quote/i.test(t.name); })[0] : null;   // emergency: work the same day as the inspection
     p.tasks.forEach(function (t) { byId[t.id] = t; t.es = ''; t.ef = ''; });
@@ -508,7 +508,7 @@
     $('#title').textContent = 'Project plan';
     var j = S.job, scope0 = j.scope || '';
     var guess = guessType(j.title + ' ' + scope0);
-    S.mode = 'type'; S.aiDraft = null; S.aiId = ''; S.aiText = ''; S.tplType = ''; S.aiFinish = ''; S.coolZero = false; S.datesTouched = false; S.lastDates = '';
+    S.mode = 'type'; S.aiDraft = null; S.aiId = ''; S.aiText = ''; S.tplType = ''; S.aiFinish = ''; S.tplWeek = false; S.coolZero = false; S.datesTouched = false; S.lastDates = '';
     V().innerHTML = '<div class="row" style="margin-bottom:14px"><a class="btn btn-sm" href="#job/' + esc(j.core) + '">← ' + esc(j.ref) + '</a><h2 style="font-size:22px">Plan this job: ' + esc(j.name) + ': ' + esc(j.title || j.service || 'Job') + '</h2></div>' +
       '<div class="card"><h2>1. What the customer wants (scope of work)</h2>' +
       '<p class="jobline"><span class="ref">' + esc(j.ref) + '</span> <b>' + esc(j.title || '') + '</b>' + [j.suburb, j.source ? 'from ' + j.source : ''].filter(Boolean).map(function (x) { return ' · ' + esc(x); }).join('') + '</p>' +
@@ -519,6 +519,7 @@
         '<label style="display:grid;gap:4px;font-weight:700">Start date<input type="date" id="tplStart" value="' + today() + '" style="width:auto"></label>' +
         '<label style="display:grid;gap:4px;font-weight:700"><span>Finish by <small class="muted" style="font-weight:400">(optional)</small></span><input type="date" id="aiFinish" value="' + esc(S.aiFinish || '') + '" style="width:auto"></label>' +
         '<label class="qchk emergpick" title="No cooling-off: the work can start straight away, the same day as the site inspection"><input type="checkbox" id="tplEmerg"' + (j.emergency || EMERG.test((j.title || '') + ' ' + scope0) ? ' checked' : '') + '> 🚨 Emergency job <small class="muted">(start straight away; otherwise the work waits for the quote to be accepted plus 3 business days cooling-off)</small></label>' +
+        '<label class="qchk" title="Tick if the crew can work Saturday and Sunday: the schedule counts every day and finishes sooner"><input type="checkbox" id="tplWeek"' + (S.tplWeek ? ' checked' : '') + '> 📅 Weekends (Sat, Sun) allowed</label>' +
         '<p class="pdates-note">✨ <b>Not sure of the end date?</b> Leave <b>Finish by</b> empty and choose <b>Ask AI to build it</b>: the AI works out the end date for this job. If you set a Finish by date, the plan is checked against it (and ✨ Fit to finish-by can bring it in).</p>' +
       '</div><div class="tpl-grid tmodes">' +
       [['type', '📋 Pick a job type', CATALOG.length + ' common job types, each with sub-types. Builds tasks, sub-tasks, example costs and risks.'], ['blank', '⬜ Blank plan', 'Two rows to start from. Add your own tasks.'], ['ai', '✨ Ask AI to build it', 'Describe the job; AI works out the tasks, sub-tasks, costs, scope and risks, plus tips to help you plan.']]
@@ -551,12 +552,12 @@
       var out = $('#aiOut'); if (!out) return;
       var p = fromAi(S.aiDraft, j, $('#tplStart').value || today(), $('#tplScope').value);
       var fb = $('#aiFinish') ? $('#aiFinish').value : '', em = !!($('#tplEmerg') && $('#tplEmerg').checked);
-      p.emergency = em; p.coolOff = S.coolZero && !em ? 0 : 3; if (fb) p.charter.assumptions = ('Customer wants it finished by ' + dmy(fb) + '.\n' + (p.charter.assumptions || '')).trim();
+      p.emergency = em; p.weekends = !!($('#tplWeek') && $('#tplWeek').checked); p.coolOff = S.coolZero && !em ? 0 : 3; if (fb) p.charter.assumptions = ('Customer wants it finished by ' + dmy(fb) + '.\n' + (p.charter.assumptions || '')).trim();
       // estimate with the quote accepted on the start date and the usual cooling-off (unless emergency)
       var est = JSON.parse(JSON.stringify(p)); est.gate = em ? null : { date: p.start, accepted: true, id: 'quote' }; var ER = rollup(est, today());
       var fit = !fb ? '' : ER.finish <= fb ? '<div class="aifit ok">✅ Planned finish <b>' + esc(dmy(ER.finish)) + '</b>: within your finish-by date (' + esc(dmy(fb)) + ').</div>'
         : '<div class="aifit">⚠ Planned finish <b>' + esc(dmy(ER.finish)) + '</b>: ' + (workBetween(fb, ER.finish) - 1) + ' working day' + (workBetween(fb, ER.finish) - 1 === 1 ? '' : 's') + ' past your finish-by date (' + esc(dmy(fb)) + '). Shorten some tasks, run some in parallel, tick Emergency, or ask the AI again.</div>';
-      out.innerHTML = fit + (fb ? '' : '<div class="aifit plain">✨ The AI worked out the end date: <b>' + esc(dmy(ER.finish)) + '</b> (starts ' + esc(dmy(ER.start)) + ', ' + pl(workBetween(ER.start, ER.finish), em ? 'day' : 'working day') + ')' + (em ? ' (emergency: no cooling-off, Saturday and Sunday are work days)' : coolOf(p) ? ' (includes ' + coolOf(p) + ' business days cooling-off after the quote)' : ' (no cooling-off)') + '.</div>') + previewHtml(p, S.aiDraft.tips, S.aiDraft) + '<p class="muted" style="font-size:12.5px;margin:6px 0 0">This is an AI draft: check the tasks, days, prices, scope and risks (all go into the Scope and Risks tabs). People (resources) are left blank. Press <b>Use this plan</b> to create it, or <b>Build the plan with AI</b> again for another version.</p>';
+      out.innerHTML = fit + (fb ? '' : '<div class="aifit plain">✨ The AI worked out the end date: <b>' + esc(dmy(ER.finish)) + '</b> (starts ' + esc(dmy(ER.start)) + ', ' + pl(workBetween(ER.start, ER.finish), em || p.weekends ? 'day' : 'working day') + ')' + (em ? ' (emergency: no cooling-off, Saturday and Sunday are work days)' : coolOf(p) ? ' (includes ' + coolOf(p) + ' business days cooling-off after the quote)' : ' (no cooling-off)') + '.</div>') + previewHtml(p, S.aiDraft.tips, S.aiDraft) + '<p class="muted" style="font-size:12.5px;margin:6px 0 0">This is an AI draft: check the tasks, days, prices, scope and risks (all go into the Scope and Risks tabs). People (resources) are left blank. Press <b>Use this plan</b> to create it, or <b>Build the plan with AI</b> again for another version.</p>';
       $('#tplCreate').disabled = false;
     }
     function aiRun() {
@@ -579,7 +580,7 @@
         });
       };
       fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
-        body: JSON.stringify({ id: id, core: j.core, describe: desc, scope: scope, type: cat ? cat.cat + ': ' + cat.item.n : '', start: $('#tplStart').value || today(), finish: $('#aiFinish').value || '', emergency: !!($('#tplEmerg') && $('#tplEmerg').checked) }) })
+        body: JSON.stringify({ id: id, core: j.core, describe: desc, scope: scope, type: cat ? cat.cat + ': ' + cat.item.n : '', start: $('#tplStart').value || today(), finish: $('#aiFinish').value || '', emergency: !!($('#tplEmerg') && $('#tplEmerg').checked), weekends: !!($('#tplWeek') && $('#tplWeek').checked) }) })
         .then(function (r) {
           if (r.status === 401 || r.status === 403) throw new Error('Your session has ended. Sign in again.');
           if (r.status !== 202 && !r.ok) throw new Error('Could not start the AI (' + r.status + '). Try again.');
@@ -590,6 +591,7 @@
     $('#tplStart').onchange = function () { if (S.mode === 'type' && $('#tplType') && $('#tplType').value) $('#tplType').onchange(); };
     mode();
     $('#tplEmerg').onchange = function () { S.emergTouched = true; if (S.mode === 'ai' && S.aiDraft) showDraft(); };
+    $('#tplWeek').onchange = function () { S.tplWeek = this.checked; if (S.mode === 'ai' && S.aiDraft) showDraft(); else if (S.mode === 'type' && $('#tplType') && $('#tplType').value) $('#tplType').onchange(); };
     $('#aiFinish').onchange = function () { S.aiFinish = this.value; if (S.mode === 'ai') { if (S.aiDraft) showDraft(); else mode(); } };
     // saying it's an emergency (in the scope or the AI description) ticks the box, unless you have unticked it yourself
     S.emergTouched = false;
@@ -638,7 +640,7 @@
       var fb2 = $('#aiFinish') ? $('#aiFinish').value : '';
       if (fb2) { plan.finishBy = fb2; plan.charter.assumptions = ('Customer wants it finished by ' + dmy(fb2) + '.\n' + (plan.charter.assumptions || '')).trim(); }
       var btn = this; btn.disabled = true;
-      plan.emergency = !!$('#tplEmerg').checked; plan.coolOff = S.coolZero && !plan.emergency ? 0 : 3;
+      plan.emergency = !!$('#tplEmerg').checked; plan.weekends = !!($('#tplWeek') && $('#tplWeek').checked); plan.coolOff = S.coolZero && !plan.emergency ? 0 : 3;
       S.plan = plan; S.rev = 0; S.tab = 'schedule';
       api('planSave', { core: S.core, plan: S.plan, rev: 0, note: note }).then(function (r) { S.plan = normalise(r.plan); S.rev = r.plan.rev; S.aiDraft = null; S.chain = null; loadChain(); S.aiText = ''; S.tplType = ''; toast('Plan created'); history.replaceState(null, '', '#plan/' + S.core + '/schedule'); render(); }).catch(function (e) { btn.disabled = false; S.plan = null; fail(e); });
     };
@@ -751,16 +753,24 @@
   function setWorkStart(v) {
     var p = S.plan, g = gateDate(p);
     if (v && v < nextWork(p.start)) { toast('The work can\'t start before the project start (' + dmy(nextWork(p.start)) + ')', true); render(); return; }
-    if (v && g && nextWork(v) < g) { toast('Work can only start once the quote is accepted plus the ' + coolOf(p) + '-day cooling-off: the earliest is ' + dmy(g) + '. Pick that or later, or tick Emergency.', true); render(); return; }
+    var f0 = rollup(p, today()).finish, waived = '';
+    if (v && g && nextWork(v) < g && p.gate && /^\d{4}-\d{2}-\d{2}$/.test(p.gate.date || '')) {
+      // v40: more flexible: shorten the cooling-off so the work can start then (the customer must agree to waive the rest)
+      ALL = false; var c = coolOf(p) - 1;
+      while (c >= 0 && addWork(nextWork(p.gate.date), c) > nextWork(v)) c--;
+      if (c < 0) { toast('That is before the quote ' + (p.gate.accepted ? 'was accepted' : 'date') + ' (' + dmy(p.gate.date) + '). The earliest is ' + dmy(nextWork(p.gate.date)) + ' with no cooling-off, or tick 🚨 Emergency to start straight away.', true); render(); return; }
+      p.coolOff = c; waived = ' Cooling-off shortened to ' + pl(c, 'business day') + ' so the work can start then: the customer must agree in writing to waive the rest.';
+    }
     var q = S.chain && liveQuote(S.chain);
     if (q && q.fromPlan && !q.invoiceId) {   // the server moves the plan and refreshes the quote together
-      (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () { return api('quoteStart', { id: q.id, date: v || '' }); }).then(function (r) {
-        return api('planGet', { core: S.core }).then(function (d) { S.plan = normalise(d.plan); S.rev = d.plan.rev; render(); toast(v ? 'Work starts ' + dmy(r.workStart) + ', finishes ' + dmy(r.finish) + ' (quote ' + q.id + ' updated too)' : '"Work starts" cleared'); loadChain(); });
+      (S.timer || waived ? saveNow(waived ? 'cooling-off ' + p.coolOff + ' business days' : '') : (S.q || Promise.resolve())).then(function () { return api('quoteStart', { id: q.id, date: v || '' }); }).then(function (r) {
+        return api('planGet', { core: S.core }).then(function (d) { S.plan = normalise(d.plan); S.rev = d.plan.rev; render(); afterDates(f0, ''); toast(v ? 'Work starts ' + dmy(r.workStart) + ', finishes ' + dmy(r.finish) + ' (quote ' + q.id + ' updated too)' + waived : '"Work starts" cleared'); loadChain(); });
       }).catch(function (e) { fail(e); render(); });
       return;
     }
     p.workStart = v || ''; dirty('work start ' + (v || 'cleared')); render();
-    var R = rollup(p, today()); if (v) toast('Work starts ' + dmy(holdDate(p)) + ', finishes ' + dmy(R.finish));
+    var R = rollup(p, today()); if (v) toast('Work starts ' + dmy(holdDate(p)) + ', finishes ' + dmy(R.finish) + '.' + waived, !!waived);
+    afterDates(f0, 'Work starts changed');
   }
   /* ---------- v38: ✨ fit the plan to its "Finish by" date ---------- */
   function fitBar(p, R) {
@@ -770,7 +780,28 @@
     if (R.finish <= p.finishBy) return '<div class="fitbar ok">✅ Planned finish <b>' + esc(dmy(R.finish)) + '</b>: on time for your finish-by date (' + esc(dmy(p.finishBy)) + ')' + (R.finish < p.finishBy ? ', ' + pl(workBetween(R.finish, p.finishBy) - 1, 'working day') + ' to spare' : '') + '.' + undo + '</div>';
     var late = workBetween(p.finishBy, R.finish) - 1;
     return '<div class="fitbar late">⚠ Planned finish <b>' + esc(dmy(R.finish)) + '</b> is <b>' + pl(late, 'working day') + ' late</b> for your finish-by date (' + esc(dmy(p.finishBy)) + '). ' +
-      '<button class="btn btn-sm btn-gold" id="fitGo" type="button" title="The AI looks at the critical path and suggests which tasks can run side by side or be done faster with more crew. You see the changes before anything is saved.">✨ Fit to finish-by</button>' + undo + '</div>';
+      '<button class="btn btn-sm btn-gold" id="fitGo" type="button" title="The AI looks at the critical path and suggests which tasks can run side by side or be done faster with more crew. You see the changes before anything is saved.">✨ Fit to finish-by</button>' +
+      (function () { var wf = weekendFinish(p); return wf ? '<button class="btn btn-sm" id="fitWeek" type="button" title="Count Saturday and Sunday as work days">📅 Allow weekends: finishes ' + esc(dmy(wf)) + (wf <= p.finishBy ? ' ✓' : '') + '</button>' : ''; })() + undo + '</div>';
+  }
+  // v40: after Work starts / Finish by / weekends / cooling-off / emergency changes: if the plan is now late, ask what to do
+  function weekendFinish(p) { if (p.emergency || p.weekends) return ''; var w = JSON.parse(JSON.stringify(p)); w.weekends = true; var f = rollup(w, today()).finish; rollup(p, today()); return f; }
+  function afterDates(f0, why) {
+    var p = S.plan; if (!p || !p.finishBy) return;
+    var R = rollup(p, today());
+    if (!R.finish || R.finish <= p.finishBy) return;
+    if (f0 && f0 > p.finishBy && R.finish <= f0) return;   // it was already late and did not get later: the bar says so
+    var late = workBetween(p.finishBy, R.finish) - 1, wf = weekendFinish(p);
+    M.modal('<h2>📅 The plan now finishes ' + esc(dmy(R.finish)) + '</h2>' +
+      '<p>' + (why ? esc(why.charAt(0).toUpperCase() + why.slice(1)) + ', so the' : 'The') + ' plan is <b>' + pl(late, 'working day') + ' late</b> for your Finish by date (' + esc(dmy(p.finishBy)) + '). How do you want to handle it?</p>' +
+      '<div class="fitopts">' +
+        '<button class="btn btn-gold" id="aoFit" type="button">✨ Fit it with AI<small>Crashing (more crew or longer hours) and fast-tracking (tasks that can safely run side by side). You see the changes first.</small></button>' +
+        (wf ? '<button class="btn" id="aoWeek" type="button">📅 Allow weekends (Sat, Sun)<small>Finishes ' + esc(dmy(wf)) + (wf <= p.finishBy ? ': on time' : ': still ' + pl(workBetween(p.finishBy, wf) - 1, 'day') + ' late, then ✨ Fit with AI') + '.</small></button>' : '') +
+        '<button class="btn" id="aoMove" type="button">↔ Move Finish by to ' + esc(dmy(R.finish)) + '<small>If the customer is happy with the later date.</small></button>' +
+        '<button class="btn" id="aoKeep" data-close type="button">Keep it as it is<small>The plan stays late; the bar on the Schedule tab keeps reminding you.</small></button>' +
+      '</div>');
+    $('#aoFit').onclick = function () { M.closeModal(); fitRun(); };
+    var w = $('#aoWeek'); if (w) w.onclick = function () { p.weekends = true; dirty('weekends allowed'); M.closeModal(); render(); var R2 = rollup(p, today()); toast('📅 Weekends allowed: finishes ' + dmy(R2.finish) + (R2.finish <= p.finishBy ? ', on time' : '')); if (R2.finish > p.finishBy) afterDates(R.finish, 'even with weekends it is late'); };
+    $('#aoMove').onclick = function () { p.finishBy = R.finish; dirty('finish by ' + R.finish); M.closeModal(); render(); toast('Finish by moved to ' + dmy(R.finish)); };
   }
   function fitRun() {
     var p = S.plan, core = S.core, id = rid(), b = $('#fitGo');
@@ -819,19 +850,22 @@
       ((f.refused || []).length ? '<p class="muted" style="font-size:12.5px">Kept as they are: ' + esc(f.refused.join('; ')) + '.</p>' : '') +
       ((f.tips || []).length ? '<ul class="muted" style="font-size:13px">' + f.tips.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
       ((f.risks || []).length && rows ? '<label class="qchk" style="margin:6px 0"><input type="checkbox" id="fitRisks" checked> Add ' + pl(f.risks.length, 'risk') + ' of the faster schedule to the Risks tab (' + esc(f.risks.map(function (r) { return r.title; }).join(', ')) + ')</label>' : '') +
-      '<div class="actions">' + (rows ? '<button class="btn btn-gold" id="fitUse" type="button">Use these changes</button>' : '') + '<button class="btn" data-close type="button">' + (rows ? 'Discard' : 'Close') + '</button></div>';
+      (f.weekend ? '<div class="aifit ' + (f.weekend.fits ? 'ok' : '') + '">📅 Allowing weekends (Sat, Sun) on top of ' + (rows ? 'these changes' : 'the plan') + ' would finish <b>' + esc(dmy(f.weekend.finish)) + '</b>' + (f.weekend.fits ? ': on time.' : ', still ' + pl(f.weekend.stillLate, 'day') + ' late.') + '</div>' : '') +
+      '<div class="actions">' + (rows ? '<button class="btn btn-gold" id="fitUse" type="button">Use these changes</button>' : '') + (f.weekend ? '<button class="btn' + (rows ? '' : ' btn-gold') + '" id="fitUseWeek" type="button">' + (rows ? 'Use these changes + allow weekends' : 'Allow weekends') + '</button>' : '') + '<button class="btn" data-close type="button">' + (rows ? 'Discard' : 'Close') + '</button></div>';
     M.modal(html);
     var u = $('#fitUse'); if (u) u.onclick = function () { fitApply(f, !!($('#fitRisks') && $('#fitRisks').checked)); };
+    var uw = $('#fitUseWeek'); if (uw) uw.onclick = function () { fitApply(f, !!($('#fitRisks') && $('#fitRisks').checked), true); };
   }
-  function fitApply(f, addRisks) {
+  function fitApply(f, addRisks, weekends) {
     var p = S.plan;
     if ((p.rev || 0) !== (f.rev || 0) && S.rev !== f.rev) { M.closeModal(); toast('The plan changed while the AI was working. Press ✨ Fit to finish-by again.', true); return; }
     S.fitUndo = { core: S.core, plan: JSON.parse(JSON.stringify(p)) };
+    if (weekends) p.weekends = true;
     var byId = {}; p.tasks.forEach(function (t) { byId[t.id] = t; });
     f.changes.forEach(function (c) { var t = byId[c.id]; if (!t) return; t.dur = c.durTo; t.pred = c.afterTo.filter(function (x) { return byId[x]; }); fitSubs(t); derive(t); });
     if (addRisks) (f.risks || []).forEach(function (r, i) { p.risks.push({ id: 'r' + Date.now().toString(36) + i, title: r.title, cause: r.cause, p: r.p, i: r.i, response: r.response, action: r.action, owner: (p.charter || {}).manager || '', review: '', status: 'Open', raised: today() }); });
     p.charter = p.charter || {};
-    p.charter.assumptions = ('Schedule brought in to finish by ' + dmy(f.finishBy) + ' (' + pl(f.changes.length, 'task') + ' changed' + (f.extraTotal ? ', extra cost ' + money(f.extraTotal) + ' ex GST' : '') + ').\n' + (p.charter.assumptions || '')).trim().slice(0, 2000);
+    p.charter.assumptions = ('Schedule brought in to finish by ' + dmy(f.finishBy) + ' (' + pl(f.changes.length, 'task') + ' changed' + (weekends ? ', Saturday and Sunday work' : '') + (f.extraTotal ? ', extra cost ' + money(f.extraTotal) + ' ex GST' : '') + ').\n' + (p.charter.assumptions || '')).trim().slice(0, 2000);
     M.closeModal(); dirty('AI fitted the plan to finish by ' + f.finishBy); render();
     var Rn = rollup(p, today());
     toast('Plan updated: finishes ' + dmy(Rn.finish) + (Rn.finish <= f.finishBy ? ', on time' : '') + '. Press ↶ Undo the AI changes to put it back.');
@@ -911,11 +945,11 @@
   // Time card: Start, Finish and Duration in plain words, with the progress status underneath
   function timeCard(p, R) {
     var c = R.late.length ? 'red' : evRag(R.SPI), n = R.start && R.finish ? workBetween(R.start, R.finish) : 0;
-    var wk = n >= 10 ? ' (about ' + pl(Math.round(n / (p.emergency ? 7 : 5)), 'week') + ')' : '';
+    var wk = n >= 10 ? ' (about ' + pl(Math.round(n / (p.emergency || p.weekends ? 7 : 5)), 'week') + ')' : '';
     var row = function (k, v) { return '<dt>' + esc(k) + '</dt><dd>' + esc(v || '-') + '</dd>'; };
     var s = (R.SPI == null ? 'not started' : 'SPI ' + R.SPI) + (R.late.length ? ' · ' + R.late.length + ' late' : '') + (p.baseline && p.baseline.finish && R.finish ? ' · ' + varDays(p.baseline.finish, R.finish) : '');
     return '<div class="card kpi rag-card rag-b-' + c + '"><div class="k">Time <span class="dot dot-' + c + '"></span></div>' +
-      '<dl class="tdl">' + row('Start', prettyY(R.start)) + row('Finish', prettyY(R.finish)) + row('Duration', n ? p.emergency ? pl(n, 'day') + ' (weekends included)' : pl(n, 'working day') + wk : '') + '</dl>' +
+      '<dl class="tdl">' + row('Start', prettyY(R.start)) + row('Finish', prettyY(R.finish)) + row('Duration', n ? p.emergency || p.weekends ? pl(n, 'day') + ' (weekends included)' : pl(n, 'working day') + wk : '') + '</dl>' +
       '<div class="s">' + esc(s) + '</div></div>';
   }
   function mini(k, v, s, c) { return '<div class="card kpi rag-card rag-b-' + (c || 'grey') + '"><div class="k">' + esc(k) + ' <span class="dot dot-' + (c || 'grey') + '"></span></div><div class="v" style="font-size:20px">' + esc(v) + '</div><div class="s">' + esc(s) + '</div></div>'; }
@@ -950,7 +984,7 @@
     var dayW = S.zoom === 'week' ? 7 : 20, days = daysBetween(from, to) + 1, W = days * dayW;
     var x = function (s) { return daysBetween(from, s) * dayW; };
     var firstW = toD(from).getUTCDay(), satOff = ((6 - firstW + 7) % 7) * dayW;
-    var weekendBg = p.emergency ? '' : 'background-image:repeating-linear-gradient(90deg,transparent 0,transparent ' + satOff + 'px,rgba(0,0,0,.045) ' + satOff + 'px,rgba(0,0,0,.045) ' + (satOff + 2 * dayW) + 'px,transparent ' + (satOff + 2 * dayW) + 'px,transparent ' + 7 * dayW + 'px);background-size:' + 7 * dayW + 'px 100%';
+    var weekendBg = p.emergency || p.weekends ? '' : 'background-image:repeating-linear-gradient(90deg,transparent 0,transparent ' + satOff + 'px,rgba(0,0,0,.045) ' + satOff + 'px,rgba(0,0,0,.045) ' + (satOff + 2 * dayW) + 'px,transparent ' + (satOff + 2 * dayW) + 'px,transparent ' + 7 * dayW + 'px);background-size:' + 7 * dayW + 'px 100%';
     var scale = '<div class="gscale" style="width:' + W + 'px">';
     for (var i = 0; i < days; i++) {
       var d = toS(new Date(toD(from).getTime() + i * 864e5)), dd = +d.slice(8), wd = toD(d).getUTCDay();
@@ -970,11 +1004,12 @@
     };
     var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button>' +
       '<div class="qgate' + (p.emergency ? ' emerg' : p.gate && p.gate.accepted ? ' ok' : '') + '"><div class="qrow"><label class="qchk" title="Emergency work (burst pipe, storm damage, a leak that is doing damage): no cooling-off, the work can start straight away, the same day as the site inspection"><input type="checkbox" id="pEmerg"' + (p.emergency ? ' checked' : '') + '> 🚨 Emergency</label>' +
+        '<label class="qchk" title="' + (p.emergency ? 'Emergency jobs already work Saturday and Sunday' : 'Tick if the crew can work Saturday and Sunday on this job: the schedule then counts every day and finishes sooner') + '"><input type="checkbox" id="pWeek"' + (p.emergency || p.weekends ? ' checked' : '') + (p.emergency ? ' disabled' : '') + '> 📅 Weekends (Sat, Sun) allowed</label>' +
         '<label class="qchk" title="Days after the quote is accepted before the work can start. The full cooling-off period is 5 business days; most customers agree to start after 3.">Cooling-off <select id="pCool"' + (p.emergency ? ' disabled' : '') + '>' + [0, 1, 2, 3, 4, 5].map(function (n) { return '<option value="' + n + '"' + (coolOf(p) === n ? ' selected' : '') + '>' + n + (n === 3 ? ' (usual)' : n === 5 ? ' (full period)' : '') + '</option>'; }).join('') + '</select> business days</label></div><div>' + gateText(p) + '</div></div>' +
       fitBar(p, R) +
-      '<span class="muted" style="font-size:12.5px">To move a task, type its new number in <b>#</b> (1 = first) or drag <b>⠿</b>. Sub-tasks move inside their own task. Days are working days (' + (p.emergency ? 'emergency: every day, Saturday and Sunday included' : 'Mon–Fri') + '). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span><span class="sp"></span>' +
+      '<span class="muted" style="font-size:12.5px">To move a task, type its new number in <b>#</b> (1 = first) or drag <b>⠿</b>. Sub-tasks move inside their own task. Days are working days (' + (p.emergency ? 'emergency: every day, Saturday and Sunday included' : p.weekends ? 'weekends allowed: every day, Saturday and Sunday included' : 'Mon–Fri') + '). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span><span class="sp"></span>' +
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700">Project start<input type="date" id="pStart" value="' + esc(p.start) + '" style="width:auto"></label>' +
-      '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The day the work itself starts (after the quote is accepted). Tasks before the quote, like the site inspection, are not affected. Also on the quote.">Work starts<input type="date" id="pWork" value="' + esc(p.workStart || '') + '" min="' + esc(gateDate(p) || nextWork(p.start)) + '" style="width:auto"></label>' +
+      '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The day the work itself starts (after the quote is accepted). Tasks before the quote, like the site inspection, are not affected. Also on the quote.">Work starts<input type="date" id="pWork" value="' + esc(p.workStart || '') + '" min="' + esc(nextWork(p.start)) + '" style="width:auto"></label>' +
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The date the customer needs it finished. If the plan finishes later, ✨ Fit to finish-by asks the AI how to bring it in.">Finish by<input type="date" id="pFinishBy" value="' + esc(p.finishBy || '') + '" min="' + esc(nextWork(p.start)) + '" style="width:auto"></label>' +
       '<div class="tabs" style="margin:0" title="Which columns to show"><button class="tab' + (S.cols === 's' ? ' on' : '') + '" data-cols="s">📅 Dates</button><button class="tab' + (S.cols === 'c' ? ' on' : '') + '" data-cols="c">$ Costs</button><button class="tab' + (S.cols === 'a' ? ' on' : '') + '" data-cols="a">All columns</button></div>' +
       '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button></div></div>' +
@@ -989,7 +1024,7 @@
           (t.dur === 0 ? '' : '<button class="subadd" type="button" data-addsub title="Break this task into smaller steps (they stay inside its dates)">＋ sub-task' + (subs.length ? ' · ' + subs.filter(function (x) { return x.status === 'done'; }).length + '/' + subs.length + ' done' : '') + '</button>') + '</td>' +
         '<td>' + resCell(t) + '</td>' +
         '<td><input data-k="dur" type="number" min="0" max="365" value="' + t.dur + '" style="width:50px" title="0 days = milestone"></td>' +
-        '<td><input data-k="snet" type="date" value="' + esc(t.es) + '" min="' + esc(nextWork(p.start)) + '" max="' + esc(R.finish || '') + '" class="' + (t.snet ? 'pinned' : '') + '" title="' + (t.fixed && t.snet ? 'Start set by hand: ' + dmy(t.snet) + '. It runs in parallel (the After # link is not used). Clear the date to follow After # again.' : t.snet ? 'Starts no earlier than ' + dmy(t.snet) + ' (clear the date box to remove)' : 'Worked out from the tasks before it. Type or pick a date to start it earlier (in parallel) or later: between the project start and finish.') + '"></td>' +
+        '<td><input data-k="snet" type="date" value="' + esc(t.es) + '" min="' + esc(nextWork(p.start)) + '" class="' + (t.snet ? 'pinned' : '') + '" title="' + (t.fixed && t.snet ? 'Start set by hand: ' + dmy(t.snet) + '. It runs in parallel (the After # link is not used). Clear the date to follow After # again.' : t.snet ? 'Starts no earlier than ' + dmy(t.snet) + ' (clear the date box to remove)' : 'Worked out from the tasks before it. Type or pick a date to start it earlier (in parallel) or later: between the project start and finish.') + '"></td>' +
         '<td class="nowrap">' + esc(dmy(t.ef)) + (base && base.ef && base.ef !== t.ef ? '<br><small class="' + (t.ef > base.ef ? 'bad' : 'good') + '">base ' + esc(dmy(base.ef)) + '</small>' : '') + '</td>' +
         '<td><input data-k="pred" value="' + esc((t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', ')) + '" placeholder="e.g. 2,3" style="width:58px"' + (t.fixed && t.snet ? ' class="predoff" title="Not used while the start date is set by hand (runs in parallel)"' : '') + '></td>' +
         '<td><input data-k="qty" inputmode="decimal" value="' + esc(t.qty || '') + '" style="width:60px"></td>' +
@@ -1032,13 +1067,15 @@
     splitPanes(x(t0));
     B.querySelectorAll('[data-cols]').forEach(function (b) { b.onclick = function () { S.cols = b.getAttribute('data-cols'); try { localStorage.setItem('mbsPlanCols', S.cols); } catch (e) {} render(); }; });
     B.querySelectorAll('[data-zoom]').forEach(function (b) { b.onclick = function () { S.zoom = b.getAttribute('data-zoom'); render(); }; });
-    $('#pStart').onchange = function () { if (this.value) { p.start = this.value; dirty(); render(); } };
+    $('#pStart').onchange = function () { if (this.value) { var f0 = rollup(p, today()).finish; p.start = this.value; dirty(); render(); afterDates(f0, 'the project start changed'); } };
     $('#pWork').onchange = function () { setWorkStart(this.value); };
-    $('#pFinishBy').onchange = function () { p.finishBy = this.value || ''; S.fitUndo = null; dirty('finish by ' + (p.finishBy || 'cleared')); render(); };
+    $('#pFinishBy').onchange = function () { p.finishBy = this.value || ''; S.fitUndo = null; dirty('finish by ' + (p.finishBy || 'cleared')); render(); afterDates('', 'Finish by changed'); };
+    $('#pWeek').onchange = function () { var f0 = rollup(p, today()).finish; p.weekends = this.checked; dirty(p.weekends ? 'weekends allowed' : 'weekdays only'); render(); var Rw = rollup(p, today()); toast(p.weekends ? '📅 Saturday and Sunday are work days now: finishes ' + dmy(Rw.finish) : 'Weekdays only (Mon–Fri): finishes ' + dmy(Rw.finish)); afterDates(f0, 'weekend work changed'); };
+    var fw = $('#fitWeek'); if (fw) fw.onclick = function () { var f0 = rollup(p, today()).finish; p.weekends = true; dirty('weekends allowed'); render(); toast('📅 Weekends allowed: finishes ' + dmy(rollup(p, today()).finish)); afterDates(f0, ''); };
     var fg = $('#fitGo'); if (fg) fg.onclick = fitRun;
     var fu = $('#fitUndo'); if (fu) fu.onclick = fitUndo;
-    $('#pEmerg').onchange = function () { p.emergency = this.checked; dirty(p.emergency ? 'emergency: work can start straight away' : 'not an emergency: cooling-off applies'); render(); var R = rollup(p, today()); toast(p.emergency ? 'Emergency: the work starts the same day as the site inspection (finish ' + dmy(R.finish) + ')' : 'Cooling-off applies again (finish ' + dmy(R.finish) + ')'); };
-    $('#pCool').onchange = function () { p.coolOff = +this.value; dirty('cooling-off ' + p.coolOff + ' business days'); render(); };
+    $('#pEmerg').onchange = function () { var f0e = rollup(p, today()).finish; setTimeout(function () { afterDates(f0e, 'Emergency changed'); }, 0); p.emergency = this.checked; dirty(p.emergency ? 'emergency: work can start straight away' : 'not an emergency: cooling-off applies'); render(); var R = rollup(p, today()); toast(p.emergency ? 'Emergency: the work starts the same day as the site inspection (finish ' + dmy(R.finish) + ')' : 'Cooling-off applies again (finish ' + dmy(R.finish) + ')'); };
+    $('#pCool').onchange = function () { var f0 = rollup(p, today()).finish; p.coolOff = +this.value; dirty('cooling-off ' + p.coolOff + ' business days'); render(); afterDates(f0, 'the cooling-off changed'); };
     var task = function (el) { var id = el.closest('tr').getAttribute('data-tid'); return p.tasks.filter(function (t) { return t.id === id; })[0]; };
     B.querySelectorAll('tr[data-tid] [data-k]').forEach(function (el) {
       var k = el.getAttribute('data-k');
@@ -1055,14 +1092,15 @@
           else {
             var R0 = rollup(p, today()), ps = nextWork(p.start || today()), said = [], warn = false;
             if (v < ps) { said.push('A task can\'t start before the project start (' + dmy(ps) + ').'); warn = true; v = ps; }
-            else if (R0.finish && v > R0.finish) { said.push('A task can\'t start after the project finish (' + dmy(R0.finish) + '): make it longer, or change the project start, instead.'); warn = true; v = R0.finish; }
-            v = nextWork(v); if (R0.finish && v > R0.finish) v = R0.finish;
+            else if (R0.finish && v > R0.finish) said.push('Starts after the current finish (' + dmy(R0.finish) + '), so the project gets longer.');
+            v = nextWork(v);
             var gd = holdDate(p);
             if (gd && v < gd && gatedTasks(p).indexOf(t) >= 0) { said.push(gateOf(p).why === 'work' ? 'The work starts on ' + dmy(gd) + ' ("Work starts" date).' : 'Work can only start once the quote is accepted plus the ' + coolOf(p) + '-day cooling-off, so it starts ' + dmy(gd) + ' (tick Emergency to start straight away).'); warn = true; v = gd; }
             var probe = JSON.parse(JSON.stringify(p)), pt = probe.tasks.filter(function (x) { return x.id === t.id; })[0]; pt.snet = ''; pt.fixed = false; schedule(probe);
             t.snet = v; t.fixed = true;
             if (v < pt.es) said.push('Runs in parallel: starts ' + dmy(v) + ' instead of waiting for #' + (t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', #') + ' (' + dmy(pt.es) + '). Clear the date to follow "After #" again.');
             if (said.length) toast(said.join(' '), warn);
+            setTimeout(function () { afterDates(R0.finish, 'a task start date changed'); }, 50);
           }
         }
         else if (k === 'pred') { t.pred = el.value.split(/[,\s]+/).map(function (s) { return idOf[+s]; }).filter(function (id) { return id && id !== t.id; }); }

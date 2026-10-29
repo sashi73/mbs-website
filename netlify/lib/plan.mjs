@@ -1,5 +1,5 @@
 // MBS project planner (PMI style, waterfall): one plan per job, stored in Netlify Blobs as plan:<job core>.
-// Scheduling uses working days (Mon-Fri; emergency jobs also Sat and Sun). Tasks: duration, finish-to-start predecessors, "start no earlier than",
+// Scheduling uses working days (Mon-Fri; emergency jobs, and plans with "Weekends allowed" ticked, also Sat and Sun). Tasks: duration, finish-to-start predecessors, "start no earlier than",
 // resource, quantity x unit cost, actual cost, % complete. Plus charter (scope), risks, issues and a baseline.
 import * as kv from './kv.mjs';
 import * as J from './jobs.mjs';
@@ -20,7 +20,7 @@ const int = (n, lo, hi, d = lo) => { const v = Math.round(Number(n)); return Num
 const toD = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
 const toS = (d) => d.toISOString().slice(0, 10);
 const off = (d, all) => !all && [0, 6].includes(d.getUTCDay());   // a day off?
-export const allDays = (plan) => !!(plan && plan.emergency);
+export const allDays = (plan) => !!(plan && (plan.emergency || plan.weekends));   // v40: "Weekends (Sat, Sun) allowed"
 export const isWork = (s, all = false) => !off(toD(s), all);
 export function nextWork(s, all = false) { let d = toD(s); while (off(d, all)) d = new Date(d.getTime() + 86400000); return toS(d); }
 export function prevWork(s, all = false) { let d = new Date(toD(s).getTime() - 86400000); while (off(d, all)) d = new Date(d.getTime() - 86400000); return toS(d); }
@@ -151,7 +151,7 @@ function clean(p, core) {
   for (const t of tasks) t.pred = t.pred.filter((x) => tIds.has(x) && x !== t.id);
   const c = p.charter || {};
   return {
-    core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart), finishBy: ymdOk(p.finishBy), emergency: !!p.emergency, coolOff: int(p.coolOff, 0, 10, 3),
+    core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart), finishBy: ymdOk(p.finishBy), emergency: !!p.emergency, weekends: !!p.weekends, coolOff: int(p.coolOff, 0, 10, 3),
     charter: { objective: str(c.objective, 1500), inScope: str(c.inScope, 3000), outScope: str(c.outScope, 2000), deliverables: str(c.deliverables, 2000),
       acceptance: str(c.acceptance, 2000), assumptions: str(c.assumptions, 2000), notes: str(c.notes, 3000), budget: r2(c.budget), customer: str(c.customer, 120), manager: str(c.manager, 80) },
     phases, tasks,
@@ -304,7 +304,7 @@ export function privateOut(text, job = {}) {
 
 // ---------- ✨ AI builds a plan (runs in a background function, so it can take longer than a normal request) ----------
 const planCap = () => Math.max(800, Math.min(4000, Number(env('AI_PLAN_MAX_TOKENS', '3000')) || 3000));   // AI plan reply cap: default 3000, AI_PLAN_MAX_TOKENS 800-4000
-export async function buildAiPlan({ core, describe, scope, type, start, finish, emergency }, by) {
+export async function buildAiPlan({ core, describe, scope, type, start, finish, emergency, weekends }, by) {
   const job = core ? await J.find(core) : null;
   if (!job) return { error: 'Job not found' };
   const text = privateOut(str(describe, 1500) || str(scope, 1500), job);   // never send the customer's name, phone or email
@@ -313,7 +313,7 @@ export async function buildAiPlan({ core, describe, scope, type, start, finish, 
   try { await checkLimit(); } catch (e) { return { error: e.message }; }
   const system = 'You are an experienced NSW residential building and remedial project manager. Build a practical WATERFALL project plan for a small builder from the job description. ' +
     'Include: site inspection, quote accepted (milestone, 0 days), any approvals needed (council, strata, engineer), ordering materials with realistic lead times, the trade work in the right order (with sub-steps where useful), inspections/tests (e.g. flood test), clean-up, handover and invoice (milestone). ' +
-    'Days are working days (Monday to Friday; if emergency is true, every day counts, Saturday and Sunday included). "after" lists the task numbers (1-based) that must finish first. Sub-tasks must fit inside their task: [name, start offset in days from the task start, days]. ' +
+    'Days are working days (Monday to Friday; if emergency or weekends_allowed is true, every day counts, Saturday and Sunday included). "after" lists the task numbers (1-based) that must finish first. Sub-tasks must fit inside their task: [name, start offset in days from the task start, days]. ' +
     'Costs: qty, unit (h, m², L, lot, each) and a typical Sydney rate ex GST for labour or materials; use 0 if unsure. Do not invent council rules; say "check with council" where relevant. ' +
     'Also work out the SCOPE for this job: in_scope (the work included, as short "- " lines), out_of_scope (what is NOT included, to avoid arguments later), deliverables (e.g. certificates, photos, finished work), acceptance (how the customer knows it is done) and assumptions/constraints. ' +
     'And the RISKS specific to this job (4-6): [title, cause, probability 1-5, impact 1-5, response Avoid|Mitigate|Transfer|Accept, action]. Plus 3-6 short planning tips (lead times, permits, weather, inspections, access, safety). Keep every text short. ' +
@@ -322,8 +322,8 @@ export async function buildAiPlan({ core, describe, scope, type, start, finish, 
     'Set "emergency": true only if the description says it is an emergency or urgent (e.g. burst pipe, active leak doing damage, storm damage, "ASAP"). ' +
     'JSON only: {"emergency":false,"name":"short plan name","objective":"one sentence","in_scope":"","out_of_scope":"","deliverables":"","acceptance":"","assumptions":"","tips":[""],"tasks":[{"n":"","d":1,"after":[],"q":0,"u":"h","r":0,"s":[["",0,1]]}],"risks":[["","",3,3,"Mitigate",""]]}';
   const st = ymdOk(start) || new Date().toISOString().slice(0, 10), fin = ymdOk(finish);
-  const user = { job_type: str(type, 120), work: str(job.service, 120), suburb: str(job.suburb, 60), start_date: st, emergency: !!emergency, cooling_off_days: emergency ? 0 : 3, description: text };
-  if (fin && fin >= st) { user.finish_by = fin; user.working_days_available = workBetween(nextWork(st, !!emergency), fin, !!emergency); }
+  const user = { job_type: str(type, 120), work: str(job.service, 120), suburb: str(job.suburb, 60), start_date: st, emergency: !!emergency, weekends_allowed: !!weekends, cooling_off_days: emergency ? 0 : 3, description: text };
+  if (fin && fin >= st) { user.finish_by = fin; user.working_days_available = workBetween(nextWork(st, !!(emergency || weekends)), fin, !!(emergency || weekends)); }
   let o, used;
   try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: planCap(), timeoutMs: 150000, temperature: 0.3 })); }
   catch (e) { return { error: e.message }; }
@@ -438,10 +438,10 @@ export async function fitPlanAi({ core, finishBy }, by) {
     '(2) CRASH: shorten a task\'s days by adding crew or longer hours, and give extra_cost (ex GST, AUD) for the extra labour or overtime, 0 if none. ' +
     'Work on critical tasks (crit=true) first: changing tasks that are not critical does not move the finish. NEVER change tasks with locked=true (milestones, approvals and council/certifier/engineer/strata, ordering, lead times and deliveries, curing/drying/setting times, inspections and tests, work already started). ' +
     'Never make a task longer, never shorten a task below half its days, and keep the work order safe and sensible (for example waterproofing must cure and pass its flood test before tiling). ' +
-    'Days are ' + (A ? 'calendar days, Saturday and Sunday included (emergency job)' : 'working days, Monday to Friday') + '. If it truly cannot fit, do the best you can and set can_fit false with realistic_extra_days (days still late). ' +
+    'Days are ' + (A ? 'calendar days, Saturday and Sunday included (' + (plan.emergency ? 'emergency job' : 'weekend work allowed') + ')' : 'working days, Monday to Friday') + '. If it truly cannot fit, do the best you can and set can_fit false with realistic_extra_days (days still late). ' +
     'JSON only: {"changes":[{"id":"","d":0,"after":[""],"why":"short reason","extra_cost":0}],"can_fit":true,"realistic_extra_days":0,"summary":"two short sentences","risks":[["title","cause",3,3,"Mitigate","action"]],"tips":[""]}. ' +
     'List only the tasks you change; leave out "d" if the days stay the same and "after" if the links stay the same.';
-  const user = { plan: scrubTask(str(plan.name, 120), job), emergency: !!plan.emergency, start: R.start, current_finish: R.finish, finish_by: fb, days_late: late,
+  const user = { plan: scrubTask(str(plan.name, 120), job), emergency: !!plan.emergency, weekends_allowed: !!plan.weekends, start: R.start, current_finish: R.finish, finish_by: fb, days_late: late,
     working_days_available: workBetween(R.start, fb, A), tasks };
   let o, used;
   try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: 1800, timeoutMs: 150000, temperature: 0.2 })); }
@@ -471,12 +471,15 @@ export async function fitPlanAi({ core, finishBy }, by) {
     if (ch.durTo !== ch.durFrom || !sameAfter) changes.push(ch);
   }
   const R2 = rollup(q, today);
+  // weekdays only and still late: what would allowing weekends (Sat, Sun) on top of these changes give?
+  let weekend = null;
+  if (R2.finish > fb && !A) { const w = JSON.parse(JSON.stringify(q)); w.weekends = true; const Rw = rollup(w, today); weekend = { finish: Rw.finish, fits: Rw.finish <= fb, stillLate: Rw.finish > fb ? workBetween(fb, Rw.finish, true) - 1 : 0 }; }
   const num = Object.fromEntries(q.tasks.map((t, i) => [t.id, i + 1]));
   for (const c of changes) { c.num = num[c.id]; c.afterFromN = c.afterFrom.map((x) => num[x]).filter(Boolean); c.afterToN = c.afterTo.map((x) => num[x]).filter(Boolean); }
   const risks = (Array.isArray(o.risks) ? o.risks : []).slice(0, 5).map((r) => Array.isArray(r) ? { title: str(r[0], 160), cause: str(r[1], 300), p: int(r[2], 1, 5, 3), i: int(r[3], 1, 5, 3), response: RESP.includes(r[4]) ? r[4] : 'Mitigate', action: str(r[5], 300) } : null).filter((r) => r && r.title);
   return { fits: R2.finish <= fb, before: R.finish, after: R2.finish, finishBy: fb, late, stillLate: R2.finish > fb ? workBetween(fb, R2.finish, A) - 1 : 0, changes, refused,
     extraTotal: r2(changes.reduce((a, c) => a + c.extra, 0)), summary: str(o.summary, 500), tips: (Array.isArray(o.tips) ? o.tips : []).slice(0, 5).map((x) => str(x, 200)).filter(Boolean),
-    risks, critical: [...crit].map((id) => num[id]).filter(Boolean), rev: p0.rev || 0, tokens: used, today: todayUse };
+    risks, critical: [...crit].map((id) => num[id]).filter(Boolean), weekend, rev: p0.rev || 0, tokens: used, today: todayUse };
 }
 
 export async function planPost(action, body, { who, by, audit }) {
