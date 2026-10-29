@@ -935,7 +935,7 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues']];
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['stake', '👥 Stakeholders']];
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>' +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
       '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote" title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
@@ -971,7 +971,7 @@
         p.baseline = { at: Date.now(), finish: R.finish, BAC: R.BAC, tasks: tasks }; saveNow('baseline set'); toast('Baseline set'); render();
       });
     };
-    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues }[S.tab] || scheduleTab)(R);
+    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues, stake: stakeholders }[S.tab] || scheduleTab)(R);
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
@@ -1509,6 +1509,21 @@
     if (!(p.issues || []).length) is.getCell(5, 2).value = 'No issues logged.';
     footer(is, 7 + (p.issues || []).length);
 
+    /* 7b. v45: Stakeholders (RACI) */
+    var sk = wb.addWorksheet('Stakeholders', { views: [{ state: 'frozen', ySplit: 4 }] });
+    sk.columns = [6, 28, 26, 18, 18, 34].map(function (w) { return { width: w }; });
+    titleBlock(sk, 'Stakeholder list (RACI)', 6);
+    header(sk, 4, ['#', 'Name', 'Role', 'RACI', 'Contact number', 'Email']);
+    var raFill = { R: 'FFDBEAFE', A: 'FFFDE68A', C: 'FFDCFCE7', I: 'FFF1EEE6' };
+    (p.stakeholders || []).forEach(function (x, i) {
+      var r = sk.getRow(5 + i);
+      r.values = [i + 1, x.name, x.role, x.raci + ' – ' + RACI[x.raci][0], x.phone, x.email];
+      r.getCell(4).fill = fill(raFill[x.raci] || 'FFF1EEE6');
+      r.eachCell({ includeEmpty: true }, function (cc) { cc.border = box; cc.alignment = { vertical: 'top', wrapText: cc.col === 2 || cc.col === 3 }; });
+    });
+    if (!(p.stakeholders || []).length) sk.getCell(5, 2).value = 'No stakeholders listed.';
+    footer(sk, 7 + (p.stakeholders || []).length);
+
     /* 8. Materials from stock (only when tasks use stock items) */
     var by = {};
     p.tasks.forEach(function (t) { if (!t.item) return; var b = by[t.item] = by[t.item] || { need: 0, used: 0, tasks: [] }; if (t.status === 'done') b.used += Number(t.qty) || 0; else b.need += Number(t.qty) || 0; b.tasks.push(t.name); });
@@ -1664,6 +1679,52 @@
     $('#addIssue').onclick = function () { p.issues.push({ id: 'i' + Date.now().toString(36), title: '', detail: '', priority: 'Medium', owner: (p.charter || {}).manager || '', raised: today(), due: '', status: 'Open', resolution: '' }); dirty(); render(); var i = document.querySelectorAll('#planBody [data-x=title]'); if (i.length) i[i.length - 1].focus(); };
   }
 
+
+  /* ---------- v45: 👥 Stakeholders (RACI) ---------- */
+  var RACI = { R: ['Responsible', 'does the work'], A: ['Accountable', 'signs off, has the final say'], C: ['Consulted', 'asked before decisions'], I: ['Informed', 'kept up to date'] };
+  function stakeholders() {
+    var p = S.plan; p.stakeholders = p.stakeholders || [];
+    var L = p.stakeholders, n = { R: 0, A: 0, C: 0, I: 0 }; L.forEach(function (x) { n[x.raci] = (n[x.raci] || 0) + 1; });
+    var warn = !L.length ? '' : n.A === 0 ? '<p class="sk-warn">⚠ Nobody is <b>Accountable</b>. One person should sign off and have the final say.</p>'
+      : n.A > 1 ? '<p class="sk-warn">⚠ ' + n.A + ' people are <b>Accountable</b>. Usually only one person is, so decisions don\'t stall.</p>' : '';
+    var haveCust = L.some(function (x) { return S.job && x.name && x.name.toLowerCase() === String(S.job.name || '').toLowerCase(); });
+    var mgr = (p.charter || {}).manager || '', haveMgr = !mgr || L.some(function (x) { return x.name.toLowerCase() === mgr.toLowerCase(); });
+    $('#planBody').innerHTML = '<div class="card"><div class="card-h"><h2>Stakeholder list</h2><span class="sp"></span>' +
+        (S.job && !haveCust ? '<button class="btn btn-sm" id="skCust">＋ Add the customer</button> ' : '') + (!haveMgr ? '<button class="btn btn-sm" id="skMgr">＋ Add the project manager</button> ' : '') +
+        '<button class="btn btn-sm btn-gold" id="addStake">＋ Add stakeholder</button></div>' +
+      '<p class="muted" style="margin:-4px 0 10px">Everyone with a part in this job and what they do, using <b>RACI</b>: ' +
+        Object.keys(RACI).map(function (k) { return '<span class="raci raci-' + k + '">' + k + '</span> ' + RACI[k][0] + ' (' + RACI[k][1] + ')'; }).join(' · ') + '.</p>' +
+      (L.length ? '<div class="sk-sum">' + Object.keys(RACI).map(function (k) { return '<span><span class="raci raci-' + k + '">' + k + '</span> ' + RACI[k][0] + ': <b>' + n[k] + '</b></span>'; }).join('') + '</div>' + warn +
+        '<div class="table-wrap"><table class="rt sk"><thead><tr><th>#</th><th>Name</th><th>Role</th><th>RACI</th><th>Contact number</th><th>Email</th><th></th></tr></thead><tbody>' +
+        L.map(function (x, i) {
+          var tel = String(x.phone || '').replace(/[^\d+]/g, '');
+          return '<tr data-sid="' + esc(x.id) + '"><td class="muted">' + (i + 1) + '</td><td><input data-s="name" value="' + esc(x.name) + '" placeholder="Name" maxlength="120"></td>' +
+            '<td><input data-s="role" value="' + esc(x.role) + '" placeholder="e.g. Site supervisor" maxlength="120" list="skRoles"></td>' +
+            '<td><select data-s="raci" class="raci-sel raci-' + esc(x.raci) + '">' + Object.keys(RACI).map(function (k) { return '<option value="' + k + '"' + (x.raci === k ? ' selected' : '') + '>' + k + ' – ' + RACI[k][0] + '</option>'; }).join('') + '</select></td>' +
+            '<td><div class="sk-c"><input data-s="phone" type="tel" value="' + esc(x.phone) + '" placeholder="04xx xxx xxx" maxlength="40">' + (tel ? '<a class="btn btn-sm" href="tel:' + esc(tel) + '" title="Call">📞</a>' : '') + '</div></td>' +
+            '<td><div class="sk-c"><input data-s="email" type="email" value="' + esc(x.email) + '" placeholder="name@example.com" maxlength="160">' + (/@/.test(x.email || '') ? '<a class="btn btn-sm" href="mailto:' + esc(x.email) + '" title="Email">✉</a>' : '') + '</div></td>' +
+            '<td class="nowrap"><button class="btn btn-sm" data-sup title="Move up"' + (i ? '' : ' disabled') + '>↑</button> <button class="btn btn-sm" data-sdel title="Delete">✕</button></td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty">No stakeholders yet. Add the customer, the project manager, the trades and anyone who signs off or needs to be kept informed.</div>') +
+      '<datalist id="skRoles">' + ['Customer', 'Property owner', 'Project manager', 'Site supervisor', 'Builder', 'Carpenter', 'Electrician', 'Plumber', 'Tiler', 'Painter', 'Waterproofer', 'Certifier', 'Council', 'Strata manager', 'Tenant', 'Supplier', 'Insurer', 'Architect', 'Engineer'].map(function (r) { return '<option value="' + r + '">'; }).join('') + '</datalist>' +
+      '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Contact details stay in this plan. They are never sent to the AI.</p></div>';
+    var B = $('#planBody'), find = function (el) { var id = el.closest('tr').getAttribute('data-sid'); return L.filter(function (x) { return x.id === id; })[0]; };
+    B.querySelectorAll('tr[data-sid] [data-s]').forEach(function (el) {
+      var k = el.getAttribute('data-s'), live = el.tagName === 'INPUT';
+      el.addEventListener(live ? 'input' : 'change', function () { find(el)[k] = el.value; dirty(); if (!live) render(); });
+      if (k === 'phone' || k === 'email') el.addEventListener('input', function () {   // update the call / email button in place (no redraw, so focus stays)
+        var box = el.parentNode, a = box.querySelector('a'), v = el.value.trim(), href = k === 'phone' ? (v.replace(/[^\d+]/g, '') ? 'tel:' + v.replace(/[^\d+]/g, '') : '') : (/@/.test(v) ? 'mailto:' + v : '');
+        if (!href) { if (a) a.remove(); return; }
+        if (!a) { a = document.createElement('a'); a.className = 'btn btn-sm'; a.title = k === 'phone' ? 'Call' : 'Email'; a.textContent = k === 'phone' ? '📞' : '✉'; box.appendChild(a); }
+        a.href = href;
+      });
+    });
+    B.querySelectorAll('[data-sdel]').forEach(function (b) { b.onclick = function () { var x = find(b); p.stakeholders = L.filter(function (y) { return y !== x; }); dirty(); render(); }; });
+    B.querySelectorAll('[data-sup]').forEach(function (b) { b.onclick = function () { var i = L.indexOf(find(b)); if (i > 0) { L.splice(i - 1, 0, L.splice(i, 1)[0]); dirty(); render(); } }; });
+    var add = function (x) { L.push(Object.assign({ id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: '', role: '', raci: 'I', phone: '', email: '' }, x)); dirty(); render(); };
+    $('#addStake').onclick = function () { add({ raci: 'R' }); var i = document.querySelectorAll('#planBody [data-s=name]'); if (i.length) i[i.length - 1].focus(); };
+    if ($('#skCust')) $('#skCust').onclick = function () { add({ name: S.job.name || '', role: 'Customer', raci: 'C', phone: S.job.phone || '', email: S.job.email || '' }); };
+    if ($('#skMgr')) $('#skMgr').onclick = function () { add({ name: mgr, role: 'Project manager', raci: 'A' }); };
+  }
 
   /* ---------- ✨ Ask AI: possible resolutions for a risk or an issue (DeepSeek, token-capped) ---------- */
   S.advice = S.advice || {};

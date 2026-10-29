@@ -220,10 +220,11 @@
   function suppliersTab() {
     var d = S.data, list = d.suppliers.filter(function (s) { return S.showArchived || !s.archived; });
     var count = function (id) { return d.items.filter(function (i) { return !i.archived && (i.priceSupplier === id || i.preferred === id); }).length; };
-    $('#invBody').innerHTML = list.length ? '<div class="table-wrap"><table><thead><tr><th>Supplier</th><th>Contact</th><th>Phone</th><th>Email</th><th class="hide-sm">Supplies</th><th class="num">Items</th><th></th></tr></thead><tbody>' +
+    $('#invBody').innerHTML = list.length ? '<div class="table-wrap"><table><thead><tr><th>Supplier</th><th>Contact</th><th>Phone</th><th>Email</th><th>Address</th><th class="hide-sm">Supplies</th><th class="num">Items</th><th></th></tr></thead><tbody>' +
       list.map(function (s) {
         return '<tr data-sid="' + esc(s.id) + '"' + (s.archived ? ' class="tdone"' : '') + '><td><button class="linkish" data-sedit>' + esc(s.name) + '</button>' + (s.terms ? '<br><small class="muted">' + esc(s.terms) + '</small>' : '') + '</td><td>' + esc(s.contact || '') + '</td>' +
           '<td>' + (s.phone ? '<a href="tel:' + esc(s.phone.replace(/[^\d+]/g, '')) + '">' + esc(s.phone) + '</a>' : '') + '</td><td>' + (s.email ? '<a href="mailto:' + esc(s.email) + '">' + esc(s.email) + '</a>' : '') + '</td>' +
+          '<td class="sup-addr">' + (s.address ? '<a href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.address) + '" target="_blank" rel="noopener" title="Open in Google Maps">' + esc(s.address) + '</a>' : '<span class="muted">–</span>') + '</td>' +
           '<td class="hide-sm">' + esc(s.categories || '') + '</td><td class="num">' + count(s.id) + '</td><td><button class="btn btn-sm" data-sedit>Edit</button></td></tr>';
       }).join('') + '</tbody></table></div>' : '<div class="empty">No suppliers yet. Add one with “＋ Supplier”.</div>';
     $('#invBody').querySelectorAll('[data-sedit]').forEach(function (b) { b.onclick = function () { editSupplier(b.closest('tr').getAttribute('data-sid')); }; });

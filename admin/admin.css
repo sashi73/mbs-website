@@ -670,3 +670,12 @@ input.predoff{text-decoration:line-through;color:#A8A397}
 #invBody table.mini td.num{white-space:nowrap}
 #invBody .cmapside table.mini{font-size:13px}
 @media (max-width:700px){#invBody .grid.two{grid-template-columns:1fr}#invBody table.mini td.num{white-space:normal}#invBody table.mini td{overflow-wrap:anywhere}#invBody .grid.two>.card{overflow-x:auto}}
+/* v45: stakeholders (RACI) */
+.raci{display:inline-block;min-width:20px;padding:1px 6px;border-radius:6px;font-weight:800;font-size:12px;text-align:center}
+.raci-R{background:#DBEAFE;color:#1E40AF}.raci-A{background:#FDE68A;color:#854D0E}.raci-C{background:#DCFCE7;color:#166534}.raci-I{background:#F1EEE6;color:#57534E}
+select.raci-sel{font-weight:700;width:auto}
+.sk-sum{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;margin:0 0 8px}
+.sk-warn{background:#FFF7ED;border:1px solid #FED7AA;color:#9A3412;border-radius:8px;padding:6px 10px;font-size:13px;margin:0 0 10px}
+table.sk input{width:100%;min-width:120px}
+.sk-c{display:flex;gap:4px;align-items:center}.sk-c input{flex:1}
+#invBody td.sup-addr{max-width:240px;font-size:13px}

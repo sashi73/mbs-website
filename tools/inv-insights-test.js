@@ -123,6 +123,15 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     ok('Map', 'a bubble opens a popup with the top items used there', /of stock on/.test(await p.textContent('#imap')));
     await p.screenshot({ path: path.join(__dirname, 'shot44-map-usage.png') });
 
+    // v45: the supplier list has an Address column, also for suppliers saved before v45 (no address in the index)
+    const kv = await import(path.join(SITE, 'netlify/lib/kv.mjs'));
+    await kv.update('inv-index', (x) => { Object.values(x.suppliers).forEach((s) => { delete s.address; }); return x; });
+    await p.goto(`${BASE}/admin/#inventory/suppliers`); await p.reload(); await p.waitForSelector('#invBody table');
+    const hd = await p.$$eval('#invBody thead th', (x) => x.map((h) => h.textContent));
+    const addrs = await p.$$eval('#invBody td.sup-addr a', (x) => x.map((a) => a.textContent));
+    ok('Suppliers', 'the supplier list has an Address column after Email, filled in for older suppliers too, linking to Google Maps', hd.indexOf('Address') === hd.indexOf('Email') + 1 && addrs.length === 50 && addrs.every((a) => /NSW 2\d{3}$/.test(a)) && /google\.com\/maps/.test(await p.getAttribute('#invBody td.sup-addr a', 'href')), hd.join('|') + ' ' + addrs.length);
+    await p.screenshot({ path: path.join(__dirname, 'shot45-suppliers.png') });
+
     // the existing tabs still work
     await p.click('[data-itab="items"]'); await p.waitForSelector('#invBody table');
     ok('Tabs', 'Stock items still lists the stock', (await p.$$eval('#invBody tbody tr', (x) => x.length)) >= 50);

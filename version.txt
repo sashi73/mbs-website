@@ -1,2 +1,3 @@
-MBS website v44 (2026-10-30)
-Inventory (test site): new 📊 Insights tab (stock value, use per month, running low with days left, fast movers, dead and over-stock, cheaper suppliers, quotes ending, orders, supplier ranking, and a ✨ AI analysis) and a 🗺 Map tab (suppliers by suburb sized by use, and where stock is used on jobs). Test data: 50 suppliers and 150 stock items with six months of movements, loaded with deploy\load-test-data.ps1 (-What inventory).
+MBS website v45 (2026-10-30)
+Project plan: a 👥 Stakeholders tab after Issues, using RACI: Name, Role, RACI (Responsible, Accountable, Consulted, Informed), Contact number and Email, with call and email buttons, "Add the customer" (from the job) and "Add the project manager", a warning when nobody or more than one person is Accountable, and a Stakeholders sheet in the Excel export. Contact details are never sent to the AI.
+Inventory: the supplier list has an Address column (opens Google Maps).

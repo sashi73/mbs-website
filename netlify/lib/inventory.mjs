@@ -32,7 +32,7 @@ function cleanSupplier(f, cur = {}) {
     website: str(f.website, 160), address: str(f.address, 200), abn: str(f.abn, 20), account: str(f.account, 60), terms: str(f.terms, 80),
     categories: str(f.categories, 200), notes: str(f.notes, 1000), archived: !!f.archived };
 }
-const supSummary = (s) => ({ id: s.id, name: s.name, contact: s.contact, phone: s.phone, email: s.email, categories: s.categories, terms: s.terms, archived: !!s.archived });
+const supSummary = (s) => ({ id: s.id, name: s.name, contact: s.contact, phone: s.phone, email: s.email, address: s.address || '', categories: s.categories, terms: s.terms, archived: !!s.archived });
 export async function saveSupplier(f, by) {
   if (!str(f.name, 120)) return { error: 'Give the supplier a name' };
   if (f.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(str(f.email, 160))) return { error: 'That email address does not look right' };
@@ -272,7 +272,13 @@ export async function sendReorder(id, f, by) {
 
 // ---------- lists for the console and the SQL wizard ----------
 export async function list() {
-  const idx = await index();
+  let idx = await index();
+  // v45: the supplier list shows the address. Suppliers saved before v45 have none in the index: fill it in once.
+  const old = Object.values(idx.suppliers || {}).filter((s) => !('address' in s)).map((s) => s.id);
+  if (old.length) {
+    const full = (await kv.getMany(old.map((id) => 'sup:' + id))).filter(Boolean);
+    idx = await kv.update('inv-index', (x) => { x.suppliers = x.suppliers || {}; full.forEach((s) => { if (x.suppliers[s.id]) x.suppliers[s.id] = supSummary(s); }); return x; }, () => ({ items: {}, suppliers: {} }));
+  }
   return { items: Object.values(idx.items || {}).sort((a, b) => (a.name > b.name ? 1 : -1)), suppliers: Object.values(idx.suppliers || {}).sort((a, b) => (a.name > b.name ? 1 : -1)), units: UNITS };
 }
 export async function full() {

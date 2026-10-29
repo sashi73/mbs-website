@@ -91,7 +91,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Excel', 'the "⬇ Excel" button downloads MBS-plan-<job>-<date>.xlsx', /^MBS-plan-.+-\d{4}-\d{2}-\d{2}\.xlsx$/.test(dl.suggestedFilename()) && fs.statSync(file).size > 8000, dl.suggestedFilename());
     const wb = new ExcelJS.Workbook(); await wb.xlsx.readFile(file);
     const names = wb.worksheets.map((w) => w.name);
-    ok('Excel', 'tabs: Overview, Schedule, Gantt, Board, Scope, Risks, Issues, Materials', JSON.stringify(names) === JSON.stringify(['Overview', 'Schedule', 'Gantt', 'Board', 'Scope', 'Risks', 'Issues', 'Materials']), names.join(','));
+    ok('Excel', 'tabs: Overview, Schedule, Gantt, Board, Scope, Risks, Issues, Stakeholders, Materials', JSON.stringify(names) === JSON.stringify(['Overview', 'Schedule', 'Gantt', 'Board', 'Scope', 'Risks', 'Issues', 'Stakeholders', 'Materials']), names.join(','));
     const ov = wb.getWorksheet('Overview');
     ok('Overview', 'overview has scope / time / cost status with colours and the earned-value table', ov.getCell('A5').value === 'Scope: % complete' && ov.getCell('B5').numFmt === '0%' && /Budget at completion/.test(ov.getCell('A12').value) && ov.getCell('B12').value === 8580 && ov.getCell('A5').fill.fgColor.argb);
     const sc = wb.getWorksheet('Schedule');
