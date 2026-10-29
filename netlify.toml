@@ -1,6 +1,8 @@
 # Netlify settings for the MBS website
 [build]
   publish = "."
+  # Does nothing on the live site. On the test site (SITE_ENV = test) it adds the TEST badge and blocks Google.
+  command = "node tools/site-env.mjs"
   functions = "netlify/functions"
 
 [functions]
@@ -81,6 +83,11 @@
   force = true
 [[redirects]]
   from = "/.git*"
+  to = "/404.html"
+  status = 404
+  force = true
+[[redirects]]
+  from = "/TEST-SITE-SETUP.txt"
   to = "/404.html"
   status = 404
   force = true

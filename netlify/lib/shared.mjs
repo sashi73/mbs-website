@@ -6,6 +6,9 @@ export const env = (name, fallback = '') => {
   return v === undefined || v === '' ? fallback : v;
 };
 
+// The test copy of the website (SITE_ENV = test in Netlify). Production never sets it.
+export const isTestSite = () => env('SITE_ENV').trim().toLowerCase() === 'test';
+
 export const BUSINESS = {
   name: 'Modern Building Solutions (MBS)',
   phone: '0420 494 990',
@@ -252,7 +255,7 @@ export async function writeBrief(lead, extra = {}) {
 
 // Strip any "thinking" text some models include, so customers only see the answer.
 // Removes tired stock phrases from Mr. Fixit's answers, whatever the AI writes.
-export const SITE_VERSION = 'v31';
+export const SITE_VERSION = 'v32b';
 export function humanise(text) {
   let t = String(text || '');
   const swap = [
@@ -326,7 +329,7 @@ export async function sendTelegramTo(chatId, text, extra = {}) {
     const r = await fetch(`${base}/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, ...extra })
+      body: JSON.stringify({ chat_id: chatId, text: isTestSite() ? '🧪 <b>TEST</b>\n' + text : text, parse_mode: 'HTML', disable_web_page_preview: true, ...extra })
     });
     if (r.ok) return { ok: true, status: r.status };
     const j = await r.json().catch(() => ({}));
@@ -341,6 +344,7 @@ export async function sendTelegramPhotosTo(chatId, photos, caption = '') {
   const token = env('TELEGRAM_BOT_TOKEN');
   if (!photos.length) return { ok: true, skipped: true };
   if (!token || !chatId) return { ok: false, reason: 'Telegram is not set up' };
+  if (isTestSite()) caption = '🧪 TEST ' + caption;
   const base = env('TELEGRAM_API_BASE', 'https://api.telegram.org');
   try {
     const fd = new FormData();
@@ -381,7 +385,14 @@ export async function sendEmail({ subject, html, text, replyTo, to: toOverride, 
   const key = env('RESEND_API_KEY');
   // Temporary default while testing: chat enquiries go to Sashi. Set OWNER_EMAIL in .env to change it.
   // toOverride is used only for the customer's own copy of their conversation.
-  const to = toOverride || env('OWNER_EMAIL', 'sashi1973@gmail.com');
+  let to = toOverride || env('OWNER_EMAIL', 'sashi1973@gmail.com');
+  // Test site: every email goes to the owner only, never to a customer, and says so in the subject
+  if (isTestSite()) {
+    const owner = env('OWNER_EMAIL', 'sashi1973@gmail.com');
+    const meant = to.split(',').map((x) => x.trim()).filter(Boolean).filter((x) => !owner.split(',').map((y) => y.trim().toLowerCase()).includes(x.toLowerCase()));
+    subject = '[TEST] ' + (subject || '') + (meant.length ? ` (would have gone to ${meant.join(', ')})` : '');
+    to = owner; bcc = '';
+  }
   const from = env('FROM_EMAIL', 'MBS Website <onboarding@resend.dev>');
   if (!key || !to) return { ok: false, skipped: true, reason: 'Email is not set up (add RESEND_API_KEY to .env)' };
   const base = env('RESEND_API_BASE', 'https://api.resend.com');

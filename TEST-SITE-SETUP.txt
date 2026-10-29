@@ -1,0 +1,210 @@
+MBS TEST SITE - step-by-step setup (once, about 30 minutes)
+==========================================================
+            Website                              Branch              Folder on your PC                  Claude chat
+LIVE (Prod) https://mbsplc.com.au                MBS-FixIT-ver-21    C:\Workzone\2026\MBSFIXITVER21    the Prod chat
+TEST        https://mbs-fixit-test.netlify.app   MBS-FixIT-test      C:\Workzone\2026\FIXITVER1        the Test chat
+
+Each folder stays on its own branch. You never switch branches by hand.
+
+Same code on both. Only the Netlify settings differ:
+- The test site has its own storage: customers, jobs, quotes and invoices there never touch the live site.
+- Every email from the test site goes only to sashi1973@gmail.com with [TEST] in the subject. Even an email meant for
+  a customer comes to you instead, and the subject says who it would have gone to.
+- Telegram alerts come from your test bot TestFixIT, marked 🧪 TEST.
+- Every page shows an orange "TEST SITE" badge, and Google is told not to list the test site.
+
+Golden rule: tokens, API keys, passwords and secrets only ever go into Netlify. Never into chat, GitHub, email or files.
+
+
+BEFORE YOU START - have these open
+----------------------------------
+- app.netlify.com        (logged in)
+- github.com             (logged in)
+- resend.com             (logged in)
+- platform.deepseek.com  (logged in)
+- Telegram on your phone or PC
+- PowerShell on your PC
+- A second browser tab with the LIVE site's settings:
+  Netlify > live site > Project configuration > Environment variables  (to copy values from)
+
+
+STEP 1 - GitHub and your two folders (PowerShell, one line at a time)
+----------------------------------------------------------------------
+1a. Put v32b on the live branch, in the PROD folder (it changes nothing on the live site):
+
+   cd C:\Workzone\2026\MBSFIXITVER21
+   git branch --show-current            <- must say MBS-FixIT-ver-21
+   Expand-Archive -Path "$env:USERPROFILE\Downloads\MBS_Website_v32b.zip" -DestinationPath "$env:TEMP\mbs32b" -Force
+   Copy-Item -Path "$env:TEMP\mbs32b\MBS_Website_v32b\*" -Destination . -Recurse -Force
+   git add -A
+   git commit -m "v32b: test site switch and deploy scripts"
+   git push origin MBS-FixIT-ver-21
+
+1b. Make the test branch on GitHub WITHOUT leaving the live branch:
+
+   git branch MBS-FixIT-test
+   git push origin MBS-FixIT-test
+   git branch --show-current            <- still says MBS-FixIT-ver-21
+
+1c. Make the TEST folder. git makes the folder itself, so if C:\Workzone\2026\FIXITVER1 already exists,
+    move it out of the way first (skip the Rename-Item line if it doesn't exist):
+
+   cd C:\Workzone\2026
+   Rename-Item C:\Workzone\2026\FIXITVER1 FIXITVER1_old
+   git clone -b MBS-FixIT-test (git -C C:\Workzone\2026\MBSFIXITVER21 remote get-url origin) FIXITVER1
+   cd C:\Workzone\2026\FIXITVER1
+   git branch --show-current            <- says MBS-FixIT-test
+
+Check on GitHub: your repository's branch drop-down (top left) lists MBS-FixIT-test.
+Nothing else to do on GitHub. Netlify already has access to this repository.
+(If you had copied any .env file into the old FIXITVER1, don't copy it into the new one: settings live in Netlify.)
+
+
+STEP 2 - Telegram: make the TestFixIT bot
+-----------------------------------------
+1. In Telegram, search @BotFather (blue tick) and open it. Send:   /newbot
+2. It asks for a name. Send:   TestFixIT
+3. It asks for a username; it must end in "bot". Send:   TestFixIT_bot
+   (if taken, try MBS_TestFixIT_bot or TestFixIT_MBS_bot)
+4. BotFather replies with a token like 123456789:AAH... Leave that message there; you'll copy it in step 5.
+   Don't copy it anywhere else.
+5. Tap the link to your new bot (t.me/TestFixIT_bot) and press START.
+   (A bot can't message you until you press Start.)
+6. Your own Telegram ID: search @userinfobot, press Start; it replies "Id: 123456789". Note the number.
+   (It is the same number as in the live site's TELEGRAM_ALLOWED_IDS.)
+
+
+STEP 3 - Resend (email): a separate key for the test site
+---------------------------------------------------------
+1. resend.com > API Keys > Create API Key
+2. Name:        MBS test site
+   Permission:  Sending access
+   Domain:      the same domain the live site sends from (or All domains)
+3. Click Add. The key (re_...) is shown ONCE. Leave the window open; you'll paste it in step 5.
+   (If you'd rather, you can use the same key as the live site. A separate key lets you switch the test site off
+   on its own: delete the key and only the test site stops sending.)
+Note: if the live FROM_EMAIL is onboarding@resend.dev, Resend only delivers to the email you signed up to Resend
+with. That's fine here, because the test site only emails you.
+
+
+STEP 4 - DeepSeek (the AI and Mr. Fixit)
+----------------------------------------
+Simplest: use the same key as the live site (copy LLM_API_KEY from the live settings).
+Optional: platform.deepseek.com > API keys > Create new API key > name "MBS test". Both keys draw on the same
+balance; a separate key just shows the test usage on its own.
+
+
+STEP 5 - Netlify: make the test site
+------------------------------------
+A. Create it
+   1. app.netlify.com > Add new project (older screens: Add new site) > Import an existing project
+   2. Choose GitHub, then pick the same repository as the live site.
+   3. Branch to deploy:   MBS-FixIT-test
+      Build command and Publish directory fill themselves in from netlify.toml
+      (node tools/site-env.mjs  and  .). Leave them.
+   4. Click Deploy. This first deploy has no settings yet; that's fine.
+
+B. Give it its name
+   Project configuration > General > Project details > Change project name:   mbs-fixit-test
+   Your address is now  https://mbs-fixit-test.netlify.app
+   (If that name is taken, choose another and use your address everywhere below.)
+
+C. Make two secrets with PowerShell (they go to the clipboard, not the screen)
+   cd C:\Workzone\2026\FIXITVER1
+   powershell -ExecutionPolicy Bypass -File .\deploy\make-secret.ps1
+   -> paste it straight into TELEGRAM_WEBHOOK_SECRET (below) AND into a private note for step 6.
+   Run it again for ADMIN_SESSION_SECRET.
+
+D. Settings: Project configuration > Environment variables > Add a variable > Add a single variable.
+   Type the Key, paste the Value, tick "Contains secret values" for keys/passwords, then Create variable.
+   Do NOT use "Import from a .env file".
+
+   Key                        Value
+   -------------------------  -----------------------------------------------------------
+   SITE_ENV                   test
+   OWNER_EMAIL                sashi1973@gmail.com
+   PUBLIC_WEBSITE             mbs-fixit-test.netlify.app
+   TELEGRAM_BOT_TOKEN         the TestFixIT token from BotFather (step 2)          [secret]
+   TELEGRAM_WEBHOOK_SECRET    the secret from make-secret.ps1 (C)                  [secret]
+   TELEGRAM_CHAT_ID           your Telegram ID (step 2.6)
+   TELEGRAM_ALLOWED_IDS       your Telegram ID (step 2.6)
+   ADMIN_USERNAME             a test login name (best different from live)
+   ADMIN_PASSWORD             a test password (best different from live)           [secret]
+   ADMIN_SESSION_SECRET       the second secret from make-secret.ps1 (C)           [secret]
+   RESEND_API_KEY             the new Resend key (step 3)                          [secret]
+   FROM_EMAIL                 copy from live
+   LLM_API_KEY                copy from live, or the new DeepSeek key (step 4)     [secret]
+
+   Copy from live too, if the live site has them:
+   ALLOWED_ORIGIN             set to  https://mbs-fixit-test.netlify.app   (NOT the live address)
+   LLM_BASE_URL, LLM_MODEL, AI_PLAN_MAX_TOKENS and the other AI_... settings
+   BUSINESS_ABN, BUSINESS_ADDRESS, BUSINESS_LEGAL_NAME, BUILDER_LICENCE, BUSINESS_SLOGAN,
+   BANK_ACCOUNT_NAME, BANK_BSB, BANK_ACCOUNT_NUMBER, PUBLIC_CONTACT_EMAIL, PUBLIC_PHONE
+   AZURE_SPEECH_KEY, AZURE_SPEECH_REGION   (only if you want the voice on the test site)
+   Optional:  WEEKLY_REPORT = off   (no Monday report from the test site)
+
+   NEVER copy these from live: TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, TELEGRAM_ALERT_IDS.
+   If both sites used the same bot, the test site would take over the live bot.
+
+E. Deploy with the settings
+   Deploys > Trigger deploy > Clear cache and deploy project (older: Clear cache and deploy site).
+   Wait for Published. Click the deploy and open the log: it shows
+      site-env: TEST site, 7 pages marked, search engines blocked
+
+
+STEP 6 - Connect TestFixIT to the test site
+-------------------------------------------
+In your browser, open (TEST address, then your NEW webhook secret from the private note):
+
+   https://mbs-fixit-test.netlify.app/.netlify/functions/telegram?setup=YOUR-NEW-SECRET
+
+It says "Telegram bot connected", and TestFixIT messages you "MBS job tracker is connected".
+Never open the live address with the test secret, or the test address with the live secret.
+Then delete the private note with the secret.
+
+
+STEP 7 - Check everything
+-------------------------
+[ ] https://mbs-fixit-test.netlify.app : orange "TEST SITE" badge at the top, tab title starts "TEST ·"
+[ ] Leave a test enquiry with Mr. Fixit (any name, your own phone):
+    - email arrives at sashi1973@gmail.com with [TEST] in the subject
+    - TestFixIT (not the live bot) sends the alert, marked 🧪 TEST
+[ ] In TestFixIT send /help: the command list appears
+[ ] https://mbs-fixit-test.netlify.app/admin/ : log in with the TEST login. Footer says v32b. It starts empty.
+[ ] https://mbsplc.com.au : no badge, footer v32b, the live bot still works
+
+
+EVERY NEW VERSION FROM NOW ON (PowerShell)
+------------------------------------------
+Version numbers: the Test chat makes new features (v33, v34, ...). The Prod chat only makes urgent live fixes,
+numbered with a letter (v32c, v32d, ...), so the two never use the same number.
+
+NEW FEATURE (Test chat)
+1. Download MBS_Website_vXX.zip to Downloads.
+2. Put it on the TEST site, from the TEST folder:
+   cd C:\Workzone\2026\FIXITVER1
+   powershell -ExecutionPolicy Bypass -File .\deploy\push-to-test.ps1 -Version v33 -Message "what changed"
+   -> wait 1-2 minutes, open https://mbs-fixit-test.netlify.app, Ctrl+F5, try it.
+3. Happy with it? Send it LIVE, from the PROD folder:
+   cd C:\Workzone\2026\MBSFIXITVER21
+   powershell -ExecutionPolicy Bypass -File .\deploy\go-live.ps1
+   -> it shows the test version and asks you to type LIVE. The PROD folder stays on the live branch.
+
+URGENT LIVE FIX (Prod chat), the same 6 lines as always, in the PROD folder:
+   cd C:\Workzone\2026\MBSFIXITVER21
+   Expand-Archive -Path "$env:USERPROFILE\Downloads\MBS_Website_v32c.zip" -DestinationPath "$env:TEMP\mbs32c" -Force
+   Copy-Item -Path "$env:TEMP\mbs32c\MBS_Website_v32c\*" -Destination . -Recurse -Force
+   git add -A
+   git commit -m "v32c: ..."
+   git push origin MBS-FixIT-ver-21
+Then bring that fix into TEST too, so the next test version doesn't undo it:
+   cd C:\Workzone\2026\FIXITVER1
+   powershell -ExecutionPolicy Bypass -File .\deploy\sync-test-from-live.ps1
+
+Good to know
+- Which branch is this folder on?   git branch --show-current
+  PROD folder = MBS-FixIT-ver-21, TEST folder = MBS-FixIT-test. Always.
+- The scripts refuse to run if a folder is on the wrong branch or has changes that aren't committed.
+- If go-live or sync says there is a clash (conflict), it undoes the merge and pushes nothing: ask in chat.
+- To pause the test site: Netlify > test site > Project configuration > Build & deploy > Continuous deployment > Stop builds.
+  To stop its email, delete the "MBS test site" key in Resend.
