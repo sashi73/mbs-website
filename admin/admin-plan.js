@@ -790,7 +790,7 @@
       '<div id="planChain"></div>' +
       '<div class="grid pkpis">' +
         mini('Scope', R.pct + '% complete', R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8)) +
-        mini('Time', 'Finish ' + prettyY(R.finish), (R.SPI == null ? 'not started' : 'SPI ' + R.SPI) + (R.late.length ? ' · ' + R.late.length + ' late' : '') + (p.baseline && p.baseline.finish && R.finish ? ' · ' + varDays(p.baseline.finish, R.finish) : ''), R.late.length ? 'red' : evRag(R.SPI)) +
+        timeCard(p, R) +
         mini('Cost', money(R.AC) + ' of ' + money(R.BAC), (R.CPI == null ? 'no actual costs yet' : 'CPI ' + R.CPI + ' · forecast ' + money(R.EAC)), evRag(R.CPI)) +
         mini('Risks & issues', pl((p.risks || []).filter(function (r) { return r.status !== 'Closed'; }).length, 'risk') + ' · ' + pl((p.issues || []).filter(function (x) { return x.status !== 'Resolved'; }).length, 'issue'), pl((p.risks || []).filter(function (r) { return r.status !== 'Closed' && r.p * r.i >= 12; }).length, 'high risk'), (p.risks || []).some(function (r) { return r.status !== 'Closed' && r.p * r.i >= 15; }) ? 'red' : (p.issues || []).some(function (x) { return x.status !== 'Resolved' && /High|Critical/.test(x.priority); }) ? 'amber' : 'green') +
       '</div>' +
@@ -823,6 +823,16 @@
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
+  // Time card: Start, Finish and Duration in plain words, with the progress status underneath
+  function timeCard(p, R) {
+    var c = R.late.length ? 'red' : evRag(R.SPI), n = R.start && R.finish ? workBetween(R.start, R.finish) : 0;
+    var wk = n >= 10 ? ' (about ' + pl(Math.round(n / (p.emergency ? 7 : 5)), 'week') + ')' : '';
+    var row = function (k, v) { return '<dt>' + esc(k) + '</dt><dd>' + esc(v || '-') + '</dd>'; };
+    var s = (R.SPI == null ? 'not started' : 'SPI ' + R.SPI) + (R.late.length ? ' · ' + R.late.length + ' late' : '') + (p.baseline && p.baseline.finish && R.finish ? ' · ' + varDays(p.baseline.finish, R.finish) : '');
+    return '<div class="card kpi rag-card rag-b-' + c + '"><div class="k">Time <span class="dot dot-' + c + '"></span></div>' +
+      '<dl class="tdl">' + row('Start', prettyY(R.start)) + row('Finish', prettyY(R.finish)) + row('Duration', n ? p.emergency ? pl(n, 'day') + ' (weekends included)' : pl(n, 'working day') + wk : '') + '</dl>' +
+      '<div class="s">' + esc(s) + '</div></div>';
+  }
   function mini(k, v, s, c) { return '<div class="card kpi rag-card rag-b-' + (c || 'grey') + '"><div class="k">' + esc(k) + ' <span class="dot dot-' + (c || 'grey') + '"></span></div><div class="v" style="font-size:20px">' + esc(v) + '</div><div class="s">' + esc(s) + '</div></div>'; }
   function ordered() {   // tasks in order, with their row numbers (like Microsoft Project's ID column)
     return S.plan.tasks.map(function (t, i) { return { t: t, n: i + 1 }; });
