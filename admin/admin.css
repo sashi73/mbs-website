@@ -702,3 +702,24 @@ table.sk input{width:100%;min-width:120px}
 tr.sq-exp td{background:#FFF5F2}
 /* v51: keys in the table list */
 .chipd.kpk{background:#FDE68A;color:#713F12;border-color:#E8C04A}.chipd.kfk{background:#E0F2FE;color:#075985;border-color:#BAE6FD}
+/* v52: Project Intelligence */
+.pi-wrap{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+@media (max-width:1100px){.pi-wrap{grid-template-columns:minmax(0,1fr)}}
+.pi-main,.pi-side{min-width:0}.pi-mform{grid-template-columns:2fr 1fr 1fr 1fr}
+@media (max-width:700px){.pi-mform{grid-template-columns:1fr 1fr}.pi-mform>label:first-child{grid-column:1/-1}.pi-ask{flex-direction:column}}
+.pi-ask{display:flex;gap:8px;align-items:stretch}.pi-ask textarea{flex:1;resize:vertical;min-height:52px}
+.pi-ex{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+.pi-chip{border:1px solid var(--line);background:#FBF8EF;border-radius:99px;padding:4px 11px;font-size:12.5px;cursor:pointer;text-align:left}.pi-chip:hover{border-color:#C9A227}
+.pi-a{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:12px;background:#fff}
+.pi-q{font-weight:700;font-style:italic;color:#4A473F;margin-bottom:6px}
+.pi-md p{margin:0 0 8px}.pi-md h4{margin:12px 0 6px;font-size:15px}.pi-md ul,.pi-md ol{margin:0 0 8px;padding-left:20px}.pi-md li{margin:2px 0}
+.pi-md code{background:#F3F1EA;border-radius:4px;padding:0 4px}
+table.pi-tbl{font-size:13px;margin:6px 0 10px}table.pi-tbl th{font-size:11.5px}table.pi-tbl td{vertical-align:top}
+.pi-act{border-top:1px dashed var(--line);margin-top:10px;padding-top:10px}.pi-act h4{margin:0 0 6px;font-size:14px}
+.pi-crit{color:#B42318;font-weight:800;white-space:nowrap}
+.pi-who{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px}
+.pi-src{font-size:12.5px;color:#6B675E;margin:8px 0 4px}
+.pi-docs,.pi-meets{list-style:none;margin:0;padding:0}
+.pi-docs li{display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}.pi-docs li:first-child{border-top:0}
+.pi-docs b{font-size:13.5px;word-break:break-word}.pi-dk{font-size:20px}
+.pi-meets li{padding:8px 0;border-top:1px solid var(--line)}.pi-meets li:first-child{border-top:0}

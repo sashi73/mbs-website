@@ -935,7 +935,7 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['stake', '👥 Stakeholders']];
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['stake', '👥 Stakeholders'], ['intel', '🧠 Project Intelligence']];
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>' +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
       '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote" title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
@@ -971,7 +971,7 @@
         p.baseline = { at: Date.now(), finish: R.finish, BAC: R.BAC, tasks: tasks }; saveNow('baseline set'); toast('Baseline set'); render();
       });
     };
-    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues, stake: stakeholders }[S.tab] || scheduleTab)(R);
+    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues, stake: stakeholders, intel: intelTab }[S.tab] || scheduleTab)(R);
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
@@ -1735,6 +1735,201 @@
     };
     if (M.subs && !S.subsLoaded) { S.subsLoaded = true; M.subs.load().then(function () { if (S.tab === 'stake' && $('#skSub')) render(); }).catch(function () {}); }
     if ($('#skMgr')) $('#skMgr').onclick = function () { add({ name: mgr, role: 'Project manager', raci: 'A' }); };
+  }
+
+  /* ---------- v52: 🧠 Project Intelligence ---------- */
+  // Ask anything about this project. The AI answers from the plan and the documents uploaded here (contract, specs ...),
+  // can suggest risks and a stakeholder register, and set up a team meeting (Google Calendar invite with Google Meet, .ics).
+  var PI_EX = ['Work out the critical and non-critical risks for this project', 'What would a stakeholder register look like for this project?',
+    'Summarise the contract: price, payment stages, variations, defects period and delays', 'What could delay the finish date, and what should we do this week?',
+    'Set up a 45-minute Google Meet with the stakeholders next Tuesday at 10am to review progress'];
+  var PI_KIND = { Contract: '📜', Specification: '📐', Quote: '💲', Variation: '🔁', Drawings: '🗺', Invoice: '🧾', Certificate: '✅', 'Meeting notes': '🗒', Correspondence: '✉', Document: '📄' };
+  function piLoad(src, test) { return test() ? Promise.resolve() : new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = function () { rej(new Error('Could not load ' + src)); }; document.head.appendChild(s); }); }
+  function piMd(s) {   // small, safe markdown: escaped first, then headings, bullets, tables, bold, code
+    var L = esc(String(s || '')).split('\n'), out = [], list = null, tbl = null;
+    var inl = function (x) { return x.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>'); };
+    var close = function () { if (list) { out.push('</' + list + '>'); list = null; } if (tbl) { out.push(piTable(tbl)); tbl = null; } };
+    L.forEach(function (ln) {
+      var x = ln.trim(), m;
+      if (/^\|.*\|$/.test(x)) { if (list) { out.push('</' + list + '>'); list = null; } (tbl = tbl || []).push(x); return; }
+      if (tbl) { out.push(piTable(tbl)); tbl = null; }
+      if ((m = x.match(/^#{1,4}\s+(.*)$/))) { close(); out.push('<h4>' + inl(m[1]) + '</h4>'); return; }
+      if ((m = x.match(/^[-*•]\s+(.*)$/))) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push('<li>' + inl(m[1]) + '</li>'); return; }
+      if ((m = x.match(/^\d+[.)]\s+(.*)$/))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push('<li>' + inl(m[1]) + '</li>'); return; }
+      close(); if (x) out.push('<p>' + inl(x) + '</p>');
+    });
+    close(); return out.join('');
+  }
+  function piTable(rows) {
+    var cells = function (r) { return r.replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim().replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); }); };
+    rows = rows.filter(function (r) { return !/^\|[\s:|-]+\|$/.test(r); });
+    if (!rows.length) return '';
+    return '<div class="table-wrap"><table class="pi-tbl"><thead><tr>' + cells(rows[0]).map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      rows.slice(1).map(function (r) { return '<tr>' + cells(r).map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+  }
+  // meeting times: Sydney local -> UTC for the .ics file
+  function piUtc(date, hm) {
+    var a = date.split('-').map(Number), b = hm.split(':').map(Number), guess = Date.UTC(a[0], a[1] - 1, a[2], b[0], b[1]);
+    var f = function (ms) { var o = {}; new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(ms)).forEach(function (q) { o[q.type] = q.value; }); return Date.UTC(+o.year, +o.month - 1, +o.day, +o.hour, +o.minute); };
+    var off = f(guess) - guess; return new Date(guess - off);
+  }
+  function piStamp(d) { return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''); }
+  function piLocal(date, hm, plus) { var a = date.split('-').map(Number), b = hm.split(':').map(Number), d = new Date(Date.UTC(a[0], a[1] - 1, a[2], b[0], b[1] + (plus || 0))); return d.toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', 'T') + '00'; }
+  function piPeople(ids) { return (S.plan.stakeholders || []).filter(function (x) { return ids.indexOf(x.id) >= 0; }); }
+  function piMeetLinks(m) {
+    var who = piPeople(m.attendees), emails = who.map(function (x) { return x.email; }).filter(function (e) { return /@/.test(e || ''); });
+    var details = (m.agenda ? 'Agenda:\n' + m.agenda.split('\n').map(function (x) { return '- ' + x; }).join('\n') + '\n\n' : '') + 'Project: ' + S.plan.name + ' (' + S.job.ref + ')\nGoogle Meet: the video link is added by Google Calendar.' + (m.link ? '\nJoin: ' + m.link : '');
+    var g = 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent(m.title) + '&dates=' + piLocal(m.date, m.start) + '/' + piLocal(m.date, m.start, m.minutes) +
+      '&ctz=Australia/Sydney&details=' + encodeURIComponent(details) + '&location=' + encodeURIComponent(m.link || 'Google Meet') + (emails.length ? '&add=' + encodeURIComponent(emails.join(',')) : '');
+    var s = piUtc(m.date, m.start), e = new Date(s.getTime() + m.minutes * 60000);
+    var ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MBS Console//Project Intelligence//EN', 'METHOD:REQUEST', 'BEGIN:VEVENT', 'UID:' + (m.id || ('m' + Date.now())) + '@mbs-console', 'DTSTAMP:' + piStamp(new Date()),
+      'DTSTART:' + piStamp(s), 'DTEND:' + piStamp(e), 'SUMMARY:' + m.title.replace(/[,;]/g, '\\$&'), 'LOCATION:' + (m.link || 'Google Meet'), 'DESCRIPTION:' + details.replace(/[,;]/g, '\\$&').replace(/\n/g, '\\n')]
+      .concat(who.filter(function (x) { return /@/.test(x.email || ''); }).map(function (x) { return 'ATTENDEE;CN=' + (x.name || x.email).replace(/[,;:"]/g, ' ') + ';ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:' + x.email; }))
+      .concat(['BEGIN:VALARM', 'TRIGGER:-PT15M', 'ACTION:DISPLAY', 'DESCRIPTION:Reminder', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR']).join('\r\n');
+    var when = new Date(m.date + 'T00:00:00Z').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) + ' at ' + m.start + ' (Sydney time), ' + m.minutes + ' minutes';
+    var mail = 'mailto:' + emails.join(',') + '?subject=' + encodeURIComponent(m.title + ': ' + when) + '&body=' + encodeURIComponent('Hello,\n\nPlease join our project meeting on Google Meet.\n\nWhen: ' + when + '\n' + (m.link ? 'Join: ' + m.link + '\n' : 'The Google Meet link is in the calendar invite.\n') + '\n' + details + '\n\nRegards');
+    return { gcal: g, ics: ics, mail: mail, emails: emails, missing: who.filter(function (x) { return !/@/.test(x.email || ''); }), when: when };
+  }
+  function intelTab() {
+    var B = $('#planBody');
+    if (!S.intel || S.intel.core !== S.core) {
+      B.innerHTML = '<div class="empty">Loading Project Intelligence…</div>';
+      api('intelGet', { core: S.core }).then(function (d) { S.intel = { core: S.core, docs: d.docs, log: d.log, open: {} }; if (S.tab === 'intel') intelTab(); }).catch(fail);
+      return;
+    }
+    var I = S.intel, p = S.plan;
+    B.innerHTML = '<div class="pi-wrap"><div class="pi-main"><div class="card"><div class="card-h"><h2>🧠 Project Intelligence</h2><span class="sp"></span>' + (I.log.length ? '<button class="btn btn-sm" id="piClear">Clear answers</button>' : '') + '</div>' +
+        '<p class="muted" style="margin:-4px 0 10px">Ask anything about this project. The AI reads the plan (tasks, dates, critical path, costs, risks, issues, stakeholders) and the documents on the right, and can add risks and stakeholders or set up a Google Meet.</p>' +
+        '<div class="pi-ask"><textarea id="piQ" rows="2" placeholder="e.g. Work out the critical and non-critical risks for this project">' + esc(S.piDraft || '') + '</textarea><button class="btn btn-gold" id="piGo"' + (S.piBusy ? ' disabled' : '') + '>' + (S.piBusy ? 'Thinking…' : 'Ask') + '</button></div>' +
+        '<div class="pi-ex">' + PI_EX.map(function (x) { return '<button class="pi-chip" data-piex="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') + '</div>' +
+        '<div id="piLog">' + (S.piBusy ? '<div class="pi-a"><div class="pi-q">“' + esc(S.piBusy) + '”</div><p class="ask-think">Reading the plan' + (I.docs.length ? ' and ' + pl(I.docs.length, 'document') : '') + '… (this can take up to a minute)</p></div>' : '') +
+          I.log.slice().reverse().map(function (e, k) { return piAnswer(e, I.log.length - 1 - k); }).join('') + (!I.log.length && !S.piBusy ? '<div class="empty">No questions yet. Try one of the examples above.</div>' : '') + '</div></div></div>' +
+      '<div class="pi-side"><div class="card"><div class="card-h"><h2>📎 Documents</h2><span class="sp"></span><label class="btn btn-sm btn-gold" for="piFile">＋ Upload</label><input type="file" id="piFile" multiple hidden accept=".pdf,.docx,.txt,.md,.csv,.html,.htm,.eml,.json"></div>' +
+        '<p class="muted" style="font-size:12.5px;margin:-4px 0 8px">The contract, specification, quotes, variations, letters or meeting notes (PDF, Word .docx or text). The text is read here in your browser and kept with this project.</p>' +
+        '<div id="piUp"></div>' + (I.docs.length ? '<ul class="pi-docs">' + I.docs.map(function (d) { return '<li data-did="' + esc(d.id) + '"><span class="pi-dk" title="' + esc(d.kind) + '">' + (PI_KIND[d.kind] || '📄') + '</span><div><b>' + esc(d.name) + '</b><br><small class="muted">' + esc(d.kind) + (d.pages ? ' · ' + pl(d.pages, 'page') : '') + ' · ' + (d.words || 0).toLocaleString('en-AU') + ' words · ' + dmy(new Date(d.at + 10 * 3600e3).toISOString().slice(0, 10)) + '</small></div><span class="sp"></span><button class="btn btn-sm" data-ddl title="Download">⬇</button><button class="btn btn-sm" data-ddel title="Delete">✕</button></li>'; }).join('') + '</ul>' : '<div class="empty" style="padding:12px">No documents yet. Upload the contract to ask about it.</div>') +
+        '<p class="muted" style="font-size:12px;margin:10px 0 0">🔒 Before anything goes to the AI, the customer\'s name, phone numbers and emails are taken out, and stakeholders\' phone numbers and emails never leave MBS.</p></div>' +
+      '<div class="card" style="margin-top:14px"><h2>📅 Meetings</h2>' + ((p.meetings || []).length ? '<ul class="pi-meets">' + p.meetings.slice().reverse().map(function (m) { var L = piMeetLinks(m); return '<li><b>' + esc(m.title) + '</b><br><small class="muted">' + esc(L.when) + ' · ' + pl(m.attendees.length, 'attendee') + '</small><div class="row" style="gap:6px;margin-top:4px"><a class="btn btn-sm" target="_blank" rel="noopener" href="' + esc(L.gcal) + '">📅 Google Calendar</a><button class="btn btn-sm" data-mics="' + esc(m.id) + '">⬇ .ics</button><button class="btn btn-sm" data-mdel="' + esc(m.id) + '">✕</button></div></li>'; }).join('') + '</ul>' : '<p class="muted" style="margin:0;font-size:13px">None yet. Ask, for example: “Set up a 45-minute Google Meet with the stakeholders next Tuesday at 10am”.</p>') +
+        '<p style="margin:10px 0 0"><a class="btn btn-sm" href="https://meet.google.com/new" target="_blank" rel="noopener">🎥 Start a Google Meet now</a></p></div></div></div>';
+    var go = function () { var q = $('#piQ').value.trim(); if (q) piAsk(q); };
+    $('#piGo').onclick = go;
+    $('#piQ').oninput = function () { S.piDraft = this.value; };
+    $('#piQ').onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } };
+    B.querySelectorAll('[data-piex]').forEach(function (b) { b.onclick = function () { $('#piQ').value = S.piDraft = b.getAttribute('data-piex'); go(); }; });
+    B.querySelectorAll('[data-pifu]').forEach(function (b) { b.onclick = function () { $('#piQ').value = S.piDraft = b.getAttribute('data-pifu'); go(); }; });
+    var cl = $('#piClear'); if (cl) cl.onclick = function () { M.confirmBox('Clear the answers?', 'The questions and answers on this project are cleared for everyone. Documents, risks and meetings stay.', 'Clear').then(function (y) { if (!y) return; api('intelClear', { core: S.core }).then(function () { I.log = []; intelTab(); }).catch(fail); }); };
+    $('#piFile').onchange = function () { piUpload(Array.prototype.slice.call(this.files)); this.value = ''; };
+    B.querySelectorAll('[data-ddel]').forEach(function (b) { b.onclick = function () { var id = b.closest('li').getAttribute('data-did'), d = I.docs.filter(function (x) { return x.id === id; })[0];
+      M.confirmBox('Delete this document?', '“' + d.name + '” is removed from this project. Answers already given stay.', 'Delete').then(function (y) { if (!y) return; api('intelDocDelete', { core: S.core, id: id }).then(function () { I.docs = I.docs.filter(function (x) { return x.id !== id; }); intelTab(); toast('Document deleted'); }).catch(fail); }); }; });
+    B.querySelectorAll('[data-ddl]').forEach(function (b) { b.onclick = function () { api('intelDocFile', { core: S.core, id: b.closest('li').getAttribute('data-did') }).then(function (r) {
+      var bin = atob(r.file), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      var url = URL.createObjectURL(new Blob([u8], { type: r.type })), a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 5000); }).catch(fail); }; });
+    B.querySelectorAll('[data-mics]').forEach(function (b) { b.onclick = function () { var m = p.meetings.filter(function (x) { return x.id === b.getAttribute('data-mics'); })[0]; piIcs(m); }; });
+    B.querySelectorAll('[data-mdel]').forEach(function (b) { b.onclick = function () { p.meetings = p.meetings.filter(function (x) { return x.id !== b.getAttribute('data-mdel'); }); dirty(); intelTab(); }; });
+    piWire(B);
+  }
+  function piIcs(m) { var L = piMeetLinks(m), url = URL.createObjectURL(new Blob([L.ics], { type: 'text/calendar' })), a = document.createElement('a'); a.href = url; a.download = (m.title || 'meeting').replace(/[^\w -]+/g, '').slice(0, 60) + '.ics'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 5000); }
+  function piAnswer(e, i) {
+    var r = e.r || {}, p = S.plan, st = S.intel.open[i] = S.intel.open[i] || {};
+    var h = '<div class="pi-a" data-pia="' + i + '"><div class="pi-q">“' + esc(e.q) + '”<small class="muted"> · ' + esc(new Date(e.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + (e.by ? ' · ' + esc(String(e.by).replace(/^Admin \((.*)\)$/, '$1')) : '') + '</small></div>' +
+      '<div class="pi-md">' + piMd(r.answer) + '</div>';
+    if (r.risks && r.risks.length) {
+      var crit = r.risks.filter(function (x) { return x.critical; }).length;
+      h += '<div class="pi-act"><h4>⚠ Suggested risks <small class="muted">(' + crit + ' critical, ' + (r.risks.length - crit) + ' non-critical)</small></h4><div class="table-wrap"><table class="pi-tbl"><thead><tr><th></th><th>Risk</th><th>Path</th><th>P</th><th>I</th><th>Score</th><th>Response</th><th>Action</th></tr></thead><tbody>' +
+        r.risks.map(function (x, k) { var have = (p.risks || []).some(function (y) { return y.title.toLowerCase() === x.title.toLowerCase(); }); return '<tr><td><input type="checkbox" data-rk="' + k + '"' + (have ? ' disabled title="Already in the register"' : ' checked') + '></td><td><b>' + esc(x.title) + '</b><br><small class="muted">' + esc(x.cause) + '</small></td><td>' + (x.critical ? '<span class="pi-crit">⚡ Critical</span>' : '<span class="muted">Non-critical</span>') + '</td><td>' + x.p + '</td><td>' + x.i + '</td><td><b>' + (x.p * x.i) + '</b></td><td>' + esc(x.response) + '</td><td><small>' + esc(x.action) + '</small></td></tr>'; }).join('') +
+        '</tbody></table></div><button class="btn btn-sm btn-gold" data-addrisks>＋ Add ticked risks to the Risk register</button></div>';
+    }
+    if (r.stakeholders && r.stakeholders.length) {
+      h += '<div class="pi-act"><h4>👥 Stakeholder register</h4><div class="table-wrap"><table class="pi-tbl"><thead><tr><th></th><th>Name</th><th>Role</th><th>RACI</th><th>Interest</th><th>Influence</th><th>How to engage</th></tr></thead><tbody>' +
+        r.stakeholders.map(function (x, k) { var have = !!x.id || (p.stakeholders || []).some(function (y) { return y.name && y.name.toLowerCase() === x.name.toLowerCase(); }); return '<tr><td><input type="checkbox" data-sk="' + k + '"' + (have ? ' disabled title="Already a stakeholder"' : ' checked') + '></td><td><b>' + esc(x.name) + '</b>' + (have ? ' <small class="muted">(listed)</small>' : '') + '</td><td>' + esc(x.role) + '</td><td><span class="raci raci-' + x.raci + '">' + x.raci + '</span></td><td>' + x.interest + '</td><td>' + x.influence + '</td><td><small>' + esc(x.engagement) + '</small></td></tr>'; }).join('') +
+        '</tbody></table></div><button class="btn btn-sm btn-gold" data-addsk>＋ Add ticked to Stakeholders</button></div>';
+    }
+    if (r.meeting) {
+      var m = st.meeting || (st.meeting = Object.assign({ id: 'm' + Date.now().toString(36) + i }, r.meeting)), all = p.stakeholders || [];
+      var L = piMeetLinks(m), saved = (p.meetings || []).some(function (x) { return x.id === m.id; });
+      h += '<div class="pi-act pi-meet"><h4>🎥 Team meeting (Google Meet)</h4><div class="form pi-mform">' +
+          '<label>Title<input data-mf="title" value="' + esc(m.title) + '"></label><label>Date<input type="date" data-mf="date" value="' + esc(m.date) + '"></label><label>Start<input type="time" data-mf="start" value="' + esc(m.start) + '"></label>' +
+          '<label>Length<select data-mf="minutes">' + [30, 45, 60].map(function (n) { return '<option value="' + n + '"' + (m.minutes === n ? ' selected' : '') + '>' + n + ' min</option>'; }).join('') + '</select></label>' +
+          '<div class="full"><b style="font-size:13px">Who</b><div class="pi-who">' + (all.length ? all.map(function (x) { return '<label class="sc-cb"><input type="checkbox" data-mw="' + esc(x.id) + '"' + (m.attendees.indexOf(x.id) >= 0 ? ' checked' : '') + '> ' + esc(x.name || x.role) + ' <small class="muted">' + esc(x.role) + (/@/.test(x.email || '') ? '' : ' · no email') + '</small></label>'; }).join('') : '<span class="muted">No stakeholders yet: add them on the Stakeholders tab first.</span>') + '</div></div>' +
+          '<label class="full">Agenda<textarea data-mf="agenda" rows="4">' + esc(m.agenda) + '</textarea></label></div>' +
+        (L.missing.length ? '<p class="sk-warn" style="margin:8px 0">No email for ' + esc(L.missing.map(function (x) { return x.name || x.role; }).join(', ')) + ': add it on the Stakeholders tab to invite them.</p>' : '') +
+        '<div class="row" style="gap:6px;margin-top:8px"><a class="btn btn-gold btn-sm" data-mgo target="_blank" rel="noopener" href="' + esc(L.gcal) + '">📅 Create in Google Calendar + Meet</a><button class="btn btn-sm" data-mdl>⬇ Invite (.ics)</button><a class="btn btn-sm" data-mmail href="' + esc(L.mail) + '">✉ Email the invite</a><button class="btn btn-sm" data-msave' + (saved ? ' disabled' : '') + '>' + (saved ? '✓ Saved to this project' : '💾 Save to this project') + '</button></div>' +
+        '<p class="muted" style="font-size:12px;margin:8px 0 0">Google Calendar opens with the time, guests and agenda filled in and adds the Google Meet video link; press <b>Save</b> there and Google emails the invites. A free Google account allows group calls up to 60 minutes, so 45 minutes fits.</p></div>';
+    }
+    if ((r.sources || []).length) h += '<p class="pi-src">📎 ' + r.sources.map(esc).join(' · ') + (r.partial ? ' <span class="muted">(the most relevant parts of long documents were read)</span>' : '') + '</p>';
+    if ((r.follow_ups || []).length) h += '<div class="pi-ex" style="margin-top:6px">' + r.follow_ups.map(function (x) { return '<button class="pi-chip" data-pifu="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') + '</div>';
+    if (r.tokens) h += '<small class="muted">About ' + r.tokens.toLocaleString('en-AU') + ' tokens.</small>';
+    return h + '</div>';
+  }
+  function piWire(B) {
+    var p = S.plan;
+    B.querySelectorAll('[data-pia]').forEach(function (box) {
+      var i = +box.getAttribute('data-pia'), e = S.intel.log[i], r = e.r || {}, st = S.intel.open[i] = S.intel.open[i] || {};
+      var ar = box.querySelector('[data-addrisks]'); if (ar) ar.onclick = function () {
+        var n = 0; box.querySelectorAll('[data-rk]:checked:not(:disabled)').forEach(function (c) { var x = r.risks[+c.getAttribute('data-rk')]; n++;
+          p.risks.push({ id: 'r' + Date.now().toString(36) + n, title: x.title, cause: x.cause + (x.critical ? ' (affects the critical path)' : ''), p: x.p, i: x.i, response: x.response, action: x.action, owner: x.owner || (p.charter || {}).manager || '', review: '', status: 'Open', raised: today() }); });
+        if (!n) return toast('Tick the risks to add', true); dirty(); toast(pl(n, 'risk') + ' added to the Risk register'); intelTab(); };
+      var as = box.querySelector('[data-addsk]'); if (as) as.onclick = function () {
+        var n = 0; p.stakeholders = p.stakeholders || [];
+        box.querySelectorAll('[data-sk]:checked:not(:disabled)').forEach(function (c) { var x = r.stakeholders[+c.getAttribute('data-sk')]; n++; p.stakeholders.push({ id: 's' + Date.now().toString(36) + n, name: x.name, role: x.role, raci: x.raci, phone: '', email: '' }); });
+        if (!n) return toast('Tick the stakeholders to add', true); dirty(); toast(pl(n, 'stakeholder') + ' added: add their phone and email on the Stakeholders tab'); intelTab(); };
+      if (!r.meeting) return;
+      var m = st.meeting;
+      var refresh = function () { var L = piMeetLinks(m); box.querySelector('[data-mgo]').href = L.gcal; box.querySelector('[data-mmail]').href = L.mail; };
+      box.querySelectorAll('[data-mf]').forEach(function (el) { el.addEventListener('input', function () { var k = el.getAttribute('data-mf'); m[k] = k === 'minutes' ? +el.value : el.value; refresh(); }); el.addEventListener('change', function () { var k = el.getAttribute('data-mf'); m[k] = k === 'minutes' ? +el.value : el.value; refresh(); }); });
+      box.querySelectorAll('[data-mw]').forEach(function (el) { el.onchange = function () { var id = el.getAttribute('data-mw'); m.attendees = m.attendees.filter(function (x) { return x !== id; }); if (el.checked) m.attendees.push(id); intelTab(); }; });
+      box.querySelector('[data-mdl]').onclick = function () { piIcs(m); };
+      box.querySelector('[data-mgo]').addEventListener('click', function () { if (!(p.meetings || []).some(function (x) { return x.id === m.id; })) { (p.meetings = p.meetings || []).push(JSON.parse(JSON.stringify(m))); dirty(); setTimeout(intelTab, 50); } });
+      box.querySelector('[data-msave]').onclick = function () { (p.meetings = p.meetings || []).push(JSON.parse(JSON.stringify(m))); dirty(); toast('Meeting saved to this project'); intelTab(); };
+    });
+  }
+  function piAsk(q) {
+    if (S.piBusy) return;
+    S.piBusy = q; S.piDraft = ''; intelTab();
+    var id = Array.from(crypto.getRandomValues(new Uint8Array(10))).map(function (b) { return b.toString(16).padStart(2, '0'); }).join(''), t0 = Date.now(), core = S.core;
+    var hist = S.intel.log.slice(-3).map(function (e) { return { q: e.q, a: String((e.r || {}).answer || '').slice(0, 600) }; });
+    var done = function () { S.piBusy = false; if (S.tab === 'intel' && S.core === core) intelTab(); };
+    var poll = function () {
+      if (Date.now() - t0 > 180000) { done(); return toast('The AI took too long. Try again, or ask a shorter question.', true); }
+      return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
+        if (d.status === 'done') { S.intel.log.push({ at: Date.now(), by: '', q: q, r: d.intel }); S.intel.log = S.intel.log.slice(-30); done(); return; }
+        if (d.status === 'error') { done(); toast(d.error || 'The AI could not answer', true); return; }
+        return poll();
+      });
+    };
+    fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
+      body: JSON.stringify({ mode: 'intel', id: id, core: core, question: q, history: hist }) })
+      .then(function (r) { if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); })
+      .catch(function (e) { done(); fail(e); });
+  }
+  function piExtract(f) {
+    var name = f.name.toLowerCase();
+    if (/\.pdf$/.test(name)) return piLoad('vendor/pdf.min.js?v=3111', function () { return !!window.pdfjsLib; }).then(function () {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js?v=3111';
+      return f.arrayBuffer().then(function (buf) { return window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise; }).then(function (doc) {
+        var parts = [], n = doc.numPages, chain = Promise.resolve();
+        for (var k = 1; k <= n; k++) (function (k) { chain = chain.then(function () { return doc.getPage(k).then(function (pg) { return pg.getTextContent(); }).then(function (c) {
+          var s = ''; c.items.forEach(function (it) { s += it.str + (it.hasEOL ? '\n' : ' '); }); parts.push('[page ' + k + ']\n' + s.replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').trim()); }); }); })(k);
+        return chain.then(function () { return { text: parts.join('\n\n'), pages: n }; });
+      });
+    });
+    if (/\.docx$/.test(name)) return piLoad('vendor/mammoth.browser.min.js?v=180', function () { return !!window.mammoth; }).then(function () { return f.arrayBuffer(); }).then(function (buf) { return window.mammoth.extractRawText({ arrayBuffer: buf }); }).then(function (r) { return { text: r.value, pages: 0 }; });
+    if (/\.doc$/.test(name)) return Promise.reject(new Error('Old Word .doc files can\'t be read: open it in Word and save as .docx or PDF.'));
+    if (/\.(txt|md|csv|json|eml|html?)$/.test(name) || /^text\//.test(f.type)) return f.text().then(function (t) { if (/\.html?$/.test(name)) { var d = document.createElement('div'); d.innerHTML = t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ''); t = d.textContent; } return { text: t, pages: 0 }; });
+    return Promise.reject(new Error('“' + f.name + '” is not a PDF, Word (.docx) or text file.'));
+  }
+  function piUpload(files) {
+    var box = $('#piUp'), I = S.intel, core = S.core;
+    var one = function (f) {
+      if (box) box.innerHTML = '<p class="ask-think" style="margin:0 0 8px">Reading “' + esc(f.name) + '”…</p>';
+      return piExtract(f).then(function (x) {
+        if (!x.text || x.text.replace(/\[page \d+\]/g, '').trim().length < 20) throw new Error('No text found in “' + f.name + '”. If it is a scanned PDF (pictures of pages), save it as a text PDF or Word file first.');
+        var send = function (b64) { return api('intelUpload', { core: core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text, file: b64 }); };
+        if (f.size > 3.5 * 1024 * 1024) return send('');
+        return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).replace(/^data:[^,]*,/, '')); }; rd.readAsDataURL(f); }).then(send);
+      }).then(function (r) { I.docs.push(r.doc); toast('Added “' + r.doc.name + '”' + (r.truncated ? ' (very long: the first 400,000 characters are kept)' : '')); })
+        .catch(function (e) { toast(e.message, true); });
+    };
+    files.reduce(function (c, f) { return c.then(function () { return one(f); }); }, Promise.resolve()).then(function () { if (S.tab === 'intel' && S.core === core) intelTab(); });
   }
 
   /* ---------- ✨ Ask AI: possible resolutions for a risk or an issue (DeepSeek, token-capped) ---------- */

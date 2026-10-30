@@ -4,6 +4,7 @@
 import * as A from '../lib/admin-lib.mjs';
 import * as kv from '../lib/kv.mjs';
 import { buildAiPlan, fitPlanAi } from '../lib/plan.mjs';
+import * as INTEL from '../lib/plan-intel.mjs';
 
 const ok = () => new Response('', { status: 202 });
 export default async (req) => {
@@ -17,6 +18,12 @@ export default async (req) => {
     id = String(body.id || '').replace(/[^a-z0-9]/gi, '').slice(0, 40);
     if (id.length < 12) return new Response('', { status: 400 });
     await kv.set('aiplan:' + id, { status: 'working', at: Date.now() });
+    if (body.mode === 'intel') {   // v52: 🧠 Project Intelligence question
+      const r = await INTEL.ask({ core: body.core, question: body.question, history: body.history }, `Admin (${session.u})`);
+      await kv.set('aiplan:' + id, { intel: r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
+      if (!r.error) await A.audit(session.u, `Project Intelligence question on ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
+      return ok();
+    }
     if (body.mode === 'fit') {   // v38: fit an existing plan to its "Finish by" date
       const r = await fitPlanAi({ core: body.core, finishBy: body.finishBy }, `Admin (${session.u})`);
       await kv.set('aiplan:' + id, { fit: r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });

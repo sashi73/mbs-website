@@ -162,6 +162,9 @@ function clean(p, core) {
     // v45: stakeholder list (RACI). Contact details stay in the plan and are never sent to the AI.
     stakeholders: (Array.isArray(p.stakeholders) ? p.stakeholders : []).slice(0, 100).map((x) => ({ id: uid(x.id, 's'), name: str(x.name, 120), role: str(x.role, 120),
       raci: ['R', 'A', 'C', 'I'].includes(x.raci) ? x.raci : 'I', phone: str(x.phone, 40), email: str(x.email, 160), sub: /^SC-\d{3,5}$/.test(x.sub || '') ? x.sub : '' })),
+    // v52: team meetings set up from Project Intelligence (Google Meet / calendar invites)
+    meetings: (Array.isArray(p.meetings) ? p.meetings : []).slice(0, 50).map((m) => ({ id: uid(m.id, 'm'), title: str(m.title, 160), date: ymdOk(m.date), start: /^\d{2}:\d{2}$/.test(m.start || '') ? m.start : '10:00',
+      minutes: Math.max(15, Math.min(240, Math.round(Number(m.minutes) || 45))), attendees: (Array.isArray(m.attendees) ? m.attendees : []).slice(0, 50).map((a) => str(a, 20)), agenda: str(m.agenda, 2000), link: /^https:\/\/meet\.google\.com\/[a-z0-9-]+$/i.test(m.link || '') ? m.link : '', at: Number(m.at) || Date.now() })),
     baseline: p.baseline && typeof p.baseline === 'object' ? { at: Number(p.baseline.at) || Date.now(), finish: ymdOk(p.baseline.finish), BAC: r2(p.baseline.BAC),
       tasks: Object.fromEntries(Object.entries(p.baseline.tasks || {}).slice(0, 300).map(([k, v]) => [str(k, 20), { es: ymdOk(v.es), ef: ymdOk(v.ef), cost: r2(v.cost) }])) } : null
   };
@@ -402,7 +405,7 @@ function clampSubs(t) {
 }
 // task names to the AI: take out the customer's full name, phone and email only (not every word of the name:
 // a customer called "Tina Tiles" must not turn "Lay tiles" into "Lay the customer")
-function scrubTask(s, job) {
+export function scrubTask(s, job) {
   let x = String(s || '');
   const rx = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (job.name && job.name.trim().length >= 3) x = x.replace(new RegExp(rx(job.name.trim()), 'gi'), 'the customer');
@@ -410,6 +413,16 @@ function scrubTask(s, job) {
   const ph = String(job.phone || '').replace(/\D/g, '');
   if (ph.length >= 6) x = x.replace(/[\d][\d\s()+-]{5,}[\d]/g, (m) => (m.replace(/\D/g, '').includes(ph.slice(-6)) ? '' : m));
   return x.trim();
+}
+// which tasks drive the finish date (one more day on them moves the finish): the critical path
+export function critTasks(plan, R) {
+  const crit = new Set();
+  for (const t of plan.tasks) {
+    if (!(t.dur > 0) || (t.pct || 0) >= 100) continue;
+    const q = JSON.parse(JSON.stringify(plan)); const qt = q.tasks.find((x) => x.id === t.id); qt.dur += 1; schedule(q);
+    if (q.tasks.reduce((m, x) => (x.ef > m ? x.ef : m), '') > R.finish) crit.add(t.id);
+  }
+  return crit;
 }
 export async function fitPlanAi({ core, finishBy }, by) {
   const job = core ? await J.find(core) : null;
@@ -426,13 +439,7 @@ export async function fitPlanAi({ core, finishBy }, by) {
   if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.' };
   try { await checkLimit(); } catch (e) { return { error: e.message }; }
   const late = workBetween(fb, R.finish, A) - 1;
-  // which tasks drive the finish date (one more day on them moves the finish)
-  const crit = new Set();
-  for (const t of plan.tasks) {
-    if (!(t.dur > 0) || (t.pct || 0) >= 100) continue;
-    const q = JSON.parse(JSON.stringify(plan)); const qt = q.tasks.find((x) => x.id === t.id); qt.dur += 1; schedule(q);
-    if (q.tasks.reduce((m, x) => (x.ef > m ? x.ef : m), '') > R.finish) crit.add(t.id);
-  }
+  const crit = critTasks(plan, R);
   const locked = (t) => t.dur === 0 || (t.pct || 0) > 0 || PROTECTED.test(t.name || '');
   const tasks = plan.tasks.slice(0, 60).map((t) => ({ id: t.id, n: scrubTask(str(t.name, 120), job), d: t.dur, after: t.pred || [], start: t.es, finish: t.ef, crit: crit.has(t.id),
     locked: locked(t), started: (t.pct || 0) > 0, start_set_by_hand: !!t.fixed, qty: t.qty || 0, unit: t.unit || '', rate: t.rate || 0, people: (t.res || []).length }));
