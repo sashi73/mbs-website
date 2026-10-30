@@ -8,7 +8,7 @@
   var LIBS = ['vendor/alasql.min.js', 'vendor/chart.umd.min.js', 'vendor/codemirror.js', 'vendor/cm-sql.js', 'vendor/show-hint.js', 'vendor/sql-hint.js'];
   var CSS = ['vendor/codemirror.css', 'vendor/show-hint.css'];
   var OPEN = { jobs: true };
-  var loaded = null, DB = null, SCHEMA = null, DESCRIBE = {}, loadedAt = 0;
+  var loaded = null, DB = null, SCHEMA = null, DESCRIBE = {}, KEYS = {}, loadedAt = 0;
   var S = { askLog: [], period: null, tab: 'ask', view: 'table', sql: '', cols: [], rows: [], chart: { type: 'bar', x: '', y: [] }, title: 'Data report', wiz: { table: '', cols: [], filters: [], order: '', dir: 'DESC', limit: 100 } };
   var chartObj = null, cm = null;
   var COLORS = ['#C9A227', '#1F2937', '#3B82F6', '#10B981', '#EF4444', '#8B5CF6', '#F59E0B', '#14B8A6', '#EC4899', '#6B7280', '#84CC16', '#0EA5E9'];
@@ -23,7 +23,7 @@
   function loadData(force) {
     if (DB && !force && Date.now() - loadedAt < 5 * 60000) return Promise.resolve();
     return api('sqlData').then(function (d) {
-      SCHEMA = d.schema; DESCRIBE = d.describe || {};
+      SCHEMA = d.schema; DESCRIBE = d.describe || {}; KEYS = d.keys || {};
       DB = new window.alasql.Database();
       Object.keys(d.schema).forEach(function (t) { DB.exec('CREATE TABLE ' + t); DB.tables[t].data = d.data[t] || []; });
       loadedAt = Date.now();
@@ -140,7 +140,7 @@
           tables.map(function (t) {
             return '<details class="tbl" data-t="' + esc(t) + '"' + (OPEN[t] ? ' open' : '') + '><summary><span class="chipd tchip" draggable="true" data-drag="' + esc(t) + '" data-table="' + esc(t) + '">' + esc(t) + '</span><small class="muted"> ' + DB.tables[t].data.length + (DB.tables[t].data.length === 1 ? ' row' : ' rows') + '</small></summary>' +
               '<p class="muted" style="margin:4px 0 6px;font-size:12px">' + esc(DESCRIBE[t] || '') + '</p><div class="cols">' +
-              SCHEMA[t].map(function (c) { return '<span class="chipd" draggable="true" data-drag="' + esc(c) + '" data-col="' + esc(c) + '" data-of="' + esc(t) + '">' + esc(c) + '</span>'; }).join('') + '</div></details>';
+              SCHEMA[t].map(function (c) { var K = KEYS[t] || {}, pk = K.pk === c, fk = (K.fk || {})[c]; return '<span class="chipd' + (pk ? ' kpk' : fk ? ' kfk' : '') + '" draggable="true" data-drag="' + esc(c) + '" data-col="' + esc(c) + '" data-of="' + esc(t) + '"' + (pk ? ' title="Key of ' + esc(t) + ': one per row"' : fk ? ' title="Links to ' + esc(fk) + '.' + esc((KEYS[fk] || {}).pk || c) + '"' : '') + '>' + (pk ? '🔑 ' : fk ? '🔗 ' : '') + esc(c) + '</span>'; }).join('') + '</div></details>';
           }).join('') + '</aside>' +
         '<section class="sql-main">' +
           '<div class="tabs" id="sqlTabs">' + [['ask', '✨ AI query'], ['templates', '★ Templates'], ['wizard', '🧩 Wizard'], ['editor', '⌨ SQL editor'], ['saved', '💾 Saved']].map(function (x) { return '<button class="tab' + (S.tab === x[0] ? ' on' : '') + '" data-tab="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
@@ -273,7 +273,25 @@
     var count = function (r) { a.tokens += Number(r && r.tokens) || 0; if (r && r.today) showUse(r.today); return r; };
     var tryRun = function (r, n) {
       if (!r.sql) return Promise.reject(new Error(r.note || 'I could not turn that into a query. Try asking in a different way.'));
-      try { run(r.sql); return Promise.resolve(r); }
+      try {
+        run(r.sql);
+        // v51: it ran, but a column is empty in every row (usually a JOIN on the wrong key): ask the AI to fix it, once
+        var empty = S.rows.length ? S.cols.filter(function (c) { return S.rows.every(function (x) { return x[c] == null || x[c] === ''; }); }) : [];
+        if (empty.length && n < 1 && !r.checked && /\bjoin\b/i.test(r.sql)) {
+          var t0 = $('#askOut .ask-think'); if (t0) t0.textContent = 'Checking the query…';
+          var keep = { sql: S.sql, cols: S.cols, rows: S.rows };
+          return api('sqlAsk', { question: question, hints: H, history: hist, previous: { sql: r.sql, error: 'It ran, but these columns are empty in every row: ' + empty.join(', ') + '. The JOIN probably uses the wrong key (join on the id columns listed in rule 6), or take the value from a column the table already has.' } })
+            .then(count).then(function (r2) {
+              r2.checked = true;
+              return tryRun(r2, n + 1).then(function (r3) {   // keep the better of the two
+                var still = S.cols.filter(function (c) { return S.rows.every(function (x) { return x[c] == null || x[c] === ''; }); }).length;
+                if (!S.rows.length || still >= empty.length) { S.sql = keep.sql; S.cols = keep.cols; S.rows = keep.rows; return r; }
+                return r3;
+              }, function () { S.sql = keep.sql; S.cols = keep.cols; S.rows = keep.rows; return r; });
+            }, function () { return r; });
+        }
+        return Promise.resolve(r);
+      }
       catch (e) {
         if (n >= 1) return Promise.reject(new Error('The AI\'s query did not work (' + e.message + '). Try asking in a different way.'));
         var t = $('#askOut .ask-think'); if (t) t.textContent = 'Fixing the query…';

@@ -22,6 +22,45 @@ const bad = (msg, status = 400) => out(status, { error: msg });
 const d10 = (ms) => { if (!ms) return ''; const p = parts(ms); return `${p.y}-${String(p.mo).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`; };
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+// ---------- v51: keys ----------
+// Every table starts with its own key (primary key: one value per row), named after the table: customer_id, job_id,
+// quote_id, invoice_id, stock_id, supplier_id, subcontractor_id ... A column pointing at another table (foreign key) has
+// that table's key name, so joins and unions line up: inventory.supplier_id = suppliers.supplier_id, stock_moves.stock_id
+// = inventory.stock_id, plan_tasks.job_id = jobs.job_id. The older columns (id, core, item_id, job, sub_id) stay for saved reports.
+const cnt = () => { const m = {}; return (k) => (m[k] = (m[k] || 0) + 1); };
+export const KEYS = {
+  customers: { pk: 'customer_id', cols: { customer_id: (r) => r.id } },
+  jobs: { pk: 'job_id', cols: { job_id: (r) => r.core, customer_id: (r) => r.customer }, fk: { customer_id: 'customers' } },
+  quotes: { pk: 'quote_id', cols: { quote_id: (r) => r.id, job_id: (r) => r.job, customer_id: (r, x) => x.custOfJob[r.job] || '' }, fk: { job_id: 'jobs', customer_id: 'customers', invoice_id: 'invoices' } },
+  invoices: { pk: 'invoice_id', cols: { invoice_id: (r) => r.id, job_id: (r) => r.job, customer_id: (r, x) => x.custOfJob[r.job] || '', quote_id: (r) => r.from_quote || '' }, fk: { job_id: 'jobs', customer_id: 'customers', quote_id: 'quotes' } },
+  items: { pk: 'line_id', cols: { line_id: (r) => r.doc_id + '/' + r.line, quote_id: (r) => (/^q/i.test(r.doc_type) ? r.doc_id : ''), invoice_id: (r) => (/^i/i.test(r.doc_type) ? r.doc_id : '') }, fk: { quote_id: 'quotes', invoice_id: 'invoices' } },
+  payments: { pk: 'payment_id', cols: { payment_id: (r, x) => r.invoice_id + '/' + x.n(r.invoice_id) }, fk: { invoice_id: 'invoices' } },
+  expenses: { pk: 'expense_id', cols: { expense_id: (r) => r.id, job_id: (r) => r.job }, fk: { job_id: 'jobs' } },
+  reminders: { pk: 'reminder_id', cols: { reminder_id: (r) => r.id, job_id: (r) => r.job }, fk: { job_id: 'jobs' } },
+  visits: { pk: 'date', cols: {} },
+  plan_tasks: { pk: 'task_id', cols: { task_id: (r) => r._id, job_id: (r) => r.job }, fk: { job_id: 'jobs' } },
+  plan_subtasks: { pk: 'subtask_id', cols: { subtask_id: (r) => r._id, task_id: (r) => r._parent, job_id: (r) => r.job }, fk: { task_id: 'plan_tasks', job_id: 'jobs' } },
+  plan_risks: { pk: 'risk_id', cols: { risk_id: (r) => r._id, job_id: (r) => r.job }, fk: { job_id: 'jobs' } },
+  plan_issues: { pk: 'issue_id', cols: { issue_id: (r) => r._id, job_id: (r) => r.job }, fk: { job_id: 'jobs' } },
+  plan_stakeholders: { pk: 'stakeholder_id', cols: { stakeholder_id: (r) => r._id, job_id: (r) => r.job, subcontractor_id: (r) => r.sub_id }, fk: { job_id: 'jobs', subcontractor_id: 'subcontractors' } },
+  inventory: { pk: 'stock_id', cols: { stock_id: (r) => r.id }, fk: { supplier_id: 'suppliers' } },
+  suppliers: { pk: 'supplier_id', cols: { supplier_id: (r) => r.id } },
+  supplier_prices: { pk: 'price_id', cols: { price_id: (r, x) => r.item_id + '/' + r.supplier_id + '/' + x.n(r.item_id + '/' + r.supplier_id), stock_id: (r) => r.item_id }, fk: { stock_id: 'inventory', supplier_id: 'suppliers' } },
+  stock_moves: { pk: 'move_id', cols: { move_id: (r, x) => r.item_id + '/' + x.n(r.item_id), stock_id: (r) => r.item_id, job_id: (r) => r.job }, fk: { stock_id: 'inventory', job_id: 'jobs' } },
+  subcontractors: { pk: 'subcontractor_id', cols: { subcontractor_id: (r) => r.id } },
+  sub_trades: { pk: 'trade', cols: {} }
+};
+function withKeys(all, ctx) {
+  for (const [t, K] of Object.entries(KEYS)) {
+    const x = { ...ctx, n: cnt() };
+    all[t] = (all[t] || []).map((r) => {
+      const k = {}; for (const [c, f] of Object.entries(K.cols)) k[c] = f(r, x) ?? '';
+      const o = { ...k, ...r }; delete o._id; delete o._parent; return o;
+    });
+  }
+  return all;
+}
+
 // ---------- the tables (one row per record, plain columns) ----------
 export const SCHEMA = {
   customers: ['id', 'name', 'phone', 'email', 'suburb', 'enquiries', 'confirmed_jobs', 'lost_jobs', 'open_quotes', 'open_jobs', 'quoted_value', 'total_value', 'paid_total', 'owed',
@@ -40,7 +79,8 @@ export const SCHEMA = {
   plan_risks: ['job', 'plan_name', 'risk', 'probability', 'impact', 'score', 'response', 'owner', 'status', 'review'],
   plan_issues: ['job', 'plan_name', 'issue', 'priority', 'owner', 'raised', 'due', 'status'],
   plan_stakeholders: ['job', 'plan_name', 'person', 'role', 'raci', 'raci_meaning', 'sub_id', 'phone', 'email'],
-  inventory: ['id', 'item', 'sku', 'category', 'unit', 'location', 'on_hand', 'allocated', 'available', 'on_order', 'reorder_level', 'reorder_qty', 'low', 'unit_price', 'price_supplier', 'stock_value'],
+  inventory: ['id', 'item', 'sku', 'category', 'unit', 'location', 'on_hand', 'allocated', 'available', 'on_order', 'reorder_level', 'reorder_qty', 'low', 'unit_price', 'price_supplier', 'stock_value',
+    'supplier_id', 'supplier_contact', 'supplier_phone', 'supplier_email', 'supplier_terms', 'reorder_needed'],
   suppliers: ['id', 'supplier', 'contact', 'phone', 'email', 'categories', 'terms', 'items_quoted'],
   supplier_prices: ['item_id', 'item', 'supplier_id', 'supplier', 'price_ex', 'pack_size', 'quote_ref', 'quoted', 'valid_until', 'expired', 'preferred'],
   stock_moves: ['item_id', 'item', 'date', 'month', 'kind', 'qty', 'reason', 'job'],
@@ -49,6 +89,10 @@ export const SCHEMA = {
     'wc_policy', 'wc_expiry', 'wc_state', 'sole_trader', 'white_card', 'swms', 'compliance', 'problems', 'any_expired', 'last_used', 'days_since_used', 'archived'],
   sub_trades: ['trade', 'licence_needed', 'subbies', 'preferred', 'approved', 'all_papers_ok', 'with_expired', 'avg_rating', 'avg_hourly_rate', 'cheapest_hourly_rate']
 };
+for (const [tb, K] of Object.entries(KEYS)) {   // key columns first: own key, then keys of other tables
+  const ks = [K.pk, ...Object.keys(K.cols).filter((c) => c !== K.pk), ...Object.keys(K.fk || {}).filter((c) => c !== K.pk && !(c in K.cols))];
+  SCHEMA[tb] = [...new Set([...ks, ...SCHEMA[tb]])];
+}
 export const DESCRIBE = {
   customers: 'One row per customer (same phone + email = same customer) with their job counts and values', jobs: 'Every enquiry and job (pipeline stage, customer, suburb, trade, values)', quotes: 'Quotes (status, totals ex/inc GST)', invoices: 'Tax invoices (paid, balance, days overdue)',
   items: 'Line items of quotes and invoices', plan_tasks: 'Project plan tasks (dates, costs, % complete)', plan_risks: 'Risk registers of all plans', plan_issues: 'Issue logs of all plans', plan_subtasks: 'Sub-tasks inside plan tasks (no costs; costs stay on the task)', plan_stakeholders: 'Stakeholders (RACI) on each project plan, including the subbies working on it', sub_trades: 'Every trade category (also ones with no subbies yet) with how many subbies, preferred, compliant, average rating and rates', subcontractors: 'Sub-contractors (subbies): trade, where they are, status, rating, rates, licence and insurance with expiry and whether expired', inventory: 'Stock items (on hand, set aside for jobs, re-order level)', suppliers: 'Suppliers', supplier_prices: 'Supplier quotes per stock item', stock_moves: 'Stock in and out', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
@@ -108,23 +152,26 @@ export async function tables() {
   for (const p of planList) {
     PLAN.schedule(p);
     const STN = { todo: 'To do', doing: 'In progress', review: 'In review / QA', done: 'Done' };
-    for (const t of p.tasks) plan_tasks.push({ job: p.core, plan_name: p.name, task: t.name, resource: t.resource || '', lead: t.lead || '', status: STN[t.status] || (t.pct >= 100 ? 'Done' : t.pct > 0 ? 'In progress' : 'To do'), start: t.es, finish: t.ef, days: t.dur, qty: t.qty, unit: t.unit,
+    for (const t of p.tasks) plan_tasks.push({ _id: p.core + '/' + t.id, job: p.core, plan_name: p.name, task: t.name, resource: t.resource || '', lead: t.lead || '', status: STN[t.status] || (t.pct >= 100 ? 'Done' : t.pct > 0 ? 'In progress' : 'To do'), start: t.es, finish: t.ef, days: t.dur, qty: t.qty, unit: t.unit,
       unit_cost: t.rate, planned_cost: r2(t.qty * t.rate), actual_cost: t.actual, pct_complete: t.pct, done: t.pct >= 100, late: t.pct < 100 && t.ef < todayS });
     for (const t of p.tasks) for (const x of t.subs || []) {
       const A = PLAN.allDays(p), es = t.es ? (x.off ? PLAN.addWork(t.es, x.off, A) : t.es) : '', ef = es ? (x.dur > 1 ? PLAN.addWork(es, x.dur - 1, A) : es) : '';
-      plan_subtasks.push({ job: p.core, plan_name: p.name, task: t.name, subtask: x.name, owner: x.owner || '', start: es, finish: ef, days: x.dur, status: STN[x.status] || 'To do', done: x.status === 'done', late: x.status !== 'done' && !!ef && ef < todayS });
+      plan_subtasks.push({ _id: p.core + '/' + t.id + '/' + (x.id || t.subs.indexOf(x) + 1), _parent: p.core + '/' + t.id, job: p.core, plan_name: p.name, task: t.name, subtask: x.name, owner: x.owner || '', start: es, finish: ef, days: x.dur, status: STN[x.status] || 'To do', done: x.status === 'done', late: x.status !== 'done' && !!ef && ef < todayS });
     }
-    for (const r of p.risks || []) plan_risks.push({ job: p.core, plan_name: p.name, risk: r.title, probability: r.p, impact: r.i, score: r.p * r.i, response: r.response, owner: r.owner, status: r.status, review: r.review });
-    for (const x of p.stakeholders || []) plan_stakeholders.push({ job: p.core, plan_name: p.name, person: x.name, role: x.role, raci: x.raci, raci_meaning: { R: 'Responsible', A: 'Accountable', C: 'Consulted', I: 'Informed' }[x.raci] || '', sub_id: x.sub || '', phone: x.phone || '', email: x.email || '' });
-    for (const x of p.issues || []) plan_issues.push({ job: p.core, plan_name: p.name, issue: x.title, priority: x.priority, owner: x.owner, raised: x.raised, due: x.due, status: x.status });
+    for (const r of p.risks || []) plan_risks.push({ _id: p.core + '/' + r.id, job: p.core, plan_name: p.name, risk: r.title, probability: r.p, impact: r.i, score: r.p * r.i, response: r.response, owner: r.owner, status: r.status, review: r.review });
+    for (const x of p.stakeholders || []) plan_stakeholders.push({ _id: p.core + '/' + x.id, job: p.core, plan_name: p.name, person: x.name, role: x.role, raci: x.raci, raci_meaning: { R: 'Responsible', A: 'Accountable', C: 'Consulted', I: 'Informed' }[x.raci] || '', sub_id: x.sub || '', phone: x.phone || '', email: x.email || '' });
+    for (const x of p.issues || []) plan_issues.push({ _id: p.core + '/' + x.id, job: p.core, plan_name: p.name, issue: x.title, priority: x.priority, owner: x.owner, raised: x.raised, due: x.due, status: x.status });
   }
-  const supName = Object.fromEntries(stock.suppliers.map((x) => [x.id, x.name]));
+  const supName = Object.fromEntries(stock.suppliers.map((x) => [x.id, x.name])), supRec = Object.fromEntries(stock.suppliers.map((x) => [x.id, x]));
   const inventory = [], supplier_prices = [], stock_moves = [];
   for (const it of stock.items) {
     if (it.archived) continue;
     const b = INV.bestPrice(it), al = (alloc[it.id] || {}).qty || 0, av = Math.round(((it.onHand || 0) - al) * 1000) / 1000, oo = it.onOrder && it.onOrder.qty > 0 ? it.onOrder.qty : 0;
     inventory.push({ id: it.id, item: it.name, sku: it.sku || '', category: it.category || '', unit: it.unit, location: it.location || '', on_hand: it.onHand || 0, allocated: al, available: av, on_order: oo,
-      reorder_level: it.reorderLevel || 0, reorder_qty: it.reorderQty || 0, low: (it.reorderLevel || 0) > 0 && av + oo <= it.reorderLevel, unit_price: b.price, price_supplier: supName[b.supplier] || '', stock_value: r2((it.onHand || 0) * b.price) });
+      reorder_level: it.reorderLevel || 0, reorder_qty: it.reorderQty || 0, low: (it.reorderLevel || 0) > 0 && av + oo <= it.reorderLevel, unit_price: b.price, price_supplier: supName[b.supplier] || '', stock_value: r2((it.onHand || 0) * b.price),
+      // v51: who to order from, right on the item (no join needed): the preferred supplier, or the one with the best current price
+      supplier_id: b.supplier || '', supplier_contact: (supRec[b.supplier] || {}).contact || '', supplier_phone: (supRec[b.supplier] || {}).phone || '', supplier_email: (supRec[b.supplier] || {}).email || '',
+      supplier_terms: (supRec[b.supplier] || {}).terms || '', reorder_needed: Math.max(0, r2((it.reorderLevel || 0) + (it.reorderQty || 0) - av - oo)) });
     for (const p of it.prices || []) supplier_prices.push({ item_id: it.id, item: it.name, supplier_id: p.supplier, supplier: supName[p.supplier] || '', price_ex: p.price, pack_size: p.packSize || 0, quote_ref: p.ref || '',
       quoted: p.quoted || '', valid_until: p.validUntil || '', expired: !!(p.validUntil && p.validUntil < d10(now)), preferred: p.supplier === it.preferred });
     for (const m of it.moves || []) if (m.qty) stock_moves.push({ item_id: it.id, item: it.name, date: d10(m.at), month: d10(m.at).slice(0, 7), kind: m.kind, qty: m.qty, reason: m.reason || '', job: m.job || '' });
@@ -151,7 +198,8 @@ export async function tables() {
       avg_rating: rated.length ? r2(rated.reduce((a, s) => a + s.rating, 0) / rated.length) : null, avg_hourly_rate: rates.length ? r2(rates.reduce((a, x) => a + x, 0) / rates.length) : null, cheapest_hourly_rate: rates.length ? Math.min(...rates) : null };
   });
   subcontractors.forEach((s) => { delete s._keys; });
-  return { customers, jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves, subcontractors, sub_trades, plan_stakeholders };
+  const all = { customers, jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves, subcontractors, sub_trades, plan_stakeholders };
+  return withKeys(all, { custOfJob: custOf });
 }
 
 // ---------- AI narrative (DeepSeek) ----------
@@ -206,7 +254,7 @@ const NOTE = {
   expenses: 'job = jobs.core (blank = overhead); ex/gst/inc $', reminders: 'job = jobs.core', visits: 'website visitors per day',
   plan_tasks: 'one plan per job, job = jobs.core, status To do|In progress|In review / QA|Done, days 0 = milestone, pct_complete 0-100, done/late true|false',
   plan_subtasks: 'steps inside a plan task (task = plan_tasks.task, same job), no costs', plan_risks: 'job = jobs.core', plan_issues: 'job = jobs.core',
-  inventory: 'one row per stock item; available = on_hand - allocated (set aside by open plan tasks); low = at or below reorder_level; unit_price = preferred or cheapest valid quote ex GST',
+  inventory: 'one row per stock item; available = on_hand - allocated (set aside by open plan tasks); low = at or below reorder_level; unit_price = preferred or cheapest valid quote ex GST; price_supplier, supplier_contact, supplier_phone, supplier_email = who to order it from (no join needed). "Low", "short supply", "running out", "need to order" = low = true',
   subcontractors: 'one row per subbie (leave out archived = true unless asked). trade is the full name e.g. "Cleaner (builders clean)", "Electrician (sparkie)", "Plumber": match LOWER(trade) LIKE \'%clean%\' OR LOWER(other_trades) LIKE \'%clean%\'. ' +
     'Area: region is one of Hills District|Blacktown|Parramatta & Cumberland|Penrith|Hawkesbury|Fairfield & Liverpool|Campbelltown & Camden|Inner West|North Shore|Northern Beaches|Eastern Suburbs|Sydney CBD|Canterbury-Bankstown|St George & Sutherland|Central Coast|Blue Mountains; ' +
     '"Western Sydney" = (western_sydney = true OR LOWER(areas_covered) LIKE \'%western sydney%\' OR LOWER(areas_covered) LIKE \'%greater sydney%\'). ' +
@@ -224,14 +272,15 @@ const WORDS = {
   expenses: /expens|spend|spent|cost|receipt|purchase|bought/i, reminders: /remind|follow/i, visits: /visit|traffic|website/i,
   plan_tasks: /plan|project|task|complet|progress|late|schedule|gantt|milestone|lead|resource|finish|behind/i, plan_subtasks: /sub-?task|step/i, plan_risks: /risk/i, plan_issues: /issue|problem/i,
   subcontractors: /sub-?contract|subb(ie|y|ies)|tradie|sparky|rating|rated|roof|drain|gutter|leak|liability|call-?out|hourly|rates?\b|sole trader|papers?\b|complian|on hold|do not use|(not|haven'?t|didn'?t)( we)? used|last used|who (can|does|do)|someone|anyone|nobody|no one|\bguy\b|person for|trades?(wo)?m[ae]n|licen[cs]|insur|workers'? comp|white card|swms|plumb|electric|sparkie|cleaner|tiler|painter|carpent|roofer|concret|plaster|waterproof|glazier|landscap|fenc|scaffold|demoli|asbestos|skip bin|pest|locksmith|handyman|gas ?fit|air ?con|certifier|engineer|surveyor|bricklay|joiner/i,
-  inventory: /stock|inventor|material|re-?order|low on|on hand/i, suppliers: /supplier|vendor/i, supplier_prices: /price|cheap|compare|supplier quote/i, stock_moves: /stock (used|in|out)|used|movement|consum|took/i
+  inventory: /stock|inventor|material|re-?order|low on|on hand|short supply|short of|running (low|out)|run(ning)? out|\blow\b|\bitems?\b|\border(ing)?\b|restock|shortage|supplies|parts?\b|products?\b/i, suppliers: /supplier|vendor/i, supplier_prices: /price|cheap|compare|supplier quote/i, stock_moves: /stock (used|in|out)|used|movement|consum|took/i
 };
-function pickTables(question, extraSql = '') {
+export function pickTables(question, extraSql = '') {
   const q = String(question || ''), chosen = new Set(['jobs']);
   for (const [t, re] of Object.entries(WORDS)) if (re.test(q)) chosen.add(t);
   for (const t of Object.keys(SCHEMA)) if (new RegExp('\\b' + t + '\\b', 'i').test(extraSql)) chosen.add(t);
   if (chosen.has('plan_subtasks')) chosen.add('plan_tasks');
-  if (chosen.has('supplier_prices') || chosen.has('stock_moves')) chosen.add('inventory');
+  if (chosen.has('supplier_prices') || chosen.has('stock_moves') || chosen.has('suppliers')) chosen.add('inventory');
+  if (chosen.has('inventory') && /supplier|order from|whom|who to|contact|phone|call|email|vendor/i.test(q)) chosen.add('suppliers');
   if (chosen.has('subcontractors')) { chosen.add('sub_trades'); if (/job|project|plan|working on|on site|stakeholder|raci/i.test(q)) chosen.add('plan_stakeholders'); }
   if (/stakeholder|raci|accountable|responsible|consulted|informed/i.test(q)) { chosen.add('plan_stakeholders'); chosen.add('plan_tasks'); }
   // nothing specific (and not about jobs): give the AI every table
@@ -273,7 +322,12 @@ const SYSTEM = 'Turn the question from the owner of a Sydney building company in
   '3) Never alias as total, value, count, sum, rows, index, plan, top, group, desc or asc; every alias must differ from column names (e.g. jobs_count, total_inc). Same aliases in every UNION part. ' +
   '4) Match words loosely: LOWER(col) LIKE \'%word%\'. "Project X" = plan_tasks.plan_name or the job (jobs.name, service, suburb, ref) joined on plan_tasks.job = jobs.core. ' +
   '5) Project % complete = ROUND(SUM(CASE WHEN days < 1 THEN 1 ELSE days END * pct_complete) / SUM(CASE WHEN days < 1 THEN 1 ELSE days END)). New jobs = by created. Owed = SUM(balance) of invoices not paid or void. ' +
-  '6) Lists: useful columns, newest first, LIMIT 200. Totals/counts: one row. If it cannot be answered from these tables, sql = "" and say why in note. ' +
+  '6) Every table starts with its own key (primary key), named after the table: customer_id, job_id, quote_id, invoice_id, stock_id (inventory), supplier_id, subcontractor_id, task_id, line_id, payment_id, expense_id, move_id, price_id, stakeholder_id. ' +
+  'A column with another table\'s key name points to that table (foreign key), so JOIN on the SAME name, never on names or text: inventory.supplier_id = suppliers.supplier_id; supplier_prices.stock_id = inventory.stock_id; supplier_prices.supplier_id = suppliers.supplier_id; ' +
+  'stock_moves.stock_id = inventory.stock_id; stock_moves.job_id = jobs.job_id; quotes/invoices/expenses/reminders/plan_*.job_id = jobs.job_id; jobs.customer_id = customers.customer_id; invoices.quote_id = quotes.quote_id; ' +
+  'items.quote_id / items.invoice_id; payments.invoice_id = invoices.invoice_id; plan_subtasks.task_id = plan_tasks.task_id; plan_stakeholders.subcontractor_id = subcontractors.subcontractor_id. ' +
+  'For a UNION, select the same key and columns from each part (e.g. stock_id, supplier_id). Use LEFT JOIN when the other side may be missing. Prefer columns already on the table (e.g. inventory.supplier_phone) over a join. ' +
+  '7) Lists: useful columns, newest first, LIMIT 200. Totals/counts: one row. If it cannot be answered from these tables, sql = "" and say why in note. ' +
   'Reply JSON only: {"sql":"","title":"max 60 chars","note":"one short sentence: how you read it","chart":null or {"type":"bar|hbar|line|pie|doughnut","x":"alias","y":["alias"]}}';
 
 export async function askSql({ question, hints, previous, history }) {
@@ -378,7 +432,7 @@ export async function reportPdf({ title, summary, insights, recommendations, sql
 }
 
 export async function sqlPost(action, body, { who }) {
-  if (action === 'sqlData') return out(200, { schema: SCHEMA, describe: DESCRIBE, data: await tables() });
+  if (action === 'sqlData') return out(200, { schema: SCHEMA, describe: DESCRIBE, keys: Object.fromEntries(Object.entries(KEYS).map(([t, K]) => [t, { pk: K.pk, fk: K.fk || {} }])), data: await tables() });
   if (action === 'sqlNarrative') {
     const columns = (Array.isArray(body.columns) ? body.columns : []).map(String).slice(0, 40), rows = Array.isArray(body.rows) ? body.rows.slice(0, 200) : [];
     return out(200, await narrative({ title: String(body.title || 'Report').slice(0, 120), sql: String(body.sql || '').slice(0, 3000), columns, rows, focus: String(body.focus || '').slice(0, 400) }));

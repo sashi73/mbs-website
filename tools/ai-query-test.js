@@ -124,7 +124,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const w1 = seen.filter((x) => /Turn the question/.test(x.sys)).pop();
     const m = w1.u.dates.this_month;
     ok('Context', `the AI is given Sydney dates for "this month" (${m[0]} to ${m[1]}), this week, financial year…`, m[0] === today.slice(0, 8) + '01' && m[1] >= today && Array.isArray(w1.u.dates.this_financial_year) && w1.u.dates.today === today);
-    ok('Context', 'the AI is given the table columns and short notes (stages)', /jobs\(ref,core,(customer,)?stage/.test(w1.u.tables) && /new\|called\|quoted/.test(w1.u.notes) );
+    ok('Context', 'the AI is given the table columns and short notes (stages)', /jobs\(job_id,customer_id,ref,core,(customer,)?stage/.test(w1.u.tables) && /new\|called\|quoted/.test(w1.u.notes) );
     ok('Tokens', 'only the tables the question needs are sent ("new jobs" → just jobs)', !/plan_tasks|inventory|supplier/.test(w1.u.tables) && !w1.u.values.plans);
     const body1 = JSON.parse(w1.raw);
     ok('Tokens', `writing the query: reply capped at AI_QUERY_MAX_TOKENS (450 here, default 500), request about ${Math.round(w1.raw.length / 3.6)} tokens (was about 2,400)`, body1.max_tokens === 450 && w1.raw.length / 3.6 < 1300, w1.raw.length);
