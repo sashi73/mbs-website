@@ -1527,14 +1527,14 @@
     /* 7c. v53: Contracts (only when there are some) */
     if ((p.contracts || []).length) {
       var cs = wb.addWorksheet('Contracts', { views: [{ state: 'frozen', ySplit: 4 }] });
-      cs.columns = [16, 30, 30, 12, 15, 15, 15, 15, 15, 15, 13, 13, 12, 14].map(function (w) { return { width: w }; });
-      titleBlock(cs, 'Contracts', 14);
-      header(cs, 4, ['Type', 'With', 'Scope', 'Status', 'Contract sum', 'Approved variations', 'Adjusted sum', 'Claimed', 'Paid', 'Owing', 'Start', 'Completion', 'Retention %', 'LDs $/day']);
+      cs.columns = [6, 20, 36, 44, 14].map(function (w) { return { width: w }; });
+      titleBlock(cs, 'Contracts', 5);
+      header(cs, 4, ['#', 'Type', 'With', 'Document', 'Uploaded']);
+      var dn = {}; ((S.intel && S.intel.docs) || []).forEach(function (d) { dn[d.id] = d.name; });
       p.contracts.forEach(function (c, i) {
-        var n = ctNums(c), r = cs.getRow(5 + i);
-        r.values = [c.type, c.party, c.title, c.status, c.value, n.approved, n.adjusted, n.claimed, n.paid, n.owing, D(c.start), D(c.end), c.retention, c.ldPerDay];
-        [5, 6, 7, 8, 9, 10, 14].forEach(function (cc) { r.getCell(cc).numFmt = money$; }); [11, 12].forEach(function (cc) { r.getCell(cc).numFmt = dateF; });
-        r.eachCell({ includeEmpty: true }, function (cc) { cc.border = box; cc.alignment = { vertical: 'top', wrapText: cc.col <= 3 }; });
+        var r = cs.getRow(5 + i);
+        r.values = [i + 1, c.type === 'Customer' ? 'Customer contract' : c.type, c.party, dn[(c.docs || [])[0]] || '', c.at ? new Date(c.at) : null];
+        r.getCell(5).numFmt = dateF; r.eachCell({ includeEmpty: true }, function (cc) { cc.border = box; cc.alignment = { vertical: 'top', wrapText: cc.col >= 3 && cc.col <= 4 }; });
       });
       footer(cs, 7 + p.contracts.length);
     }
@@ -1752,223 +1752,67 @@
     if ($('#skMgr')) $('#skMgr').onclick = function () { add({ name: mgr, role: 'Project manager', raci: 'A' }); };
   }
 
-  /* ---------- v53: 📜 Contracts (contract and vendor management) ---------- */
-  // The head contract with the customer, sub-contracts with subbies, supply and consultant contracts: value, dates, retention,
-  // defects period, liquidated damages, variations and progress claims, with the contract documents (also read by Project Intelligence).
-  var CT_TYPES = [['Head contract', '🏠', 'customer', 'With the customer: money in'], ['Subcontract', '👷', 'subbie', 'With a sub-contractor: money out'], ['Supply', '📦', 'supplier', 'With a supplier: materials and hire'], ['Consultant', '📐', 'other', 'Certifier, engineer, designer'], ['Other', '📄', 'other', 'Anything else']];
-  var CT_STATUS = ['Draft', 'Sent', 'Signed', 'Active', 'Completed', 'Terminated', 'Disputed'];
-  var ctIcon = function (ty) { return (CT_TYPES.filter(function (x) { return x[0] === ty; })[0] || CT_TYPES[4])[1]; };
-  var ctIn = function (c) { return c.type === 'Head contract'; };
-  var ctEx = function (c, v) { return c.gstIncl ? v / 1.1 : v; };
-  function ctNums(c) {
-    var ap = c.variations.filter(function (v) { return v.status === 'Approved'; }).reduce(function (a, v) { return a + v.amount; }, 0);
-    var pend = c.variations.filter(function (v) { return v.status === 'Pending'; }).reduce(function (a, v) { return a + v.amount; }, 0);
-    var claimed = c.claims.reduce(function (a, v) { return a + v.amount; }, 0), paid = c.claims.filter(function (v) { return v.paid; }).reduce(function (a, v) { return a + v.amount; }, 0);
-    var adj = c.value + ap, ret = Math.round(claimed * (c.retention || 0)) / 100;
-    return { approved: ap, pending: pend, adjusted: adj, claimed: claimed, paid: paid, owing: claimed - paid, left: adj - claimed, retention: ret, overdue: c.claims.filter(function (v) { return !v.paid && v.due && v.due < today(); }) };
-  }
-  function ctSub(c) { return c.partyKind === 'subbie' && M.subs ? M.subs.list().filter(function (s) { return s.id === c.partyRef; })[0] : null; }
-  function ctAlerts(c) {
-    var a = [], n = ctNums(c), t0 = today(), sb = ctSub(c);
-    if (/Draft|Sent/.test(c.status)) a.push(['warn', c.status === 'Draft' ? 'Not sent or signed yet' : 'Sent, not signed yet']);
-    if (sb && sb.comp && sb.comp.worst === 'expired') a.push(['bad', 'Subbie papers expired: ' + sb.comp.problems.join(', ')]);
-    else if (sb && sb.comp && sb.comp.worst === 'due') a.push(['warn', 'Subbie papers due soon: ' + sb.comp.problems.join(', ')]);
-    else if (sb && sb.comp && sb.comp.worst === 'missing') a.push(['warn', 'Subbie papers missing: ' + sb.comp.problems.join(', ')]);
-    if (n.overdue.length) a.push(['bad', pl(n.overdue.length, 'claim') + ' overdue (' + money(n.overdue.reduce(function (x, v) { return x + v.amount; }, 0)) + ')']);
-    if (c.end && c.end < t0 && /Signed|Active/.test(c.status)) a.push(['warn', 'Past the completion date (' + dmy(c.end) + ')' + (c.ldPerDay ? ': liquidated damages ' + money(c.ldPerDay) + '/day may apply' : '')]);
-    if (n.pending) a.push(['info', pl(c.variations.filter(function (v) { return v.status === 'Pending'; }).length, 'variation') + ' waiting for approval (' + money(n.pending) + ')']);
-    if (c.claims.length && n.claimed > n.adjusted + 0.01) a.push(['bad', 'Claimed more than the contract sum']);
-    return a;
-  }
+  /* ---------- v53: 📜 Contracts (plain uploader) ---------- */
+  // One line per contract: the type, who it is with, and the signed contract (Word or PDF). The details are read by
+  // 🧠 Project Intelligence, so ask there ("What are the payment terms in the plumbing sub-contract?").
+  var CT_TYPES = [['Customer', '🏠', 'Customer contract'], ['Sub-contractor', '👷', 'Sub-contractor'], ['Supply', '📦', 'Supply'], ['Consultant', '📐', 'Consultant']];
   function contractsTab() {
-    // keep the cursor where it was (redraws happen after a change, often as you tab to the next box)
-    var ae = document.activeElement, keep = null;
-    if (ae && ae.closest && ae.closest('[data-ctcard]')) {
-      var tr = ae.closest('tr[data-vi],tr[data-ci]');
-      keep = { card: ae.closest('[data-ctcard]').getAttribute('data-ctcard'), sel: ae.hasAttribute('data-cf') ? '[data-cf="' + ae.getAttribute('data-cf') + '"]' : ae.hasAttribute('data-cv') ? 'tr[data-vi="' + tr.getAttribute('data-vi') + '"] [data-cv="' + ae.getAttribute('data-cv') + '"]' : ae.hasAttribute('data-cc') ? 'tr[data-ci="' + tr.getAttribute('data-ci') + '"] [data-cc="' + ae.getAttribute('data-cc') + '"]' : null, pos: (function () { try { return ae.selectionStart; } catch (e) { return null; } })() };
+    var p = S.plan; p.contracts = p.contracts || [];
+    if (!S.intel || S.intel.core !== S.core) {
+      $('#planBody').innerHTML = '<div class="empty">Loading contracts…</div>';
+      api('intelGet', { core: S.core }).then(function (d) { S.intel = { core: S.core, docs: d.docs, log: d.log, open: {} }; if (S.tab === 'contracts') contractsTab(); }).catch(fail);
+      return;
     }
-    ctDraw();
-    if (keep && keep.sel) { var el = document.querySelector('[data-ctcard="' + keep.card + '"] ' + keep.sel); if (el) { el.focus(); try { if (keep.pos != null) el.setSelectionRange(keep.pos, keep.pos); } catch (e) {} } }
-  }
-  function ctLater() { setTimeout(contractsTab, 0); }   // after the browser has moved focus to the next box
-  function ctDraw() {
-    var p = S.plan; p.contracts = p.contracts || []; S.ctOpen = S.ctOpen || {};
-    if (M.subs && !S.subsLoaded) { S.subsLoaded = true; M.subs.load().then(function () { if (S.tab === 'contracts') contractsTab(); }).catch(function () {}); }
-    if (!S.intel || S.intel.core !== S.core) { api('intelGet', { core: S.core }).then(function (d) { S.intel = { core: S.core, docs: d.docs, log: d.log, open: {} }; if (S.tab === 'contracts') contractsTab(); }).catch(function () {}); }
-    var L = p.contracts, head = L.filter(ctIn), outs = L.filter(function (c) { return !ctIn(c) && c.status !== 'Terminated'; });
-    var sum = function (list, f) { return list.reduce(function (a, c) { return a + f(c); }, 0); };
-    var inAdj = sum(head, function (c) { return ctEx(c, ctNums(c).adjusted); }), outAdj = sum(outs, function (c) { return ctEx(c, ctNums(c).adjusted); });
-    var inClaim = sum(head, function (c) { return ctNums(c).claimed; }), inPaid = sum(head, function (c) { return ctNums(c).paid; });
-    var outClaim = sum(outs, function (c) { return ctNums(c).claimed; }), outPaid = sum(outs, function (c) { return ctNums(c).paid; });
-    var att = L.reduce(function (a, c) { return a + ctAlerts(c).filter(function (x) { return x[0] !== 'info'; }).length; }, 0);
-    var kpi = function (k, v, s, cls) { return '<div class="card kpi' + (cls ? ' ' + cls : '') + '"><div class="k">' + k + '</div><div class="v">' + v + '</div><div class="s">' + s + '</div></div>'; };
-    var mg = inAdj - outAdj;
-    $('#planBody').innerHTML = (L.length ? '<div class="grid kpis ckpis ct-kpis">' +
-        kpi('Contract sum (customer)', head.length ? money(inAdj) : '–', head.length ? 'ex GST, with approved variations' : 'no head contract yet') +
-        kpi('Committed to subbies & suppliers', money(outAdj), pl(outs.length, 'contract') + ', ex GST') +
-        kpi('Margin', head.length ? money(mg) : '–', head.length && inAdj ? Math.round(mg / inAdj * 100) + '% of the contract sum' : 'add the head contract', head.length && mg < 0 ? 'kpi-bad' : '') +
-        kpi('Money in', money(inPaid) + ' <small>of ' + money(inClaim) + '</small>', 'paid of claimed from the customer') +
-        kpi('Money out', money(outPaid) + ' <small>of ' + money(outClaim) + '</small>', 'paid of claimed by subbies & suppliers') +
-        kpi('Needs attention', att, att ? 'see the flags below' : 'all in order', att ? 'kpi-warn' : '') + '</div>' : '') +
-      '<div class="card" style="margin-top:' + (L.length ? '14px' : '0') + '"><div class="card-h"><h2>📜 Contracts</h2><span class="sp"></span>' +
-        CT_TYPES.slice(0, 4).map(function (x) { return '<button class="btn btn-sm' + (x[0] === 'Head contract' && !head.length ? ' btn-gold' : '') + '" data-ctnew="' + x[0] + '" title="' + esc(x[3]) + '">＋ ' + x[1] + ' ' + (x[0] === 'Head contract' ? 'Customer contract' : x[0] === 'Subcontract' ? 'Sub-contract' : x[0]) + '</button>'; }).join('') + '</div>' +
-      '<p class="muted" style="margin:-4px 0 10px">Every contract on this job: with the customer, your subbies, suppliers and consultants. Upload the signed contract to each one; <b>✨ Fill in from the document</b> reads the key terms, and 🧠 Project Intelligence can answer questions about them.</p>' +
-      (L.length ? L.map(ctCard).join('') : '<div class="empty">No contracts yet. Start with the <b>customer contract</b> (the head contract), then add a sub-contract for each subbie and supply contracts for big orders.</div>') + '</div>';
-    var B = $('#planBody');
-    B.querySelectorAll('[data-ctnew]').forEach(function (b) { b.onclick = function () { ctNew(b.getAttribute('data-ctnew')); }; });
-    B.querySelectorAll('[data-ctcard]').forEach(function (el) { ctWire(el); });
-  }
-  function ctCard(c) {
-    var n = ctNums(c), al = ctAlerts(c), open = S.ctOpen[c.id], sb = ctSub(c), tin = ctIn(c);
-    var docs = ((S.intel && S.intel.docs) || []).filter(function (d) { return d.contractId === c.id || c.docs.indexOf(d.id) >= 0; });
-    var h = '<div class="ct-card' + (open ? ' open' : '') + '" data-ctcard="' + esc(c.id) + '"><div class="ct-head" data-cttoggle><span class="ct-ic">' + ctIcon(c.type) + '</span><div class="ct-who"><b>' + esc(c.party || '(who?)') + '</b>' +
-        (sb ? ' <span class="scchip scchip-' + ({ ok: 'ok', due: 'due', expired: 'bad', missing: 'miss' }[sb.comp.worst] || 'ok') + '">' + ({ ok: '✓ Papers OK', due: 'Papers due', expired: '⚠ Papers expired', missing: 'Papers missing' }[sb.comp.worst] || '') + '</span>' : '') +
-        '<br><small class="muted">' + esc(c.type) + (c.title ? ' · ' + esc(c.title) : '') + (c.ref ? ' · ' + esc(c.ref) : '') + '</small></div>' +
-        '<div class="ct-money"><b>' + money(n.adjusted) + '</b><small class="muted">' + (n.approved ? 'incl. ' + money(n.approved) + ' variations' : (c.gstIncl ? 'inc GST' : 'ex GST')) + '</small></div>' +
-        '<div class="ct-bar" title="' + esc(money(n.paid) + ' paid, ' + money(n.claimed) + ' claimed of ' + money(n.adjusted)) + '"><i style="width:' + Math.min(100, n.adjusted ? n.paid / n.adjusted * 100 : 0) + '%"></i><i class="cl" style="width:' + Math.min(100, n.adjusted ? (n.claimed - n.paid) / n.adjusted * 100 : 0) + '%"></i></div>' +
-        '<span class="ct-st ct-st-' + c.status.toLowerCase() + '">' + c.status + '</span>' + (al.some(function (x) { return x[0] === 'bad'; }) ? '<span class="ct-flag bad" title="Needs attention">⚠</span>' : al.some(function (x) { return x[0] === 'warn'; }) ? '<span class="ct-flag warn" title="Needs attention">!</span>' : '') +
-        '<span class="ct-chev">' + (open ? '▾' : '▸') + '</span></div>';
-    if (al.length) h += '<div class="ct-alerts">' + al.map(function (x) { return '<span class="ct-al ct-al-' + x[0] + '">' + esc(x[1]) + '</span>'; }).join('') + '</div>';
-    if (!open) return h + '</div>';
-    var f = function (k, label, type, extra) { var v = c[k]; return '<label' + (extra || '') + '>' + label + '<input data-cf="' + k + '"' + (type ? ' type="' + type + '"' : '') + ' value="' + esc(v == null || (type === 'number' && !v) ? '' : v) + '"' + (type === 'number' ? ' step="any" min="0"' : '') + '></label>'; };
-    h += '<div class="ct-body"><div class="form ct-form">' +
-      '<label>Type<select data-cf="type">' + CT_TYPES.map(function (x) { return '<option' + (x[0] === c.type ? ' selected' : '') + '>' + x[0] + '</option>'; }).join('') + '</select></label>' +
-      '<label>Status<select data-cf="status">' + CT_STATUS.map(function (x) { return '<option' + (x === c.status ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label>' +
-      '<label class="ct-w2">' + (tin ? 'Customer' : c.partyKind === 'subbie' ? 'Sub-contractor' : c.partyKind === 'supplier' ? 'Supplier' : 'With') + '<span class="ct-party"><input data-cf="party" value="' + esc(c.party) + '">' + (c.partyKind === 'subbie' && c.partyRef ? '<a class="btn btn-sm" href="#subs/' + esc(c.partyRef) + '" title="Open the subbie">👷 ' + esc(c.partyRef) + '</a>' : '') + '</span></label>' +
-      f('title', 'Scope of work', '', ' class="ct-w2"') + f('ref', 'Contract no.') + f('form', 'Form of contract') +
-      f('value', 'Contract sum ($)', 'number') + '<label>GST<span class="sc-inline"><label class="sc-cb"><input type="checkbox" data-cf="gstIncl"' + (c.gstIncl ? ' checked' : '') + '> Sum includes GST</label></span></label>' +
-      f('terms', 'Payment terms', '', ' class="ct-w2"') + f('retention', 'Retention (%)', 'number') + f('ldPerDay', 'Liquidated damages ($/day)', 'number') +
-      f('signed', 'Signed', 'date') + f('start', 'Start', 'date') + f('end', 'Completion', 'date') + f('dlpMonths', 'Defects period (months)', 'number') +
-      '<label class="full">Insurance required<input data-cf="insurance" value="' + esc(c.insurance) + '" placeholder="e.g. Public liability $20m, workers comp, contract works"></label>' +
-      '<label class="full">Key obligations, notices and deadlines<textarea data-cf="obligations" rows="3" placeholder="- Variations must be agreed in writing before work starts">' + esc(c.obligations) + '</textarea></label>' +
-      '<label class="full">Notes<textarea data-cf="notes" rows="2">' + esc(c.notes) + '</textarea></label></div>';
-    if (sb) h += '<div class="ct-sub">👷 <b>' + esc(sb.business) + '</b> · ' + esc(M.subs.tradeName(sb.trade)) + ' · ' + (sb.comp.worst === 'ok' ? '✓ licence and insurance in order' : esc(sb.comp.problems.join(' · '))) + (sb.phone ? ' · <a href="tel:' + esc(String(sb.phone).replace(/[^\d+]/g, '')) + '">' + esc(sb.phone) + '</a>' : '') + '</div>';
-    // documents
-    h += '<div class="ct-sec"><div class="ct-sec-h"><h4>📎 Contract documents</h4><span class="sp"></span><label class="btn btn-sm btn-gold" for="ctf-' + esc(c.id) + '">＋ Upload contract</label><input type="file" id="ctf-' + esc(c.id) + '" data-ctfile hidden accept=".pdf,.docx,.txt,.md,.html,.htm"></div><div data-ctup></div>' +
-      (docs.length ? '<ul class="pi-docs">' + docs.map(function (d) { return '<li data-did="' + esc(d.id) + '"><span class="pi-dk">' + (PI_KIND[d.kind] || '📄') + '</span><div><b>' + esc(d.name) + '</b><br><small class="muted">' + (d.pages ? pl(d.pages, 'page') + ' · ' : '') + (d.words || 0).toLocaleString('en-AU') + ' words</small></div><span class="sp"></span><button class="btn btn-sm btn-ai" data-ctread>✨ Fill in from the document</button><button class="btn btn-sm" data-ctdl title="Download">⬇</button></li>'; }).join('') + '</ul>'
-        : '<p class="muted" style="margin:0;font-size:13px">No document yet. Upload the signed contract (PDF, Word or text) and let the AI fill in the key terms.</p>') + '</div>';
-    // variations
-    h += '<div class="ct-sec"><div class="ct-sec-h"><h4>🔁 Variations</h4><span class="muted" style="font-size:12.5px">' + money(n.approved) + ' approved' + (n.pending ? ' · ' + money(n.pending) + ' pending' : '') + '</span><span class="sp"></span><button class="btn btn-sm" data-ctaddv>＋ Variation</button></div>' +
-      (c.variations.length ? '<div class="table-wrap"><table class="ct-tbl"><thead><tr><th>No.</th><th>What changed</th><th class="num">$ (+/−)</th><th class="num">+ days</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>' + c.variations.map(function (v, i) {
-        return '<tr data-vi="' + i + '"><td><input data-cv="no" value="' + esc(v.no) + '" style="width:56px"></td><td><input data-cv="desc" value="' + esc(v.desc) + '" placeholder="e.g. Extra niche in the shower"></td><td><input data-cv="amount" type="number" step="any" value="' + (v.amount || '') + '" style="width:100px"></td>' +
-          '<td><input data-cv="days" type="number" step="1" value="' + (v.days || '') + '" style="width:64px"></td><td><input data-cv="date" type="date" value="' + esc(v.date) + '"></td><td><select data-cv="status" class="ct-vs-' + v.status.toLowerCase() + '">' + ['Pending', 'Approved', 'Rejected'].map(function (s) { return '<option' + (s === v.status ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select></td><td><button class="btn btn-sm" data-vdel>✕</button></td></tr>'; }).join('') + '</tbody></table></div>' : '<p class="muted" style="margin:0;font-size:13px">No variations. Record every change to the scope or price here, and get it agreed in writing before the work is done.</p>') + '</div>';
-    // claims
-    h += '<div class="ct-sec"><div class="ct-sec-h"><h4>💵 Progress claims & payments <small class="muted">(' + (tin ? 'money in: what we claim from the customer' : 'money out: what they claim from us') + ')</small></h4><span class="sp"></span><button class="btn btn-sm" data-ctaddc>＋ Claim</button></div>' +
-      (c.claims.length ? '<div class="table-wrap"><table class="ct-tbl"><thead><tr><th>No.</th><th>Stage / description</th><th class="num">Amount $</th><th>Claimed</th><th>Due</th><th>Paid on</th><th></th></tr></thead><tbody>' + c.claims.map(function (v, i) {
-        var od = !v.paid && v.due && v.due < today();
-        return '<tr data-ci="' + i + '"' + (od ? ' class="ct-od"' : v.paid ? ' class="tdone"' : '') + '><td><input data-cc="no" value="' + esc(v.no) + '" style="width:56px"></td><td><input data-cc="desc" value="' + esc(v.desc) + '" placeholder="e.g. Deposit 10%"></td><td><input data-cc="amount" type="number" step="any" value="' + (v.amount || '') + '" style="width:110px"></td>' +
-          '<td><input data-cc="date" type="date" value="' + esc(v.date) + '"></td><td><input data-cc="due" type="date" value="' + esc(v.due) + '"></td><td><input data-cc="paid" type="date" value="' + esc(v.paid) + '"></td><td class="nowrap">' + (v.paid ? '' : '<button class="btn btn-sm" data-cpaid title="Paid today">✓ Paid</button> ') + '<button class="btn btn-sm" data-cdel>✕</button></td></tr>'; }).join('') +
-        '</tbody><tfoot><tr><td></td><td><b>Claimed ' + money(n.claimed) + ' · paid ' + money(n.paid) + ' · owing ' + money(n.owing) + '</b>' + (c.retention ? '<br><small class="muted">Retention held at ' + c.retention + '%: ' + money(n.retention) + '</small>' : '') + '</td><td colspan="5" class="muted" style="font-size:12.5px">Left to claim: <b>' + money(n.left) + '</b></td></tr></tfoot></table></div>'
-        : '<p class="muted" style="margin:0;font-size:13px">No claims yet. Add the payment stages (e.g. deposit, frame, lock-up, completion) and tick them off as they are paid.</p>') + '</div>';
-    h += '<div class="row" style="margin-top:10px"><span class="sp"></span><button class="btn btn-sm" data-ctdel>🗑 Delete this contract</button></div></div>';
-    return h + '</div>';
-  }
-  function ctFind(el) { var id = el.closest('[data-ctcard]').getAttribute('data-ctcard'); return S.plan.contracts.filter(function (c) { return c.id === id; })[0]; }
-  function ctWire(box) {
-    var c = ctFind(box), p = S.plan;
-    box.querySelector('[data-cttoggle]').onclick = function () { S.ctOpen[c.id] = !S.ctOpen[c.id]; contractsTab(); };
-    box.querySelectorAll('[data-cf]').forEach(function (el) {
-      var k = el.getAttribute('data-cf'), num = el.type === 'number';
-      var set = function () { c[k] = el.type === 'checkbox' ? el.checked : num ? (parseFloat(el.value) || 0) : el.value; dirty(); };
-      if (el.tagName === 'INPUT' && el.type !== 'checkbox' && el.type !== 'date') { el.addEventListener('input', set); el.addEventListener('change', ctLater); }
-      else el.addEventListener('change', function () { set(); ctLater(); });
-    });
-    var rows = function (sel, list, attr) { box.querySelectorAll(sel).forEach(function (tr) { var i = +tr.getAttribute(attr); tr.querySelectorAll('[data-cv],[data-cc]').forEach(function (el) {
-      var k = el.getAttribute('data-cv') || el.getAttribute('data-cc'), num = el.type === 'number';
-      var set = function () { list()[i][k] = num ? (parseFloat(el.value) || 0) : el.value; dirty(); };
-      if (el.tagName === 'INPUT' && el.type !== 'date') { el.addEventListener('input', set); el.addEventListener('change', ctLater); } else el.addEventListener('change', function () { set(); ctLater(); });
-    }); }); };
-    rows('tr[data-vi]', function () { return c.variations; }, 'data-vi'); rows('tr[data-ci]', function () { return c.claims; }, 'data-ci');
-    var q = function (s) { return box.querySelector(s); };
-    if (q('[data-ctaddv]')) q('[data-ctaddv]').onclick = function () { c.variations.push({ no: 'V' + (c.variations.length + 1), desc: '', amount: 0, days: 0, date: today(), status: 'Pending' }); dirty(); contractsTab(); };
-    if (q('[data-ctaddc]')) q('[data-ctaddc]').onclick = function () { c.claims.push({ no: (ctIn(c) ? 'PC' : 'C') + (c.claims.length + 1), desc: '', amount: 0, date: today(), due: '', paid: '' }); dirty(); contractsTab(); };
-    box.querySelectorAll('[data-vdel]').forEach(function (b) { b.onclick = function () { c.variations.splice(+b.closest('tr').getAttribute('data-vi'), 1); dirty(); contractsTab(); }; });
-    box.querySelectorAll('[data-cdel]').forEach(function (b) { b.onclick = function () { c.claims.splice(+b.closest('tr').getAttribute('data-ci'), 1); dirty(); contractsTab(); }; });
-    box.querySelectorAll('[data-cpaid]').forEach(function (b) { b.onclick = function () { c.claims[+b.closest('tr').getAttribute('data-ci')].paid = today(); dirty(); contractsTab(); }; });
-    if (q('[data-ctdel]')) q('[data-ctdel]').onclick = function () { M.confirmBox('Delete this contract?', 'The contract with ' + (c.party || '(no name)') + ', its variations and claims are removed from this project. Uploaded documents stay under Project Intelligence.', 'Delete').then(function (y) { if (!y) return; p.contracts = p.contracts.filter(function (x) { return x !== c; }); dirty(); contractsTab(); }); };
-    var fi = q('[data-ctfile]'); if (fi) fi.onchange = function () { var f = this.files[0]; this.value = ''; if (f) ctUpload(c, f, q('[data-ctup]')); };
-    box.querySelectorAll('[data-ctdl]').forEach(function (b) { b.onclick = function () { api('intelDocFile', { core: S.core, id: b.closest('li').getAttribute('data-did') }).then(function (r) {
-      var bin = atob(r.file), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-      var url = URL.createObjectURL(new Blob([u8], { type: r.type })), a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 5000); }).catch(fail); }; });
-    box.querySelectorAll('[data-ctread]').forEach(function (b) { b.onclick = function () { ctRead(c, b.closest('li').getAttribute('data-did'), b); }; });
-  }
-  function ctNew(type) {
-    var T = CT_TYPES.filter(function (x) { return x[0] === type; })[0], p = S.plan;
-    var make = function (party, kind, ref) {
-      var c = { id: 'c' + Date.now().toString(36), type: type, party: party || '', partyKind: kind, partyRef: ref || '', title: '', ref: '', form: type === 'Head contract' ? 'HIA / Master Builders lump sum' : type === 'Subcontract' ? 'Subcontract' : '', value: 0, gstIncl: type === 'Head contract',
-        terms: type === 'Head contract' ? 'Progress payments, 5 business days' : '30 days EOM', retention: type === 'Subcontract' ? 5 : 0, start: S.plan.workStart || '', end: '', signed: '', dlpMonths: type === 'Head contract' ? 12 : type === 'Subcontract' ? 12 : 0, ldPerDay: 0, status: 'Draft', insurance: type === 'Subcontract' ? 'Public liability $20m, workers comp (or sole trader cover), current licence' : '', obligations: '', notes: '', docs: [], variations: [], claims: [] };
-      if (type === 'Head contract') c.title = S.plan.name;
-      p.contracts.push(c); S.ctOpen[c.id] = true; dirty(); contractsTab();
-      setTimeout(function () { var el = document.querySelector('[data-ctcard="' + c.id + '"] [data-cf=' + (party ? 'title' : 'party') + ']'); if (el) el.focus(); }, 30);
+    var subs = (p.stakeholders || []).filter(function (x) { return x.sub; }), ty = S.ctType || 'Customer', docs = S.intel.docs;
+    var who = ty === 'Customer' ? '<input value="' + esc(S.job.name || 'Customer') + '" disabled>'
+      : ty === 'Sub-contractor' ? (subs.length ? '<select id="ctWho"><option value="">Choose the sub-contractor…</option>' + subs.map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.name) + (x.role ? ' · ' + esc(x.role) : '') + '</option>'; }).join('') + '</select>'
+        : '<input disabled value="No sub-contractors yet: add them on the Stakeholders tab (👷 Add a subbie)">')
+      : '<input id="ctWho" placeholder="' + (ty === 'Supply' ? 'Supplier name, e.g. Western Tiles Direct' : 'Consultant, e.g. Hills Certifiers') + '" maxlength="120">';
+    var row = function (c) {
+      var d = docs.filter(function (x) { return x.id === (c.docs || [])[0]; })[0], T = CT_TYPES.filter(function (x) { return x[0] === c.type; })[0] || CT_TYPES[3];
+      return '<tr data-ctid="' + esc(c.id) + '"><td class="nowrap">' + T[1] + ' ' + esc(T[2]) + '</td><td><b>' + esc(c.party) + '</b></td>' +
+        '<td>' + (d ? esc(d.name) + '<br><small class="muted">' + (d.pages ? pl(d.pages, 'page') + ' · ' : '') + (d.words || 0).toLocaleString('en-AU') + ' words</small>' : '<span class="muted">document missing</span>') + '</td>' +
+        '<td class="nowrap">' + dmy(new Date((c.at || Date.now()) + 10 * 3600e3).toISOString().slice(0, 10)) + '</td>' +
+        '<td class="nowrap">' + (d ? '<button class="btn btn-sm" data-ctdl title="Download">⬇</button> <button class="btn btn-sm btn-ai" data-ctask title="Ask Project Intelligence about this contract">🧠 Ask</button> ' : '') + '<button class="btn btn-sm" data-ctdel title="Delete">✕</button></td></tr>';
     };
-    if (T[2] === 'customer') return make(S.job.name, 'customer', S.core);
-    if (T[2] === 'subbie') {
-      var go = function () {
-        var list = M.subs.list().filter(function (s) { return !s.archived && s.status !== 'Do not use'; }), by = {};
-        list.forEach(function (s) { var t = M.subs.tradeName(s.trade); (by[t] = by[t] || []).push(s); });
-        var used = (p.stakeholders || []).filter(function (x) { return x.sub; }).map(function (x) { return x.sub; });
-        M.modal('<h2>New sub-contract</h2><p class="muted" style="margin:6px 0 10px">Choose the subbie. Their licence and insurance are checked on the contract.</p><label>Sub-contractor<select id="ctPick"><option value="">Choose…</option>' +
-          (used.length ? '<optgroup label="On this project (Stakeholders)">' + list.filter(function (s) { return used.indexOf(s.id) >= 0; }).map(function (s) { return '<option value="' + esc(s.id) + '">' + esc(s.business) + ' · ' + esc(M.subs.tradeName(s.trade)) + '</option>'; }).join('') + '</optgroup>' : '') +
-          Object.keys(by).sort().map(function (t) { return '<optgroup label="' + esc(t) + '">' + by[t].map(function (s) { return '<option value="' + esc(s.id) + '">' + esc(s.business) + (s.comp && s.comp.worst === 'expired' ? ' ⚠ papers expired' : '') + '</option>'; }).join('') + '</optgroup>'; }).join('') +
-          '</select></label><div class="actions" style="margin-top:14px"><button class="btn" data-close>Cancel</button> <button class="btn" id="ctOther">Someone not in the list</button> <button class="btn btn-gold" id="ctOk">Add sub-contract</button></div>');
-        $('#ctOk').onclick = function () { var s = list.filter(function (x) { return x.id === $('#ctPick').value; })[0]; if (!s) return toast('Choose the subbie', true); M.closeModal(); make(s.business, 'subbie', s.id);
-          var c = p.contracts[p.contracts.length - 1]; c.title = M.subs.tradeName(s.trade) + ' works'; c.terms = s.terms || c.terms; dirty(); contractsTab();
-          if (s.comp && s.comp.worst === 'expired') toast('Heads up: ' + s.business + ' has expired papers: ' + s.comp.problems.join(', '), true); };
-        $('#ctOther').onclick = function () { M.closeModal(); make('', 'other', ''); };
-      };
-      return M.subs ? M.subs.load().then(go).catch(fail) : make('', 'other', '');
-    }
-    if (T[2] === 'supplier') return api('invList').then(function (d) {
-      var sups = (d.suppliers || []).filter(function (s) { return !s.archived; });
-      M.modal('<h2>New supply contract</h2><p class="muted" style="margin:6px 0 10px">A supply agreement, purchase order or equipment hire for this job.</p><label>Supplier<select id="ctPick"><option value="">Choose…</option>' + sups.map(function (s) { return '<option value="' + esc(s.id) + '">' + esc(s.name) + (s.categories ? ' · ' + esc(s.categories) : '') + '</option>'; }).join('') + '</select></label>' +
-        '<div class="actions" style="margin-top:14px"><button class="btn" data-close>Cancel</button> <button class="btn" id="ctOther">Someone not in the list</button> <button class="btn btn-gold" id="ctOk">Add supply contract</button></div>');
-      $('#ctOk').onclick = function () { var s = sups.filter(function (x) { return x.id === $('#ctPick').value; })[0]; if (!s) return toast('Choose the supplier', true); M.closeModal(); make(s.name, 'supplier', s.id); var c = p.contracts[p.contracts.length - 1]; c.terms = s.terms || c.terms; c.title = 'Supply of ' + (s.categories || 'materials').toLowerCase(); dirty(); contractsTab(); };
-      $('#ctOther').onclick = function () { M.closeModal(); make('', 'other', ''); };
-    }).catch(fail);
-    make('', 'other', '');
+    $('#planBody').innerHTML = '<div class="card"><div class="card-h"><h2>📜 Contracts</h2></div>' +
+      '<p class="muted" style="margin:-4px 0 12px">Upload the signed contracts for this job (Word or PDF). Ask <b>🧠 Project Intelligence</b> about what is in them: price, payment stages, dates, variations, defects period and more.</p>' +
+      '<div class="ct-add"><select id="ctType">' + CT_TYPES.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === ty ? ' selected' : '') + '>' + x[1] + ' ' + x[2] + '</option>'; }).join('') + '</select>' + who +
+        '<label class="btn btn-gold" for="ctFile" id="ctUpBtn">⬆ Upload contract (Word or PDF)</label><input type="file" id="ctFile" hidden accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></div><div id="ctMsg"></div>' +
+      (p.contracts.length ? '<div class="table-wrap"><table class="ct-list"><thead><tr><th>Type</th><th>With</th><th>Contract</th><th>Uploaded</th><th></th></tr></thead><tbody>' + p.contracts.map(row).join('') + '</tbody></table></div>'
+        : '<div class="empty">No contracts yet. Choose the type, who it is with, and upload the signed contract.</div>') + '</div>';
+    $('#ctType').onchange = function () { S.ctType = this.value; contractsTab(); };
+    $('#ctFile').onchange = function () { var f = this.files[0]; this.value = ''; if (f) ctUpload(f); };
+    $('#planBody').querySelectorAll('tr[data-ctid]').forEach(function (tr) {
+      var c = p.contracts.filter(function (x) { return x.id === tr.getAttribute('data-ctid'); })[0], id = (c.docs || [])[0];
+      var q = function (s) { return tr.querySelector(s); };
+      if (q('[data-ctdl]')) q('[data-ctdl]').onclick = function () { api('intelDocFile', { core: S.core, id: id }).then(function (r) {
+        var bin = atob(r.file), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        var url = URL.createObjectURL(new Blob([u8], { type: r.type })), a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 5000); }).catch(fail); };
+      if (q('[data-ctask]')) q('[data-ctask]').onclick = function () { S.piDraft = 'Summarise the ' + (c.type === 'Customer' ? 'customer contract' : c.type.toLowerCase() + ' contract with ' + c.party) + ': price, payment stages, key dates, variations, defects period and anything we must watch.'; location.hash = '#plan/' + S.core + '/intel'; };
+      q('[data-ctdel]').onclick = function () { M.confirmBox('Delete this contract?', 'The ' + c.type.toLowerCase() + ' contract with ' + c.party + ' and its document are removed from this job.', 'Delete').then(function (y) {
+        if (!y) return; (id ? api('intelDocDelete', { core: S.core, id: id }) : Promise.resolve()).then(function () {
+          S.intel.docs = S.intel.docs.filter(function (x) { return x.id !== id; }); p.contracts = p.contracts.filter(function (x) { return x !== c; }); dirty(); toast('Contract deleted'); contractsTab(); }).catch(fail); }); };
+    });
   }
-  function ctUpload(c, f, box) {
-    if (box) box.innerHTML = '<p class="ask-think" style="margin:0 0 8px">Reading “' + esc(f.name) + '”…</p>';
+  function ctUpload(f) {
+    var p = S.plan, ty = S.ctType || 'Customer', msg = $('#ctMsg'), party = '', ref = '';
+    if (!/\.(pdf|docx)$/i.test(f.name)) return toast('Contracts must be a Word (.docx) or PDF file.', true);
+    if (ty === 'Customer') { party = S.job.name || 'Customer'; ref = S.core; }
+    else if (ty === 'Sub-contractor') { var sid = ($('#ctWho') || {}).value, x = (p.stakeholders || []).filter(function (y) { return y.id === sid; })[0]; if (!x) return toast('Choose the sub-contractor first', true); party = x.name; ref = x.sub; }
+    else { party = (($('#ctWho') || {}).value || '').trim(); if (!party) return toast('Type who the contract is with first', true); }
+    if (msg) msg.innerHTML = '<p class="ask-think" style="margin:8px 0">Reading “' + esc(f.name) + '”…</p>';
+    var id = 'c' + Date.now().toString(36);
     piExtract(f).then(function (x) {
       if (!x.text || x.text.replace(/\[page \d+\]/g, '').trim().length < 20) throw new Error('No text found in “' + f.name + '”. If it is a scanned PDF, save it as a text PDF or Word file first.');
-      var send = function (b64) { return api('intelUpload', { core: S.core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text, file: b64, kind: 'Contract', contractId: c.id }); };
+      var send = function (b64) { return api('intelUpload', { core: S.core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text, file: b64, kind: 'Contract', contractId: id }); };
       if (f.size > 3.5 * 1024 * 1024) return send('');
       return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).replace(/^data:[^,]*,/, '')); }; rd.readAsDataURL(f); }).then(send);
     }).then(function (r) {
-      if (S.intel && S.intel.core === S.core) S.intel.docs.push(r.doc);
-      c.docs.push(r.doc.id); dirty(); toast('Contract uploaded: press ✨ Fill in from the document to read the key terms'); contractsTab();
-    }).catch(function (e) { if (box) box.innerHTML = ''; toast(e.message, true); });
-  }
-  var CT_FIELDS = [['type', 'Type'], ['party', 'With'], ['title', 'Scope of work'], ['ref', 'Contract no.'], ['form', 'Form of contract'], ['value', 'Contract sum'], ['gstIncl', 'Includes GST'], ['terms', 'Payment terms'], ['retention', 'Retention %'],
-    ['signed', 'Signed'], ['start', 'Start'], ['end', 'Completion'], ['dlpMonths', 'Defects period (months)'], ['ldPerDay', 'Liquidated damages $/day'], ['insurance', 'Insurance required'], ['obligations', 'Key obligations']];
-  function ctRead(c, docId, btn) {
-    btn.disabled = true; btn.textContent = 'Reading the contract…';
-    var id = Array.from(crypto.getRandomValues(new Uint8Array(10))).map(function (b) { return b.toString(16).padStart(2, '0'); }).join(''), t0 = Date.now();
-    var poll = function () {
-      if (Date.now() - t0 > 180000) throw new Error('The AI took too long. Try again.');
-      return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
-        if (d.status === 'done') return d.contract; if (d.status === 'error') throw new Error(d.error || 'The AI could not read it'); return poll(); });
-    };
-    fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ mode: 'contract', id: id, core: S.core, docId: docId }) })
-      .then(function (r) { if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); })
-      .then(function (r) { ctReview(c, r); })
-      .catch(function (e) { toast(e.message, true); }).then(function () { btn.disabled = false; btn.textContent = '✨ Fill in from the document'; });
-  }
-  function ctReview(c, r) {
-    var F = r.fields, show = function (k, v) { return k === 'gstIncl' ? (v ? 'Yes' : 'No') : k === 'value' || k === 'ldPerDay' ? (v ? money(v) : '') : /^(signed|start|end)$/.test(k) ? dmy(v) : String(v == null ? '' : v); };
-    var rows = CT_FIELDS.filter(function (x) { var v = F[x[0]]; return !(v === '' || v == null || (typeof v === 'number' && !v) || (x[0] === 'party' && /^the customer$/i.test(v) && ctIn(c)) || (x[0] === 'type' && !v)); })
-      .map(function (x) { var k = x[0], same = String(c[k]) === String(F[k]); return '<tr><td><input type="checkbox" data-rf="' + k + '"' + (same ? ' disabled' : ' checked') + '></td><td>' + x[1] + '</td><td class="muted">' + esc(show(k, c[k])) + '</td><td><b>' + esc(show(k, F[k])).replace(/\n/g, '<br>') + '</b></td></tr>'; }).join('');
-    M.modal('<h2>✨ What the contract says</h2>' + (r.summary ? '<p style="margin:8px 0">' + esc(r.summary) + '</p>' : '') + '<p class="muted" style="font-size:12.5px;margin:0 0 8px">Check each line against the contract before you use it. Untick anything you don\'t want.</p>' +
-      (rows ? '<div class="table-wrap"><table class="pi-tbl"><thead><tr><th></th><th>Term</th><th>Now</th><th>From the contract</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p>Nothing could be read from the document.</p>') +
-      (F.claims.length && !c.claims.length ? '<label class="sc-cb" style="margin-top:8px"><input type="checkbox" id="ctUseClaims" checked> Add the ' + pl(F.claims.length, 'payment stage') + ' as claims: ' + esc(F.claims.map(function (x) { return x.desc + (x.amount ? ' ' + money(x.amount) : x.pct ? ' ' + x.pct + '%' : ''); }).join(', ')) + '</label>' : '') +
-      '<p class="muted" style="font-size:12px">General information only, not legal advice. About ' + (r.tokens || 0).toLocaleString('en-AU') + ' tokens.</p>' +
-      '<div class="actions" style="margin-top:12px"><button class="btn" data-close>Cancel</button> <button class="btn btn-gold" id="ctApply">Use the ticked terms</button></div>');
-    $('#modal .modal-card').classList.add('sc-wide');
-    $('#ctApply').onclick = function () {
-      document.querySelectorAll('#modal [data-rf]:checked').forEach(function (el) { var k = el.getAttribute('data-rf'); c[k] = F[k]; });
-      var uc = $('#ctUseClaims'); if (uc && uc.checked) { var base = c.value || F.value || 0; c.claims = F.claims.map(function (x, i) { return { no: (ctIn(c) ? 'PC' : 'C') + (i + 1), desc: x.desc, amount: x.amount || Math.round(base * (x.pct || 0)) / 100, date: '', due: '', paid: '' }; }); }
-      M.closeModal(); dirty(); toast('Contract terms filled in'); contractsTab();
-    };
+      S.intel.docs.push(r.doc);
+      p.contracts.push({ id: id, type: ty, party: party, partyRef: ref, docs: [r.doc.id], at: Date.now() });
+      dirty(); toast('Contract uploaded'); contractsTab();
+    }).catch(function (e) { if (msg) msg.innerHTML = ''; toast(e.message, true); });
   }
 
   /* ---------- v52: 🧠 Project Intelligence ---------- */

@@ -162,16 +162,10 @@ function clean(p, core) {
     // v45: stakeholder list (RACI). Contact details stay in the plan and are never sent to the AI.
     stakeholders: (Array.isArray(p.stakeholders) ? p.stakeholders : []).slice(0, 100).map((x) => ({ id: uid(x.id, 's'), name: str(x.name, 120), role: str(x.role, 120),
       raci: ['R', 'A', 'C', 'I'].includes(x.raci) ? x.raci : 'I', phone: str(x.phone, 40), email: str(x.email, 160), sub: /^SC-\d{3,5}$/.test(x.sub || '') ? x.sub : '' })),
-    // v53: contracts for this project: the head contract with the customer, sub-contracts (subbies), supply and consultant contracts
+    // v53: contracts for this job: one line each (type, who with, the uploaded Word/PDF). Project Intelligence reads the document.
     contracts: (Array.isArray(p.contracts) ? p.contracts : []).slice(0, 60).map((c) => ({ id: uid(c.id, 'c'),
-      type: ['Head contract', 'Subcontract', 'Supply', 'Consultant', 'Other'].includes(c.type) ? c.type : 'Other',
-      party: str(c.party, 120), partyKind: ['customer', 'subbie', 'supplier', 'other'].includes(c.partyKind) ? c.partyKind : 'other', partyRef: str(c.partyRef, 20),
-      title: str(c.title, 200), ref: str(c.ref, 60), form: str(c.form, 80), value: r2(c.value), gstIncl: !!c.gstIncl, terms: str(c.terms, 200), retention: Math.max(0, Math.min(20, r2(c.retention))),
-      start: ymdOk(c.start), end: ymdOk(c.end), signed: ymdOk(c.signed), dlpMonths: Math.max(0, Math.min(120, Math.round(Number(c.dlpMonths) || 0))), ldPerDay: r2(c.ldPerDay),
-      status: ['Draft', 'Sent', 'Signed', 'Active', 'Completed', 'Terminated', 'Disputed'].includes(c.status) ? c.status : 'Draft',
-      insurance: str(c.insurance, 600), obligations: str(c.obligations, 3000), notes: str(c.notes, 2000), docs: (Array.isArray(c.docs) ? c.docs : []).slice(0, 20).map((d) => str(d, 30)),
-      variations: (Array.isArray(c.variations) ? c.variations : []).slice(0, 100).map((v, i) => ({ no: str(v.no, 20) || 'V' + (i + 1), desc: str(v.desc, 300), amount: r2(v.amount), days: Math.round(Number(v.days) || 0), date: ymdOk(v.date), status: ['Pending', 'Approved', 'Rejected'].includes(v.status) ? v.status : 'Pending' })),
-      claims: (Array.isArray(c.claims) ? c.claims : []).slice(0, 100).map((v, i) => ({ no: str(v.no, 20) || 'C' + (i + 1), desc: str(v.desc, 300), amount: r2(v.amount), date: ymdOk(v.date), due: ymdOk(v.due), paid: ymdOk(v.paid) })) })),
+      type: ['Customer', 'Sub-contractor', 'Supply', 'Consultant'].includes(c.type) ? c.type : 'Consultant', party: str(c.party, 120), partyRef: str(c.partyRef, 30),
+      docs: (Array.isArray(c.docs) ? c.docs : []).slice(0, 5).map((d) => str(d, 30)), at: Number(c.at) || Date.now() })),
     // v52: team meetings set up from Project Intelligence (Google Meet / calendar invites)
     meetings: (Array.isArray(p.meetings) ? p.meetings : []).slice(0, 50).map((m) => ({ id: uid(m.id, 'm'), title: str(m.title, 160), date: ymdOk(m.date), start: /^\d{2}:\d{2}$/.test(m.start || '') ? m.start : '10:00',
       minutes: Math.max(15, Math.min(240, Math.round(Number(m.minutes) || 45))), attendees: (Array.isArray(m.attendees) ? m.attendees : []).slice(0, 50).map((a) => str(a, 20)), agenda: str(m.agenda, 2000), link: /^https:\/\/meet\.google\.com\/[a-z0-9-]+$/i.test(m.link || '') ? m.link : '', at: Number(m.at) || Date.now() })),

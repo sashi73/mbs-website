@@ -42,7 +42,7 @@ export const KEYS = {
   plan_subtasks: { pk: 'subtask_id', cols: { subtask_id: (r) => r._id, task_id: (r) => r._parent, job_id: (r) => r.job }, fk: { task_id: 'plan_tasks', job_id: 'jobs' } },
   plan_risks: { pk: 'risk_id', cols: { risk_id: (r) => r._id, job_id: (r) => r.job }, fk: { job_id: 'jobs' } },
   plan_issues: { pk: 'issue_id', cols: { issue_id: (r) => r._id, job_id: (r) => r.job }, fk: { job_id: 'jobs' } },
-  plan_contracts: { pk: 'contract_id', cols: { contract_id: (r) => r._id, job_id: (r) => r.job, subcontractor_id: (r) => r.sub_id, supplier_id: (r) => r.sup_id }, fk: { job_id: 'jobs', subcontractor_id: 'subcontractors', supplier_id: 'suppliers' } },
+  plan_contracts: { pk: 'contract_id', cols: { contract_id: (r) => r._id, job_id: (r) => r.job, subcontractor_id: (r) => r.sub_id }, fk: { job_id: 'jobs', subcontractor_id: 'subcontractors' } },
   plan_stakeholders: { pk: 'stakeholder_id', cols: { stakeholder_id: (r) => r._id, job_id: (r) => r.job, subcontractor_id: (r) => r.sub_id }, fk: { job_id: 'jobs', subcontractor_id: 'subcontractors' } },
   inventory: { pk: 'stock_id', cols: { stock_id: (r) => r.id }, fk: { supplier_id: 'suppliers' } },
   suppliers: { pk: 'supplier_id', cols: { supplier_id: (r) => r.id } },
@@ -80,8 +80,7 @@ export const SCHEMA = {
   plan_risks: ['job', 'plan_name', 'risk', 'probability', 'impact', 'score', 'response', 'owner', 'status', 'review'],
   plan_issues: ['job', 'plan_name', 'issue', 'priority', 'owner', 'raised', 'due', 'status'],
   plan_stakeholders: ['job', 'plan_name', 'person', 'role', 'raci', 'raci_meaning', 'sub_id', 'phone', 'email'],
-  plan_contracts: ['job', 'plan_name', 'type', 'direction', 'party', 'party_kind', 'title', 'contract_no', 'form', 'status', 'value', 'gst_included', 'approved_variations', 'pending_variations', 'adjusted_value',
-    'claimed', 'paid', 'owing', 'left_to_claim', 'overdue_claims', 'retention_pct', 'payment_terms', 'signed', 'start', 'completion', 'defects_months', 'ld_per_day', 'documents'],
+  plan_contracts: ['job', 'plan_name', 'type', 'party', 'document', 'uploaded'],
   inventory: ['id', 'item', 'sku', 'category', 'unit', 'location', 'on_hand', 'allocated', 'available', 'on_order', 'reorder_level', 'reorder_qty', 'low', 'unit_price', 'price_supplier', 'stock_value',
     'supplier_id', 'supplier_contact', 'supplier_phone', 'supplier_email', 'supplier_terms', 'reorder_needed'],
   suppliers: ['id', 'supplier', 'contact', 'phone', 'email', 'categories', 'terms', 'items_quoted'],
@@ -98,7 +97,7 @@ for (const [tb, K] of Object.entries(KEYS)) {   // key columns first: own key, t
 }
 export const DESCRIBE = {
   customers: 'One row per customer (same phone + email = same customer) with their job counts and values', jobs: 'Every enquiry and job (pipeline stage, customer, suburb, trade, values)', quotes: 'Quotes (status, totals ex/inc GST)', invoices: 'Tax invoices (paid, balance, days overdue)',
-  items: 'Line items of quotes and invoices', plan_tasks: 'Project plan tasks (dates, costs, % complete)', plan_risks: 'Risk registers of all plans', plan_issues: 'Issue logs of all plans', plan_subtasks: 'Sub-tasks inside plan tasks (no costs; costs stay on the task)', plan_stakeholders: 'Stakeholders (RACI) on each project plan, including the subbies working on it', plan_contracts: 'Contracts on each project: head contract with the customer, sub-contracts, supply; value, variations, claims, paid, owing', sub_trades: 'Every trade category (also ones with no subbies yet) with how many subbies, preferred, compliant, average rating and rates', subcontractors: 'Sub-contractors (subbies): trade, where they are, status, rating, rates, licence and insurance with expiry and whether expired', inventory: 'Stock items (on hand, set aside for jobs, re-order level)', suppliers: 'Suppliers', supplier_prices: 'Supplier quotes per stock item', stock_moves: 'Stock in and out', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
+  items: 'Line items of quotes and invoices', plan_tasks: 'Project plan tasks (dates, costs, % complete)', plan_risks: 'Risk registers of all plans', plan_issues: 'Issue logs of all plans', plan_subtasks: 'Sub-tasks inside plan tasks (no costs; costs stay on the task)', plan_stakeholders: 'Stakeholders (RACI) on each project plan, including the subbies working on it', plan_contracts: 'Contracts uploaded on each project: customer, sub-contractor, supply, consultant', sub_trades: 'Every trade category (also ones with no subbies yet) with how many subbies, preferred, compliant, average rating and rates', subcontractors: 'Sub-contractors (subbies): trade, where they are, status, rating, rates, licence and insurance with expiry and whether expired', inventory: 'Stock items (on hand, set aside for jobs, re-order level)', suppliers: 'Suppliers', supplier_prices: 'Supplier quotes per stock item', stock_moves: 'Stock in and out', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
 };
 
 export async function tables() {
@@ -163,15 +162,9 @@ export async function tables() {
     }
     for (const r of p.risks || []) plan_risks.push({ _id: p.core + '/' + r.id, job: p.core, plan_name: p.name, risk: r.title, probability: r.p, impact: r.i, score: r.p * r.i, response: r.response, owner: r.owner, status: r.status, review: r.review });
     for (const x of p.stakeholders || []) plan_stakeholders.push({ _id: p.core + '/' + x.id, job: p.core, plan_name: p.name, person: x.name, role: x.role, raci: x.raci, raci_meaning: { R: 'Responsible', A: 'Accountable', C: 'Consulted', I: 'Informed' }[x.raci] || '', sub_id: x.sub || '', phone: x.phone || '', email: x.email || '' });
-    for (const c of p.contracts || []) {   // v53
-      const ap = (c.variations || []).filter((v) => v.status === 'Approved').reduce((a, v) => a + v.amount, 0), pend = (c.variations || []).filter((v) => v.status === 'Pending').reduce((a, v) => a + v.amount, 0);
-      const cl = (c.claims || []).reduce((a, v) => a + v.amount, 0), pd = (c.claims || []).filter((v) => v.paid).reduce((a, v) => a + v.amount, 0);
-      plan_contracts.push({ _id: p.core + '/' + c.id, job: p.core, plan_name: p.name, type: c.type, direction: c.type === 'Head contract' ? 'in' : 'out', party: c.party, party_kind: c.partyKind,
-        sub_id: c.partyKind === 'subbie' ? c.partyRef : '', sup_id: c.partyKind === 'supplier' ? c.partyRef : '', title: c.title, contract_no: c.ref, form: c.form, status: c.status,
-        value: c.value, gst_included: !!c.gstIncl, approved_variations: r2(ap), pending_variations: r2(pend), adjusted_value: r2(c.value + ap), claimed: r2(cl), paid: r2(pd), owing: r2(cl - pd),
-        left_to_claim: r2(c.value + ap - cl), overdue_claims: (c.claims || []).filter((v) => !v.paid && v.due && v.due < todayS).length, retention_pct: c.retention, payment_terms: c.terms,
-        signed: c.signed, start: c.start, completion: c.end, defects_months: c.dlpMonths, ld_per_day: c.ldPerDay, documents: (c.docs || []).length });
-    }
+    const dn = (p.contracts || []).length ? Object.fromEntries((((await kv.get('pdocs:' + p.core)) || {}).docs || []).map((d) => [d.id, d.name])) : {};
+    for (const c of p.contracts || []) plan_contracts.push({ _id: p.core + '/' + c.id, job: p.core, plan_name: p.name, type: c.type, party: c.party, sub_id: c.type === 'Sub-contractor' ? c.partyRef : '',
+      document: dn[(c.docs || [])[0]] || '', uploaded: d10(c.at) });   // v53
     for (const x of p.issues || []) plan_issues.push({ _id: p.core + '/' + x.id, job: p.core, plan_name: p.name, issue: x.title, priority: x.priority, owner: x.owner, raised: x.raised, due: x.due, status: x.status });
   }
   const supName = Object.fromEntries(stock.suppliers.map((x) => [x.id, x.name])), supRec = Object.fromEntries(stock.suppliers.map((x) => [x.id, x]));
@@ -275,7 +268,7 @@ const NOTE = {
     'days_since_used = days since last used (null = never). Subbies on a project: JOIN plan_stakeholders ps ON ps.sub_id = subcontractors.id (ps.job = jobs.core). For trades with nobody, counts per trade, average rating or rates use sub_trades. ' +
     'To show licence and insurance and flag expired, list (in this order) business, compliance, problems, trade, suburb, status, rating, licence_no, licence_expiry, licence_state, pl_expiry, pl_state, wc_expiry, wc_state. Dates YYYY-MM-DD',
   sub_trades: 'one row per trade category (33), subbies = active subbies who do it (0 = nobody), licence_needed true when NSW needs a licence for it',
-  plan_contracts: 'one row per contract on a project: direction in = head contract with the customer (money in), out = subcontract/supply/consultant (money out); adjusted_value = value + approved_variations; owing = claimed - paid; status Draft|Sent|Signed|Active|Completed|Terminated|Disputed',
+  plan_contracts: 'one row per contract uploaded to a project: type Customer|Sub-contractor|Supply|Consultant, party = who it is with, uploaded = date. What the contracts say is not in this table: ask 🧠 Project Intelligence on the project',
   plan_stakeholders: 'one row per stakeholder on a project plan: job = jobs.core, raci R|A|C|I, sub_id = subcontractors.id when the person is a subbie (blank otherwise)',
   suppliers: 'suppliers', supplier_prices: 'one row per supplier quote for a stock item', stock_moves: 'qty + in / - out; kind in|out|count|plan|order; job = jobs.core'
 };
@@ -295,7 +288,7 @@ export function pickTables(question, extraSql = '') {
   if (chosen.has('supplier_prices') || chosen.has('stock_moves') || chosen.has('suppliers')) chosen.add('inventory');
   if (chosen.has('inventory') && /supplier|order from|whom|who to|contact|phone|call|email|vendor/i.test(q)) chosen.add('suppliers');
   if (chosen.has('subcontractors')) { chosen.add('sub_trades'); if (/job|project|plan|working on|on site|stakeholder|raci/i.test(q)) chosen.add('plan_stakeholders'); }
-  if (/contract|variation|progress claim|retention|liquidated|defects|subcontract|purchase order|margin|committed/i.test(q)) { chosen.add('plan_contracts'); if (/sub|trade/i.test(q)) chosen.add('subcontractors'); }
+  if (/contract/i.test(q)) { chosen.add('plan_contracts'); if (/sub|trade/i.test(q)) chosen.add('subcontractors'); }
   if (/stakeholder|raci|accountable|responsible|consulted|informed/i.test(q)) { chosen.add('plan_stakeholders'); chosen.add('plan_tasks'); }
   // nothing specific (and not about jobs): give the AI every table
   if (chosen.size === 1 && !/job|enquir|customer|lead|won|lost|suburb|trade|new|stage|called/i.test(q)) Object.keys(SCHEMA).forEach((t) => chosen.add(t));
@@ -339,7 +332,7 @@ const SYSTEM = 'Turn the question from the owner of a Sydney building company in
   '6) Every table starts with its own key (primary key), named after the table: customer_id, job_id, quote_id, invoice_id, stock_id (inventory), supplier_id, subcontractor_id, task_id, line_id, payment_id, expense_id, move_id, price_id, stakeholder_id. ' +
   'A column with another table\'s key name points to that table (foreign key), so JOIN on the SAME name, never on names or text: inventory.supplier_id = suppliers.supplier_id; supplier_prices.stock_id = inventory.stock_id; supplier_prices.supplier_id = suppliers.supplier_id; ' +
   'stock_moves.stock_id = inventory.stock_id; stock_moves.job_id = jobs.job_id; quotes/invoices/expenses/reminders/plan_*.job_id = jobs.job_id; jobs.customer_id = customers.customer_id; invoices.quote_id = quotes.quote_id; ' +
-  'items.quote_id / items.invoice_id; payments.invoice_id = invoices.invoice_id; plan_subtasks.task_id = plan_tasks.task_id; plan_stakeholders.subcontractor_id = subcontractors.subcontractor_id; plan_contracts.job_id = jobs.job_id, plan_contracts.subcontractor_id = subcontractors.subcontractor_id, plan_contracts.supplier_id = suppliers.supplier_id. ' +
+  'items.quote_id / items.invoice_id; payments.invoice_id = invoices.invoice_id; plan_subtasks.task_id = plan_tasks.task_id; plan_stakeholders.subcontractor_id = subcontractors.subcontractor_id; plan_contracts.job_id = jobs.job_id, plan_contracts.subcontractor_id = subcontractors.subcontractor_id. ' +
   'For a UNION, select the same key and columns from each part (e.g. stock_id, supplier_id). Use LEFT JOIN when the other side may be missing. Prefer columns already on the table (e.g. inventory.supplier_phone) over a join. ' +
   '7) Lists: useful columns, newest first, LIMIT 200. Totals/counts: one row. If it cannot be answered from these tables, sql = "" and say why in note. ' +
   'Reply JSON only: {"sql":"","title":"max 60 chars","note":"one short sentence: how you read it","chart":null or {"type":"bar|hbar|line|pie|doughnut","x":"alias","y":["alias"]}}';

@@ -105,10 +105,7 @@ async function context(job, plan, question) {
     issues: (plan.issues || []).map((x) => ({ issue: sc(x.title), detail: sc(x.detail), priority: x.priority, owner: sc(x.owner), due: x.due, status: x.status })),
     stakeholders: people.map((x, i) => ({ ref: 'S' + (i + 1), name: sc(x.name), role: sc(x.role), raci: x.raci, has_email: /@/.test(x.email || '') })),
     meetings: (plan.meetings || []).slice(-5).map((m) => ({ title: sc(m.title), date: m.date, start: m.start, minutes: m.minutes })),
-    contracts: (plan.contracts || []).map((c) => ({ type: c.type, with: c.partyKind === 'customer' ? 'the customer' : sc(c.party), title: sc(c.title), ref: c.ref, form: c.form, value: c.value, gst_included: c.gstIncl, status: c.status,
-      start: c.start, end: c.end, signed: c.signed, payment_terms: sc(c.terms), retention_pct: c.retention, defects_months: c.dlpMonths, liquidated_damages_per_day: c.ldPerDay, insurance: sc(c.insurance), obligations: sc(c.obligations),
-      variations: c.variations.map((v) => ({ no: v.no, desc: sc(v.desc), amount: v.amount, days: v.days, status: v.status })), claims: c.claims.map((v) => ({ no: v.no, amount: v.amount, date: v.date, due: v.due, paid: v.paid || false })),
-      documents: c.docs.length })),
+    contracts: (plan.contracts || []).map((c) => ({ type: c.type, with: c.type === 'Customer' ? 'the customer' : sc(c.party), document: c.docs[0] || '' })),
     documents: []
   };
   const docs = await docList(job.core);
@@ -117,6 +114,8 @@ async function context(job, plan, question) {
   docs.forEach((d, i) => { const t = texts[i] && texts[i].text; if (t) all.push(...chunks(d, scrub(t, job, people))); });
   const pick = pickChunks(all, question);
   ctx.documents = docs.map((d) => ({ name: d.name, kind: d.kind, pages: d.pages, words: d.words }));
+  // which uploaded document is which contract
+  ctx.contracts = ctx.contracts.map((c) => ({ type: c.type, with: c.with, document: (docs.find((d) => d.id === c.document) || {}).name || '' }));
   ctx.document_extracts = pick.chunks.map((c) => ({ doc: c.doc, page: c.page || undefined, text: c.text }));
   ctx.extracts_are_partial = pick.partial;
   return { ctx, stakeholders: people };
@@ -172,35 +171,6 @@ export async function ask({ core, question, history }, by) {
   }
   await kv.update('pchat:' + job.core, (x) => { x.log = (x.log || []).concat([{ at: Date.now(), by: str(by, 60), q, r }]).slice(-30); return x; }, () => ({ log: [] }));
   return r;
-}
-
-// v53: ✨ read the key terms out of a contract document, for the Contracts tab to fill in (the user checks them first)
-const CSYS = 'You read construction contracts for Modern Building Solutions (MBS), a Sydney builder. From the contract text, take out the key terms. MBS is the builder or head contractor. ' +
-  'Use only what the text says; leave a field empty ("" or 0) when it is not there. Dates YYYY-MM-DD. Money in AUD as a number. Reply JSON only: ' +
-  '{"type":"Head contract|Subcontract|Supply|Consultant|Other","party":"the other party (business or person; \'the customer\' if it is the owner)","title":"scope of work, short","ref":"contract number","form":"e.g. HIA Lump Sum, MBA, AS 4000, AS 4903, purchase order",' +
-  '"value":0,"gst_included":true,"terms":"payment terms, short","retention_pct":0,"start":"","end":"","signed":"","defects_months":0,"ld_per_day":0,"insurance":"insurance required, short",' +
-  '"obligations":"- 4 to 8 short lines: the key obligations, notice periods, approval steps and deadlines","claims":[{"desc":"stage or milestone","amount":0,"pct":0}],"summary":"2 sentences"}';
-export async function extractContract({ core, docId }, by) {
-  const job = await J.find(core); if (!job) return { error: 'Job not found' };
-  const plan = await P.get(job.core); if (!plan) return { error: 'This job has no plan' };
-  const t = await kv.get(`pdoctext:${job.core}:${str(docId, 30)}`); if (!t) return { error: 'Document not found' };
-  if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.' };
-  try { await checkLimit(); } catch (e) { return { error: e.message }; }
-  let text = scrub(t.text, job, plan.stakeholders || []);
-  if (text.length > 60000) {   // long contracts: the start (parties, price) plus the parts about money, dates and obligations
-    const all = chunks({ name: 'contract', kind: 'Contract' }, text);
-    text = pickChunks(all, 'contract price sum value payment progress claim deposit retention date commencement completion practical defects liability liquidated damages insurance variation notice termination parties').chunks.map((c) => c.text).join('\n\n');
-  }
-  let o, used;
-  try { ({ data: o, used } = await llmJson([{ role: 'system', content: CSYS }, { role: 'user', content: text }], { maxTokens: 1500, timeoutMs: 120000, temperature: 0 })); }
-  catch (e) { return { error: e.message }; }
-  const today = await usage(true, used);
-  const d = (s) => (/^\d{4}-\d{2}-\d{2}$/.test(s || '') ? s : ''), n = (x) => Math.max(0, Math.round((Number(x) || 0) * 100) / 100);
-  return { fields: { type: ['Head contract', 'Subcontract', 'Supply', 'Consultant', 'Other'].includes(o.type) ? o.type : '', party: str(o.party, 120), title: str(o.title, 200), ref: str(o.ref, 60), form: str(o.form, 80),
-    value: n(o.value), gstIncl: o.gst_included !== false, terms: str(o.terms, 200), retention: Math.min(20, n(o.retention_pct)), start: d(o.start), end: d(o.end), signed: d(o.signed),
-    dlpMonths: Math.min(120, Math.round(n(o.defects_months))), ldPerDay: n(o.ld_per_day), insurance: str(o.insurance, 600), obligations: str(o.obligations, 3000),
-    claims: (Array.isArray(o.claims) ? o.claims : []).slice(0, 20).map((c) => ({ desc: str(c.desc, 200), amount: n(c.amount), pct: n(c.pct) })).filter((c) => c.desc) },
-    summary: str(o.summary, 600), tokens: used, today };
 }
 
 export async function intelPost(action, body, { who, by, audit }) {
