@@ -697,3 +697,6 @@ table.sk input{width:100%;min-width:120px}
 .scdoc{font-weight:800;font-size:12.5px}.scdoc-expired{color:#B42318}.scdoc-due{color:#B45309}.scdoc-missing{color:#6B675E}
 .kpi-bad .v{color:#B42318}
 .sc-table td{vertical-align:top}
+/* v49: licence / insurance states in query results */
+.sq-st{font-weight:800;font-size:12px;white-space:nowrap}.sq-bad{color:#B42318}.sq-due{color:#B45309}.sq-miss{color:#6B675E}.sq-ok{color:#166534}
+tr.sq-exp td{background:#FFF5F2}

@@ -204,13 +204,20 @@
   /* ---------- ✨ AI query: ask in plain English ---------- */
   var EXAMPLES = ['How many new jobs did I get this month?', 'What is the completion status of each project?', 'Which tasks are late, and who is the lead?', 'How much money is owed to me, and by which invoices?',
     'Which quotes sent in the last 30 days are still waiting?', 'Jobs won this financial year by trade', 'Top 5 suburbs for enquiries this year', 'Spending by category last month'];
+  // v49: licence / insurance states stand out (expired in red, due soon in amber, missing in grey)
+  function flagCell(c, v) {
+    if (/(_state|^compliance)$/.test(c) && typeof v === 'string') { var k = { expired: ['⚠ EXPIRED', 'bad'], due: ['due soon', 'due'], missing: ['missing', 'miss'], ok: ['✓ ok', 'ok'] }[v]; if (k) return '<span class="sq-st sq-' + k[1] + '">' + k[0] + '</span>'; }
+    if (c === 'any_expired' && v === true) return '<span class="sq-st sq-bad">⚠ EXPIRED</span>';
+    if (/_expiry$/.test(c) && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) { var td = new Date(Date.now() + 10 * 3600e3).toISOString().slice(0, 10); return '<span' + (v < td ? ' class="sq-st sq-bad"' : '') + '>' + v.slice(8, 10) + '/' + v.slice(5, 7) + '/' + v.slice(0, 4) + '</span>'; }
+    return esc(fmt(v));
+  }
   function hints() {
     var q = function (sql, k) { try { return DB.exec(sql).map(function (r) { return r[k]; }).filter(function (v) { return v != null && v !== ''; }); } catch (e) { return []; } };
     var counts = {}; Object.keys(SCHEMA).forEach(function (t) { counts[t] = DB.tables[t].data.length; });
     var plans = []; try { plans = DB.exec('SELECT DISTINCT plan_name AS pn, job AS jb FROM plan_tasks').map(function (r) { return r.pn + ' (job ' + r.jb + ')'; }); } catch (e) {}
     return {
       row_counts: counts, stages: q('SELECT DISTINCT stage AS v FROM jobs', 'v'), quote_status: q('SELECT DISTINCT status AS v FROM quotes', 'v'), invoice_status: q('SELECT DISTINCT status AS v FROM invoices', 'v'),
-      expense_categories: q('SELECT DISTINCT category AS v FROM expenses', 'v'), trades: q('SELECT DISTINCT trade AS v FROM jobs', 'v'), sources: q('SELECT DISTINCT source AS v FROM jobs', 'v'),
+      expense_categories: q('SELECT DISTINCT category AS v FROM expenses', 'v'), trades: q('SELECT DISTINCT trade AS v FROM jobs', 'v'), sub_trades: q('SELECT DISTINCT trade AS v FROM subcontractors', 'v'), sources: q('SELECT DISTINCT source AS v FROM jobs', 'v'),
       suburbs: q('SELECT suburb AS v, COUNT(*) AS n FROM jobs GROUP BY suburb ORDER BY n DESC LIMIT 40', 'v'), services: q('SELECT service AS v, COUNT(*) AS n FROM jobs GROUP BY service ORDER BY n DESC LIMIT 30', 'v'),
       plans: plans.slice(0, 40), plan_status: q('SELECT DISTINCT status AS v FROM plan_tasks', 'v'), risk_status: q('SELECT DISTINCT status AS v FROM plan_risks', 'v'), issue_status: q('SELECT DISTINCT status AS v FROM plan_issues', 'v')
     };
@@ -441,10 +448,10 @@
     if (!n) { B.innerHTML = '<div class="empty">No rows match.</div>'; return; }
     if (S.view === 'table') {
       B.innerHTML = '<div class="table-wrap"><table><thead><tr>' + S.cols.map(function (c) { return '<th' + (isNum(c) ? ' style="text-align:right"' : '') + '>' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-        S.rows.slice(0, 500).map(function (r) { return '<tr>' + S.cols.map(function (c) { return '<td' + (typeof r[c] === 'number' ? ' style="text-align:right"' : '') + '>' + esc(fmt(r[c])) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
+        S.rows.slice(0, 500).map(function (r) { return '<tr' + (r.any_expired === true || r.compliance === 'expired' ? ' class="sq-exp"' : '') + '>' + S.cols.map(function (c) { return '<td' + (typeof r[c] === 'number' ? ' style="text-align:right"' : '') + '>' + flagCell(c, r[c]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
         (n > 500 ? '<p class="muted">Showing the first 500 rows. Download the CSV for all of them.</p>' : '');
     } else if (S.view === 'records') {
-      B.innerHTML = '<div class="recs">' + S.rows.slice(0, 100).map(function (r, i) { return '<div class="rec"><div class="muted" style="font-size:11.5px;font-weight:800">#' + (i + 1) + '</div><dl class="kv">' + S.cols.map(function (c) { return '<dt>' + esc(c) + '</dt><dd>' + esc(fmt(r[c])) + '</dd>'; }).join('') + '</dl></div>'; }).join('') + '</div>' +
+      B.innerHTML = '<div class="recs">' + S.rows.slice(0, 100).map(function (r, i) { return '<div class="rec"><div class="muted" style="font-size:11.5px;font-weight:800">#' + (i + 1) + '</div><dl class="kv">' + S.cols.map(function (c) { return '<dt>' + esc(c) + '</dt><dd>' + flagCell(c, r[c]) + '</dd>'; }).join('') + '</dl></div>'; }).join('') + '</div>' +
         (n > 100 ? '<p class="muted">Showing the first 100 records.</p>' : '');
     } else chartView(B);
   }

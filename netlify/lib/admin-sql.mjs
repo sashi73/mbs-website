@@ -9,6 +9,8 @@ import LOGO from './logo-png.mjs';
 import { business, pdfLib } from './pdf.mjs';
 import * as PLAN from './plan.mjs';
 import * as INV from './inventory.mjs';
+import * as SUB from './subbies.mjs';
+import { regionOf } from './sydney-regions.mjs';
 import * as CU from './customers.mjs';
 import { statsFor } from './admin-cust.mjs';
 import { llmSetup, llmJson, usage, usageToday, tokCap, checkLimit, ping } from './ai.mjs';
@@ -40,11 +42,14 @@ export const SCHEMA = {
   inventory: ['id', 'item', 'sku', 'category', 'unit', 'location', 'on_hand', 'allocated', 'available', 'on_order', 'reorder_level', 'reorder_qty', 'low', 'unit_price', 'price_supplier', 'stock_value'],
   suppliers: ['id', 'supplier', 'contact', 'phone', 'email', 'categories', 'terms', 'items_quoted'],
   supplier_prices: ['item_id', 'item', 'supplier_id', 'supplier', 'price_ex', 'pack_size', 'quote_ref', 'quoted', 'valid_until', 'expired', 'preferred'],
-  stock_moves: ['item_id', 'item', 'date', 'month', 'kind', 'qty', 'reason', 'job']
+  stock_moves: ['item_id', 'item', 'date', 'month', 'kind', 'qty', 'reason', 'job'],
+  subcontractors: ['id', 'business', 'contact', 'trade', 'other_trades', 'phone', 'email', 'suburb', 'postcode', 'region', 'western_sydney', 'areas_covered', 'status', 'preference_rank', 'rating',
+    'hourly_rate', 'callout_fee', 'after_hours_rate', 'payment_terms', 'availability', 'licence_no', 'licence_class', 'licence_expiry', 'licence_state', 'insurer', 'pl_policy', 'pl_cover', 'pl_expiry', 'pl_state',
+    'wc_policy', 'wc_expiry', 'wc_state', 'sole_trader', 'white_card', 'swms', 'compliance', 'problems', 'any_expired', 'last_used', 'archived']
 };
 export const DESCRIBE = {
   customers: 'One row per customer (same phone + email = same customer) with their job counts and values', jobs: 'Every enquiry and job (pipeline stage, customer, suburb, trade, values)', quotes: 'Quotes (status, totals ex/inc GST)', invoices: 'Tax invoices (paid, balance, days overdue)',
-  items: 'Line items of quotes and invoices', plan_tasks: 'Project plan tasks (dates, costs, % complete)', plan_risks: 'Risk registers of all plans', plan_issues: 'Issue logs of all plans', plan_subtasks: 'Sub-tasks inside plan tasks (no costs; costs stay on the task)', inventory: 'Stock items (on hand, set aside for jobs, re-order level)', suppliers: 'Suppliers', supplier_prices: 'Supplier quotes per stock item', stock_moves: 'Stock in and out', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
+  items: 'Line items of quotes and invoices', plan_tasks: 'Project plan tasks (dates, costs, % complete)', plan_risks: 'Risk registers of all plans', plan_issues: 'Issue logs of all plans', plan_subtasks: 'Sub-tasks inside plan tasks (no costs; costs stay on the task)', subcontractors: 'Sub-contractors (subbies): trade, where they are, status, rating, rates, licence and insurance with expiry and whether expired', inventory: 'Stock items (on hand, set aside for jobs, re-order level)', suppliers: 'Suppliers', supplier_prices: 'Supplier quotes per stock item', stock_moves: 'Stock in and out', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
 };
 
 export async function tables() {
@@ -54,6 +59,7 @@ export async function tables() {
     kv.keys('job:').then((ks) => kv.getMany(ks)), ACC.allDocs(), J.reminders(),
     import('@netlify/blobs').then(({ getStore }) => getStore({ name: 'mbs-visits', consistency: 'strong' }).get('count', { type: 'json' })).catch(() => null),
     PLAN.list(), INV.full().catch(() => ({ items: [], suppliers: [] })), INV.allocations().catch(() => ({}))]);
+  const subRecs = await kv.keys('sub:').then((ks) => kv.getMany(ks)).catch(() => []);
   for (const j of jobRecs) {
     if (!j) continue;
     jobs.push({ ref: J.refFor(j), core: j.core, customer: '', stage: j.stage, name: j.name || '', phone: j.phone || '', email: j.email || '', suburb: j.suburb || '', service: j.service || '',
@@ -122,12 +128,23 @@ export async function tables() {
   }
   const suppliers = stock.suppliers.filter((x) => !x.archived).map((x) => ({ id: x.id, supplier: x.name, contact: x.contact || '', phone: x.phone || '', email: x.email || '', categories: x.categories || '', terms: x.terms || '',
     items_quoted: stock.items.filter((i) => (i.prices || []).some((p) => p.supplier === x.id)).length }));
-  return { customers, jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves };
+  // v49: sub-contractors, with their region and the state of each licence / insurance (ok, due = within 30 days, expired, missing, n/a)
+  const TN = Object.fromEntries(SUB.TRADES.map((t) => [t[0], t[1]])), RANK = { Preferred: 1, Approved: 2, 'On trial': 3, 'On hold': 4, 'Do not use': 5 };
+  const subcontractors = subRecs.filter(Boolean).map((s) => {
+    const c = SUB.compliance(s, d10(now)), g = regionOf(s.suburb || s.address), L = s.licence || {}, I = s.insurance || {}, W = s.workersComp || {};
+    return { id: s.id, business: s.business || '', contact: s.contact || '', trade: TN[s.trade] || s.trade || '', other_trades: (s.trades || []).map((t) => TN[t] || t).join(', '),
+      phone: s.phone || '', email: s.email || '', suburb: s.suburb || '', postcode: g.postcode, region: g.region, western_sydney: g.western, areas_covered: s.areas || '',
+      status: s.status || '', preference_rank: RANK[s.status] || 3, rating: s.rating || 0, hourly_rate: s.rate || 0, callout_fee: s.callout || 0, after_hours_rate: s.afterHours || 0,
+      payment_terms: s.terms || '', availability: s.availability || '', licence_no: L.number || '', licence_class: L.class || '', licence_expiry: L.expiry || '', licence_state: c.lic,
+      insurer: I.insurer || '', pl_policy: I.policy || '', pl_cover: I.cover || 0, pl_expiry: I.expiry || '', pl_state: c.pl, wc_policy: W.policy || '', wc_expiry: W.expiry || '', wc_state: c.wc,
+      sole_trader: !!W.soleTrader, white_card: !!s.whiteCard, swms: !!s.swms, compliance: c.worst, problems: c.problems.join('; '), any_expired: c.worst === 'expired', last_used: s.lastUsed || '', archived: !!s.archived };
+  }).sort((a, b) => a.preference_rank - b.preference_rank || b.rating - a.rating || a.business.localeCompare(b.business));
+  return { customers, jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves, subcontractors };
 }
 
 // ---------- AI narrative (DeepSeek) ----------
 // Contact details never leave MBS: phone, email, address and personal-name columns are removed before the AI sees anything.
-const PRIVATE = /phone|email|address|^name$|customer|reference/i;
+const PRIVATE = /phone|email|address|^name$|^contact$|customer|reference/i;
 function sample(columns, rows) {
   const keep = columns.filter((c) => !PRIVATE.test(c));
   return { columns: keep, rows: rows.slice(0, 60).map((r) => Object.fromEntries(keep.map((c) => [c, r[c]]))), removed: columns.filter((c) => PRIVATE.test(c)) };
@@ -178,6 +195,12 @@ const NOTE = {
   plan_tasks: 'one plan per job, job = jobs.core, status To do|In progress|In review / QA|Done, days 0 = milestone, pct_complete 0-100, done/late true|false',
   plan_subtasks: 'steps inside a plan task (task = plan_tasks.task, same job), no costs', plan_risks: 'job = jobs.core', plan_issues: 'job = jobs.core',
   inventory: 'one row per stock item; available = on_hand - allocated (set aside by open plan tasks); low = at or below reorder_level; unit_price = preferred or cheapest valid quote ex GST',
+  subcontractors: 'one row per subbie (leave out archived = true unless asked). trade is the full name e.g. "Cleaner (builders clean)", "Electrician (sparkie)", "Plumber": match LOWER(trade) LIKE \'%clean%\' OR LOWER(other_trades) LIKE \'%clean%\'. ' +
+    'Area: region is one of Hills District|Blacktown|Parramatta & Cumberland|Penrith|Hawkesbury|Fairfield & Liverpool|Campbelltown & Camden|Inner West|North Shore|Northern Beaches|Eastern Suburbs|Sydney CBD|Canterbury-Bankstown|St George & Sutherland|Central Coast|Blue Mountains; ' +
+    '"Western Sydney" = (western_sydney = true OR LOWER(areas_covered) LIKE \'%western sydney%\' OR LOWER(areas_covered) LIKE \'%greater sydney%\'). ' +
+    'By preference / best first = ORDER BY preference_rank, rating DESC (1 Preferred, 2 Approved, 3 On trial, 4 On hold, 5 Do not use). ' +
+    'licence_state, pl_state (public liability insurance), wc_state (workers comp) and compliance are ok|due (expires within 30 days)|expired|missing|n/a; any_expired true when anything has expired. ' +
+    'To show licence and insurance and flag expired, list (in this order) business, compliance, problems, trade, suburb, status, rating, licence_no, licence_expiry, licence_state, pl_expiry, pl_state, wc_expiry, wc_state. Dates YYYY-MM-DD',
   suppliers: 'suppliers', supplier_prices: 'one row per supplier quote for a stock item', stock_moves: 'qty + in / - out; kind in|out|count|plan|order; job = jobs.core'
 };
 const WORDS = {
@@ -185,6 +208,7 @@ const WORDS = {
   quotes: /quot/i, invoices: /invoic|owe|owing|unpaid|overdue|paid|debt|balance|bill/i, items: /line item|items? on (the|a|my) (quote|invoice)/i, payments: /pay|paid|received|income|revenue|cash/i,
   expenses: /expens|spend|spent|cost|receipt|purchase|bought/i, reminders: /remind|follow/i, visits: /visit|traffic|website/i,
   plan_tasks: /plan|project|task|complet|progress|late|schedule|gantt|milestone|lead|resource|finish|behind/i, plan_subtasks: /sub-?task|step/i, plan_risks: /risk/i, plan_issues: /issue|problem/i,
+  subcontractors: /sub-?contract|subb(ie|y|ies)|tradie|trades?(wo)?m[ae]n|licen[cs]|insur|workers'? comp|white card|swms|plumb|electric|sparkie|cleaner|tiler|painter|carpent|roofer|concret|plaster|waterproof|glazier|landscap|fenc|scaffold|demoli|asbestos|skip bin|pest|locksmith|handyman|gas ?fit|air ?con|certifier|engineer|surveyor|bricklay|joiner/i,
   inventory: /stock|inventor|material|re-?order|low on|on hand/i, suppliers: /supplier|vendor/i, supplier_prices: /price|cheap|compare|supplier quote/i, stock_moves: /stock (used|in|out)|used|movement|consum|took/i
 };
 function pickTables(question, extraSql = '') {
@@ -213,8 +237,8 @@ function sydneyDates(now = Date.now()) {
     last_30_days: [S(add(today, -29)), S(today)]
   };
 }
-const HINT_KEYS = { quote_status: 8, invoice_status: 8, expense_categories: 12, trades: 10, sources: 8, suburbs: 12, plans: 15 };
-const HINT_FOR = { quote_status: 'quotes', invoice_status: 'invoices', expense_categories: 'expenses', plans: 'plan_tasks' };
+const HINT_KEYS = { quote_status: 8, invoice_status: 8, expense_categories: 12, trades: 10, sources: 8, suburbs: 12, plans: 15, sub_trades: 35 };
+const HINT_FOR = { quote_status: 'quotes', invoice_status: 'invoices', expense_categories: 'expenses', plans: 'plan_tasks', sub_trades: 'subcontractors' };
 function cleanHints(h, use) {
   const out = {};
   for (const [k, n] of Object.entries(HINT_KEYS)) {
