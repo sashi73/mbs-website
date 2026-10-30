@@ -1682,6 +1682,10 @@
 
   /* ---------- v45: 👥 Stakeholders (RACI) ---------- */
   var RACI = { R: ['Responsible', 'does the work'], A: ['Accountable', 'signs off, has the final say'], C: ['Consulted', 'asked before decisions'], I: ['Informed', 'kept up to date'] };
+  function subOpts() {   // active subbies, not "Do not use", grouped by trade
+    var by = {}; M.subs.list().filter(function (s) { return !s.archived && s.status !== 'Do not use'; }).forEach(function (s) { var t = M.subs.tradeName(s.trade); (by[t] = by[t] || []).push(s); });
+    return Object.keys(by).sort().map(function (t) { return '<optgroup label="' + esc(t) + '">' + by[t].map(function (s) { return '<option value="' + esc(s.id) + '">' + esc(s.business) + (s.comp && s.comp.worst === 'expired' ? ' ⚠ papers expired' : '') + '</option>'; }).join('') + '</optgroup>'; }).join('');
+  }
   function stakeholders() {
     var p = S.plan; p.stakeholders = p.stakeholders || [];
     var L = p.stakeholders, n = { R: 0, A: 0, C: 0, I: 0 }; L.forEach(function (x) { n[x.raci] = (n[x.raci] || 0) + 1; });
@@ -1691,6 +1695,7 @@
     var mgr = (p.charter || {}).manager || '', haveMgr = !mgr || L.some(function (x) { return x.name.toLowerCase() === mgr.toLowerCase(); });
     $('#planBody').innerHTML = '<div class="card"><div class="card-h"><h2>Stakeholder list</h2><span class="sp"></span>' +
         (S.job && !haveCust ? '<button class="btn btn-sm" id="skCust">＋ Add the customer</button> ' : '') + (!haveMgr ? '<button class="btn btn-sm" id="skMgr">＋ Add the project manager</button> ' : '') +
+        (M.subs ? '<select id="skSub" style="width:auto;max-width:240px"><option value="">👷 Add a subbie…</option>' + subOpts() + '</select> ' : '') +
         '<button class="btn btn-sm btn-gold" id="addStake">＋ Add stakeholder</button></div>' +
       '<p class="muted" style="margin:-4px 0 10px">Everyone with a part in this job and what they do, using <b>RACI</b>: ' +
         Object.keys(RACI).map(function (k) { return '<span class="raci raci-' + k + '">' + k + '</span> ' + RACI[k][0] + ' (' + RACI[k][1] + ')'; }).join(' · ') + '.</p>' +
@@ -1723,6 +1728,12 @@
     var add = function (x) { L.push(Object.assign({ id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: '', role: '', raci: 'I', phone: '', email: '' }, x)); dirty(); render(); };
     $('#addStake').onclick = function () { add({ raci: 'R' }); var i = document.querySelectorAll('#planBody [data-s=name]'); if (i.length) i[i.length - 1].focus(); };
     if ($('#skCust')) $('#skCust').onclick = function () { add({ name: S.job.name || '', role: 'Customer', raci: 'C', phone: S.job.phone || '', email: S.job.email || '' }); };
+    if ($('#skSub')) $('#skSub').onchange = function () {
+      var sb = M.subs.list().filter(function (x) { return x.id === this.value; }, this)[0]; if (!sb) return;
+      add({ name: sb.business + (sb.contact ? ' (' + sb.contact + ')' : ''), role: M.subs.tradeName(sb.trade), raci: 'R', phone: sb.phone || '', email: sb.email || '', sub: sb.id });
+      if (sb.comp && /expired/.test(sb.comp.worst)) toast('Heads up: ' + sb.business + ' has expired papers (' + sb.comp.problems.join(', ') + ')');
+    };
+    if (M.subs && !S.subsLoaded) { S.subsLoaded = true; M.subs.load().then(function () { if (S.tab === 'stake' && $('#skSub')) render(); }).catch(function () {}); }
     if ($('#skMgr')) $('#skMgr').onclick = function () { add({ name: mgr, role: 'Project manager', raci: 'A' }); };
   }
 

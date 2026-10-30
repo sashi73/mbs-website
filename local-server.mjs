@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-10-30 v46 (menu: Reports removed, Data & Reports)';
+const VERSION = '2026-10-30 v47 (sub-contractors)';
 const NEEDS = [
   ['netlify/lib/shared.mjs', 'isTestSite'],
   ['netlify/lib/plan.mjs', 'gateOf'],
@@ -57,6 +57,8 @@ const NEEDS = [
   ['admin/admin-plan.js', 'dragRows'],
   ['netlify/lib/plan.mjs', 'planAiStatus'],
   ['netlify/lib/inventory.mjs', 'invPost'],
+  ['netlify/lib/subbies.mjs', 'subPost'],
+  ['admin/admin-subs.js', 'subsPage'],
   ['admin/admin-inv.js', 'reorder'],
   ['netlify/lib/ai.mjs', 'checkLimit'],
   ['admin/admin-plan.js', 'askAI'],

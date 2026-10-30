@@ -5,10 +5,10 @@
 # Run from PowerShell:
 #   cd C:\Workzone\2026\FIXITVER1
 #   powershell -ExecutionPolicy Bypass -File .\deploy\load-test-data.ps1
-# Add -What enquiries (or inventory) to load only that part; -Again to load a second copy.
+# Add -What enquiries (or inventory, or subbies) to load only that part; -Again to load a second copy.
 param(
   [string]$Site = "https://fixittest.netlify.app",
-  [ValidateSet('all', 'enquiries', 'inventory')][string]$What = 'all',
+  [ValidateSet('all', 'enquiries', 'inventory', 'subbies')][string]$What = 'all',
   [switch]$Again
 )
 $repo = 'C:\Workzone\2026\FIXITVER1'
@@ -16,7 +16,7 @@ if (-not (Test-Path (Join-Path $repo 'tools\load-test-data.mjs'))) { Write-Host 
 Set-Location $repo
 
 Write-Host ""
-Write-Host "This adds TEST data ($($What)) (150 enquiries, 50 suppliers, 150 stock items) to $Site" -ForegroundColor Yellow
+Write-Host "This adds TEST data ($($What)) (150 enquiries, 50 suppliers, 150 stock items, 30 sub-contractors) to $Site" -ForegroundColor Yellow
 $ok = Read-Host "Type TEST to continue"
 if ($ok -ne 'TEST') { Write-Host "Stopped. Nothing was loaded." -ForegroundColor Yellow; exit 0 }
 

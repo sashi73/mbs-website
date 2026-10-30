@@ -679,3 +679,21 @@ select.raci-sel{font-weight:700;width:auto}
 table.sk input{width:100%;min-width:120px}
 .sk-c{display:flex;gap:4px;align-items:center}.sk-c input{flex:1}
 #invBody td.sup-addr{max-width:240px;font-size:13px}
+/* v47: sub-contractors */
+.modal-card.sc-wide{max-width:900px}
+.sc-form h3{margin:6px 0 -4px;font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:#8A6D10}
+.sc-inline{display:flex;align-items:center;min-height:40px}
+.sc-cb{display:inline-flex!important;gap:6px;align-items:center;font-weight:500;font-size:13.5px}.sc-cb input{width:auto}
+.sc-more summary{cursor:pointer;font-weight:700;font-size:13.5px}
+.sc-trades{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 12px;margin-top:8px}
+.sc-chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.sc-tchip{border:1px solid var(--line);background:#fff;border-radius:99px;padding:3px 10px;font-size:12.5px;cursor:pointer}.sc-tchip b{color:#8A6D10}
+.sc-tchip.on{background:#1F2937;color:#fff;border-color:#1F2937}.sc-tchip.on b{color:#E8C04A}
+.sc-stars{color:#D4A017;letter-spacing:1px}.sc-stars i{font-style:normal;color:#E5E1D6}
+.scchip{display:inline-block;font-size:11.5px;font-weight:800;border-radius:99px;padding:3px 9px;white-space:nowrap}
+.scchip-ok{background:#DCFCE7;color:#166534}.scchip-due{background:#FEF3C7;color:#92400E}.scchip-bad{background:#FDE2D8;color:#B42318}.scchip-miss{background:#F1EEE6;color:#57534E}
+.scst{display:inline-block;font-size:11.5px;font-weight:700;border-radius:6px;padding:2px 8px;white-space:nowrap}
+.scst-pref{background:#FDE68A;color:#854D0E}.scst-ok{background:#E0F2FE;color:#075985}.scst-trial{background:#EDE9FE;color:#5B21B6}.scst-hold{background:#F1EEE6;color:#57534E}.scst-bad{background:#FDE2D8;color:#B42318}
+.scdoc{font-weight:800;font-size:12.5px}.scdoc-expired{color:#B42318}.scdoc-due{color:#B45309}.scdoc-missing{color:#6B675E}
+.kpi-bad .v{color:#B42318}
+.sc-table td{vertical-align:top}

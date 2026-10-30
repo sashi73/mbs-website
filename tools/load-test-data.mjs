@@ -1,5 +1,6 @@
 // v33/v44: loads the made-up test data into the TEST site: 150 enquiries (tools/test-data/enquiries-150.json),
-// 50 suppliers and 150 stock items with six months of stock movements (suppliers-50.json, inventory-150.json).
+// 50 suppliers and 150 stock items with six months of stock movements (suppliers-50.json, inventory-150.json),
+// and 30 sub-contractors (subcontractors-30.json, v47).
 // Enquiries go in through the
 // admin console's own API (the same as adding jobs by hand), then moves each one along the pipeline
 // (called, quoted, won, completed, invoiced, paid or lost) so the dashboard and reports have something to show.
@@ -18,7 +19,7 @@ const args = process.argv.slice(2);
 const opt = (name, def = '') => { const i = args.indexOf(name); return i >= 0 && args[i + 1] ? args[i + 1] : def; };
 const SITE = opt('--site', 'https://fixittest.netlify.app').replace(/\/+$/, '');
 const AGAIN = args.includes('--again');
-const WHAT = ['enquiries', 'inventory'].includes(opt('--what')) ? opt('--what') : 'all';   // v44: enquiries, inventory (suppliers + stock), or all
+const WHAT = ['enquiries', 'inventory', 'subbies'].includes(opt('--what')) ? opt('--what') : 'all';   // v44/v47: enquiries, inventory (suppliers + stock), subbies, or all
 const USER = process.env.MBS_LOAD_USER || '', PASS = process.env.MBS_LOAD_PASS || '';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA = JSON.parse(fs.readFileSync(path.join(here, 'test-data', 'enquiries-150.json'), 'utf8')).enquiries;
@@ -68,7 +69,7 @@ async function one(e) {
     await api('stage', { ref: r.job.core, stage: st, ...extra });
   }
 }
-if (WHAT !== 'inventory') {
+if (WHAT === 'all' || WHAT === 'enquiries') {
   if (already && !AGAIN) say(`Enquiries: already there (${already} test enquiries), skipped.`);
   else {
     say('Enquiries: adding 150...');
@@ -88,7 +89,7 @@ if (WHAT !== 'inventory') {
 }
 
 // 4. v44: suppliers and stock items (skipped if the test suppliers are already there)
-if (WHAT !== 'enquiries') {
+if (WHAT === 'all' || WHAT === 'inventory') {
   const inv = await api('invList');
   const haveSup = (inv.suppliers || []).filter((s) => /\.example\.com$/.test(s.email || '') || /^02 5550 3/.test(s.phone || '')).length;
   if (haveSup && !AGAIN) say(`Suppliers and stock: already there (${haveSup} test suppliers), skipped.`);
@@ -112,6 +113,16 @@ if (WHAT !== 'enquiries') {
     let n = 0;
     for (let i = 0; i < items.length; i += 10) { const r = await api('invTestLoad', { kind: 'items', items: items.slice(i, i + 10) }); n += r.ids.length; say(`  ${n} of ${items.length} stock items...`); }
     say(`Stock items: ${n} added, with six months of stock movements.`, '\x1b[32m');
+  }
+}
+// 5. v47: sub-contractors (skipped if the test subbies are already there)
+if (WHAT === 'all' || WHAT === 'subbies') {
+  const have = ((await api('subList')).subs || []).filter((s) => /^02 5550 31/.test(s.phone || '')).length;
+  if (have && !AGAIN) say(`Sub-contractors: already there (${have} test subbies), skipped.`);
+  else {
+    const SUBS = JSON.parse(fs.readFileSync(path.join(here, 'test-data', 'subcontractors-30.json'), 'utf8')).subs;
+    let n = 0; for (let i = 0; i < SUBS.length; i += 10) n += (await api('subTestLoad', { subs: SUBS.slice(i, i + 10) })).ids.length;
+    say(`Sub-contractors: ${n} added.`, '\x1b[32m');
   }
 }
 try { await api('logout'); } catch {}
