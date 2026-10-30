@@ -1,3 +1,2 @@
-MBS website v45 (2026-10-30)
-Project plan: a 👥 Stakeholders tab after Issues, using RACI: Name, Role, RACI (Responsible, Accountable, Consulted, Informed), Contact number and Email, with call and email buttons, "Add the customer" (from the job) and "Add the project manager", a warning when nobody or more than one person is Accountable, and a Stakeholders sheet in the Excel export. Contact details are never sent to the AI.
-Inventory: the supplier list has an Address column (opens Google Maps).
+MBS website v46 (2026-10-30)
+Console menu: the separate Reports item is removed (the SQL wizard & reports, Ask AI and Data explorer cover it); the Data heading is now "Data & Reports". Old #reports links still open.
