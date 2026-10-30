@@ -16,7 +16,7 @@ if (-not (Test-Path (Join-Path $repo 'tools\load-test-data.mjs'))) { Write-Host 
 Set-Location $repo
 
 Write-Host ""
-Write-Host "This adds TEST data ($($What)) (150 enquiries, 50 suppliers, 150 stock items, 30 sub-contractors) to $Site" -ForegroundColor Yellow
+Write-Host "This adds TEST data ($($What)) (150 enquiries, 50 suppliers, 150 stock items, 50 sub-contractors) to $Site" -ForegroundColor Yellow
 $ok = Read-Host "Type TEST to continue"
 if ($ok -ne 'TEST') { Write-Host "Stopped. Nothing was loaded." -ForegroundColor Yellow; exit 0 }
 

@@ -1,4 +1,4 @@
-// v47: Sub-contractors. A TEST copy of the site (tools/site-env.mjs), the real loader adds the 30 test subbies, then the
+// v47: Sub-contractors. A TEST copy of the site (tools/site-env.mjs), the real loader adds the 50 test subbies, then the
 // console's Subbies list, Licences & insurance page, the editor and the project plan's "Add a subbie" are checked.
 // Real Blobs, local site, Chromium.
 const { chromium } = require('playwright');
@@ -29,16 +29,20 @@ const run = (cwd, args, env, ms) => new Promise((res) => { const c = spawn('node
   let br = null;
   try {
     const SB = await import(path.join(SITE, 'netlify/lib/subbies.mjs'));
-    const DATA = JSON.parse(fs.readFileSync(path.join(SRC, 'tools/test-data/subcontractors-30.json'))).subs;
-    ok('Data', '30 made-up subbies across at least 20 trades, plumbers, sparkies and cleaners included, fake phones and emails', DATA.length === 30 && new Set(DATA.map((s) => s.trade)).size >= 20 &&
+    const DATA = JSON.parse(fs.readFileSync(path.join(SRC, 'tools/test-data/subcontractors-50.json'))).subs;
+    ok('Data', '50 made-up subbies across at least 25 trades, plumbers, sparkies and cleaners included, fake phones and emails', DATA.length === 50 && new Set(DATA.map((s) => s.trade)).size >= 25 &&
       ['plumber', 'electrician', 'cleaner'].every((t) => DATA.some((s) => s.trade === t)) && DATA.every((s) => /^02 5550 31/.test(s.phone) && (!s.email || /\.example\.com$/.test(s.email))));
     delete process.env.SITE_ENV;
     ok('Safety', 'test subbies are refused unless the site is the test site', (await (await SB.subPost('subTestLoad', { subs: DATA.slice(0, 1) }, { who: 'x', by: 'x' })).json()).error && true);
 
+    // as if the first 30 (v47) were already loaded: the loader tops up with the other 20
+    const SBs = await import(path.join(SITE, 'netlify/lib/subbies.mjs'));
+    for (const s of DATA.slice(0, 30)) await SBs.saveSub(s, 'test');
     const ld = await run(SITE, ['tools/load-test-data.mjs', '--site', BASE, '--what', 'subbies'], { ...process.env, MBS_LOAD_USER: 'sashi73', MBS_LOAD_PASS: 'sashi98' }, 120000);
-    ok('Loader', 'the loader adds the 30 test subbies (-What subbies)', /Sub-contractors: 30 added/.test(ld.stdout), ld.stdout.slice(-400));
+    ok('Loader', 'with 30 already there, the loader adds only the other 20 (no duplicates)', /Sub-contractors: 20 added \(30 were already there\)/.test(ld.stdout), ld.stdout.slice(-400));
     const ld2 = await run(SITE, ['tools/load-test-data.mjs', '--site', BASE, '--what', 'subbies'], { ...process.env, MBS_LOAD_USER: 'sashi73', MBS_LOAD_PASS: 'sashi98' }, 120000);
-    ok('Loader', 'running it again skips them', /already there \(30 test subbies\)/.test(ld2.stdout), ld2.stdout.slice(-300));
+    ok('Loader', 'running it again skips them all', /all 50 test subbies already there/.test(ld2.stdout), ld2.stdout.slice(-300));
+    ok('Loader', '50 subbies in the database, each once', new Set((await SB.list()).subs.map((s) => s.business)).size === 50 && (await SB.list()).subs.length === 50);
 
     const L = await SB.list();
     const active = L.subs.filter((s) => !s.archived && s.status !== 'Do not use');
@@ -61,7 +65,7 @@ const run = (cwd, args, env, ms) => new Promise((res) => { const c = spawn('node
     ok('Menu', 'the Licences & insurance item shows how many have papers expired or due', (await p.textContent('[data-nav=subscomp] .nbadge').catch(() => '')) === String(flagged), flagged);
 
     await p.click('[data-nav=subs]'); await p.waitForSelector('.sc-table');
-    ok('List', 'Subbies lists all 30', (await p.$$eval('.sc-table tbody tr', (x) => x.length)) === 30);
+    ok('List', 'Subbies lists all 50', (await p.$$eval('.sc-table tbody tr', (x) => x.length)) === 50);
     ok('List', 'columns: business, trade, phone, email, rate, rating, licence & insurance, status', /Business.*Trade.*Phone.*Email.*Rate.*Rating.*Licence & insurance.*Status/.test((await p.$$eval('.sc-table th', (x) => x.map((h) => h.textContent))).join(' ')));
     await p.selectOption('#scTrade', 'plumber');
     const plumbers = DATA.filter((s) => s.trade === 'plumber' || s.trades.includes('plumber')).length;
@@ -83,13 +87,13 @@ const run = (cwd, args, env, ms) => new Promise((res) => { const c = spawn('node
     await p.locator('.modal-card').screenshot({ path: path.join(__dirname, 'shot47-edit.png') });
     await p.click('#scSave'); await p.waitForSelector('#modal', { state: 'hidden' }); await sleep(400);
     const zap = (await SB.list()).subs.find((s) => s.business === 'Zap Electrical Test');
-    ok('Add', 'a new subbie is saved with the next number, trade, other trades and rate', zap && zap.id === 'SC-031' && zap.trade === 'electrician' && zap.trades.join() === 'aircon' && zap.rate === 99, JSON.stringify(zap));
-    ok('Add', 'an expired licence shows as Expired', zap && zap.comp.worst === 'expired' && /Licence: expired/.test(zap.comp.problems.join()) && /Expired/.test(await p.textContent('tr[data-scid="SC-031"]')));
-    await p.click('tr[data-scid="SC-031"] [data-scedit] >> nth=0'); await p.waitForSelector('#scSave');
+    ok('Add', 'a new subbie is saved with the next number, trade, other trades and rate', zap && zap.id === 'SC-051' && zap.trade === 'electrician' && zap.trades.join() === 'aircon' && zap.rate === 99, JSON.stringify(zap));
+    ok('Add', 'an expired licence shows as Expired', zap && zap.comp.worst === 'expired' && /Licence: expired/.test(zap.comp.problems.join()) && /Expired/.test(await p.textContent('tr[data-scid="SC-051"]')));
+    await p.click('tr[data-scid="SC-051"] [data-scedit] >> nth=0'); await p.waitForSelector('#scSave');
     ok('Edit', 'opening it warns about the expired licence', /Licence: expired/.test(await p.textContent('#modalBody')));
     await p.fill('[data-k="lic.expiry"]', '2099-01-01'); await p.selectOption('[data-k=status]', 'Preferred'); await p.selectOption('[data-k=rating]', '5');
     await p.click('#scSave'); await p.waitForSelector('#modal', { state: 'hidden' }); await sleep(400);
-    const zap2 = (await SB.list()).subs.find((s) => s.id === 'SC-031');
+    const zap2 = (await SB.list()).subs.find((s) => s.id === 'SC-051');
     ok('Edit', 'changes are saved and the subbie is now compliant', zap2.status === 'Preferred' && zap2.rating === 5 && zap2.comp.worst === 'ok' && zap2.trades.join() === 'aircon', JSON.stringify(zap2.comp));
 
     // compliance page
@@ -101,8 +105,8 @@ const run = (cwd, args, env, ms) => new Promise((res) => { const c = spawn('node
     await p.screenshot({ path: path.join(__dirname, 'shot47-compliance.png'), fullPage: true });
 
     // archive
-    await p.goto(`${BASE}/admin/#subs/SC-031`); await p.waitForSelector('#scArchB'); await p.click('#scArchB'); await p.waitForSelector('#modal', { state: 'hidden' }); await sleep(300);
-    ok('Archive', 'archiving hides the subbie from the list', !(await p.isVisible('tr[data-scid="SC-031"]')) && (await SB.list()).subs.find((s) => s.id === 'SC-031').archived);
+    await p.goto(`${BASE}/admin/#subs/SC-051`); await p.waitForSelector('#scArchB'); await p.click('#scArchB'); await p.waitForSelector('#modal', { state: 'hidden' }); await sleep(300);
+    ok('Archive', 'archiving hides the subbie from the list', !(await p.isVisible('tr[data-scid="SC-051"]')) && (await SB.list()).subs.find((s) => s.id === 'SC-051').archived);
 
     // project plan: add a subbie as a stakeholder
     const J = await import(path.join(SITE, 'netlify/lib/jobs.mjs'));

@@ -1,6 +1,6 @@
 // v33/v44: loads the made-up test data into the TEST site: 150 enquiries (tools/test-data/enquiries-150.json),
 // 50 suppliers and 150 stock items with six months of stock movements (suppliers-50.json, inventory-150.json),
-// and 30 sub-contractors (subcontractors-30.json, v47).
+// and 50 sub-contractors (subcontractors-50.json, v48).
 // Enquiries go in through the
 // admin console's own API (the same as adding jobs by hand), then moves each one along the pipeline
 // (called, quoted, won, completed, invoiced, paid or lost) so the dashboard and reports have something to show.
@@ -115,14 +115,16 @@ if (WHAT === 'all' || WHAT === 'inventory') {
     say(`Stock items: ${n} added, with six months of stock movements.`, '\x1b[32m');
   }
 }
-// 5. v47: sub-contractors (skipped if the test subbies are already there)
+// 5. v47/v48: 50 sub-contractors. Only the ones not there yet are added (matched on their test phone number),
+// so running it again, or after the first 30 (v47), just tops up to 50.
 if (WHAT === 'all' || WHAT === 'subbies') {
-  const have = ((await api('subList')).subs || []).filter((s) => /^02 5550 31/.test(s.phone || '')).length;
-  if (have && !AGAIN) say(`Sub-contractors: already there (${have} test subbies), skipped.`);
+  const SUBS = JSON.parse(fs.readFileSync(path.join(here, 'test-data', 'subcontractors-50.json'), 'utf8')).subs;
+  const have = new Set(((await api('subList')).subs || []).map((s) => s.phone || '').filter((p) => /^02 5550 31/.test(p)));
+  const todo = AGAIN ? SUBS : SUBS.filter((s) => !have.has(s.phone));
+  if (!todo.length) say(`Sub-contractors: all ${SUBS.length} test subbies already there, skipped.`);
   else {
-    const SUBS = JSON.parse(fs.readFileSync(path.join(here, 'test-data', 'subcontractors-30.json'), 'utf8')).subs;
-    let n = 0; for (let i = 0; i < SUBS.length; i += 10) n += (await api('subTestLoad', { subs: SUBS.slice(i, i + 10) })).ids.length;
-    say(`Sub-contractors: ${n} added.`, '\x1b[32m');
+    let n = 0; for (let i = 0; i < todo.length; i += 10) n += (await api('subTestLoad', { subs: todo.slice(i, i + 10) })).ids.length;
+    say(`Sub-contractors: ${n} added${have.size && !AGAIN ? ` (${have.size} were already there)` : ''}.`, '\x1b[32m');
   }
 }
 try { await api('logout'); } catch {}

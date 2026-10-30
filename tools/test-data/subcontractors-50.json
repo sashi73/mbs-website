@@ -1,0 +1,2097 @@
+{
+ "subs": [
+  {
+   "business": "Hills Plumbing Services",
+   "contact": "Mick",
+   "trade": "plumber",
+   "trades": [
+    "gasfitter"
+   ],
+   "phone": "02 5550 3101",
+   "email": "jobs@hillsplumbingservices.example.com",
+   "suburb": "Castle Hill",
+   "address": "10 Test St, Castle Hill NSW",
+   "abn": "00 000 000 001",
+   "gst": true,
+   "licence": {
+    "number": "TEST-000000",
+    "class": "Plumber, drainer",
+    "expiryDays": 743
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0001",
+    "cover": 20000000,
+    "expiryDays": 221
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0001",
+    "soleTrader": false,
+    "expiryDays": 71
+   },
+   "whiteCard": "WC0000000",
+   "swms": true,
+   "rate": 110,
+   "callout": 60,
+   "afterHours": 176,
+   "rateNote": "",
+   "terms": "14 days",
+   "areas": "Greater Sydney",
+   "availability": "Weekends by arrangement",
+   "status": "On trial",
+   "rating": 0,
+   "lastUsedDays": -48,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Western Drains & Pipes",
+   "contact": "Tony",
+   "trade": "plumber",
+   "trades": [],
+   "phone": "02 5550 3102",
+   "email": "jobs@westerndrainspipes.example.com",
+   "suburb": "Blacktown",
+   "address": "13 Test St, Blacktown NSW",
+   "abn": "00 000 000 002",
+   "gst": true,
+   "licence": {
+    "number": "TEST-007919",
+    "class": "Plumber, drainer",
+    "expiryDays": 323
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0002",
+    "cover": 10000000,
+    "expiryDays": 129
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0002",
+    "soleTrader": false,
+    "expiryDays": 351
+   },
+   "whiteCard": "WC0104729",
+   "swms": true,
+   "rate": 110,
+   "callout": 80,
+   "afterHours": 176,
+   "rateNote": "",
+   "terms": "On completion",
+   "areas": "Hills District, Parramatta",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -170,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Parra Plumbing & Gas",
+   "contact": "Sanjay",
+   "trade": "plumber",
+   "trades": [
+    "gasfitter"
+   ],
+   "phone": "02 5550 3103",
+   "email": "jobs@parraplumbinggas.example.com",
+   "suburb": "Parramatta",
+   "address": "16 Test St, Parramatta NSW",
+   "abn": "00 000 000 003",
+   "gst": true,
+   "licence": {
+    "number": "TEST-015838",
+    "class": "Plumber, drainer",
+    "expiryDays": -12
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0003",
+    "cover": 20000000,
+    "expiryDays": 70
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC0209458",
+   "swms": true,
+   "rate": 110,
+   "callout": 80,
+   "afterHours": 176,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Western Sydney",
+   "availability": "Mon-Sat",
+   "status": "Do not use",
+   "rating": 1,
+   "lastUsedDays": -54,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Bright Spark Electrical",
+   "contact": "Josh",
+   "trade": "electrician",
+   "trades": [
+    "aircon"
+   ],
+   "phone": "02 5550 3104",
+   "email": "jobs@brightsparkelectrical.example.com",
+   "suburb": "Kellyville",
+   "address": "19 Test St, Kellyville NSW",
+   "abn": "00 000 000 004",
+   "gst": true,
+   "licence": {
+    "number": "TEST-023757",
+    "class": "Electrician",
+    "expiryDays": 20
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0004",
+    "cover": 20000000,
+    "expiryDays": 348
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0004",
+    "soleTrader": false,
+    "expiryDays": 350
+   },
+   "whiteCard": "WC0314187",
+   "swms": true,
+   "rate": 105,
+   "callout": 0,
+   "afterHours": 168,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Western Sydney",
+   "availability": "Mon-Sat",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -165,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Penrith Power Electrical",
+   "contact": "Lee",
+   "trade": "electrician",
+   "trades": [],
+   "phone": "02 5550 3105",
+   "email": "jobs@penrithpowerelectrical.example.com",
+   "suburb": "Penrith",
+   "address": "22 Test St, Penrith NSW",
+   "abn": "00 000 000 005",
+   "gst": true,
+   "licence": {
+    "number": "TEST-031676",
+    "class": "Electrician",
+    "expiryDays": 756
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0005",
+    "cover": 10000000,
+    "expiryDays": 253
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0005",
+    "soleTrader": false,
+    "expiryDays": 123
+   },
+   "whiteCard": "",
+   "swms": false,
+   "rate": 105,
+   "callout": 0,
+   "afterHours": 168,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Greater Sydney",
+   "availability": "Mon-Fri",
+   "status": "On hold",
+   "rating": 2,
+   "lastUsedDays": -64,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Volt Electrical Contracting",
+   "contact": "Ahmed",
+   "trade": "electrician",
+   "trades": [],
+   "phone": "02 5550 3106",
+   "email": "jobs@voltelectricalcontract.example.com",
+   "suburb": "Liverpool",
+   "address": "25 Test St, Liverpool NSW",
+   "abn": "00 000 000 006",
+   "gst": true,
+   "licence": {
+    "number": "TEST-039595",
+    "class": "Electrician",
+    "expiryDays": 20
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0006",
+    "cover": 10000000,
+    "expiryDays": 341
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0006",
+    "soleTrader": false,
+    "expiryDays": 356
+   },
+   "whiteCard": "WC0523645",
+   "swms": true,
+   "rate": 105,
+   "callout": 80,
+   "afterHours": 168,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Parramatta, Cumberland, Inner West",
+   "availability": "Weekends by arrangement",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -32,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "CoolAir Hills",
+   "contact": "Ravi",
+   "trade": "aircon",
+   "trades": [
+    "electrician"
+   ],
+   "phone": "02 5550 3107",
+   "email": "jobs@coolairhills.example.com",
+   "suburb": "Baulkham Hills",
+   "address": "28 Test St, Baulkham Hills NSW",
+   "abn": "00 000 000 007",
+   "gst": true,
+   "licence": {
+    "number": "TEST-047514",
+    "class": "Refrigeration & AC",
+    "expiryDays": 482
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0007",
+    "cover": 20000000,
+    "expiryDays": 131
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0007",
+    "soleTrader": false,
+    "expiryDays": 92
+   },
+   "whiteCard": "",
+   "swms": false,
+   "rate": 120,
+   "callout": 0,
+   "afterHours": 192,
+   "rateNote": "",
+   "terms": "On completion",
+   "areas": "Blacktown, Penrith, Hawkesbury",
+   "availability": "Mon-Fri",
+   "status": "On trial",
+   "rating": 0,
+   "lastUsedDays": -76,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "True Square Carpentry",
+   "contact": "Ben",
+   "trade": "carpenter",
+   "trades": [
+    "fencer"
+   ],
+   "phone": "02 5550 3108",
+   "email": "jobs@truesquarecarpentry.example.com",
+   "suburb": "Rouse Hill",
+   "address": "31 Test St, Rouse Hill NSW",
+   "abn": "00 000 000 008",
+   "gst": true,
+   "licence": {
+    "number": "TEST-055433",
+    "class": "Carpentry",
+    "expiryDays": 20
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0008",
+    "cover": 10000000,
+    "expiryDays": 185
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0008",
+    "soleTrader": false,
+    "expiryDays": 240
+   },
+   "whiteCard": "WC0733103",
+   "swms": true,
+   "rate": 85,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "30 days EOM",
+   "areas": "Western Sydney",
+   "availability": "Weekends by arrangement",
+   "status": "On trial",
+   "rating": 0,
+   "lastUsedDays": -174,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Oakwood Joinery",
+   "contact": "Greg",
+   "trade": "joiner",
+   "trades": [
+    "carpenter"
+   ],
+   "phone": "02 5550 3109",
+   "email": "jobs@oakwoodjoinery.example.com",
+   "suburb": "Seven Hills",
+   "address": "34 Test St, Seven Hills NSW",
+   "abn": "00 000 000 009",
+   "gst": true,
+   "licence": {
+    "number": "TEST-063352",
+    "class": "Joinery",
+    "expiryDays": 591
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0009",
+    "cover": 10000000,
+    "expiryDays": 346
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0009",
+    "soleTrader": false,
+    "expiryDays": 156
+   },
+   "whiteCard": "WC0837832",
+   "swms": true,
+   "rate": 90,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "30 days EOM",
+   "areas": "Hills District, Parramatta",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -101,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Hills Tiling Co",
+   "contact": "Marco",
+   "trade": "tiler",
+   "trades": [
+    "waterproofer"
+   ],
+   "phone": "02 5550 3110",
+   "email": "jobs@hillstilingco.example.com",
+   "suburb": "Box Hill",
+   "address": "37 Test St, Box Hill NSW",
+   "abn": "00 000 000 010",
+   "gst": true,
+   "licence": {
+    "number": "TEST-071271",
+    "class": "Wall & floor tiling",
+    "expiryDays": 231
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0010",
+    "cover": 20000000,
+    "expiryDays": 335
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC0942561",
+   "swms": true,
+   "rate": 80,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "30 days EOM",
+   "areas": "Parramatta, Cumberland, Inner West",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "Do not use",
+   "rating": 1,
+   "lastUsedDays": -190,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Precise Tile & Stone",
+   "contact": "Dimitri",
+   "trade": "tiler",
+   "trades": [],
+   "phone": "02 5550 3111",
+   "email": "",
+   "suburb": "Merrylands",
+   "address": "40 Test St, Merrylands NSW",
+   "abn": "00 000 000 011",
+   "gst": true,
+   "licence": {
+    "number": "TEST-079190",
+    "class": "Wall & floor tiling",
+    "expiryDays": 225
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0011",
+    "cover": 20000000,
+    "expiryDays": 267
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0011",
+    "soleTrader": false,
+    "expiryDays": 230
+   },
+   "whiteCard": "WC1047290",
+   "swms": true,
+   "rate": 80,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "30 days EOM",
+   "areas": "Hills District, Parramatta",
+   "availability": "Mon-Fri",
+   "status": "Preferred",
+   "rating": 5,
+   "lastUsedDays": -95,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "DrySeal Waterproofing",
+   "contact": "Kim",
+   "trade": "waterproofer",
+   "trades": [],
+   "phone": "02 5550 3112",
+   "email": "jobs@drysealwaterproofing.example.com",
+   "suburb": "Smithfield",
+   "address": "43 Test St, Smithfield NSW",
+   "abn": "00 000 000 012",
+   "gst": true,
+   "licence": {
+    "number": "TEST-087109",
+    "class": "Waterproofing",
+    "expiryDays": 716
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0012",
+    "cover": 20000000,
+    "expiryDays": 197
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC1152019",
+   "swms": true,
+   "rate": 85,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "30 days EOM",
+   "areas": "Western Sydney",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "Approved",
+   "rating": 3,
+   "lastUsedDays": -172,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Smooth Walls Plastering",
+   "contact": "Sione",
+   "trade": "plasterer",
+   "trades": [
+    "renderer"
+   ],
+   "phone": "02 5550 3113",
+   "email": "jobs@smoothwallsplastering.example.com",
+   "suburb": "Riverstone",
+   "address": "46 Test St, Riverstone NSW",
+   "abn": "00 000 000 013",
+   "gst": true,
+   "licence": {
+    "number": "TEST-095028",
+    "class": "Plastering",
+    "expiryDays": 426
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0013",
+    "cover": 20000000,
+    "expiryDays": 222
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0013",
+    "soleTrader": false,
+    "expiryDays": 88
+   },
+   "whiteCard": "WC1256748",
+   "swms": true,
+   "rate": 75,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "14 days",
+   "areas": "Parramatta, Cumberland, Inner West",
+   "availability": "Weekends by arrangement",
+   "status": "Preferred",
+   "rating": 5,
+   "lastUsedDays": -111,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Fresh Coat Painting",
+   "contact": "Dave",
+   "trade": "painter",
+   "trades": [],
+   "phone": "02 5550 3114",
+   "email": "jobs@freshcoatpainting.example.com",
+   "suburb": "Castle Hill",
+   "address": "49 Test St, Castle Hill NSW",
+   "abn": "00 000 000 014",
+   "gst": true,
+   "licence": {
+    "number": "TEST-102947",
+    "class": "Painting & decorating",
+    "expiryDays": 20
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0014",
+    "cover": 20000000,
+    "expiryDays": 191
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0014",
+    "soleTrader": false,
+    "expiryDays": 210
+   },
+   "whiteCard": "WC1361477",
+   "swms": true,
+   "rate": 65,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Greater Sydney",
+   "availability": "Mon-Fri",
+   "status": "Preferred",
+   "rating": 5,
+   "lastUsedDays": -89,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Colour Pro Painters",
+   "contact": "Lina",
+   "trade": "painter",
+   "trades": [],
+   "phone": "02 5550 3115",
+   "email": "jobs@colourpropainters.example.com",
+   "suburb": "Campbelltown",
+   "address": "52 Test St, Campbelltown NSW",
+   "abn": "00 000 000 015",
+   "gst": true,
+   "licence": {
+    "number": "TEST-110866",
+    "class": "Painting & decorating",
+    "expiryDays": 360
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0015",
+    "cover": 20000000,
+    "expiryDays": 220
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0015",
+    "soleTrader": false,
+    "expiryDays": 344
+   },
+   "whiteCard": "WC1466206",
+   "swms": true,
+   "rate": 65,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Parramatta, Cumberland, Inner West",
+   "availability": "Weekends by arrangement",
+   "status": "Preferred",
+   "rating": 5,
+   "lastUsedDays": -160,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "TopCover Roofing",
+   "contact": "Shane",
+   "trade": "roofer",
+   "trades": [],
+   "phone": "02 5550 3116",
+   "email": "jobs@topcoverroofing.example.com",
+   "suburb": "St Marys",
+   "address": "55 Test St, St Marys NSW",
+   "abn": "00 000 000 016",
+   "gst": true,
+   "licence": {
+    "number": "TEST-118785",
+    "class": "Roof tiling & slating",
+    "expiryDays": -12
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0016",
+    "cover": 20000000,
+    "expiryDays": 81
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0016",
+    "soleTrader": false,
+    "expiryDays": 152
+   },
+   "whiteCard": "WC1570935",
+   "swms": true,
+   "rate": 90,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "14 days",
+   "areas": "Parramatta, Cumberland, Inner West",
+   "availability": "Mon-Fri",
+   "status": "On hold",
+   "rating": 2,
+   "lastUsedDays": -18,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Solid Base Concreting",
+   "contact": "Paulo",
+   "trade": "concreter",
+   "trades": [
+    "excavation"
+   ],
+   "phone": "02 5550 3117",
+   "email": "jobs@solidbaseconcreting.example.com",
+   "suburb": "Marsden Park",
+   "address": "58 Test St, Marsden Park NSW",
+   "abn": "00 000 000 017",
+   "gst": true,
+   "licence": {
+    "number": "TEST-126704",
+    "class": "Concreting",
+    "expiryDays": 300
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0017",
+    "cover": 20000000,
+    "expiryDays": 62
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC1675664",
+   "swms": true,
+   "rate": 85,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "14 days",
+   "areas": "Hills District, Parramatta",
+   "availability": "Weekends by arrangement",
+   "status": "Approved",
+   "rating": 3,
+   "lastUsedDays": -130,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Brick by Brick NSW",
+   "contact": "Frank",
+   "trade": "bricklayer",
+   "trades": [
+    "renderer"
+   ],
+   "phone": "02 5550 3118",
+   "email": "jobs@brickbybricknsw.example.com",
+   "suburb": "Windsor",
+   "address": "61 Test St, Windsor NSW",
+   "abn": "00 000 000 018",
+   "gst": true,
+   "licence": {
+    "number": "TEST-134623",
+    "class": "Bricklaying",
+    "expiryDays": 764
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0018",
+    "cover": 10000000,
+    "expiryDays": 321
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0018",
+    "soleTrader": false,
+    "expiryDays": 265
+   },
+   "whiteCard": "WC1780393",
+   "swms": true,
+   "rate": 85,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Hills District, Parramatta",
+   "availability": "Weekends by arrangement",
+   "status": "On hold",
+   "rating": 2,
+   "lastUsedDays": -161,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "ClearView Glass",
+   "contact": "Nadia",
+   "trade": "glazier",
+   "trades": [],
+   "phone": "02 5550 3119",
+   "email": "jobs@clearviewglass.example.com",
+   "suburb": "Northmead",
+   "address": "64 Test St, Northmead NSW",
+   "abn": "00 000 000 019",
+   "gst": true,
+   "licence": {
+    "number": "TEST-142542",
+    "class": "Glazing",
+    "expiryDays": 801
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0019",
+    "cover": 20000000,
+    "expiryDays": -5
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC1885122",
+   "swms": true,
+   "rate": 95,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "On completion",
+   "areas": "Parramatta, Cumberland, Inner West",
+   "availability": "Mon-Fri",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -113,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Floor Masters Sydney",
+   "contact": "Hamid",
+   "trade": "flooring",
+   "trades": [],
+   "phone": "02 5550 3120",
+   "email": "jobs@floormasterssydney.example.com",
+   "suburb": "Auburn",
+   "address": "67 Test St, Auburn NSW",
+   "abn": "00 000 000 020",
+   "gst": true,
+   "licence": {
+    "number": "TEST-150461",
+    "class": "Floor finishing",
+    "expiryDays": 20
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0020",
+    "cover": 20000000,
+    "expiryDays": 263
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0020",
+    "soleTrader": false,
+    "expiryDays": 98
+   },
+   "whiteCard": "WC1989851",
+   "swms": true,
+   "rate": 75,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "14 days",
+   "areas": "Blacktown, Penrith, Hawkesbury",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -67,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Boundary Fencing",
+   "contact": "Craig",
+   "trade": "fencer",
+   "trades": [
+    "landscaper"
+   ],
+   "phone": "02 5550 3121",
+   "email": "jobs@boundaryfencing.example.com",
+   "suburb": "Schofields",
+   "address": "70 Test St, Schofields NSW",
+   "abn": "00 000 000 021",
+   "gst": true,
+   "licence": {
+    "number": "TEST-158380",
+    "class": "Fencing",
+    "expiryDays": -12
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0021",
+    "cover": 20000000,
+    "expiryDays": 75
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0021",
+    "soleTrader": false,
+    "expiryDays": 262
+   },
+   "whiteCard": "WC2094580",
+   "swms": true,
+   "rate": 70,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Parramatta, Cumberland, Inner West",
+   "availability": "Mon-Sat",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -132,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Green Edge Landscapes",
+   "contact": "Tom",
+   "trade": "landscaper",
+   "trades": [],
+   "phone": "02 5550 3122",
+   "email": "",
+   "suburb": "Glenhaven",
+   "address": "73 Test St, Glenhaven NSW",
+   "abn": "00 000 000 022",
+   "gst": true,
+   "licence": {
+    "number": "TEST-166299",
+    "class": "Structural landscaping",
+    "expiryDays": 433
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0022",
+    "cover": 10000000,
+    "expiryDays": 347
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC2199309",
+   "swms": true,
+   "rate": 70,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Greater Sydney",
+   "availability": "Mon-Sat",
+   "status": "Do not use",
+   "rating": 1,
+   "lastUsedDays": -106,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Hills Scaffold Hire",
+   "contact": "Jason",
+   "trade": "scaffolder",
+   "trades": [],
+   "phone": "02 5550 3123",
+   "email": "jobs@hillsscaffoldhire.example.com",
+   "suburb": "Mulgrave",
+   "address": "76 Test St, Mulgrave NSW",
+   "abn": "00 000 000 023",
+   "gst": true,
+   "licence": {
+    "number": "TEST-174218",
+    "class": "High-risk work: scaffolding",
+    "expiryDays": 127
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0023",
+    "cover": 20000000,
+    "expiryDays": 180
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0023",
+    "soleTrader": false,
+    "expiryDays": 343
+   },
+   "whiteCard": "WC2304038",
+   "swms": true,
+   "rate": 90,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "30 days EOM",
+   "areas": "Hills District, Parramatta",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "Approved",
+   "rating": 3,
+   "lastUsedDays": -154,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Clean Slate Demolition",
+   "contact": "Rob",
+   "trade": "demolition",
+   "trades": [
+    "waste"
+   ],
+   "phone": "02 5550 3124",
+   "email": "jobs@cleanslatedemolition.example.com",
+   "suburb": "Wetherill Park",
+   "address": "79 Test St, Wetherill Park NSW",
+   "abn": "00 000 000 024",
+   "gst": true,
+   "licence": {
+    "number": "TEST-182137",
+    "class": "Demolition",
+    "expiryDays": 20
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0024",
+    "cover": 10000000,
+    "expiryDays": 132
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC2408767",
+   "swms": true,
+   "rate": 95,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "14 days",
+   "areas": "Western Sydney",
+   "availability": "Mon-Fri",
+   "status": "On trial",
+   "rating": 0,
+   "lastUsedDays": -153,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "SafeStrip Asbestos",
+   "contact": "Mel",
+   "trade": "asbestos",
+   "trades": [
+    "demolition"
+   ],
+   "phone": "02 5550 3125",
+   "email": "jobs@safestripasbestos.example.com",
+   "suburb": "Silverwater",
+   "address": "82 Test St, Silverwater NSW",
+   "abn": "00 000 000 025",
+   "gst": true,
+   "licence": {
+    "number": "TEST-190056",
+    "class": "Class A asbestos removal",
+    "expiryDays": 476
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0025",
+    "cover": 20000000,
+    "expiryDays": 210
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0025",
+    "soleTrader": false,
+    "expiryDays": 14
+   },
+   "whiteCard": "WC2513496",
+   "swms": true,
+   "rate": 140,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "14 days",
+   "areas": "Greater Sydney",
+   "availability": "Mon-Fri",
+   "status": "Preferred",
+   "rating": 5,
+   "lastUsedDays": -29,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Skip It Bins",
+   "contact": "Andrew",
+   "trade": "waste",
+   "trades": [],
+   "phone": "02 5550 3126",
+   "email": "jobs@skipitbins.example.com",
+   "suburb": "Rydalmere",
+   "address": "85 Test St, Rydalmere NSW",
+   "abn": "00 000 000 026",
+   "gst": true,
+   "licence": {
+    "number": "",
+    "class": "",
+    "expiryDays": null
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0026",
+    "cover": 10000000,
+    "expiryDays": -5
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC2618225",
+   "swms": true,
+   "rate": 0,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "6m\u00b3 skip $420, 9m\u00b3 skip $560",
+   "terms": "30 days EOM",
+   "areas": "Hills District, Parramatta",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -132,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Sparkle Builders Clean",
+   "contact": "Priya",
+   "trade": "cleaner",
+   "trades": [],
+   "phone": "02 5550 3127",
+   "email": "jobs@sparklebuildersclean.example.com",
+   "suburb": "Quakers Hill",
+   "address": "88 Test St, Quakers Hill NSW",
+   "abn": "00 000 000 027",
+   "gst": true,
+   "licence": {
+    "number": "",
+    "class": "",
+    "expiryDays": null
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0027",
+    "cover": 20000000,
+    "expiryDays": 326
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0027",
+    "soleTrader": false,
+    "expiryDays": 325
+   },
+   "whiteCard": "WC2722954",
+   "swms": true,
+   "rate": 55,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "Builders clean from $450 a bathroom",
+   "terms": "On completion",
+   "areas": "Blacktown, Penrith, Hawkesbury",
+   "availability": "Weekends by arrangement",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -189,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Spotless Site Cleaning",
+   "contact": "Maria",
+   "trade": "cleaner",
+   "trades": [],
+   "phone": "02 5550 3128",
+   "email": "jobs@spotlesssitecleaning.example.com",
+   "suburb": "Granville",
+   "address": "91 Test St, Granville NSW",
+   "abn": "00 000 000 028",
+   "gst": true,
+   "licence": {
+    "number": "",
+    "class": "",
+    "expiryDays": null
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0028",
+    "cover": 20000000,
+    "expiryDays": 85
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0028",
+    "soleTrader": false,
+    "expiryDays": 279
+   },
+   "whiteCard": "WC2827683",
+   "swms": true,
+   "rate": 55,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "Builders clean from $450 a bathroom",
+   "terms": "7 days",
+   "areas": "Blacktown, Penrith, Hawkesbury",
+   "availability": "Mon-Fri",
+   "status": "Preferred",
+   "rating": 5,
+   "lastUsedDays": -114,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Hills Pest Solutions",
+   "contact": "Gary",
+   "trade": "pest",
+   "trades": [],
+   "phone": "02 5550 3129",
+   "email": "jobs@hillspestsolutions.example.com",
+   "suburb": "Dural",
+   "address": "94 Test St, Dural NSW",
+   "abn": "00 000 000 029",
+   "gst": true,
+   "licence": {
+    "number": "TEST-221732",
+    "class": "Pest management",
+    "expiryDays": 180
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0029",
+    "cover": 10000000,
+    "expiryDays": 269
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0029",
+    "soleTrader": false,
+    "expiryDays": 300
+   },
+   "whiteCard": "WC2932412",
+   "swms": true,
+   "rate": 0,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "Termite inspection $295",
+   "terms": "On completion",
+   "areas": "Parramatta, Cumberland, Inner West",
+   "availability": "Mon-Fri",
+   "status": "Approved",
+   "rating": 3,
+   "lastUsedDays": -163,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Handy Hills Maintenance",
+   "contact": "Steve",
+   "trade": "handyman",
+   "trades": [
+    "painter",
+    "carpenter"
+   ],
+   "phone": "02 5550 3130",
+   "email": "jobs@handyhillsmaintenance.example.com",
+   "suburb": "Bella Vista",
+   "address": "97 Test St, Bella Vista NSW",
+   "abn": "00 000 000 030",
+   "gst": true,
+   "licence": {
+    "number": "",
+    "class": "",
+    "expiryDays": null
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0030",
+    "cover": 20000000,
+    "expiryDays": 132
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC3037141",
+   "swms": true,
+   "rate": 60,
+   "callout": 60,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "30 days EOM",
+   "areas": "Hills District, Parramatta",
+   "availability": "Mon-Fri",
+   "status": "On trial",
+   "rating": 3,
+   "lastUsedDays": -14,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Rapid Response Plumbing",
+   "contact": "Luke",
+   "trade": "plumber",
+   "trades": [
+    "gasfitter"
+   ],
+   "phone": "02 5550 3131",
+   "email": "jobs@rapidresponseplumbing.example.com",
+   "suburb": "Rouse Hill",
+   "address": "100 Test St, Rouse Hill NSW",
+   "abn": "00 000 000 031",
+   "gst": true,
+   "licence": {
+    "number": "TEST-237570",
+    "class": "Plumber, drainer",
+    "expiryDays": 805
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0031",
+    "cover": 20000000,
+    "expiryDays": 236
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0031",
+    "soleTrader": false,
+    "expiryDays": 14
+   },
+   "whiteCard": "WC3141870",
+   "swms": true,
+   "rate": 110,
+   "callout": 60,
+   "afterHours": 176,
+   "rateNote": "",
+   "terms": "14 days",
+   "areas": "Greater Sydney",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "On hold",
+   "rating": 2,
+   "lastUsedDays": -117,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Nepean Plumbing & Drainage",
+   "contact": "Kurt",
+   "trade": "plumber",
+   "trades": [],
+   "phone": "02 5550 3132",
+   "email": "jobs@nepeanplumbingdrainage.example.com",
+   "suburb": "Emu Plains",
+   "address": "103 Test St, Emu Plains NSW",
+   "abn": "00 000 000 032",
+   "gst": true,
+   "licence": {
+    "number": "TEST-245489",
+    "class": "Plumber, drainer",
+    "expiryDays": 879
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0032",
+    "cover": 20000000,
+    "expiryDays": 275
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0032",
+    "soleTrader": false,
+    "expiryDays": 116
+   },
+   "whiteCard": "WC3246599",
+   "swms": true,
+   "rate": 110,
+   "callout": 95,
+   "afterHours": 176,
+   "rateNote": "",
+   "terms": "On completion",
+   "areas": "Greater Sydney",
+   "availability": "Weekends by arrangement",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -188,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Livewire Electrical Services",
+   "contact": "Chris",
+   "trade": "electrician",
+   "trades": [],
+   "phone": "02 5550 3133",
+   "email": "",
+   "suburb": "Marsden Park",
+   "address": "106 Test St, Marsden Park NSW",
+   "abn": "00 000 000 033",
+   "gst": true,
+   "licence": {
+    "number": "TEST-253408",
+    "class": "Electrician",
+    "expiryDays": 825
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0033",
+    "cover": 10000000,
+    "expiryDays": 198
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0033",
+    "soleTrader": false,
+    "expiryDays": 14
+   },
+   "whiteCard": "WC3351328",
+   "swms": true,
+   "rate": 105,
+   "callout": 95,
+   "afterHours": 168,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Hills District, Parramatta",
+   "availability": "Weekends by arrangement",
+   "status": "Approved",
+   "rating": 3,
+   "lastUsedDays": -96,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Circuit Pro Electrical",
+   "contact": "Wei",
+   "trade": "electrician",
+   "trades": [
+    "aircon"
+   ],
+   "phone": "02 5550 3134",
+   "email": "jobs@circuitproelectrical.example.com",
+   "suburb": "Epping",
+   "address": "109 Test St, Epping NSW",
+   "abn": "00 000 000 034",
+   "gst": true,
+   "licence": {
+    "number": "TEST-261327",
+    "class": "Electrician",
+    "expiryDays": 473
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0034",
+    "cover": 20000000,
+    "expiryDays": 285
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0034",
+    "soleTrader": false,
+    "expiryDays": 94
+   },
+   "whiteCard": "WC3456057",
+   "swms": true,
+   "rate": 105,
+   "callout": 0,
+   "afterHours": 168,
+   "rateNote": "",
+   "terms": "On completion",
+   "areas": "Greater Sydney",
+   "availability": "Mon-Fri",
+   "status": "On trial",
+   "rating": 0,
+   "lastUsedDays": -61,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Hills Gas Fitting",
+   "contact": "Omar",
+   "trade": "gasfitter",
+   "trades": [
+    "plumber"
+   ],
+   "phone": "02 5550 3135",
+   "email": "jobs@hillsgasfitting.example.com",
+   "suburb": "Cherrybrook",
+   "address": "112 Test St, Cherrybrook NSW",
+   "abn": "00 000 000 035",
+   "gst": true,
+   "licence": {
+    "number": "TEST-269246",
+    "class": "Gasfitting",
+    "expiryDays": 603
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0035",
+    "cover": 20000000,
+    "expiryDays": 63
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0035",
+    "soleTrader": false,
+    "expiryDays": 14
+   },
+   "whiteCard": "WC3560786",
+   "swms": true,
+   "rate": 115,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Greater Sydney",
+   "availability": "Mon-Sat",
+   "status": "Preferred",
+   "rating": 5,
+   "lastUsedDays": -123,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Chill Zone Air Conditioning",
+   "contact": "Vikram",
+   "trade": "aircon",
+   "trades": [],
+   "phone": "02 5550 3136",
+   "email": "jobs@chillzoneairconditioni.example.com",
+   "suburb": "Blacktown",
+   "address": "115 Test St, Blacktown NSW",
+   "abn": "00 000 000 036",
+   "gst": true,
+   "licence": {
+    "number": "TEST-277165",
+    "class": "Refrigeration & AC",
+    "expiryDays": 339
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0036",
+    "cover": 20000000,
+    "expiryDays": 79
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0036",
+    "soleTrader": false,
+    "expiryDays": 360
+   },
+   "whiteCard": "WC3665515",
+   "swms": true,
+   "rate": 120,
+   "callout": 95,
+   "afterHours": 192,
+   "rateNote": "",
+   "terms": "30 days EOM",
+   "areas": "Parramatta, Cumberland, Inner West",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "Preferred",
+   "rating": 5,
+   "lastUsedDays": -8,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Square Edge Builders",
+   "contact": "Nathan",
+   "trade": "builder",
+   "trades": [
+    "carpenter"
+   ],
+   "phone": "02 5550 3137",
+   "email": "jobs@squareedgebuilders.example.com",
+   "suburb": "Kellyville",
+   "address": "118 Test St, Kellyville NSW",
+   "abn": "00 000 000 037",
+   "gst": true,
+   "licence": {
+    "number": "TEST-285084",
+    "class": "General building work",
+    "expiryDays": 169
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0037",
+    "cover": 10000000,
+    "expiryDays": -5
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC3770244",
+   "swms": true,
+   "rate": 95,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Hills District, Parramatta",
+   "availability": "Mon-Fri",
+   "status": "Preferred",
+   "rating": 5,
+   "lastUsedDays": -51,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Level Line Tiling",
+   "contact": "Antonio",
+   "trade": "tiler",
+   "trades": [],
+   "phone": "02 5550 3138",
+   "email": "jobs@levellinetiling.example.com",
+   "suburb": "Fairfield",
+   "address": "121 Test St, Fairfield NSW",
+   "abn": "00 000 000 038",
+   "gst": true,
+   "licence": {
+    "number": "TEST-293003",
+    "class": "Wall & floor tiling",
+    "expiryDays": 403
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0038",
+    "cover": 20000000,
+    "expiryDays": 321
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC3874973",
+   "swms": true,
+   "rate": 80,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "30 days EOM",
+   "areas": "Hills District, Parramatta",
+   "availability": "Mon-Fri",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -16,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Shield Membranes NSW",
+   "contact": "Duc",
+   "trade": "waterproofer",
+   "trades": [
+    "tiler"
+   ],
+   "phone": "02 5550 3139",
+   "email": "jobs@shieldmembranesnsw.example.com",
+   "suburb": "Cabramatta",
+   "address": "124 Test St, Cabramatta NSW",
+   "abn": "00 000 000 039",
+   "gst": true,
+   "licence": {
+    "number": "TEST-300922",
+    "class": "Waterproofing",
+    "expiryDays": 572
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0039",
+    "cover": 20000000,
+    "expiryDays": 230
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0039",
+    "soleTrader": false,
+    "expiryDays": 106
+   },
+   "whiteCard": "WC3979702",
+   "swms": true,
+   "rate": 85,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "30 days EOM",
+   "areas": "Blacktown, Penrith, Hawkesbury",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "Preferred",
+   "rating": 5,
+   "lastUsedDays": -99,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Flat Finish Plaster",
+   "contact": "Hemi",
+   "trade": "plasterer",
+   "trades": [],
+   "phone": "02 5550 3140",
+   "email": "jobs@flatfinishplaster.example.com",
+   "suburb": "Mount Druitt",
+   "address": "127 Test St, Mount Druitt NSW",
+   "abn": "00 000 000 040",
+   "gst": true,
+   "licence": {
+    "number": "TEST-308841",
+    "class": "Plastering",
+    "expiryDays": 150
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0040",
+    "cover": 10000000,
+    "expiryDays": 124
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC4084431",
+   "swms": true,
+   "rate": 75,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "14 days",
+   "areas": "Hills District, Parramatta",
+   "availability": "Mon-Fri",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -109,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Brushwork Painting Services",
+   "contact": "Karen",
+   "trade": "painter",
+   "trades": [
+    "renderer"
+   ],
+   "phone": "02 5550 3141",
+   "email": "jobs@brushworkpaintingservi.example.com",
+   "suburb": "Baulkham Hills",
+   "address": "130 Test St, Baulkham Hills NSW",
+   "abn": "00 000 000 041",
+   "gst": true,
+   "licence": {
+    "number": "TEST-316760",
+    "class": "Painting & decorating",
+    "expiryDays": 712
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0041",
+    "cover": 10000000,
+    "expiryDays": -5
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0041",
+    "soleTrader": false,
+    "expiryDays": 138
+   },
+   "whiteCard": "WC4189160",
+   "swms": true,
+   "rate": 65,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "On completion",
+   "areas": "Parramatta, Cumberland, Inner West",
+   "availability": "Weekends by arrangement",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -22,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Gutter Guard Roofing",
+   "contact": "Dean",
+   "trade": "roofer",
+   "trades": [],
+   "phone": "02 5550 3142",
+   "email": "jobs@gutterguardroofing.example.com",
+   "suburb": "Richmond",
+   "address": "133 Test St, Richmond NSW",
+   "abn": "00 000 000 042",
+   "gst": true,
+   "licence": {
+    "number": "TEST-324679",
+    "class": "Roof tiling & slating",
+    "expiryDays": 367
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0042",
+    "cover": 10000000,
+    "expiryDays": 96
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC4293889",
+   "swms": true,
+   "rate": 90,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Western Sydney",
+   "availability": "Mon-Fri",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -159,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Hawkesbury Concrete",
+   "contact": "Ray",
+   "trade": "concreter",
+   "trades": [],
+   "phone": "02 5550 3143",
+   "email": "jobs@hawkesburyconcrete.example.com",
+   "suburb": "Windsor",
+   "address": "136 Test St, Windsor NSW",
+   "abn": "00 000 000 043",
+   "gst": true,
+   "licence": {
+    "number": "TEST-332598",
+    "class": "Concreting",
+    "expiryDays": 419
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0043",
+    "cover": 20000000,
+    "expiryDays": 340
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0043",
+    "soleTrader": false,
+    "expiryDays": 309
+   },
+   "whiteCard": "WC4398618",
+   "swms": true,
+   "rate": 85,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Western Sydney",
+   "availability": "Mon-Sat",
+   "status": "Approved",
+   "rating": 3,
+   "lastUsedDays": -41,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Steelworks Fabrication",
+   "contact": "Ivan",
+   "trade": "steel",
+   "trades": [],
+   "phone": "02 5550 3144",
+   "email": "",
+   "suburb": "Smithfield",
+   "address": "139 Test St, Smithfield NSW",
+   "abn": "00 000 000 044",
+   "gst": true,
+   "licence": {
+    "number": "",
+    "class": "",
+    "expiryDays": null
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0044",
+    "cover": 20000000,
+    "expiryDays": 310
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0044",
+    "soleTrader": false,
+    "expiryDays": 295
+   },
+   "whiteCard": "WC4503347",
+   "swms": true,
+   "rate": 90,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "30 days EOM",
+   "areas": "Blacktown, Penrith, Hawkesbury",
+   "availability": "Weekends by arrangement",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -6,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "DigRight Earthmoving",
+   "contact": "Sam",
+   "trade": "excavation",
+   "trades": [
+    "demolition"
+   ],
+   "phone": "02 5550 3145",
+   "email": "jobs@digrightearthmoving.example.com",
+   "suburb": "Riverstone",
+   "address": "142 Test St, Riverstone NSW",
+   "abn": "00 000 000 045",
+   "gst": true,
+   "licence": {
+    "number": "",
+    "class": "",
+    "expiryDays": null
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0045",
+    "cover": 20000000,
+    "expiryDays": 268
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0045",
+    "soleTrader": false,
+    "expiryDays": 235
+   },
+   "whiteCard": "WC4608076",
+   "swms": true,
+   "rate": 120,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "30 days EOM",
+   "areas": "Parramatta, Cumberland, Inner West",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "On trial",
+   "rating": 3,
+   "lastUsedDays": -99,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Pristine Post-Build Cleans",
+   "contact": "Grace",
+   "trade": "cleaner",
+   "trades": [],
+   "phone": "02 5550 3146",
+   "email": "jobs@pristinepostbuildclean.example.com",
+   "suburb": "Castle Hill",
+   "address": "145 Test St, Castle Hill NSW",
+   "abn": "00 000 000 046",
+   "gst": true,
+   "licence": {
+    "number": "",
+    "class": "",
+    "expiryDays": null
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0046",
+    "cover": 20000000,
+    "expiryDays": 132
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "WC4712805",
+   "swms": true,
+   "rate": 55,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "Builders clean from $450 a bathroom",
+   "terms": "On completion",
+   "areas": "Blacktown, Penrith, Hawkesbury",
+   "availability": "Mon-Fri",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -154,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Lock & Key Hills",
+   "contact": "Peter",
+   "trade": "locksmith",
+   "trades": [],
+   "phone": "02 5550 3147",
+   "email": "jobs@lockkeyhills.example.com",
+   "suburb": "Winston Hills",
+   "address": "148 Test St, Winston Hills NSW",
+   "abn": "00 000 000 047",
+   "gst": true,
+   "licence": {
+    "number": "",
+    "class": "",
+    "expiryDays": null
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0047",
+    "cover": 20000000,
+    "expiryDays": 352
+   },
+   "workersComp": {
+    "policy": "",
+    "soleTrader": true,
+    "expiryDays": null
+   },
+   "whiteCard": "",
+   "swms": false,
+   "rate": 85,
+   "callout": 60,
+   "afterHours": 0,
+   "rateNote": "",
+   "terms": "7 days",
+   "areas": "Greater Sydney",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "On trial",
+   "rating": 0,
+   "lastUsedDays": -108,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Hills Survey Group",
+   "contact": "Elena",
+   "trade": "surveyor",
+   "trades": [],
+   "phone": "02 5550 3148",
+   "email": "jobs@hillssurveygroup.example.com",
+   "suburb": "Norwest",
+   "address": "151 Test St, Norwest NSW",
+   "abn": "00 000 000 048",
+   "gst": true,
+   "licence": {
+    "number": "",
+    "class": "",
+    "expiryDays": null
+   },
+   "insurance": {
+    "insurer": "Test Insurer B",
+    "policy": "PL-TEST-0048",
+    "cover": 10000000,
+    "expiryDays": 196
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0048",
+    "soleTrader": false,
+    "expiryDays": 191
+   },
+   "whiteCard": "WC4922263",
+   "swms": true,
+   "rate": 0,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "Set-out survey from $1,450",
+   "terms": "30 days EOM",
+   "areas": "Blacktown, Penrith, Hawkesbury",
+   "availability": "Mon-Fri",
+   "status": "Approved",
+   "rating": 3,
+   "lastUsedDays": -162,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Approved Certifiers Sydney",
+   "contact": "Mark",
+   "trade": "certifier",
+   "trades": [],
+   "phone": "02 5550 3149",
+   "email": "jobs@approvedcertifierssydn.example.com",
+   "suburb": "Parramatta",
+   "address": "154 Test St, Parramatta NSW",
+   "abn": "00 000 000 049",
+   "gst": true,
+   "licence": {
+    "number": "TEST-380112",
+    "class": "Registered certifier",
+    "expiryDays": 408
+   },
+   "insurance": {
+    "insurer": "Test Insurer C",
+    "policy": "PL-TEST-0049",
+    "cover": 10000000,
+    "expiryDays": 295
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0049",
+    "soleTrader": false,
+    "expiryDays": 14
+   },
+   "whiteCard": "WC5026992",
+   "swms": true,
+   "rate": 0,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "Bathroom compliance certificate $650",
+   "terms": "30 days EOM",
+   "areas": "Western Sydney",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "Preferred",
+   "rating": 5,
+   "lastUsedDays": -48,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  },
+  {
+   "business": "Structa Engineering",
+   "contact": "Anil",
+   "trade": "engineer",
+   "trades": [],
+   "phone": "02 5550 3150",
+   "email": "jobs@structaengineering.example.com",
+   "suburb": "North Sydney",
+   "address": "157 Test St, North Sydney NSW",
+   "abn": "00 000 000 050",
+   "gst": true,
+   "licence": {
+    "number": "",
+    "class": "",
+    "expiryDays": null
+   },
+   "insurance": {
+    "insurer": "Test Insurer A",
+    "policy": "PL-TEST-0050",
+    "cover": 20000000,
+    "expiryDays": 337
+   },
+   "workersComp": {
+    "policy": "WC-TEST-0050",
+    "soleTrader": false,
+    "expiryDays": 165
+   },
+   "whiteCard": "WC5131721",
+   "swms": true,
+   "rate": 0,
+   "callout": 0,
+   "afterHours": 0,
+   "rateNote": "Structural letter from $880",
+   "terms": "14 days",
+   "areas": "Hills District, Parramatta",
+   "availability": "Mon-Sat, 24/7 emergencies",
+   "status": "Approved",
+   "rating": 4,
+   "lastUsedDays": -128,
+   "notes": "TEST DATA (v48). Made-up sub-contractor for the test site."
+  }
+ ]
+}
