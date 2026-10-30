@@ -18,6 +18,12 @@ export default async (req) => {
     id = String(body.id || '').replace(/[^a-z0-9]/gi, '').slice(0, 40);
     if (id.length < 12) return new Response('', { status: 400 });
     await kv.set('aiplan:' + id, { status: 'working', at: Date.now() });
+    if (body.mode === 'contract') {   // v53: read the key terms out of a contract document
+      const r = await INTEL.extractContract({ core: body.core, docId: body.docId }, `Admin (${session.u})`);
+      await kv.set('aiplan:' + id, { contract: r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
+      if (!r.error) await A.audit(session.u, `AI read a contract on ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
+      return ok();
+    }
     if (body.mode === 'intel') {   // v52: 🧠 Project Intelligence question
       const r = await INTEL.ask({ core: body.core, question: body.question, history: body.history }, `Admin (${session.u})`);
       await kv.set('aiplan:' + id, { intel: r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
