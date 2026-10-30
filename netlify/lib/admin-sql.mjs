@@ -39,17 +39,19 @@ export const SCHEMA = {
   plan_subtasks: ['job', 'plan_name', 'task', 'subtask', 'owner', 'start', 'finish', 'days', 'status', 'done', 'late'],
   plan_risks: ['job', 'plan_name', 'risk', 'probability', 'impact', 'score', 'response', 'owner', 'status', 'review'],
   plan_issues: ['job', 'plan_name', 'issue', 'priority', 'owner', 'raised', 'due', 'status'],
+  plan_stakeholders: ['job', 'plan_name', 'person', 'role', 'raci', 'raci_meaning', 'sub_id', 'phone', 'email'],
   inventory: ['id', 'item', 'sku', 'category', 'unit', 'location', 'on_hand', 'allocated', 'available', 'on_order', 'reorder_level', 'reorder_qty', 'low', 'unit_price', 'price_supplier', 'stock_value'],
   suppliers: ['id', 'supplier', 'contact', 'phone', 'email', 'categories', 'terms', 'items_quoted'],
   supplier_prices: ['item_id', 'item', 'supplier_id', 'supplier', 'price_ex', 'pack_size', 'quote_ref', 'quoted', 'valid_until', 'expired', 'preferred'],
   stock_moves: ['item_id', 'item', 'date', 'month', 'kind', 'qty', 'reason', 'job'],
   subcontractors: ['id', 'business', 'contact', 'trade', 'other_trades', 'phone', 'email', 'suburb', 'postcode', 'region', 'western_sydney', 'areas_covered', 'status', 'preference_rank', 'rating',
     'hourly_rate', 'callout_fee', 'after_hours_rate', 'payment_terms', 'availability', 'licence_no', 'licence_class', 'licence_expiry', 'licence_state', 'insurer', 'pl_policy', 'pl_cover', 'pl_expiry', 'pl_state',
-    'wc_policy', 'wc_expiry', 'wc_state', 'sole_trader', 'white_card', 'swms', 'compliance', 'problems', 'any_expired', 'last_used', 'archived']
+    'wc_policy', 'wc_expiry', 'wc_state', 'sole_trader', 'white_card', 'swms', 'compliance', 'problems', 'any_expired', 'last_used', 'days_since_used', 'archived'],
+  sub_trades: ['trade', 'licence_needed', 'subbies', 'preferred', 'approved', 'all_papers_ok', 'with_expired', 'avg_rating', 'avg_hourly_rate', 'cheapest_hourly_rate']
 };
 export const DESCRIBE = {
   customers: 'One row per customer (same phone + email = same customer) with their job counts and values', jobs: 'Every enquiry and job (pipeline stage, customer, suburb, trade, values)', quotes: 'Quotes (status, totals ex/inc GST)', invoices: 'Tax invoices (paid, balance, days overdue)',
-  items: 'Line items of quotes and invoices', plan_tasks: 'Project plan tasks (dates, costs, % complete)', plan_risks: 'Risk registers of all plans', plan_issues: 'Issue logs of all plans', plan_subtasks: 'Sub-tasks inside plan tasks (no costs; costs stay on the task)', subcontractors: 'Sub-contractors (subbies): trade, where they are, status, rating, rates, licence and insurance with expiry and whether expired', inventory: 'Stock items (on hand, set aside for jobs, re-order level)', suppliers: 'Suppliers', supplier_prices: 'Supplier quotes per stock item', stock_moves: 'Stock in and out', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
+  items: 'Line items of quotes and invoices', plan_tasks: 'Project plan tasks (dates, costs, % complete)', plan_risks: 'Risk registers of all plans', plan_issues: 'Issue logs of all plans', plan_subtasks: 'Sub-tasks inside plan tasks (no costs; costs stay on the task)', plan_stakeholders: 'Stakeholders (RACI) on each project plan, including the subbies working on it', sub_trades: 'Every trade category (also ones with no subbies yet) with how many subbies, preferred, compliant, average rating and rates', subcontractors: 'Sub-contractors (subbies): trade, where they are, status, rating, rates, licence and insurance with expiry and whether expired', inventory: 'Stock items (on hand, set aside for jobs, re-order level)', suppliers: 'Suppliers', supplier_prices: 'Supplier quotes per stock item', stock_moves: 'Stock in and out', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
 };
 
 export async function tables() {
@@ -101,7 +103,7 @@ export async function tables() {
     const v = visitRec;
     visits = Object.entries((v && v.days) || {}).map(([date, n]) => ({ date, month: date.slice(0, 7), visits: n })).sort((a, b) => (a.date > b.date ? 1 : -1));
   } catch {}
-  const plan_tasks = [], plan_risks = [], plan_issues = [], plan_subtasks = [];
+  const plan_tasks = [], plan_risks = [], plan_issues = [], plan_subtasks = [], plan_stakeholders = [];
   const todayS = d10(now);
   for (const p of planList) {
     PLAN.schedule(p);
@@ -113,6 +115,7 @@ export async function tables() {
       plan_subtasks.push({ job: p.core, plan_name: p.name, task: t.name, subtask: x.name, owner: x.owner || '', start: es, finish: ef, days: x.dur, status: STN[x.status] || 'To do', done: x.status === 'done', late: x.status !== 'done' && !!ef && ef < todayS });
     }
     for (const r of p.risks || []) plan_risks.push({ job: p.core, plan_name: p.name, risk: r.title, probability: r.p, impact: r.i, score: r.p * r.i, response: r.response, owner: r.owner, status: r.status, review: r.review });
+    for (const x of p.stakeholders || []) plan_stakeholders.push({ job: p.core, plan_name: p.name, person: x.name, role: x.role, raci: x.raci, raci_meaning: { R: 'Responsible', A: 'Accountable', C: 'Consulted', I: 'Informed' }[x.raci] || '', sub_id: x.sub || '', phone: x.phone || '', email: x.email || '' });
     for (const x of p.issues || []) plan_issues.push({ job: p.core, plan_name: p.name, issue: x.title, priority: x.priority, owner: x.owner, raised: x.raised, due: x.due, status: x.status });
   }
   const supName = Object.fromEntries(stock.suppliers.map((x) => [x.id, x.name]));
@@ -137,9 +140,18 @@ export async function tables() {
       status: s.status || '', preference_rank: RANK[s.status] || 3, rating: s.rating || 0, hourly_rate: s.rate || 0, callout_fee: s.callout || 0, after_hours_rate: s.afterHours || 0,
       payment_terms: s.terms || '', availability: s.availability || '', licence_no: L.number || '', licence_class: L.class || '', licence_expiry: L.expiry || '', licence_state: c.lic,
       insurer: I.insurer || '', pl_policy: I.policy || '', pl_cover: I.cover || 0, pl_expiry: I.expiry || '', pl_state: c.pl, wc_policy: W.policy || '', wc_expiry: W.expiry || '', wc_state: c.wc,
-      sole_trader: !!W.soleTrader, white_card: !!s.whiteCard, swms: !!s.swms, compliance: c.worst, problems: c.problems.join('; '), any_expired: c.worst === 'expired', last_used: s.lastUsed || '', archived: !!s.archived };
+      sole_trader: !!W.soleTrader, white_card: !!s.whiteCard, swms: !!s.swms, compliance: c.worst, problems: c.problems.join('; '), any_expired: c.worst === 'expired', last_used: s.lastUsed || '',
+      days_since_used: s.lastUsed ? Math.round((Date.parse(d10(now)) - Date.parse(s.lastUsed)) / 864e5) : null, archived: !!s.archived, _keys: [s.trade].concat(s.trades || []) };
   }).sort((a, b) => a.preference_rank - b.preference_rank || b.rating - a.rating || a.business.localeCompare(b.business));
-  return { customers, jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves, subcontractors };
+  // every trade, with or without subbies (counts include subbies who list it as another trade)
+  const sub_trades = SUB.TRADES.map(([k, nm, lic]) => {
+    const L = subcontractors.filter((s) => !s.archived && s.status !== 'Do not use' && s._keys.includes(k)), rated = L.filter((s) => s.rating), rates = L.map((s) => s.hourly_rate).filter((x) => x > 0);
+    return { trade: nm, licence_needed: lic, subbies: L.length, preferred: L.filter((s) => s.status === 'Preferred').length, approved: L.filter((s) => s.status === 'Approved').length,
+      all_papers_ok: L.filter((s) => s.compliance === 'ok').length, with_expired: L.filter((s) => s.any_expired).length,
+      avg_rating: rated.length ? r2(rated.reduce((a, s) => a + s.rating, 0) / rated.length) : null, avg_hourly_rate: rates.length ? r2(rates.reduce((a, x) => a + x, 0) / rates.length) : null, cheapest_hourly_rate: rates.length ? Math.min(...rates) : null };
+  });
+  subcontractors.forEach((s) => { delete s._keys; });
+  return { customers, jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves, subcontractors, sub_trades, plan_stakeholders };
 }
 
 // ---------- AI narrative (DeepSeek) ----------
@@ -200,7 +212,10 @@ const NOTE = {
     '"Western Sydney" = (western_sydney = true OR LOWER(areas_covered) LIKE \'%western sydney%\' OR LOWER(areas_covered) LIKE \'%greater sydney%\'). ' +
     'By preference / best first = ORDER BY preference_rank, rating DESC (1 Preferred, 2 Approved, 3 On trial, 4 On hold, 5 Do not use). ' +
     'licence_state, pl_state (public liability insurance), wc_state (workers comp) and compliance are ok|due (expires within 30 days)|expired|missing|n/a; any_expired true when anything has expired. ' +
+    'days_since_used = days since last used (null = never). Subbies on a project: JOIN plan_stakeholders ps ON ps.sub_id = subcontractors.id (ps.job = jobs.core). For trades with nobody, counts per trade, average rating or rates use sub_trades. ' +
     'To show licence and insurance and flag expired, list (in this order) business, compliance, problems, trade, suburb, status, rating, licence_no, licence_expiry, licence_state, pl_expiry, pl_state, wc_expiry, wc_state. Dates YYYY-MM-DD',
+  sub_trades: 'one row per trade category (33), subbies = active subbies who do it (0 = nobody), licence_needed true when NSW needs a licence for it',
+  plan_stakeholders: 'one row per stakeholder on a project plan: job = jobs.core, raci R|A|C|I, sub_id = subcontractors.id when the person is a subbie (blank otherwise)',
   suppliers: 'suppliers', supplier_prices: 'one row per supplier quote for a stock item', stock_moves: 'qty + in / - out; kind in|out|count|plan|order; job = jobs.core'
 };
 const WORDS = {
@@ -208,7 +223,7 @@ const WORDS = {
   quotes: /quot/i, invoices: /invoic|owe|owing|unpaid|overdue|paid|debt|balance|bill/i, items: /line item|items? on (the|a|my) (quote|invoice)/i, payments: /pay|paid|received|income|revenue|cash/i,
   expenses: /expens|spend|spent|cost|receipt|purchase|bought/i, reminders: /remind|follow/i, visits: /visit|traffic|website/i,
   plan_tasks: /plan|project|task|complet|progress|late|schedule|gantt|milestone|lead|resource|finish|behind/i, plan_subtasks: /sub-?task|step/i, plan_risks: /risk/i, plan_issues: /issue|problem/i,
-  subcontractors: /sub-?contract|subb(ie|y|ies)|tradie|trades?(wo)?m[ae]n|licen[cs]|insur|workers'? comp|white card|swms|plumb|electric|sparkie|cleaner|tiler|painter|carpent|roofer|concret|plaster|waterproof|glazier|landscap|fenc|scaffold|demoli|asbestos|skip bin|pest|locksmith|handyman|gas ?fit|air ?con|certifier|engineer|surveyor|bricklay|joiner/i,
+  subcontractors: /sub-?contract|subb(ie|y|ies)|tradie|sparky|rating|rated|roof|drain|gutter|leak|liability|call-?out|hourly|rates?\b|sole trader|papers?\b|complian|on hold|do not use|(not|haven'?t|didn'?t)( we)? used|last used|who (can|does|do)|someone|anyone|nobody|no one|\bguy\b|person for|trades?(wo)?m[ae]n|licen[cs]|insur|workers'? comp|white card|swms|plumb|electric|sparkie|cleaner|tiler|painter|carpent|roofer|concret|plaster|waterproof|glazier|landscap|fenc|scaffold|demoli|asbestos|skip bin|pest|locksmith|handyman|gas ?fit|air ?con|certifier|engineer|surveyor|bricklay|joiner/i,
   inventory: /stock|inventor|material|re-?order|low on|on hand/i, suppliers: /supplier|vendor/i, supplier_prices: /price|cheap|compare|supplier quote/i, stock_moves: /stock (used|in|out)|used|movement|consum|took/i
 };
 function pickTables(question, extraSql = '') {
@@ -217,6 +232,8 @@ function pickTables(question, extraSql = '') {
   for (const t of Object.keys(SCHEMA)) if (new RegExp('\\b' + t + '\\b', 'i').test(extraSql)) chosen.add(t);
   if (chosen.has('plan_subtasks')) chosen.add('plan_tasks');
   if (chosen.has('supplier_prices') || chosen.has('stock_moves')) chosen.add('inventory');
+  if (chosen.has('subcontractors')) { chosen.add('sub_trades'); if (/job|project|plan|working on|on site|stakeholder|raci/i.test(q)) chosen.add('plan_stakeholders'); }
+  if (/stakeholder|raci|accountable|responsible|consulted|informed/i.test(q)) { chosen.add('plan_stakeholders'); chosen.add('plan_tasks'); }
   // nothing specific (and not about jobs): give the AI every table
   if (chosen.size === 1 && !/job|enquir|customer|lead|won|lost|suburb|trade|new|stage|called/i.test(q)) Object.keys(SCHEMA).forEach((t) => chosen.add(t));
   return Object.keys(SCHEMA).filter((t) => chosen.has(t));

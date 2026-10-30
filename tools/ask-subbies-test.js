@@ -14,11 +14,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SQL = "SELECT business, compliance, problems, trade, suburb, region, status, rating, licence_no, licence_expiry, licence_state, pl_expiry, pl_state, wc_expiry, wc_state FROM subcontractors " +
   "WHERE archived = false AND (LOWER(trade) LIKE '%clean%' OR LOWER(other_trades) LIKE '%clean%') AND (western_sydney = true OR LOWER(areas_covered) LIKE '%western sydney%' OR LOWER(areas_covered) LIKE '%greater sydney%') " +
   'ORDER BY preference_rank, rating DESC';
-let toSql = null, toAnswer = null;
+let toSql = null, toAnswer = null; const asked = [];
+// other kinds of questions about subbies, with the SQL a good answer needs
+const MORE = [
+  { re: /no one for/, title: 'Trades with nobody', sql: 'SELECT trade, licence_needed FROM sub_trades WHERE subbies = 0 ORDER BY trade' },
+  { re: /Average rating/, title: 'Average rating by trade', sql: 'SELECT trade, subbies, avg_rating FROM sub_trades WHERE subbies > 0 ORDER BY avg_rating DESC, trade' },
+  { re: /haven't we used/, title: 'Not used in 6 months', sql: 'SELECT business, trade, last_used, days_since_used FROM subcontractors WHERE archived = false AND (days_since_used IS NULL OR days_since_used > 182) ORDER BY days_since_used DESC' },
+  { re: /next 90 days/, title: 'Insurance expiring in 90 days', sql: "SELECT business, trade, pl_expiry, pl_state FROM subcontractors WHERE archived = false AND pl_expiry BETWEEN '@T' AND '@T60' ORDER BY pl_expiry" },
+  { re: /working on job/, title: 'Subbies on the job', sql: "SELECT s.business, s.trade, ps.role, ps.raci, s.compliance FROM plan_stakeholders ps JOIN subcontractors s ON ps.sub_id = s.id WHERE ps.job = '@JOB'" },
+  { re: /sparky/, title: 'Electricians in the Hills', sql: "SELECT business, suburb, status, rating, compliance FROM subcontractors WHERE archived = false AND (LOWER(trade) LIKE '%electric%' OR LOWER(other_trades) LIKE '%electric%') AND region = 'Hills District' ORDER BY preference_rank, rating DESC" },
+];
 const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) => c.push(d)); req.on('end', () => {
   const body = JSON.parse(Buffer.concat(c).toString() || '{}'), sys = body.messages[0].content, user = body.messages[1].content;
   let out = {};
-  if (/Turn the question/.test(sys)) { toSql = JSON.parse(user); out = { sql: SQL, title: 'Cleaners in Western Sydney by preference', note: 'Cleaners based in or covering Western Sydney, best first.', chart: null }; }
+  if (/Turn the question/.test(sys)) {
+    toSql = JSON.parse(user); asked.push(toSql);
+    const m = MORE.find((x) => x.re.test(toSql.q));
+    out = m ? { sql: m.sql, title: m.title, note: '', chart: null } : { sql: SQL, title: 'Cleaners in Western Sydney by preference', note: 'Cleaners based in or covering Western Sydney, best first.', chart: null };
+  }
   else { toAnswer = user; out = { answer: 'You have 4 cleaners for Western Sydney. One has expired public liability insurance.' }; }
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) }, finish_reason: 'stop' }], usage: { total_tokens: 700 } }));
@@ -83,10 +96,46 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     ok('Privacy', 'no phone numbers, emails or contact names go to the AI', toAnswer && !/02 5550|example\.com|"contact"/.test(toAnswer + JSON.stringify(toSql)), (toAnswer || '').slice(0, 300));
     await p.screenshot({ path: path.join(__dirname, 'shot49-ask-subbies.png'), fullPage: true });
 
+    // other kinds of subbie questions: each reaches the right tables and the query gives the right answer
+    const T0 = new Date(Date.now() + 11 * 3600e3).toISOString().slice(0, 10), T60 = new Date(Date.now() + 11 * 3600e3 + 90 * 864e5).toISOString().slice(0, 10);
+    MORE.forEach((m) => { m.sql = m.sql.replace(/@T60/g, T60).replace(/@T/g, T0); });
+    const ask = async (q) => {
+      await p.fill('#askQ', q); await p.click('#askGo');
+      await p.waitForFunction(() => { const b = document.querySelector('#askGo'); return b && !b.disabled && document.querySelector('#askOut .ask-a') && !document.querySelector('#askOut .ask-think'); });
+      return { rows: await p.evaluate(() => window.MBS.sqlState.rows), err: await p.$('#askOut .ask-ans.err'), sent: asked[asked.length - 1] };
+    };
+    const live = (await SB.list()).subs.filter((s) => !s.archived), act = live.filter((s) => s.status !== 'Do not use');
+    let a = await ask('Which trades do we have no one for?');
+    const none = SB.TRADES.filter(([k]) => !act.some((s) => s.trade === k || (s.trades || []).includes(k))).map((x) => x[1]).sort();
+    ok('More', '"Which trades do we have no one for?" lists every trade with no subbie', !a.err && /sub_trades\(/.test(a.sent.tables) && JSON.stringify(a.rows.map((r) => r.trade)) === JSON.stringify(none), a.rows.map((r) => r.trade).join(', ') + ' vs ' + none.join(', '));
+    a = await ask('Average rating by trade');
+    const plumb = act.filter((s) => (s.trade === 'plumber' || (s.trades || []).includes('plumber')) && s.rating), avgP = Math.round(plumb.reduce((x, s) => x + s.rating, 0) / plumb.length * 100) / 100;
+    ok('More', '"Average rating by trade" works out the average per trade', !a.err && (a.rows.find((r) => r.trade === 'Plumber') || {}).avg_rating === avgP, JSON.stringify(a.rows.find((r) => r.trade === 'Plumber')) + ' vs ' + avgP);
+    a = await ask("Who haven't we used in 6 months?");
+    const t6 = live.filter((s) => !s.lastUsed || (Date.parse(T0) - Date.parse(s.lastUsed)) / 864e5 > 182).length;
+    ok('More', '"Who haven\'t we used in 6 months?" reaches the subbies and counts right', !a.err && /subcontractors\(/.test(a.sent.tables) && a.rows.length === t6 && t6 > 0, a.rows.length + ' vs ' + t6);
+    a = await ask('Which tradies have their insurance running out in the next 90 days?');
+    const e60 = live.filter((s) => s.plExpiry >= T0 && s.plExpiry <= T60).length;
+    ok('More', '"insurance running out in the next 90 days" uses the dates', !a.err && a.rows.length === e60 && e60 > 0, a.rows.length + ' vs ' + e60);
+    a = await ask('Find me a sparky in the Hills');
+    const hillsE = act.filter((s) => (s.trade === 'electrician' || (s.trades || []).includes('electrician')) && R.regionOf(s.suburb).region === 'Hills District').length;
+    ok('More', '"Find me a sparky in the Hills" (slang and region)', !a.err && /subcontractors\(/.test(a.sent.tables) && a.rows.length === hillsE && hillsE > 0, a.rows.length + ' vs ' + hillsE);
+    // a project with a subbie on it
+    const J = await import(path.join(SITE, 'netlify/lib/jobs.mjs')), core = await J.nextCore('B');
+    await J.create({ core, name: 'Bea Bath', phone: '0400 333 444', email: '', suburb: 'Castle Hill', service: 'Bathroom', source: 'phone', summary: 'New bathroom.' });
+    await p.goto(`${BASE}/admin/#plan/${core}`); await p.waitForSelector('#tplType'); await p.selectOption('#tplType', { index: 1 }); await p.click('#tplCreate'); await p.waitForSelector('table.gt');
+    await p.click('#planTabs >> text=Stakeholders'); await p.waitForSelector('#skSub'); await p.waitForFunction(() => document.querySelectorAll('#skSub option').length > 5);
+    const hp = live.find((s) => s.business === 'Hills Plumbing Services'); await p.selectOption('#skSub', hp.id);
+    await p.waitForFunction(() => /Saved/.test((document.querySelector('#planSave') || {}).textContent || ''), null, { timeout: 15000 }); await sleep(300);
+    MORE.find((m) => /working on/.test(m.re.source)).sql = MORE.find((m) => /working on/.test(m.re.source)).sql.replace('@JOB', core);
+    await p.goto(`${BASE}/admin/#sql/ask`); await p.reload(); await p.waitForSelector('#askQ');   // fresh data (the page keeps it for 5 minutes)
+    a = await ask('Which subbies are working on job ' + core + '?');
+    ok('More', '"Which subbies are working on job …?" joins the project stakeholders to the subbies', !a.err && /plan_stakeholders\(/.test(a.sent.tables) && a.rows.length === 1 && a.rows[0].business === 'Hills Plumbing Services' && a.rows[0].raci === 'R', JSON.stringify(a.rows));
+
     // Data explorer / SQL wizard know the table too
     const T = await p.evaluate(() => window.MBS.sqlState && Object.keys((window.MBS.sqlState.db || {}).tables || {}));
     const tabs = await p.evaluate(() => fetch('/.netlify/functions/admin', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ action: 'sqlData' }) }).then((r) => r.json()).then((d) => ({ s: Object.keys(d.schema), n: d.data.subcontractors.length })));
-    ok('Tables', 'the SQL wizard has a subcontractors table with every subbie', tabs.s.includes('subcontractors') && tabs.n === 54, JSON.stringify(tabs));
+    ok('Tables', 'the SQL wizard has subcontractors (every subbie), sub_trades (all 33 trades) and plan_stakeholders tables', tabs.s.includes('subcontractors') && tabs.n === 54 && tabs.s.includes('sub_trades') && tabs.s.includes('plan_stakeholders'), JSON.stringify(tabs));
     ok('Console', 'no JavaScript errors', errors.length === 0, errors.join(' | '));
     await br.close(); br = null;
   } catch (e) { try { if (br) await br.close(); } catch {} ok('Run', 'test run completed', false, e.stack.split('\n').slice(0, 4).join(' / ') + ' ERRORS: ' + errorsAll.join(' | ') + ' LOG: ' + log.slice(-500)); }
