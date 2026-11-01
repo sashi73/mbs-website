@@ -43,7 +43,7 @@
       if (!r.es) return;
       var a = Math.max(LW, X(r.es)), b = Math.min(W - 16, X(r.ef) + dw);
       if (r.ef < g.from || r.es > g.to) return;
-      var col = r.late ? '#DC2626' : r.status === 'done' ? '#16A34A' : r.status === 'doing' || r.status === 'review' ? '#2563EB' : '#94A3B8';
+      var pp = +r.pct || 0, col = r.late ? '#DC2626' : pp >= 100 ? '#16A34A' : pp >= 63 ? '#7C3AED' : pp >= 38 ? '#2563EB' : pp > 0 ? '#F59E0B' : '#94A3B8';
       if (r.mile) { var mx = X(r.es) + dw / 2, my = y + rh / 2; x.fillStyle = r.status === 'done' ? '#16A34A' : '#1F1D18'; x.beginPath(); x.moveTo(mx, my - 9); x.lineTo(mx + 9, my); x.lineTo(mx, my + 9); x.lineTo(mx - 9, my); x.closePath(); x.fill(); return; }
       var bh = r.level > 1 ? 10 : 15, by = y + (rh - bh) / 2;
       x.fillStyle = col; x.globalAlpha = 0.28; x.fillRect(a, by, Math.max(3, b - a), bh); x.globalAlpha = 1;
@@ -61,7 +61,7 @@
       else { x.fillStyle = col; x.fillRect(lx, ly - 7, 22, 14); }
       x.fillStyle = '#4B4739'; x.font = '15px Arial'; x.fillText(t, lx + 28, ly); lx += 40 + x.measureText(t).width;
     };
-    item('#16A34A', 'Done'); item('#2563EB', 'In progress'); item('#94A3B8', 'To do'); item('#DC2626', 'Late'); item('#EA580C', 'Critical path', 'c'); item('#1F1D18', 'Milestone', 'm'); item('#DC2626', 'Today', 't');
+    item('#94A3B8', '0%'); item('#F59E0B', '25%'); item('#2563EB', '50%'); item('#7C3AED', '75%'); item('#16A34A', '100% done'); item('#DC2626', 'Late'); item('#EA580C', 'Critical path', 'c'); item('#1F1D18', 'Milestone', 'm'); item('#DC2626', 'Today', 't');
     return { url: c.toDataURL('image/png'), jpg: c.toDataURL('image/jpeg', 0.88), w: W, h: H };
   }
 

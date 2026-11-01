@@ -294,7 +294,7 @@
   var STATUS = [['todo', 'To do', 0], ['doing', 'In progress', 33], ['review', 'In review / QA', 67], ['done', 'Done', 100]];
   var stPct = { todo: 0, doing: 33, review: 67, done: 100 }, stName = { todo: 'To do', doing: 'In progress', review: 'In review / QA', done: 'Done' };
   function statusFromPct(n) { return n >= 100 ? 'done' : n <= 0 ? 'todo' : n >= 67 ? 'review' : 'doing'; }
-  function setStatus(t, k) { (t.subs || []).forEach(function (x) { x.status = k; }); t.status = k; t.pct = stPct[k]; }
+  function setStatus(t, k) { (t.subs || []).forEach(function (x) { x.status = k; x.pct = SUBP[k]; }); t.status = k; t.pct = stPct[k]; }
   /* sub-tasks: inside the task's dates, no costs of their own; the task's % comes from them (weighted by days) */
   function fitSubs(t) {
     var moved = false;
@@ -308,10 +308,18 @@
     });
     return moved;
   }
+  // v67: a story's progress in quarters (0, 25, 50, 75, 100) set with the slider on the Board; its status follows. Where only the
+  // status was changed (Schedule, ticking), the % follows the status.
+  var SUBP = { todo: 0, doing: 25, review: 75, done: 100 };
+  // v67: Gantt colours by progress: 0 grey, 25 amber, 50 blue, 75 purple, 100 green (late stays red)
+  function pband(p) { p = +p || 0; return p >= 100 ? 100 : p >= 63 ? 75 : p >= 38 ? 50 : p > 0 ? 25 : 0; }
+  function subStatus(p) { return p >= 100 ? 'done' : p >= 75 ? 'review' : p > 0 ? 'doing' : 'todo'; }
+  function subPct(x) { var p = Math.round((+x.pct || 0) / 25) * 25; return x.pct != null && subStatus(p) === x.status ? p : SUBP[x.status] || 0; }
   function derive(t) {
+    (t.subs || []).forEach(function (x) { x.pct = subPct(x); });
     if (!t.subs || !t.subs.length) return;
     var w = t.subs.reduce(function (a, x) { return a + x.dur; }, 0) || 1;
-    t.pct = Math.round(t.subs.reduce(function (a, x) { return a + x.dur * stPct[x.status]; }, 0) / w); t.status = statusFromPct(t.pct);
+    t.pct = Math.round(t.subs.reduce(function (a, x) { return a + x.dur * subPct(x); }, 0) / w); t.status = statusFromPct(t.pct);
   }
   function subDates(t, x) { if (!t.es) return { es: '', ef: '' }; var es = x.off ? addWork(t.es, x.off) : t.es; return { es: es, ef: x.dur > 1 ? addWork(es, x.dur - 1) : es }; }
   function resText(t) { var r = t.res || []; if (!r.length) return ''; var others = r.filter(function (x) { return x !== t.lead; }); return [t.lead].concat(others).filter(Boolean).join(', '); }
@@ -1110,7 +1118,7 @@
       var b = base && base.es ? '<span class="gbase" style="left:' + x(base.es) + 'px;width:' + ((daysBetween(base.es, base.ef) + 1) * dayW) + 'px" title="Baseline"></span>' : '';
       var lab = '<span class="glab" style="left:' + ((t.dur === 0 ? left + dayW : left + w) + 4) + 'px">' + (t.dur === 0 ? esc(pretty(t.es)) + ' ' : '') + '<b class="gpct">' + t.pct + '%</b> ' + esc(resShort(t)) + '</span>';
       if (t.dur === 0) return b + '<span class="gmile' + (t.pct >= 100 ? ' done' : '') + '" style="left:' + (left + dayW / 2 - 7) + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' · ' + stName[t.status]) + '"></span>' + lab;
-      return b + '<span class="gbar st-' + t.status + (late ? ' late' : '') + '" style="left:' + left + 'px;width:' + w + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' – ' + pretty(t.ef) + ' · ' + stName[t.status] + ' ' + t.pct + '%') + '"><span class="gfill" style="width:' + t.pct + '%"></span></span>' + lab;
+      return b + '<span class="gbar st-' + t.status + ' pb-' + pband(t.pct) + (late ? ' late' : '') + '" style="left:' + left + 'px;width:' + w + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' – ' + pretty(t.ef) + ' · ' + stName[t.status] + ' ' + t.pct + '%') + '"><span class="gfill" style="width:' + t.pct + '%"></span></span>' + lab;
     };
     var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button>' +
       '<div class="qgate' + (p.emergency ? ' emerg' : p.gate && p.gate.accepted ? ' ok' : '') + '"><div class="qrow"><label class="qchk" title="Emergency work (burst pipe, storm damage, a leak that is doing damage): no cooling-off, the work can start straight away, the same day as the site inspection"><input type="checkbox" id="pEmerg"' + (p.emergency ? ' checked' : '') + '> 🚨 Emergency</label>' +
@@ -1161,16 +1169,16 @@
           '<td class="nowrap">' + esc(dmy(d.ef)) + '</td><td class="muted" style="font-size:11.5px">in #' + r.n + '</td><td></td><td></td><td></td>' +
           '<td class="muted subcost" title="Costs stay on the task">–</td><td></td>' +
           '<td><select data-sk="status" class="stsel st-' + sb.status + '">' + STATUS.map(function (o) { return '<option value="' + o[0] + '"' + (sb.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></td>' +
-          '<td class="muted">' + stPct[sb.status] + '</td>' +
+          '<td class="muted">' + subPct(sb) + '</td>' +
           '<td class="acts"><button class="btn btn-sm" data-sdel title="Delete sub-task">✕</button></td>' +
           '</tr>';
-        G += '<tr data-gsid="' + esc(sb.id) + '" data-gptid="' + esc(t.id) + '"><td class="gcol"><div class="gtrack gtrack-sub" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + (d.es ? '<span class="gsub st-' + sb.status + (sl ? ' late' : '') + '" style="left:' + left + 'px;width:' + sw + 'px" title="' + esc(sb.name + ' · ' + pretty(d.es) + ' – ' + pretty(d.ef) + ' · ' + stName[sb.status]) + '"><span class="gfill" style="width:' + stPct[sb.status] + '%"></span></span><span class="glab" style="left:' + (left + sw + 4) + 'px">' + esc(sb.owner || '') + '</span>' : '') + '</div></td></tr>';
+        G += '<tr data-gsid="' + esc(sb.id) + '" data-gptid="' + esc(t.id) + '"><td class="gcol"><div class="gtrack gtrack-sub" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + (d.es ? '<span class="gsub st-' + sb.status + ' pb-' + subPct(sb) + (sl ? ' late' : '') + '" style="left:' + left + 'px;width:' + sw + 'px" title="' + esc(sb.name + ' · ' + pretty(d.es) + ' – ' + pretty(d.ef) + ' · ' + stName[sb.status]) + '"><span class="gfill" style="width:' + subPct(sb) + '%"></span></span><span class="glab" style="left:' + (left + sw + 4) + 'px">' + esc(sb.owner || '') + '</span>' : '') + '</div></td></tr>';
       });
     });
     if (!rows.length) { html += '<tr><td colspan="16"><div class="empty">No tasks yet. Press “＋ Task”.</div></td></tr>'; G += '<tr><td class="gcol"></td></tr>'; }
     html += '</tbody><tfoot><tr><td></td><td></td><td><b>Total (budget at completion)</b></td><td></td><td></td><td>' + esc(pretty(R.start)) + '</td><td>' + esc(pretty(R.finish)) + '</td><td></td><td></td><td></td><td></td><td class="num"><b>' + money(R.BAC) + '</b></td><td class="num"><b>' + money(R.AC) + '</b></td><td></td><td><b>' + R.pct + '%</b></td><td></td></tr></tfoot></table></div>' +
       '<div class="gsplitter" id="gSplitter" title="Drag to make the task list or the Gantt chart wider (double-click to reset)"><span></span></div>' +
-      '<div class="gpane gright" id="gRight"><table class="gt gtr"><thead><tr><th class="gcol">' + scale + '</th></tr></thead><tbody>' + G + '</tbody><tfoot><tr><td class="gcol"></td></tr></tfoot></table></div></div>' +
+      '<div class="gpane gright" id="gRight"><table class="gt gtr"><thead><tr><th class="gcol">' + scale + '</th></tr></thead><tbody>' + G + '</tbody><tfoot><tr><td class="gcol"><div class="gleg" title="Bar colours: how far each task and sub-task has got">' + [0, 25, 50, 75, 100].map(function (n) { return '<span><i class="pb-' + n + '"></i>' + (n === 100 ? '100% done' : n + '%') + '</span>'; }).join('') + '<span><i class="pb-late"></i>Late</span><span><i class="pb-mile"></i>Milestone</span></div></td></tr></tfoot></table></div></div>' +
       '<div class="res-tip" id="resTip" hidden><b>Tip:</b> you can add more than one person or trade. Press <kbd>Enter</kbd> or type a comma after each name. <b>★</b> = the lead: the first one added is the lead; click another name to make them the lead.</div>' +
       '<datalist id="resList">' + Array.from(new Set([].concat.apply([], p.tasks.map(function (t) { return t.res || []; })).concat(['Labourer', 'Tiler', 'Plumber', 'Electrician', 'Painter', 'Carpenter', 'Waterproofer', 'Supplier', 'Customer']))).filter(Boolean).map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist></div>';
     $('#planBody').innerHTML = html;
@@ -1397,7 +1405,7 @@
       rows.push({ uid: idOf[t.id], wbs: String(i + 1), lvl: 1, name: t.name, es: t.es, ef: t.dur === 0 ? t.es : t.ef, dur: t.dur, preds: (t.pred || []).map(function (x) { return idOf[x]; }).filter(Boolean),
         mile: t.dur === 0, pct: t.pct || 0, status: stName[t.status] || '', res: (t.res || []).slice(), resTxt: resText(t), lead: t.lead || '', summary: subs.length > 0, notes: t.notes || '' });
       subs.forEach(function (sb, j) { var d = subDates(t, sb);
-        rows.push({ uid: idOf[t.id] + j + 1, wbs: (i + 1) + '.' + (j + 1), lvl: 2, name: sb.name, es: d.es, ef: d.ef, dur: sb.dur, preds: [], mile: false, pct: stPct[sb.status] || 0, status: stName[sb.status] || '',
+        rows.push({ uid: idOf[t.id] + j + 1, wbs: (i + 1) + '.' + (j + 1), lvl: 2, name: sb.name, es: d.es, ef: d.ef, dur: sb.dur, preds: [], mile: false, pct: subPct(sb) || 0, status: stName[sb.status] || '',
           res: sb.owner ? [sb.owner] : [], resTxt: sb.owner || '', lead: sb.owner || '', summary: false, parent: t.name, notes: '' }); });
     });
     return rows;
@@ -1507,6 +1515,7 @@
     var wb = new XL.Workbook(); wb.creator = 'MBS Console'; wb.created = new Date(); wb.title = p.name;
     var INK = 'FF151515', GOLD = 'FFC9A227', GOLDSOFT = 'FFFBF4DC', GREY = 'FF6B675E', LINE = 'FFE4E0D6', WHITE = 'FFFFFFFF';
     var STC = { todo: 'FFE5E7EB', doing: 'FFDBEAFE', review: 'FFEDE9FE', done: 'FFDCFCE7' }, STB = { todo: 'FF9CA3AF', doing: 'FF2563EB', review: 'FF7C3AED', done: 'FF16A34A' };
+    var PBC = { 0: 'FFE5E7EB', 25: 'FFFEF3C7', 50: 'FFDBEAFE', 75: 'FFEDE9FE', 100: 'FFDCFCE7' }, PBB = { 0: 'FF94A3B8', 25: 'FFF59E0B', 50: 'FF2563EB', 75: 'FF7C3AED', 100: 'FF16A34A' };
     var fill = function (c) { return { type: 'pattern', pattern: 'solid', fgColor: { argb: c } }; };
     var thin = { style: 'thin', color: { argb: LINE } }, box = { top: thin, left: thin, bottom: thin, right: thin };
     var D = function (s) { if (!s) return null; var a = s.split('-').map(Number); return new Date(Date.UTC(a[0], a[1] - 1, a[2])); };
@@ -1571,7 +1580,7 @@
       row++;
       (t.subs || []).forEach(function (sb, j) {
         var d = subDates(t, sb), sl = sb.status !== 'done' && d.ef && d.ef < t0, s2 = sc.getRow(row);
-        s2.values = [(i + 1) + '.' + (j + 1), '    ↳ ' + sb.name, sb.owner || '', '', sb.dur, D(d.es), D(d.ef), 'in #' + (i + 1), null, null, null, null, null, stName[sb.status], stPct[sb.status] / 100, sl ? 'Yes' : '', ''];
+        s2.values = [(i + 1) + '.' + (j + 1), '    ↳ ' + sb.name, sb.owner || '', '', sb.dur, D(d.es), D(d.ef), 'in #' + (i + 1), null, null, null, null, null, stName[sb.status], subPct(sb) / 100, sl ? 'Yes' : '', ''];
         s2.outlineLevel = 1; s2.font = { size: 10, color: { argb: sl ? 'FFB42318' : 'FF4A463D' } };
         [6, 7].forEach(function (c) { s2.getCell(c).numFmt = dateF; }); s2.getCell(15).numFmt = '0%'; s2.getCell(14).fill = fill(STC[sb.status]);
         s2.eachCell({ includeEmpty: true }, function (c) { c.border = box; c.fill = c.col === 14 ? c.fill : fill('FFFCFBF8'); });
@@ -1602,7 +1611,7 @@
     var gr = 6;
     var paint = function (r, es, ef, status, late, light) {
       if (!es) return; var a = slotOf(es), b = slotOf(ef);
-      for (var k = Math.max(0, a); k <= b && k < slots.length; k++) { var c = r.getCell(6 + k); c.fill = fill(late ? 'FFFCA5A5' : light ? STC[status] : STB[status]); }
+      for (var k = Math.max(0, a); k <= b && k < slots.length; k++) { var c = r.getCell(6 + k); c.fill = fill(late ? 'FFFCA5A5' : light ? PBC[status] : PBB[status]); }
     };
     var tCol = slotOf(t0);
     p.tasks.forEach(function (t, i) {
@@ -1611,17 +1620,17 @@
       r.getCell(3).numFmt = 'd mmm'; r.getCell(4).numFmt = 'd mmm'; r.getCell(5).numFmt = '0%'; r.font = { bold: !!(t.subs && t.subs.length), size: 10 };
       if (tCol >= 0) r.getCell(6 + tCol).border = { left: { style: 'thin', color: { argb: 'FFC2410C' } } };
       if (t.dur === 0) { var mc = r.getCell(6 + Math.max(0, slotOf(t.es))); mc.value = '◆'; mc.font = { bold: true, color: { argb: t.pct >= 100 ? 'FF16A34A' : INK } }; mc.alignment = { horizontal: 'center' }; }
-      else paint(r, t.es, t.ef, t.status, late, false);
+      else paint(r, t.es, t.ef, pband(t.pct), late, false);
       gr++;
       (t.subs || []).forEach(function (sb, j) {
         var d = subDates(t, sb), s2 = gs.getRow(gr);
-        s2.values = [(i + 1) + '.' + (j + 1), '    ↳ ' + sb.name, D(d.es), D(d.ef), stPct[sb.status] / 100];
+        s2.values = [(i + 1) + '.' + (j + 1), '    ↳ ' + sb.name, D(d.es), D(d.ef), subPct(sb) / 100];
         s2.getCell(3).numFmt = 'd mmm'; s2.getCell(4).numFmt = 'd mmm'; s2.getCell(5).numFmt = '0%'; s2.font = { size: 9, color: { argb: 'FF4A463D' } }; s2.outlineLevel = 1;
-        paint(s2, d.es, d.ef, sb.status, sb.status !== 'done' && d.ef < t0, true); gr++;
+        paint(s2, d.es, d.ef, subPct(sb), sb.status !== 'done' && d.ef < t0, true); gr++;
       });
     });
     var legend = gs.getRow(gr + 1);
-    legend.getCell(2).value = 'Colours: grey To do · blue In progress · purple In review / QA · green Done · red late · ◆ milestone · orange header = today'; legend.getCell(2).font = { size: 9, italic: true, color: { argb: GREY } };
+    legend.getCell(2).value = 'Colours by progress: grey 0% · amber 25% · blue 50% · purple 75% · green 100% done · red late · ◆ milestone · orange header = today'; legend.getCell(2).font = { size: 9, italic: true, color: { argb: GREY } };
     footer(gs, gr + 3);
 
     /* 4. Board */
@@ -1866,6 +1875,11 @@
     if (!a) return ''; var f = function (x) { return new Date(x + 'T00:00:00Z').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' }); };
     if (!b || a === b) return f(a); return a.slice(0, 7) === b.slice(0, 7) ? +a.slice(8) + '–' + f(b) : f(a) + ' – ' + f(b);
   }
+  function kSlide(x) {   // 0 · 25 · 50 · 75 · 100 (done)
+    var v = subPct(x);
+    return '<div class="kslide kslide-' + v + '"><input type="range" min="0" max="100" step="25" value="' + v + '" data-sp="' + esc(x.id) + '" aria-label="Progress of ' + esc(x.name) + '" style="--v:' + v + '%">' +
+      '<span class="kslide-v">' + (v >= 100 ? 'Done ✓' : v + '%') + '</span></div>';
+  }
   function themePts(t) { return (t.subs || []).length ? t.subs.reduce(function (a, x) { return a + (x.points || 0); }, 0) : (t.points || 0); }
   function kPop(btn, html, wire) {   // a small menu under a button (like the stock picker)
     var old = document.getElementById('kPop'); if (old) { var same = old.getAttribute('data-for') === btn.getAttribute('data-k'); old.remove(); if (same) return; }
@@ -1937,8 +1951,8 @@
             (tp ? '<span class="ktp" title="' + (subs.length ? 'Theme points: the stories added up' : 'Points') + '">' + tp + ' pts</span>' : '') + '</div>' +
             '<div class="kth-r"><div class="kdates">' + esc(pretty(t.es)) + (t.dur > 1 ? ' – ' + esc(pretty(t.ef)) : '') + '</div><div class="kdays">' + (t.dur ? pl(t.dur, 'day') : 'Milestone') + '</div>' + (rg.txt ? '<div class="kdue kdue-' + rg.c + '">' + esc(rg.txt) + '</div>' : '') + '</div></div>' +
           (subs.length ? '<div class="kstories">' + shown.map(function (x) { var d = subDates(t, x), sr = kRag(d.es, d.ef, x.status === 'done', t0);
-              return '<div class="kst' + (x.status === 'done' ? ' done' : '') + '" data-sid="' + esc(x.id) + '"><div class="kst-h"><i class="kd kd-' + sr.c + '" title="' + esc(pretty(d.es) + (d.ef !== d.es ? ' – ' + pretty(d.ef) : '') + (sr.txt ? ' · ' + sr.txt : '')) + '"></i><label><input type="checkbox" data-subtick="' + esc(x.id) + '"' + (x.status === 'done' ? ' checked' : '') + '><span>' + esc(x.name) + '</span></label>' +
-                '<span class="kst-d kst-d-' + sr.c + '">' + esc(kShort(d.es, d.ef)) + (sr.txt ? ' <b>(' + esc(sr.txt.charAt(0).toLowerCase() + sr.txt.slice(1)) + ')</b>' : '') + '</span></div>' + kCtl('s:' + x.id, x.owner, x.priority, x.points) + '</div>'; }).join('') +
+              return '<div class="kst' + (x.status === 'done' ? ' done' : '') + '" data-sid="' + esc(x.id) + '"><div class="kst-h"><i class="kd kd-' + sr.c + '" title="' + esc(pretty(d.es) + (d.ef !== d.es ? ' – ' + pretty(d.ef) : '') + (sr.txt ? ' · ' + sr.txt : '')) + '"></i><span class="kst-n">' + esc(x.name) + '</span>' +
+                '<span class="kst-d kst-d-' + sr.c + '">' + esc(kShort(d.es, d.ef)) + (sr.txt ? ' <b>(' + esc(sr.txt.charAt(0).toLowerCase() + sr.txt.slice(1)) + ')</b>' : '') + '</span></div>' + kSlide(x) + kCtl('s:' + x.id, x.owner, x.priority, x.points) + '</div>'; }).join('') +
             (filt && shown.length < subs.length ? '<div class="kmore">' + (subs.length - shown.length) + ' more ' + (subs.length - shown.length === 1 ? 'story' : 'stories') + ' hidden by the filter</div>' : '') + '</div>'
             : kCtl('t:' + t.id, ownerOf(t), t.priority, t.points)) +
           (t.dur > 0 ? '<div class="kaddrow" data-addrow></div><button type="button" class="kadd" data-kadd>＋ story</button>' : '') +
@@ -1983,10 +1997,12 @@
     }; });
     B.querySelectorAll('[data-step]').forEach(function (b) { b.onclick = function () { var t = find(b.closest('.kcard').getAttribute('data-tid')), i = STATUS.map(function (x) { return x[0]; }).indexOf(t.status) + (+b.getAttribute('data-step')); if (STATUS[i]) move(t, STATUS[i][0]); }; });
     B.querySelectorAll('[data-tick]').forEach(function (cb) { cb.onchange = function () { move(find(cb.closest('.kcard').getAttribute('data-tid')), cb.checked ? 'done' : 'todo'); }; });
-    B.querySelectorAll('[data-subtick]').forEach(function (cb) {
-      cb.onchange = function () {
-        var t = find(cb.closest('.kcard').getAttribute('data-tid')), sb = t.subs.filter(function (x) { return x.id === cb.getAttribute('data-subtick'); })[0];
-        sb.status = cb.checked ? 'done' : (sb.status === 'done' ? 'todo' : sb.status); derive(t); dirty(stName[sb.status] + ': ' + sb.name + ' (' + t.name + ')'); render();
+    B.querySelectorAll('[data-sp]').forEach(function (r) {
+      var show = function () { var v = +r.value; r.style.setProperty('--v', v + '%'); r.parentNode.className = 'kslide kslide-' + v; r.parentNode.querySelector('.kslide-v').textContent = v >= 100 ? 'Done ✓' : v + '%'; };
+      r.oninput = show;
+      r.onchange = function () {
+        var t = find(r.closest('.kcard').getAttribute('data-tid')), sb = t.subs.filter(function (x) { return x.id === r.getAttribute('data-sp'); })[0], v = +r.value;
+        sb.pct = v; sb.status = subStatus(v); derive(t); dirty(sb.name + ' ' + v + '% (' + t.name + ')'); render();
       };
     });
   }
@@ -2611,7 +2627,7 @@
       var win0 = addDays(r.to, -3), win1 = addDays(r.to, 21);
       g = { title: 'Task (3-week look-ahead)', from: win0, to: win1, today: today(), rows: [] };
       F.rows.forEach(function (x) { var t = x.t; if (!t.es || t.ef < win0 || t.es > win1) return; g.rows.push({ label: '#' + x.n + ' ' + t.name.replace(/^[✓◆\s]+/, '') + (t.resource ? ' · ' + t.resource : ''), es: t.es, ef: t.ef, pct: t.pct, mile: t.dur === 0, crit: !!F.crit[t.id], late: t.pct < 100 && t.ef < today(), status: t.status, level: 1 });
-        (t.subs || []).forEach(function (sb) { var d = subDates(t, sb); if (d.ef < win0 || d.es > win1) return; g.rows.push({ label: sb.name + (sb.owner ? ' · ' + sb.owner : ''), es: d.es, ef: d.ef, pct: stPct[sb.status], status: sb.status, level: 2 }); }); });
+        (t.subs || []).forEach(function (sb) { var d = subDates(t, sb); if (d.ef < win0 || d.es > win1) return; g.rows.push({ label: sb.name + (sb.owner ? ' · ' + sb.owner : ''), es: d.es, ef: d.ef, pct: subPct(sb), status: sb.status, level: 2 }); }); });
       kpis = [pctRow, { label: 'Tasks next 2 weeks', value: String(plan.length) }, { label: 'Late tasks', value: String(F.late.length) }, { label: 'Critical next 2 weeks', value: String(plan.filter(function (x) { return F.crit[x.t.id]; }).length) }, { label: 'Open issues', value: String(F.issues.length) }];
       var sw = S.rep.swms, safety = sw ? ['SWMS version ' + sw.version + ' (' + sw.status + '): ' + sw.steps + ' job steps. Read and sign it before starting high-risk work.'] : ['No SWMS yet for this job: write it on the SWMS tab before high-risk work starts.'];
       if (sw && sw.hrcw.length) safety.push('High-risk work on this job: ' + sw.hrcw.join('; ') + '.');

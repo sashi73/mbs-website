@@ -122,13 +122,17 @@ function people(t) {
 }
 // sub-tasks: always inside their task's dates (off = working days after the task starts, dur = working days),
 // no costs of their own; the task's % complete comes from its sub-tasks (weighted by days).
-const SPCT = { todo: 0, doing: 33, review: 67, done: 100 };
+const SPCT = { todo: 0, doing: 25, review: 75, done: 100 };
+const subStat = (p) => (p >= 100 ? 'done' : p >= 75 ? 'review' : p > 0 ? 'doing' : 'todo');
+// v67: a story's progress in quarters; if only its status was changed, the % follows the status
+const subPctOf = (x, status) => { const p = Math.round((Number(x.pct) || 0) / 25) * 25; return x.pct != null && subStat(p) === status ? Math.max(0, Math.min(100, p)) : SPCT[status]; };
 function cleanSubs(list, t, uid) {
   if (!Array.isArray(list) || t.dur === 0) return [];
   const D = Math.max(1, t.dur);
   return list.slice(0, 40).map((x) => {
     const off = int(x.off, 0, D - 1, 0);
-    return { id: uid(x.id, 's'), name: str(x.name, 160) || 'Sub-task', owner: str(x.owner, 80), off, dur: int(x.dur, 1, D - off, 1), status: STAT.includes(x.status) ? x.status : 'todo',
+    const status = STAT.includes(x.status) ? x.status : 'todo';
+    return { id: uid(x.id, 's'), name: str(x.name, 160) || 'Sub-task', owner: str(x.owner, 80), off, dur: int(x.dur, 1, D - off, 1), status, pct: subPctOf(x, status),
       priority: ['High', 'Medium', 'Low'].includes(x.priority) ? x.priority : '', points: [1, 2, 3, 5, 8, 13].includes(Number(x.points)) ? Number(x.points) : 0 };   // v65: user stories on the Board
   });
 }
@@ -152,7 +156,7 @@ function clean(p, core) {
     if (!mats.length && o.item) { mats = [{ item: o.item, qty: Math.max(0, o.qty), price: Math.max(0, o.rate) }]; o.qty = 0; o.rate = 0; o.unit = ''; }
     const seen = new Set(); o.mats = mats.filter((m) => !seen.has(m.item) && seen.add(m.item)).slice(0, 30); o.item = '';
     o.subs = cleanSubs(t.subs, o, uid);
-    if (o.subs.length) { const w = o.subs.reduce((a, x) => a + x.dur, 0); o.pct = Math.round(o.subs.reduce((a, x) => a + x.dur * SPCT[x.status], 0) / w); o.status = statusOf(o.pct); }
+    if (o.subs.length) { const w = o.subs.reduce((a, x) => a + x.dur, 0); o.pct = Math.round(o.subs.reduce((a, x) => a + x.dur * x.pct, 0) / w); o.status = statusOf(o.pct); }
     return o;
   });
   const tIds = new Set(tasks.map((t) => t.id));

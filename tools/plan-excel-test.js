@@ -109,7 +109,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let tileRow = null; gs.eachRow((r) => { if (r.getCell(2).value === 'Wall & floor tiling') tileRow = r; });
     let filled = 0; tileRow && tileRow.eachCell({ includeEmpty: true }, (c, col) => { if (col > 5 && c.fill && c.fill.fgColor) filled++; });
     ok('Gantt', 'Gantt tab colours one cell per working day: tiling (3 days) = 3 cells', filled === 3, filled);
-    ok('Gantt', 'Gantt has dates across the top and a colour legend', typeof gs.getRow(5).getCell(6).value === 'number' && /Colours:/.test(JSON.stringify(gs.getSheetValues())));
+    ok('Gantt', 'Gantt has dates across the top and a colour legend', typeof gs.getRow(5).getCell(6).value === 'number' && /Colours by progress: grey 0% · amber 25% · blue 50% · purple 75% · green 100%/.test(JSON.stringify(gs.getSheetValues())));
     const bd = wb.getWorksheet('Board');
     ok('Board', 'board tab: the 4 columns with task cards and sub-task checklists', /To do/.test(bd.getCell('A4').value) && /In review \/ QA/.test(bd.getCell('C4').value) && /☐ Remove tiles and screed/.test(JSON.stringify(bd.getSheetValues())));
     ok('Scope', 'scope tab has the charter (objective, in / out of scope)', /AS 3740/.test(JSON.stringify(wb.getWorksheet('Scope').getSheetValues())));

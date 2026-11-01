@@ -76,11 +76,18 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     await p.click(`${st(2)} .kptb`); await p.click('#kPop [data-pt="8"]'); await sleep(150);
     await p.click(`${st(3)} .kptb`); await p.click('#kPop [data-pt="3"]'); await sleep(250);
     ok('Points', 'the theme\'s points are its stories added up (5 + 8 + 3 = 16)', (await p.textContent(`${B} .ktp`)) === '16 pts' && /16 pts/.test(await p.textContent('.kcol-todo h3')) && /0 of 16 points done/.test(await p.textContent('.kpts')));
-    await p.check(`${st(2)} [data-subtick]`); await sleep(400);
-    ok('Points', 'ticking a story done counts its points as done, and the theme moves on (its % is weighted by the stories\' days: 4 of 6 = 67%, In review)', /8 of 16 points done/.test(await p.textContent('.kpts')) && !!(await p.$(`.kcol-review ${B}`)));
+    const slide = async (sel, v) => { await p.$eval(sel, (r, v) => { r.value = String(v); r.dispatchEvent(new Event('input', { bubbles: true })); r.dispatchEvent(new Event('change', { bubbles: true })); }, v); await sleep(350); };
+    ok('Slider', 'each story has a progress slider instead of a tick box: 0, 25, 50, 75, 100 (done)', (await p.$$(`${B} .kst input[type=range]`)).length === 3 && !(await p.$(`${B} .kst input[type=checkbox]`)) && (await p.$eval(`${st(1)} input[type=range]`, (r) => [r.min, r.max, r.step].join())) === '0,100,25');
+    await slide(`${st(1)} input[type=range]`, 50);
+    const t50 = await p.evaluate((id) => { const t = window.MBS.planState.plan.tasks.find((x) => x.id === id); return { s: t.subs[0], pct: t.pct }; }, bench.id);
+    ok('Slider', 'moving it to 50% marks the story in progress and moves the theme\'s % (weighted by days)', (await p.textContent(`${st(1)} .kslide-v`)) === '50%' && t50.s.pct === 50 && t50.s.status === 'doing' && t50.pct === Math.round(50 * t50.s.dur / 6), JSON.stringify(t50));
+    await slide(`${st(1)} input[type=range]`, 0);
+    await slide(`${st(2)} input[type=range]`, 100);
+    ok('Slider', 'at 100 it reads "Done ✓" and the story is done', (await p.textContent(`${st(2)} .kslide-v`)) === 'Done ✓' && (await p.getAttribute(`${st(2)}`, 'class')).includes('done'));
+    ok('Points', 'a story at 100% counts its points as done, and the theme moves on (its % is weighted by the stories\' days: 4 of 6 = 67%, In review)', /8 of 16 points done/.test(await p.textContent('.kpts')) && !!(await p.$(`.kcol-review ${B}`)));
     await sleep(1300);
     const sv = (await P.get(core)).tasks.find((t) => t.id === bench.id);
-    ok('Saved', 'owner, priority and points are saved on each story', sv.subs[0].owner === 'Sam Sparky' && sv.subs[0].priority === 'High' && sv.subs[0].points === 5 && sv.subs[1].owner === 'Oakwood Joinery' && sv.subs[1].priority === 'Medium' && sv.subs[1].points === 8 && sv.subs[2].priority === 'Low' && sv.subs[2].points === 3, JSON.stringify(sv.subs.map((x) => [x.owner, x.priority, x.points])));
+    ok('Saved', 'owner, priority and points are saved on each story', sv.subs[0].owner === 'Sam Sparky' && sv.subs[0].priority === 'High' && sv.subs[0].points === 5 && sv.subs[1].owner === 'Oakwood Joinery' && sv.subs[1].priority === 'Medium' && sv.subs[1].points === 8 && sv.subs[2].priority === 'Low' && sv.subs[2].points === 3 && sv.subs[1].pct === 100 && sv.subs[1].status === 'done', JSON.stringify(sv.subs.map((x) => [x.owner, x.priority, x.points])));
     // RAG colours
     const cards = await p.$$eval('.kcard', (a) => a.map((c) => ({ cls: c.className, due: (c.querySelector('.kdue') || {}).textContent || '' })));
     const consistent = cards.every((c) => (/kr-r/.test(c.cls) ? /late/.test(c.due) : /kr-a/.test(c.cls) ? /Due (today|in [123] day)/.test(c.due) : /kr-g/.test(c.cls)));
@@ -104,6 +111,17 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     await p.fill('#kbQ', ''); await sleep(200);
     await p.click(`${B} [data-step="1"]`); await sleep(300);
     ok('Move', '→ moves the theme on to Done with its points (all its stories done)', !!(await p.$(`.kcol-done ${B}`)) && /16 pts/.test(await p.textContent('.kcol-done h3')) && /16 of \d+ points done/.test(await p.textContent('.kpts')));
+    await slide(`${C} .kst input[type=range]`, 25);
+    ok('Slider', 'moving a story to 25% moves its theme card to In progress', !!(await p.$(`.kcol-doing ${C}`)) && (await p.textContent(`${C} .kslide-v`)) === '25%');
+    await slide(`${C} .kst input[type=range]`, 75); await sleep(1300);
+    await p.goto(`${BASE}/admin/#plan/${core}/schedule`); await p.waitForSelector('#gRight .gbar'); await sleep(400);
+    const gc = await p.evaluate((ids) => ({ task: document.querySelector(`#gRight [data-gtid="${ids[0]}"] .gbar, #gRight tr:has(.gbar) .gbar`) && [...document.querySelectorAll('#gRight .gbar')].map((b) => b.className).join('|'),
+      subs: [...document.querySelectorAll('#gRight .gsub')].map((b) => b.className).join('|'), leg: (document.querySelector('.gleg') || {}).textContent || '' }), [plain.id]);
+    const colOf = (cls) => getComputedStyle;
+    ok('Gantt', 'Gantt bars are coloured by progress (0, 25, 50, 75, 100) with a legend; late stays red', /pb-75/.test(gc.subs) && /pb-100/.test(gc.subs) && /pb-0/.test(gc.task) && /0%.*25%.*50%.*75%.*100% done.*Late/.test(gc.leg), JSON.stringify(gc).slice(0, 300));
+    const fills = await p.evaluate(() => ['pb-25', 'pb-50', 'pb-75', 'pb-100'].map((k) => { const s = document.createElement('span'); s.className = 'gsub ' + k; s.innerHTML = '<span class="gfill"></span>'; document.querySelector('#gRight').appendChild(s); const c = getComputedStyle(s.firstChild).backgroundColor; s.remove(); return c; }));
+    ok('Gantt', 'each level has its own colour', new Set(fills).size === 4, fills.join(' '));
+    await p.goto(`${BASE}/admin/#plan/${core}/board`); await p.waitForSelector('.kcard');
     await p.reload(); await p.waitForSelector('.kcard'); await sleep(900); await p.screenshot({ path: path.join(os.tmpdir(), 'board65.png') });
     ok('Filter', 'the sort choice is remembered', (await p.inputValue('#kbSort')) === 'points');
     await p.setViewportSize({ width: 390, height: 844 }); await sleep(300);
