@@ -337,7 +337,9 @@
   }
 
   /* ---------- state + saving ---------- */
-  var S = { split: (function () { try { return +localStorage.getItem('mbsPlanSplit') || 0; } catch (e) { return 0; } })(), closed: {}, cols: (function () { try { return localStorage.getItem('mbsPlanCols') || 's'; } catch (e) { return 's'; } })(), core: '', plan: null, rev: 0, job: null, tab: 'schedule', zoom: 'day', saving: false, timer: null, reminders: [], expensesEx: 0 };
+  var S = { colW: (function () { try { return JSON.parse(localStorage.getItem('mbsPlanColW') || '{}') || {}; } catch (e) { return {}; } })(),
+    freeze: (function () { try { var v = localStorage.getItem('mbsPlanFreeze'); return v == null ? 3 : +v || 0; } catch (e) { return 3; } })(),
+    split: (function () { try { return +localStorage.getItem('mbsPlanSplit') || 0; } catch (e) { return 0; } })(), closed: {}, cols: (function () { try { return localStorage.getItem('mbsPlanCols') || 's'; } catch (e) { return 's'; } })(), core: '', plan: null, rev: 0, job: null, tab: 'schedule', zoom: 'day', saving: false, timer: null, reminders: [], expensesEx: 0 };
   function dirty(note) {
     $('#planSave').textContent = 'Saving…';
     clearTimeout(S.timer);
@@ -1123,7 +1125,7 @@
       '</div><div class="pviews">' +
       '<div class="tabs" style="margin:0" title="Which columns to show"><button class="tab' + (S.cols === 's' ? ' on' : '') + '" data-cols="s">📅 Dates</button><button class="tab' + (S.cols === 'c' ? ' on' : '') + '" data-cols="c">$ Costs</button><button class="tab' + (S.cols === 'a' ? ' on' : '') + '" data-cols="a">All columns</button></div>' +
       '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button></div></div></div>' +
-      '<div class="gsplit" id="gSplit"><div class="gpane gleft" id="gLeft"' + (S.split ? ' style="flex:0 0 ' + S.split + 'px;max-width:none"' : '') + '><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task</th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th>Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th></tr></thead><tbody>';
+      '<div class="gsplit" id="gSplit"><div class="gpane gleft" id="gLeft"' + (S.split ? ' style="flex:0 0 ' + S.split + 'px;max-width:none"' : '') + '><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task <button type="button" class="gfz-chip" id="gFreezeBtn" title="Freeze columns (like Excel) and column widths">❄ ' + esc(gfzName()) + '</button></th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th>Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th></tr></thead><tbody>';
     var G = '';   // rows of the Gantt pane (kept the same height as the grid rows)
     rows.forEach(function (r) {
       var t = r.t, late = t.pct < 100 && t.ef < t0, base = p.baseline && p.baseline.tasks ? p.baseline.tasks[t.id] : null;
@@ -1175,6 +1177,7 @@
     var B = $('#planBody');
     dateBoxes(B);   // before the rows are lined up with the Gantt chart
     splitPanes(x(t0));
+    $('#gFreezeBtn').onclick = function (e) { e.stopPropagation(); gFreezeMenu(this); };
     B.querySelectorAll('[data-cols]').forEach(function (b) { b.onclick = function () { S.cols = b.getAttribute('data-cols'); try { localStorage.setItem('mbsPlanCols', S.cols); } catch (e) {} render(); }; });
     B.querySelectorAll('[data-zoom]').forEach(function (b) { b.onclick = function () { S.zoom = b.getAttribute('data-zoom'); render(); }; });
     $('#pStart').onchange = function () { if (this.value && p.finishBy && this.value > p.finishBy) { toast('The project can\'t start after your Finish by date (' + dmy(p.finishBy) + '). Move Finish by later first, or clear it.', true); render(); return; } if (this.value) { var f0 = rollup(p, today()).finish; p.start = this.value; dirty(); render(); afterDates(f0, 'the project start changed'); } };
@@ -1737,6 +1740,65 @@
     return wb;
   }
 
+
+  /* ---------- v61: the task list like Excel: drag a heading's edge to size a column, and freeze the first columns ---------- */
+  var GFZ = [[0, 'None'], [3, '# and Task'], [4, 'up to Resources'], [5, 'up to Days'], [6, 'up to Start'], [7, 'up to Finish']];
+  function gfzName() { var o = GFZ.filter(function (x) { return x[0] === S.freeze; })[0]; return o ? o[1] : 'None'; }
+  function gFreezeMenu(btn) {
+    var old = document.getElementById('gFzMenu'); if (old) { old.remove(); return; }
+    var r = btn.getBoundingClientRect(), m = document.createElement('div');
+    m.id = 'gFzMenu'; m.className = 'gfz-menu';
+    m.innerHTML = '<b>❄ Freeze columns</b><small class="muted">They stay put while you scroll the task list sideways. The heading row is always frozen.</small>' +
+      '<label class="gfz-pick">Freeze <select id="gFreeze">' + GFZ.map(function (o) { return '<option value="' + o[0] + '"' + (S.freeze === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' +
+      '<b style="margin-top:8px">↔ Column widths</b><small class="muted">Drag the edge of a column heading to make it wider or narrower; double-click the edge for its normal width.</small>' +
+      '<button type="button" class="btn btn-sm" id="gColReset"' + (Object.keys(S.colW).length ? '' : ' disabled') + '>↺ All columns to normal width</button>';
+    document.body.appendChild(m);
+    m.style.left = Math.max(8, Math.min(window.innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.top = (r.bottom + 6) + 'px';
+    var close = function (e) { if (e && m.contains(e.target)) return; m.remove(); document.removeEventListener('pointerdown', close, true); window.removeEventListener('hashchange', close); };
+    setTimeout(function () { document.addEventListener('pointerdown', close, true); window.addEventListener('hashchange', close); }, 0);
+    $('#gFreeze').onchange = function () { S.freeze = +this.value; try { localStorage.setItem('mbsPlanFreeze', S.freeze); } catch (e) {} gFreeze(); var b = $('#gFreezeBtn'); if (b) b.textContent = '❄ ' + gfzName(); };
+    $('#gColReset').onclick = function () { S.colW = {}; try { localStorage.removeItem('mbsPlanColW'); } catch (e) {} gColCss(); close(); render(); };
+  }
+  function gStyle(id) { var el = document.getElementById(id); if (!el) { el = document.createElement('style'); el.id = id; document.head.appendChild(el); } return el; }
+  function gColCss() {
+    gStyle('gtColW').textContent = Object.keys(S.colW).map(function (k) {
+      var w = Math.round(S.colW[k]), c = '#gLeft table.gt tr>:nth-child(' + k + ')';
+      return c + '{width:' + w + 'px!important;min-width:' + w + 'px!important;max-width:' + w + 'px!important;overflow:hidden;text-overflow:ellipsis}' +
+        c + ' input:not([type=checkbox]),' + c + ' select,' + c + ' .dtext{width:100%!important;min-width:0!important;max-width:100%!important;box-sizing:border-box}';
+    }).join('\n');
+  }
+  function gFreeze() {
+    var L = $('#gLeft'), css = '';
+    if (L && S.freeze) {
+      var ths = L.querySelectorAll('thead th'), x = 0, last = 0;
+      for (var i = 1; i <= S.freeze && i <= ths.length; i++) {
+        var w = ths[i - 1].getBoundingClientRect().width; if (!w) continue;   // hidden in this view
+        var c = '#gLeft table.gt tr>:nth-child(' + i + ')';
+        css += c + '{position:sticky;left:' + Math.round(x) + 'px}#gLeft table.gt tbody td:nth-child(' + i + '){z-index:2}#gLeft table.gt thead th:nth-child(' + i + '),#gLeft table.gt tfoot td:nth-child(' + i + '){z-index:5}\n';
+        x += w; last = i;
+      }
+      if (last) css += '#gLeft table.gt tr>:nth-child(' + last + '){box-shadow:inset -2px 0 0 #C9A227}';
+    }
+    gStyle('gtFreeze').textContent = css;
+    if (L) L.classList.toggle('gfz-on', !!css);
+  }
+  function gColHandles(L, sync) {
+    var ths = L.querySelectorAll('thead th');
+    Array.prototype.forEach.call(ths, function (th, i) {
+      if (i === ths.length - 1) return;   // the buttons column
+      var k = i + 1, h = document.createElement('span');
+      h.className = 'gcr'; h.title = 'Drag to size this column · double-click for its normal width';
+      th.appendChild(h); th.classList.add('gcr-th');
+      h.addEventListener('pointerdown', function (e) {
+        e.preventDefault(); e.stopPropagation(); h.setPointerCapture(e.pointerId); document.body.classList.add('gcr-drag');
+        var x0 = e.clientX, w0 = th.getBoundingClientRect().width, raf = 0;
+        var move = function (ev) { S.colW[k] = Math.max(28, Math.min(600, w0 + ev.clientX - x0)); gColCss(); if (!raf) raf = requestAnimationFrame(function () { raf = 0; gFreeze(); sync(); }); };
+        var up = function () { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); document.body.classList.remove('gcr-drag'); try { localStorage.setItem('mbsPlanColW', JSON.stringify(S.colW)); } catch (er) {} gFreeze(); sync(); };
+        h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
+      });
+      h.addEventListener('dblclick', function (e) { e.stopPropagation(); delete S.colW[k]; try { localStorage.setItem('mbsPlanColW', JSON.stringify(S.colW)); } catch (er) {} gColCss(); gFreeze(); sync(); });
+    });
+  }
   /* ---------- the grid and the Gantt chart side by side, with a divider you can drag ---------- */
   function splitPanes(todayX) {
     var L = $('#gLeft'), Rt = $('#gRight'), bar = $('#gSplitter'), box = $('#gSplit');
@@ -1749,7 +1811,8 @@
       pairs.forEach(function (pr) { if (!pr[0] || !pr[1]) return; var tk = pr[1].querySelector('.gtrack'); if (tk) tk.style.height = ''; });
       pairs.forEach(function (pr) { if (!pr[0] || !pr[1]) return; var h = Math.max(pr[0].getBoundingClientRect().height, pr[1].getBoundingClientRect().height); pr[0].style.height = pr[1].style.height = h + 'px'; var tk = pr[1].querySelector('.gtrack'); if (tk) tk.style.height = (h - 1) + 'px'; });
     };
-    sync();
+    gColCss(); gColHandles(L, sync);
+    sync(); gFreeze();
     if (window.ResizeObserver) { if (S.ro) S.ro.disconnect(); S.ro = new ResizeObserver(function () { window.requestAnimationFrame(sync); }); S.ro.observe(L.querySelector('table')); }
     var lock = false;
     L.addEventListener('scroll', function () { if (lock) { lock = false; return; } lock = true; Rt.scrollTop = L.scrollTop; });
