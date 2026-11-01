@@ -64,7 +64,11 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     await p.click('#kPop [data-own="Sam Sparky"]'); await sleep(250);
     ok('Owner', 'picking sets the story owner (initials and name on the button)', (await p.textContent(`${st(1)} .kown-n`)) === 'Sam Sparky' && (await p.textContent(`${st(1)} .kav`)) === 'SS');
     await p.click(`${st(2)} .kown`); await p.fill('#kPop .kpop-q', 'Oakwood Joinery'); await p.keyboard.press('Enter'); await sleep(250);
-    ok('Owner', 'or type any name (Enter) for someone not on the register', (await p.textContent(`${st(2)} .kown-n`)) === 'Oakwood Joinery');
+    const reg = await p.evaluate(() => window.MBS.planState.plan.stakeholders.find((x) => x.name === 'Oakwood Joinery'));
+    ok('Owner', 'a new name typed for a story (Enter) is the owner AND goes into the Stakeholder register (RACI R)', (await p.textContent(`${st(2)} .kown-n`)) === 'Oakwood Joinery' && reg && reg.raci === 'R', JSON.stringify(reg));
+    await p.click(`${st(3)} .kown`); await p.waitForSelector('#kPop');
+    ok('Owner', 'they are then on the picker list like everyone else', (await p.$$eval('#kPop [data-own]', (a) => a.map((x) => x.getAttribute('data-own')))).includes('Oakwood Joinery'));
+    await p.click('#title'); await sleep(150);
     await p.click(`${st(1)} .kseg-H`); await sleep(150);
     ok('Priority', 'H / M / L are colour-coded buttons: H turns red', (await p.getAttribute(`${st(1)} .kseg-H`, 'class')).includes('on'));
     await p.click(`${st(1)} .kseg-H`); await sleep(150);
@@ -98,7 +102,7 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     await p.$eval(C, (e) => e.scrollIntoView());
     ok('Theme', 'a task without stories has its own owner, priority and points', !!(await p.$(`${C} > .kctl .kown`)) && !(await p.$(`${C} .kst`)));
     await p.click(`${C} [data-kadd]`); await p.fill(`${C} .kadd-in`, 'Check the levels'); await p.keyboard.press('Enter'); await sleep(300);
-    ok('Story', '＋ story adds a user story, and the card becomes a theme', /THEME/.test(await p.textContent(`${C} .kid`)) && /Check the levels/.test(await p.textContent(`${C} .kst`)));
+    await sleep(400); ok('Story', '＋ story adds one user story (Enter), and the card becomes a theme', /THEME/.test(await p.textContent(`${C} .kid`)) && (await p.$$(`${C} .kst`)).length === 1 && /Check the levels/.test(await p.textContent(`${C} .kst`)));
     // filters
     await p.selectOption('#kbOwner', 'Sam Sparky'); await sleep(250);
     ok('Filter', 'filter by owner shows the themes with their stories, and only that person\'s stories', (await p.$$('.kcard')).length === 1 && (await p.$$(`${B} .kst`)).length === 1 && /2 more stories hidden/.test(await p.textContent(B)));

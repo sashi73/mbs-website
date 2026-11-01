@@ -1890,14 +1890,22 @@
     setTimeout(function () { document.addEventListener('pointerdown', close, true); }, 0);
     wire(m, function () { close(); m.remove(); document.removeEventListener('pointerdown', close, true); });
   }
-  function ownerPick(btn, cur, set) {
+  function ownerPick(btn, cur, set0) {
     var sh = (S.plan.stakeholders || []).filter(function (x) { return x.name || x.role; });
+    // v67: a new name typed here goes into the Stakeholder register too (RACI R), so the register stays complete
+    var set = function (n) {
+      if (n && !sh.some(function (x) { return (x.name || x.role || '').toLowerCase() === n.toLowerCase(); })) {
+        (S.plan.stakeholders = S.plan.stakeholders || []).push({ id: 's' + Date.now().toString(36), name: n, role: '', raci: 'R', phone: '', email: '', sub: '' });
+        toast(n + ' added to the Stakeholder register: add their role and contact details on the 👥 Stakeholders tab');
+      }
+      set0(n);
+    };
     kPop(btn, '<input class="kpop-q" placeholder="Search, or type a name">' + '<div class="kpop-list"></div>' + (cur ? '<button type="button" class="kpop-clear">✕ No owner</button>' : ''), function (m, done) {
       var q = m.querySelector('.kpop-q'), L = m.querySelector('.kpop-list');
       var draw = function () {
         var v = q.value.trim(), lv = v.toLowerCase(), hits = sh.filter(function (x) { return !lv || ((x.name || '') + ' ' + (x.role || '')).toLowerCase().indexOf(lv) >= 0; });
         L.innerHTML = hits.map(function (x) { var n = x.name || x.role; return '<button type="button" data-own="' + esc(n) + '"' + (n === cur ? ' class="on"' : '') + '><span class="kav">' + esc(initials(n)) + '</span><span><b>' + esc(n) + '</b><small>' + esc(x.role || '') + '</small></span></button>'; }).join('') +
-          (v && !sh.some(function (x) { return (x.name || x.role || '').toLowerCase() === lv; }) ? '<button type="button" data-own="' + esc(v) + '"><span class="kav none">+</span><span><b>Use “' + esc(v) + '”</b><small>not in the Stakeholder register</small></span></button>' : '') +
+          (v && !sh.some(function (x) { return (x.name || x.role || '').toLowerCase() === lv; }) ? '<button type="button" data-own="' + esc(v) + '"><span class="kav none">+</span><span><b>Add “' + esc(v) + '”</b><small>also adds them to the Stakeholder register</small></span></button>' : '') +
           (!hits.length && !v ? '<p class="muted" style="margin:6px;font-size:12px">No stakeholders yet: type a name.</p>' : '');
         L.querySelectorAll('[data-own]').forEach(function (b) { b.onclick = function () { set(b.getAttribute('data-own')); done(); }; });
       };
@@ -1992,7 +2000,7 @@
       var card = b.closest('.kcard'), t = find(card.getAttribute('data-tid')), row = card.querySelector('[data-addrow]');
       row.innerHTML = '<input class="kadd-in" placeholder="New user story, then Enter" maxlength="160">'; b.style.display = 'none';
       var inp = row.querySelector('input'); inp.focus();
-      var add = function () { var v = inp.value.trim(); if (!v) { keep(); return; } t.subs = t.subs || []; t.subs.push({ id: 's' + Date.now().toString(36), name: v, owner: '', off: 0, dur: Math.max(1, t.dur), status: 'todo', priority: '', points: 0 }); fitSubs(t); derive(t); dirty('story added to ' + t.name + ': ' + v); keep(); };
+      var once = false, add = function () { if (once) return; once = true; var v = inp.value.trim(); if (!v) { keep(); return; } t.subs = t.subs || []; t.subs.push({ id: 's' + Date.now().toString(36), name: v, owner: '', off: 0, dur: Math.max(1, t.dur), status: 'todo', priority: '', points: 0 }); fitSubs(t); derive(t); dirty('story added to ' + t.name + ': ' + v); keep(); };
       inp.onkeydown = function (e) { if (e.key === 'Enter') add(); if (e.key === 'Escape') keep(); }; inp.onblur = function () { setTimeout(add, 120); };
     }; });
     B.querySelectorAll('[data-step]').forEach(function (b) { b.onclick = function () { var t = find(b.closest('.kcard').getAttribute('data-tid')), i = STATUS.map(function (x) { return x[0]; }).indexOf(t.status) + (+b.getAttribute('data-step')); if (STATUS[i]) move(t, STATUS[i][0]); }; });
