@@ -896,3 +896,25 @@ body.gcr-drag,body.gcr-drag *{cursor:col-resize!important;user-select:none}
 .gfz-menu{position:fixed;z-index:60;width:270px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:10px 12px;display:flex;flex-direction:column;gap:4px;font-size:13px}
 .gfz-menu small{font-size:11.5px;line-height:1.35}
 .gfz-pick{display:flex;align-items:center;gap:8px;margin:4px 0}.gfz-pick select{flex:1;padding:4px 6px}
+
+/* v62: 📊 Reports */
+.rp-wrap{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.rp-auds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.rp-aud{border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:9px 11px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;font:inherit}
+.rp-aud small{color:#8A8577;font-size:11.5px}.rp-aud.on{border-color:#C9A227;background:#FFFBEB;box-shadow:0 0 0 2px #FDE68A inset}
+.rp-blurb{font-size:13px;color:#57534E;background:#FBF8EF;border-radius:8px;padding:7px 10px;margin:8px 0 10px}
+.rp-period{grid-template-columns:repeat(4,minmax(0,1fr));align-items:end}
+.rp-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:15px;margin:16px 0 8px}.rp-h small{font-weight:400}
+.rp-rag{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.rp-r{border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:4px;border:1px solid}
+.rp-r b{font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.rp-r select{font-weight:700;padding:3px 6px;width:100%}.rp-r input{font-size:12px;padding:4px 6px;width:100%}
+.rp-G{background:#ECFDF5;border-color:#86EFAC}.rp-G select{background:#15803D;color:#fff}
+.rp-A{background:#FFFBEB;border-color:#FCD34D}.rp-A select{background:#D97706;color:#fff}
+.rp-R{background:#FEF2F2;border-color:#FCA5A5}.rp-R select{background:#B91C1C;color:#fff}
+.rp-words{grid-template-columns:minmax(0,1fr)}
+.rp-go{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.rp-chip{display:inline-block;border-radius:99px;padding:1px 9px;font-size:12px;font-weight:700;color:#fff}
+.rp-chip.rp-G{background:#15803D}.rp-chip.rp-A{background:#D97706}.rp-chip.rp-R{background:#B91C1C}
+.rp-log td{vertical-align:top}.rp-hl{max-width:340px;font-size:12.5px}
+@media (max-width:820px){.rp-auds{grid-template-columns:1fr}.rp-period{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}

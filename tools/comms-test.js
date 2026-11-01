@@ -74,7 +74,7 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     await p.goto(`${BASE}/admin/#projects`); await sleep(300);
     await p.goto(`${BASE}/admin/#plan/${core}/comms`); await p.waitForSelector('#cmGo');
     const tabs = await p.$$eval('#planTabs .tab', (a) => a.map((x) => x.textContent.trim()));
-    ok('Tab', '"📞 Comms" sits after Contracts, before SWMS', tabs.indexOf('📞 Comms') === tabs.indexOf('📜 Contracts') + 1 && tabs.indexOf('🦺 SWMS') === tabs.indexOf('📞 Comms') + 1, tabs.join(' | '));
+    ok('Tab', '"📞 Comms" sits after Contracts (then Reports, SWMS)', tabs.indexOf('📞 Comms') === tabs.indexOf('📜 Contracts') + 1 && tabs.indexOf('🦺 SWMS') === tabs.indexOf('📊 Reports') + 1, tabs.join(' | '));
     const plats = await p.$$eval('.cm-plat', (a) => a.map((x) => x.textContent));
     ok('Platforms', 'Google Meet, Microsoft Teams and Zoom; Zoom shows connected (API keys set), the others open the app', plats.length === 3 && /Google Meet/.test(plats[0]) && /Teams/.test(plats[1]) && /Zoom.*Connected/.test(plats[2]) && !/Connected/.test(plats[0] + plats[1]), plats.join(' / '));
     const who = await p.$$eval('[data-cmw]', (a) => a.map((x) => [x.getAttribute('data-cmw'), x.checked]));

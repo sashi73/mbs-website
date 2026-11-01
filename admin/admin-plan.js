@@ -957,7 +957,7 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['stake', '👥 Stakeholders'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['swms', '🦺 SWMS'], ['intel', '🧠 Project Intelligence']];
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['stake', '👥 Stakeholders'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['intel', '🧠 Project Intelligence']];
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>' +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
       '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote" title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
@@ -994,7 +994,7 @@
         p.baseline = { at: Date.now(), finish: R.finish, BAC: R.BAC, tasks: tasks }; saveNow('baseline set'); toast('Baseline set'); render();
       });
     };
-    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, swms: swmsTab, intel: intelTab }[S.tab] || scheduleTab)(R);
+    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, intel: intelTab }[S.tab] || scheduleTab)(R);
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
@@ -2357,6 +2357,263 @@
     var un = box.querySelector('[data-imundo]'); if (un) un.onclick = function () { fitUndo(); after(); };
   }
   function p0finishBy(R) { return S.plan.finishBy && R.finish && R.finish > S.plan.finishBy; }
+
+  /* ---------- v62: 📊 Reports: customer, team and all stakeholders; weekly or ad hoc; RAG; Gantt; Word/PDF; email; log ---------- */
+  var RAUD = {
+    customer: { name: 'Customer update', icon: '🏠', who: 'The customer', blurb: 'Plain-English progress: what was done, what is next and what it means for them, what we need from them, the milestones and a simple Gantt chart. No internal costs.',
+      asks: 'What we need from you', points: 'Highlights', next: 'Coming up (next 2 weeks)' },
+    team: { name: 'Team look-ahead', icon: '👷', who: 'Crew and trades', blurb: 'The next 2 weeks task by task: who does what and when, critical and late tasks, blockers, safety (SWMS) and a 3-week look-ahead Gantt chart.',
+      asks: 'Help needed / blockers to clear', points: 'This week\'s focus', next: 'Next steps' },
+    all: { name: 'Stakeholder status report', icon: '📣', who: 'All stakeholders', blurb: 'Executive summary with RAG for scope, time, cost, risks and issues, milestones, top risks and issues, decisions needed, meetings and the programme Gantt chart.',
+      asks: 'Decisions needed', points: 'Executive summary', next: 'Next steps' } };
+  var RAGW = { G: 'Green', A: 'Amber', R: 'Red' }, RORD = { G: 0, A: 1, R: 2 };
+  function repState() {
+    if (!S.rep || S.rep.core !== S.core) S.rep = { core: S.core, aud: 'customer', type: 'Weekly', to: today(), from: '', over: {}, words: null, rcp: null, guests: [], showCost: false, log: null, email: false, test: false, swms: undefined, id: '', message: '' };
+    var r = S.rep; if (!r.from) r.from = repFrom(r); return r;
+  }
+  function repFrom(r) {
+    if (r.type === 'Weekly') { var d = new Date(r.to + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 6); return d.toISOString().slice(0, 10); }
+    var last = (r.log || []).filter(function (e) { return e.audience === r.aud && e.to < r.to; }).sort(function (a, b) { return a.to < b.to ? 1 : -1; })[0];
+    if (last) { var d2 = new Date(last.to + 'T00:00:00Z'); d2.setUTCDate(d2.getUTCDate() + 1); return d2.toISOString().slice(0, 10); }
+    return S.plan.start || r.to;
+  }
+  function addDays(s, n) { var d = new Date(s + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function dLong(s) { return s ? new Date(s + 'T00:00:00Z').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }) : ''; }
+  function wdLeft(R) { var t = today(); return R.finish && R.finish >= t ? workBetween(t, R.finish) : 0; }
+  // what happened, what is next: the facts for one period
+  function repFacts(r) {
+    var p = S.plan, R = rollup(p, today()), t0 = today(), key = JSON.stringify(p.tasks.map(function (t) { return [t.id, t.dur, t.pred, t.snet, t.fixed]; })) + p.start + p.workStart + !!p.weekends + !!p.emergency, crit;
+    if (r.critKey === key) crit = r.crit; else { var C = cpm(p); crit = {}; Object.keys(C.tasks).forEach(function (id) { if (C.tasks[id].float === 0) crit[id] = 1; }); r.crit = crit; r.critKey = key; R = rollup(p, today()); }
+    var rows = ordered(), horizon = addDays(r.to, 14);
+    var done = rows.filter(function (x) { return x.t.dur > 0 && x.t.status === 'done' && x.t.ef >= r.from && x.t.ef <= r.to; });
+    var doing = rows.filter(function (x) { return x.t.status !== 'done' && x.t.es <= r.to && x.t.ef >= r.from && x.t.dur > 0; });
+    var next = rows.filter(function (x) { return x.t.status !== 'done' && x.t.es > r.to && x.t.es <= horizon; });
+    var late = rows.filter(function (x) { return x.t.pct < 100 && x.t.ef < t0; });
+    var miles = rows.filter(function (x) { return x.t.dur === 0; });
+    var risks = (p.risks || []).filter(function (x) { return x.status !== 'Closed' && x.title; }).sort(function (a, b) { return b.p * b.i - a.p * a.i; });
+    var issues = (p.issues || []).filter(function (x) { return x.status !== 'Resolved' && x.title; }).sort(function (a, b) { return ['Critical', 'High', 'Medium', 'Low'].indexOf(a.priority) - ['Critical', 'High', 'Medium', 'Low'].indexOf(b.priority); });
+    var meets = (p.meetings || []).filter(function (m) { return m.status !== 'Cancelled' && m.date >= t0 && m.date <= horizon; }).sort(function (a, b) { return (a.date + a.start).localeCompare(b.date + b.start); });
+    return { p: p, R: R, crit: crit, rows: rows, done: done, doing: doing, next: next, late: late, miles: miles, risks: risks, issues: issues, meets: meets, horizon: horizon };
+  }
+  function repRag(r, F) {
+    var p = F.p, R = F.R, tp = timePct(R), o = {};
+    var fb = p.finishBy || (p.baseline && p.baseline.finish) || '';
+    var time = R.finish && fb && R.finish > fb ? ['R', 'Forecast ' + dmy(R.finish) + ', after ' + (p.finishBy ? 'Finish by' : 'baseline') + ' ' + dmy(fb)]
+      : R.SPI != null && R.SPI < 0.85 ? ['R', 'Well behind plan (SPI ' + R.SPI + ')'] : (R.SPI != null && R.SPI < 0.95) || F.late.length ? ['A', F.late.length ? pl(F.late.length, 'task') + ' late' : 'Slightly behind (SPI ' + R.SPI + ')'] : ['G', 'On track for ' + dmy(R.finish)];
+    var ratio = tp ? R.pct / tp : 1, scope = ratio < 0.8 ? 'R' : ratio < 0.95 ? 'A' : 'G';
+    var cost = R.CPI == null ? ['G', 'No costs over budget'] : R.CPI < 0.9 ? ['R', 'Over budget (CPI ' + R.CPI + ')'] : R.CPI < 0.97 ? ['A', 'Watch costs (CPI ' + R.CPI + ')'] : ['G', 'Within budget (CPI ' + R.CPI + ')'];
+    var hiR = F.risks.filter(function (x) { return x.p * x.i >= 15; }).length, mdR = F.risks.filter(function (x) { return x.p * x.i >= 12; }).length;
+    var risk = hiR ? ['R', pl(hiR, 'high risk') + ' open'] : mdR ? ['A', pl(mdR, 'significant risk') + ' open'] : ['G', F.risks.length ? pl(F.risks.length, 'risk') + ', all under control' : 'No open risks'];
+    var crI = F.issues.filter(function (x) { return x.priority === 'Critical'; }).length, hiI = F.issues.filter(function (x) { return x.priority === 'High'; }).length;
+    var iss = crI ? ['R', pl(crI, 'critical issue')] : hiI ? ['A', pl(hiI, 'high-priority issue')] : ['G', F.issues.length ? pl(F.issues.length, 'issue') + ', none urgent' : 'No open issues'];
+    var sw = S.rep.swms, safety = sw === undefined ? ['A', 'Checking the SWMS…'] : !sw ? ['A', 'No SWMS yet'] : sw.status === 'Issued' ? ['G', 'SWMS v' + sw.version + ' issued'] : ['A', 'SWMS v' + sw.version + ' not issued yet'];
+    var set = function (k, label, v) { o[k] = { label: label, c: v[0], note: v[1] }; };
+    if (r.aud === 'customer') { set('time', 'Programme', time); set('scope', 'Progress', [scope, R.pct + '% done, ' + tp + '% of the time used']); set('risk', 'Risks & issues', RORD[risk[0]] >= RORD[iss[0]] ? risk : iss); }
+    else if (r.aud === 'team') { set('time', 'Programme', time); set('issues', 'Blockers', iss); set('safety', 'Safety', safety); }
+    else { set('scope', 'Scope', [scope, R.pct + '% done, ' + tp + '% of the time used']); set('time', 'Time', time); set('cost', 'Cost', cost); set('risk', 'Risks', risk); set('issues', 'Issues', iss); }
+    Object.keys(o).forEach(function (k) { var v = r.over[k]; if (v) { if (v.c) o[k].c = v.c; if (v.note != null) o[k].note = v.note; } });   // changed by hand
+    var worst = Object.keys(o).reduce(function (m, k) { return RORD[o[k].c] > RORD[m] ? o[k].c : m; }, 'G');
+    var bad = Object.keys(o).filter(function (k) { return o[k].c !== 'G'; }).map(function (k) { return o[k].label.toLowerCase(); });
+    var all = { overall: { label: 'Overall', c: worst, note: worst === 'G' ? 'On track' : (worst === 'R' ? 'Action needed: ' : 'Watch: ') + bad.join(', ') } };
+    Object.keys(o).forEach(function (k) { all[k] = o[k]; });
+    var ov = r.over.overall; if (ov) { if (ov.c) all.overall.c = ov.c; if (ov.note != null) all.overall.note = ov.note; }
+    return all;
+  }
+  function repWords(r, F, rag) {   // a first draft of the wording, from the facts (✨ the AI can rewrite it)
+    var R = F.R, nm = function (x) { return x.t.name; }, list = function (a, n) { return a.slice(0, n).map(nm).join(', ') + (a.length > n ? ' and ' + (a.length - n) + ' more' : ''); };
+    var ov = rag.overall.c, fin = dmy(R.finish), cust = (S.job.name || '').split(' ')[0];
+    var headline = ov === 'G' ? 'On track: ' + R.pct + '% complete and heading for completion on ' + fin + '.' : ov === 'A' ? R.pct + '% complete. A few things need watching (' + rag.overall.note.replace(/^Watch: /, '') + '); we are on it. Forecast completion ' + fin + '.' : 'Action needed: ' + rag.overall.note.replace(/^Action needed: /, '') + '. ' + R.pct + '% complete, forecast completion ' + fin + '.';
+    var pts = [], next = F.next.slice(0, 8).map(function (x) { return dLong(x.t.es) + ': ' + x.t.name + (r.aud === 'team' && x.t.resource ? ' (' + x.t.resource + ')' : '') + (x.t.dur ? ', ' + pl(x.t.dur, 'day') : ''); }), asks = [];
+    if (F.done.length) pts.push('Completed: ' + list(F.done, 5) + '.');
+    if (F.doing.length) pts.push('Under way: ' + list(F.doing, 4) + '.');
+    if (r.aud === 'customer') {
+      var mNext = F.miles.filter(function (x) { return x.t.pct < 100; })[0]; if (mNext) pts.push('Next milestone: ' + mNext.t.name.replace(/^[✓◆\s]+/, '') + ' on ' + dmy(mNext.t.es) + '.');
+      pts.push(R.finish ? 'Forecast completion: ' + fin + ' (' + pl(wdLeft(R), 'working day') + ' to go).' : '');
+      asks = F.issues.filter(function (x) { return /customer|client|owner/i.test(x.owner + ' ' + x.title) || (cust && x.owner.indexOf(cust) >= 0); }).map(function (x) { return x.title + (x.due ? ' (by ' + dmy(x.due) + ')' : ''); });
+    } else if (r.aud === 'team') {
+      var wk = F.rows.filter(function (x) { return x.t.status !== 'done' && x.t.es <= addDays(r.to, 7) && x.t.ef >= r.to; });
+      var critW = wk.filter(function (x) { return F.crit[x.t.id]; });
+      if (critW.length) pts.push('Critical this week (they set the finish date): ' + list(critW, 4) + '.');
+      if (F.late.length) pts.push('Late, catch up first: ' + F.late.slice(0, 4).map(function (x) { return '#' + x.n + ' ' + x.t.name; }).join(', ') + '.');
+      if (S.rep.swms && S.rep.swms.hrcw && S.rep.swms.hrcw.length) pts.push('Safety: read and sign the SWMS (v' + S.rep.swms.version + ') before high-risk work.');
+      asks = F.issues.filter(function (x) { return /High|Critical/.test(x.priority); }).map(function (x) { return x.title + (x.owner ? ' (' + x.owner + (x.due ? ', by ' + dmy(x.due) : '') + ')' : ''); });
+    } else {
+      Object.keys(rag).filter(function (k) { return k !== 'overall' && rag[k].c !== 'G'; }).forEach(function (k) { pts.push(rag[k].label + ' (' + RAGW[rag[k].c].toLowerCase() + '): ' + rag[k].note + '.'); });
+      if (F.risks[0]) pts.push('Top risk: ' + F.risks[0].title + ' (score ' + F.risks[0].p * F.risks[0].i + ').');
+      asks = F.issues.filter(function (x) { return /High|Critical/.test(x.priority); }).map(function (x) { return x.title + (x.due ? ' (by ' + dmy(x.due) + ')' : ''); })
+        .concat(F.risks.filter(function (x) { return x.p * x.i >= 15; }).map(function (x) { return 'Agree the response to "' + x.title + '"' + (x.action ? ': ' + x.action : ''); })).slice(0, 5);
+    }
+    return { headline: headline, points: pts.filter(Boolean), next: next, asks: asks };
+  }
+  function repRecipients(r) {   // who it goes to: the customer (from the job), stakeholders, guests
+    var sh = (S.plan.stakeholders || []).filter(function (x) { return /@/.test(x.email || ''); }), out = [];
+    if (/@/.test(S.job.email || '')) out.push({ id: 'job', name: S.job.name, role: 'Customer (from the job)', email: S.job.email, raci: 'A' });
+    sh.forEach(function (x) { if (!out.some(function (y) { return y.email.toLowerCase() === x.email.toLowerCase(); })) out.push({ id: x.id, name: x.name || x.role, role: x.role, email: x.email, raci: x.raci }); });
+    return out;
+  }
+  function repDefaultRcp(r, list) {
+    return list.filter(function (x) {
+      if (r.aud === 'customer') return x.id === 'job' || /customer|client|owner|sponsor/i.test(x.role);
+      if (r.aud === 'team') return x.raci === 'R' && !/customer|client|owner/i.test(x.role);
+      return true;
+    }).map(function (x) { return x.id; });
+  }
+  function repSnapshot(r) {
+    var F = repFacts(r), p = F.p, R = F.R, rag = repRag(r, F), w = r.words || (r.words = repWords(r, F, rag)), A = RAUD[r.aud];
+    var no = (r.log || []).filter(function (e) { return e.audience === r.aud && e.id !== r.id; }).length + 1;
+    if (!r.id) r.id = 'rp' + Date.now().toString(36);
+    var all = repRecipients(r), chosen = all.filter(function (x) { return r.rcp.indexOf(x.id) >= 0; }).map(function (x) { return { name: x.name, email: x.email }; }).concat(r.guests.map(function (e) { return { name: e, email: e }; }));
+    var st = function (t) { var late = t.pct < 100 && t.ef < today(); return late ? 'Late' : stName[t.status].replace(' / QA', ''); };
+    var milesRows = F.miles.map(function (x) { var t = x.t, late = t.pct < 100 && t.ef < today(); return [x.t.name.replace(/^[✓◆\s]+/, ''), dmy(t.es), { t: t.pct >= 100 ? 'Done' : late ? 'Late' : 'Coming', rag: t.pct >= 100 ? 'G' : late ? 'R' : undefined }]; });
+    var topRows = F.rows.filter(function (x) { return x.t.es; });
+    var g = { title: 'Task', from: addDays(R.start || r.from, -2), to: addDays(R.finish || r.to, 3), today: today(), rows: topRows.map(function (x) { var t = x.t; return { label: '#' + x.n + ' ' + t.name.replace(/^[✓◆\s]+/, ''), es: t.es, ef: t.ef, pct: t.pct, mile: t.dur === 0, crit: !!F.crit[t.id], late: t.pct < 100 && t.ef < today(), status: t.status, level: 1 }; }) };
+    var kpis, sections = [];
+    var pctRow = { label: 'Complete', value: R.pct + '%' };
+    if (r.aud === 'customer') {
+      kpis = [pctRow, { label: 'Started', value: dmy(R.start) }, { label: 'Forecast finish', value: dmy(R.finish) }, { label: p.finishBy ? 'Agreed finish' : 'Working days to go', value: p.finishBy ? dmy(p.finishBy) : String(wdLeft(R)) }];
+      sections = [{ kind: 'bullets', title: A.points, items: w.points }, { kind: 'gantt', title: 'Where we are: the programme' }, { kind: 'table', title: 'Milestones', head: ['Milestone', 'Date', 'Status'], rows: milesRows, wordCols: [6, 2, 2], cols: { 1: { cellWidth: 28 }, 2: { cellWidth: 24 } } },
+        { kind: 'bullets', title: A.next, items: w.next, always: true, empty: 'Nothing new starts in the next two weeks.' }, { kind: 'bullets', title: A.asks, items: w.asks, box: true, always: true, empty: 'Nothing needed from you right now. Thank you!' }];
+    } else if (r.aud === 'team') {
+      var win0 = addDays(r.to, -3), win1 = addDays(r.to, 21), look = F.rows.filter(function (x) { return x.t.es && x.t.status !== 'done' && x.t.es <= F.horizon && x.t.ef >= r.to; });
+      g = { title: 'Task (3-week look-ahead)', from: win0, to: win1, today: today(), rows: [] };
+      F.rows.forEach(function (x) { var t = x.t; if (!t.es || t.ef < win0 || t.es > win1) return; g.rows.push({ label: '#' + x.n + ' ' + t.name.replace(/^[✓◆\s]+/, '') + (t.resource ? ' · ' + t.resource : ''), es: t.es, ef: t.ef, pct: t.pct, mile: t.dur === 0, crit: !!F.crit[t.id], late: t.pct < 100 && t.ef < today(), status: t.status, level: 1 });
+        (t.subs || []).forEach(function (sb) { var d = subDates(t, sb); if (d.ef < win0 || d.es > win1) return; g.rows.push({ label: sb.name + (sb.owner ? ' · ' + sb.owner : ''), es: d.es, ef: d.ef, pct: stPct[sb.status], status: sb.status, level: 2 }); }); });
+      kpis = [pctRow, { label: 'Tasks next 2 weeks', value: String(look.length) }, { label: 'Late tasks', value: String(F.late.length) }, { label: 'Critical next 2 weeks', value: String(look.filter(function (x) { return F.crit[x.t.id]; }).length) }, { label: 'Open issues', value: String(F.issues.length) }];
+      var sw = S.rep.swms, safety = sw ? ['SWMS version ' + sw.version + ' (' + sw.status + '): ' + sw.steps + ' job steps. Read and sign it before starting high-risk work.'] : ['No SWMS yet for this job: write it on the 🦺 SWMS tab before high-risk work starts.'];
+      if (sw && sw.hrcw.length) safety.push('High-risk work on this job: ' + sw.hrcw.join('; ') + '.');
+      safety.push('Toolbox talk: go over this week\'s tasks, the hazards and who does what before starting.');
+      sections = [{ kind: 'bullets', title: A.points, items: w.points }, { kind: 'table', title: 'Look-ahead: the next 2 weeks', head: ['#', 'Task', 'Who', 'Start', 'Finish', 'Status', 'Critical'], wordCols: [1, 6, 4, 2, 2, 2, 2],
+          rows: look.map(function (x) { var t = x.t; return [String(x.n), { t: t.name, b: !!F.crit[t.id] }, t.resource || 'Not assigned', dmy(t.es), dmy(t.ef), { t: st(t), rag: st(t) === 'Late' ? 'R' : undefined }, F.crit[t.id] ? { t: 'Yes', rag: 'A' } : '']; }),
+          cols: { 0: { cellWidth: 9 }, 3: { cellWidth: 20 }, 4: { cellWidth: 20 }, 5: { cellWidth: 20 }, 6: { cellWidth: 16 } }, always: true, empty: 'Nothing scheduled in the next two weeks.' },
+        { kind: 'gantt', title: '3-week look-ahead' },
+        { kind: 'table', title: 'Late: catch up first', head: ['#', 'Task', 'Who', 'Was due', '% done'], wordCols: [1, 6, 4, 2, 2], rows: F.late.map(function (x) { return [String(x.n), x.t.name, x.t.resource || 'Not assigned', { t: dmy(x.t.ef), rag: 'R' }, x.t.pct + '%']; }), cols: { 0: { cellWidth: 9 }, 3: { cellWidth: 22 }, 4: { cellWidth: 16 } } },
+        { kind: 'table', title: 'Blockers and open issues', head: ['Issue', 'Priority', 'Owner', 'Due'], wordCols: [6, 2, 3, 2], rows: F.issues.map(function (x) { return [x.title, { t: x.priority, rag: x.priority === 'Critical' ? 'R' : x.priority === 'High' ? 'A' : undefined }, x.owner, dmy(x.due)]; }), cols: { 1: { cellWidth: 20 }, 3: { cellWidth: 22 } } },
+        { kind: 'bullets', title: '🦺 Safety'.replace('🦺 ', ''), items: safety }, { kind: 'bullets', title: A.asks, items: w.asks, box: true }];
+    } else {
+      kpis = [pctRow, { label: 'Forecast finish', value: dmy(R.finish) }, { label: p.finishBy ? 'Finish by' : 'Baseline finish', value: dmy(p.finishBy || (p.baseline && p.baseline.finish)) || 'Not set' }, { label: 'SPI (time)', value: R.SPI == null ? 'n/a' : String(R.SPI) }];
+      if (r.showCost) kpis = kpis.concat([{ label: 'Budget', value: money(R.BAC) }, { label: 'Spent', value: money(R.AC) }, { label: 'CPI (cost)', value: R.CPI == null ? 'n/a' : String(R.CPI) }]);
+      else kpis.push({ label: 'Open risks / issues', value: F.risks.length + ' / ' + F.issues.length });
+      sections = [{ kind: 'bullets', title: A.points, items: w.points }, { kind: 'gantt', title: 'Programme' }, { kind: 'table', title: 'Milestones', head: ['Milestone', 'Date', 'Status'], rows: milesRows, wordCols: [6, 2, 2], cols: { 1: { cellWidth: 28 }, 2: { cellWidth: 24 } } },
+        { kind: 'table', title: 'Top risks', head: ['Risk', 'Score', 'Response and action', 'Owner'], wordCols: [4, 1, 5, 2], rows: F.risks.map(function (x) { var sc = x.p * x.i; return [x.title, { t: String(sc), rag: sc >= 15 ? 'R' : sc >= 12 ? 'A' : 'G' }, x.response + (x.action ? ': ' + x.action : ''), x.owner]; }), cols: { 1: { cellWidth: 14, halign: 'center' }, 3: { cellWidth: 28 } } },
+        { kind: 'table', title: 'Open issues', head: ['Issue', 'Priority', 'Owner', 'Due'], wordCols: [6, 2, 3, 2], rows: F.issues.map(function (x) { return [x.title, { t: x.priority, rag: x.priority === 'Critical' ? 'R' : x.priority === 'High' ? 'A' : undefined }, x.owner, dmy(x.due)]; }), cols: { 1: { cellWidth: 20 }, 3: { cellWidth: 22 } } },
+        { kind: 'bullets', title: A.next, items: w.next }, { kind: 'bullets', title: A.asks, items: w.asks, box: true, always: true, empty: 'No decisions needed this period.' },
+        { kind: 'table', title: 'Coming meetings', head: ['When', 'Meeting', 'Platform'], wordCols: [3, 6, 2], rows: F.meets.map(function (m) { return [dmy(m.date) + ' ' + m.start, m.title, PLAT[m.platform || 'google'][0]]; }), cols: { 0: { cellWidth: 32 }, 2: { cellWidth: 32 } } }];
+    }
+    var nameSafe = (S.job.ref + '-' + A.name.replace(/\s+/g, '-') + '-' + r.to).replace(/[^\w.-]+/g, '');
+    return { id: r.id, no: no, audience: r.aud, type: r.type, from: r.from, to: r.to, periodText: dmy(r.from) + ' to ' + dmy(r.to), date: today(), title: A.name,
+      project: { name: p.name, ref: S.job.ref, client: S.job.name, manager: (p.charter || {}).manager || '' }, rag: rag, headline: w.headline, points: w.points, next: w.next, asks: w.asks, kpis: kpis, gantt: g, sections: sections,
+      recipients: chosen, fileBase: nameSafe };
+  }
+  function reportsTab() {
+    var B = $('#planBody'), r = repState(), A = RAUD[r.aud];
+    if (r.log === null) { B.innerHTML = '<div class="empty">Loading reports…</div>'; var core = S.core;
+      Promise.all([api('reportLog', { core: core }), api('swmsGet', { core: core }).catch(function () { return {}; })]).then(function (x) {
+        if (S.core !== core) return; r.log = x[0].list || []; r.email = !!x[0].email; r.test = !!x[0].test;
+        var H = {}; (x[1].hrcw || []).forEach(function (h) { H[h[0]] = h[1]; }); var sw = x[1].swms; r.swms = sw ? { version: sw.version, status: sw.status, steps: sw.steps.length, hrcw: sw.hrcw.map(function (k) { return H[k] || k; }) } : null;
+        r.from = repFrom(r); if (S.tab === 'reports') reportsTab(); }).catch(fail); return; }
+    var list = repRecipients(r); if (!r.rcp) r.rcp = repDefaultRcp(r, list);
+    var s = repSnapshot(r), rag = s.rag, w = r.words;
+    var card = function (k) { var a = RAUD[k], last = (r.log || []).filter(function (e) { return e.audience === k; }).slice(-1)[0]; return '<button type="button" class="rp-aud' + (r.aud === k ? ' on' : '') + '" data-aud="' + k + '"><b>' + a.icon + ' ' + a.name + '</b><small>' + a.who + ' · ' + (last ? 'last #' + last.no + ' on ' + dmy(new Date(last.at + 11 * 3600e3).toISOString().slice(0, 10)) : 'none sent yet') + '</small></button>'; };
+    var ragBox = '<div class="rp-rag">' + Object.keys(rag).map(function (k) { var x = rag[k]; return '<div class="rp-r rp-' + x.c + '"><b>' + esc(x.label) + '</b><select data-rg="' + k + '" title="Automatic from the plan: change it if you know better">' + ['G', 'A', 'R'].map(function (c) { return '<option value="' + c + '"' + (x.c === c ? ' selected' : '') + '>' + RAGW[c] + '</option>'; }).join('') + '</select><input data-rn="' + k + '" value="' + esc(x.note) + '" maxlength="140"></div>'; }).join('') + '</div>';
+    var ta = function (k, label, rows, ph) { var v = Array.isArray(w[k]) ? w[k].join('\n') : w[k]; return '<label class="full">' + label + '<textarea data-rw="' + k + '" rows="' + rows + '" placeholder="' + esc(ph || '') + '">' + esc(v) + '</textarea></label>'; };
+    var logRows = (r.log || []).slice().reverse().map(function (e) { var a = RAUD[e.audience] || RAUD.all; return '<tr data-rid="' + esc(e.id) + '"><td class="nowrap">' + esc(new Date(e.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + '</td><td class="nowrap">' + a.icon + ' ' + esc(a.name) + ' <b>#' + e.no + '</b></td><td>' + esc(e.type) + '<br><small class="muted">' + esc(dmy(e.from)) + ' – ' + esc(dmy(e.to)) + '</small></td>' +
+      '<td><span class="rp-chip rp-' + e.overall + '">' + RAGW[e.overall] + '</span></td><td class="rp-hl">' + esc(e.headline) + '</td><td title="' + esc(e.recipients.map(function (x) { return x.name + ' <' + x.email + '>'; }).join(', ')) + '">' + (e.recipients.length ? pl(e.recipients.length, 'person', 'people').replace(/persons$/, 'people') : '<span class="muted">–</span>') + '</td>' +
+      '<td>' + (e.emailed ? '<span class="cm-ok">✉ Emailed</span>' : '<span class="muted">' + esc(e.action) + '</span>') + '</td><td class="nowrap acts"><button class="btn btn-sm" data-rdl="pdf">⬇ PDF</button><button class="btn btn-sm" data-rdl="docx">⬇ Word</button><button class="btn btn-sm" data-rdel title="Delete">✕</button></td></tr>'; }).join('');
+    B.innerHTML = '<div class="rp-wrap"><div class="card"><div class="card-h"><h2>📊 Project reports</h2><span class="sp"></span>' + (r.id && (r.log || []).some(function (e) { return e.id === r.id; }) ? '<button class="btn btn-sm" id="rpNew" type="button">＋ New report</button>' : '') + '</div>' +
+      '<p class="muted" style="margin:-4px 0 10px">One plan, three messages: each report says what matters to its readers, with a RAG status, the Gantt chart and the next steps, in at most 3 pages. Download it as Word or PDF, or email it; every report is kept in the log below.</p>' +
+      '<div class="rp-auds">' + ['customer', 'team', 'all'].map(card).join('') + '</div><p class="rp-blurb">' + esc(A.blurb) + '</p>' +
+      '<div class="form rp-period"><label>Report<select id="rpType"><option' + (r.type === 'Weekly' ? ' selected' : '') + '>Weekly</option><option' + (r.type === 'Ad hoc' ? ' selected' : '') + '>Ad hoc</option></select></label><label>From<input type="date" id="rpFrom" value="' + esc(r.from) + '"></label><label>To<input type="date" id="rpTo" value="' + esc(r.to) + '"></label>' +
+        (r.aud === 'all' ? '<label class="qchk" style="align-self:end"><input type="checkbox" id="rpCost"' + (r.showCost ? ' checked' : '') + '> Show $ amounts (budget, spent)</label>' : '<span></span>') + '</div>' +
+      '<h3 class="rp-h">Status (RAG) <small class="muted">worked out from the plan; change it if you know better</small></h3>' + ragBox +
+      '<h3 class="rp-h">The message <small class="muted">a first draft from the plan: edit it, or let the AI write it for ' + esc(A.who.toLowerCase()) + '</small><span class="sp"></span><button class="btn btn-sm btn-gold" id="rpAi" type="button">' + (r.aiBusy ? 'Writing…' : '✨ Write it with AI') + '</button><button class="btn btn-sm" id="rpRedo" type="button" title="Back to the draft from the plan">↺ Draft from the plan</button></h3>' +
+      '<div class="form rp-words">' + ta('headline', 'Headline', 2) + ta('points', A.points + ' (one per line)', 5) + ta('next', A.next + ' (one per line)', 4) + ta('asks', A.asks + ' (one per line)', 3, r.aud === 'customer' ? 'e.g. Choose the splashback tiles by Friday' : '') + '</div>' +
+      '<h3 class="rp-h">Who gets it <small class="muted">from the Stakeholder register' + (r.aud === 'all' ? ': everyone by default' : '') + '</small></h3>' +
+      (list.length ? '<div class="cm-who">' + list.map(function (x) { return '<label class="sc-cb"><input type="checkbox" data-rr="' + esc(x.id) + '"' + (r.rcp.indexOf(x.id) >= 0 ? ' checked' : '') + '> <span><b>' + esc(x.name) + '</b>' + (x.raci ? ' <span class="raci raci-' + x.raci + '">' + x.raci + '</span>' : '') + '<br><small class="muted">' + esc(x.role) + ' · ' + esc(x.email) + '</small></span></label>'; }).join('') + '</div>' : '<p class="muted">Nobody with an email yet: add people on the 👥 Stakeholders tab, or type an email below.</p>') +
+      '<div class="inline-form" style="margin-top:8px"><input type="email" id="rpGuest" placeholder="Someone else? name@company.com.au"><button class="btn btn-sm" id="rpGuestAdd" type="button">＋ Add</button></div>' +
+      (r.guests.length ? '<div class="cm-guests">' + r.guests.map(function (e, i) { return '<div class="cm-guest"><span>✉ ' + esc(e) + '</span><span class="cm-gnote">Not in the Stakeholder register</span><span class="sp"></span><button class="btn btn-sm btn-gold" data-rpreg="' + i + '" type="button">＋ Add to Stakeholders</button><button class="btn btn-sm" data-rpgx="' + i + '" type="button">✕</button></div>'; }).join('') + '</div><p class="sk-warn" style="margin:8px 0 0">💡 Best to add them to the Stakeholder register so it stays a true record of who is involved.</p>' : '') +
+      '<div class="rp-go"><button class="btn" id="rpPrev" type="button">👁 Preview</button><button class="btn" id="rpPdf" type="button">⬇ PDF</button><button class="btn" id="rpDocx" type="button">⬇ Word</button>' +
+        '<button class="btn btn-gold" id="rpSend" type="button">✉ ' + (r.email ? 'Email it to ' + (s.recipients.length === 1 ? '1 person' : s.recipients.length + ' people') : 'Email it') + '</button><span class="muted" id="rpMsg" style="font-size:12.5px"></span></div>' +
+      (r.email ? (r.test ? '<p class="muted" style="font-size:12px;margin:6px 0 0">🧪 Test site: emails go to the owner only, marked [TEST], with the names they would have gone to.</p>' : '') : '<p class="muted" style="font-size:12px;margin:6px 0 0">Email sending is not set up (RESEND_API_KEY), so ✉ opens your email app with the summary: attach the PDF you download.</p>') + '</div>' +
+      '<div class="card"><div class="card-h"><h2>🗂 Report log</h2><span class="sp"></span><span class="muted">' + pl((r.log || []).length, 'report') + '</span></div>' +
+        ((r.log || []).length ? '<div class="table-wrap"><table class="pi-tbl rp-log"><thead><tr><th>When</th><th>Report</th><th>Type / period</th><th>RAG</th><th>Headline</th><th>To</th><th>How</th><th></th></tr></thead><tbody>' + logRows + '</tbody></table></div>' : '<div class="empty">No reports yet. Every report you download or email is kept here.</div>') + '</div></div>';
+    reportsWire(B, r, list);
+  }
+  function reportsWire(B, r, list) {
+    var redraw = function () { reportsTab(); };
+    B.querySelectorAll('[data-aud]').forEach(function (b) { b.onclick = function () { var k = b.getAttribute('data-aud'); if (k === r.aud) return; r.aud = k; r.words = null; r.over = {}; r.rcp = null; r.guests = []; r.id = ''; r.from = repFrom(r); redraw(); }; });
+    $('#rpType').onchange = function () { r.type = this.value; r.from = repFrom(r); r.words = null; r.id = ''; redraw(); };
+    $('#rpFrom').onchange = function () { if (this.value) { r.from = this.value; r.words = null; r.id = ''; redraw(); } };
+    $('#rpTo').onchange = function () { if (this.value) { r.to = this.value; if (r.type === 'Weekly') r.from = repFrom(r); r.words = null; r.id = ''; redraw(); } };
+    var c = $('#rpCost'); if (c) c.onchange = function () { r.showCost = this.checked; redraw(); };
+    B.querySelectorAll('[data-rg]').forEach(function (el) { el.onchange = function () { var k = el.getAttribute('data-rg'); (r.over[k] = r.over[k] || {}).c = el.value; redraw(); }; });
+    B.querySelectorAll('[data-rn]').forEach(function (el) { el.oninput = function () { var k = el.getAttribute('data-rn'); (r.over[k] = r.over[k] || {}).note = el.value; }; });
+    B.querySelectorAll('[data-rw]').forEach(function (el) { el.oninput = function () { var k = el.getAttribute('data-rw'); r.words[k] = k === 'headline' ? el.value : el.value.split('\n').map(function (x) { return x.replace(/^[-•*]\s*/, '').trim(); }).filter(Boolean); }; });
+    $('#rpRedo').onclick = function () { r.words = null; redraw(); toast('Back to the draft from the plan'); };
+    $('#rpAi').onclick = function () { repAi(r); };
+    B.querySelectorAll('[data-rr]').forEach(function (el) { el.onchange = function () { var id = el.getAttribute('data-rr'); r.rcp = r.rcp.filter(function (x) { return x !== id; }); if (el.checked) r.rcp.push(id); redraw(); }; });
+    var addG = function () { var e = $('#rpGuest').value.trim().toLowerCase(); if (!/^[^\s@<>,;]+@[^\s@<>,;]+\.[a-z]{2,}$/i.test(e)) return toast('Type a full email address', true);
+      var hit = list.filter(function (x) { return x.email.toLowerCase() === e; })[0]; if (hit) { if (r.rcp.indexOf(hit.id) < 0) r.rcp.push(hit.id); toast(hit.name + ' is already on the list: ticked'); redraw(); return; }
+      if (r.guests.indexOf(e) < 0) r.guests.push(e); redraw(); };
+    $('#rpGuestAdd').onclick = addG; $('#rpGuest').onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); addG(); } };
+    B.querySelectorAll('[data-rpgx]').forEach(function (b) { b.onclick = function () { r.guests.splice(+b.getAttribute('data-rpgx'), 1); redraw(); }; });
+    B.querySelectorAll('[data-rpreg]').forEach(function (b) { b.onclick = function () { var e = r.guests[+b.getAttribute('data-rpreg')]; cmRegister(e, function (st) { r.guests = r.guests.filter(function (x) { return x !== e; }); r.rcp.push(st.id); redraw(); }); }; });
+    var nw = $('#rpNew'); if (nw) nw.onclick = function () { r.id = ''; r.words = null; r.over = {}; r.to = today(); r.from = repFrom(r); redraw(); };
+    var msg = function (t) { var m = $('#rpMsg'); if (m) m.innerHTML = t ? '<span class="ask-think">' + esc(t) + '</span>' : ''; };
+    var busy = false, run = function (fn) { if (busy) return; busy = true; return fn().catch(fail).then(function () { busy = false; msg(''); }); };
+    var logIt = function (s, how) { return api('reportKeep', { core: S.core, report: s, how: how }).then(function (d) { var i = r.log.map(function (e) { return e.id; }).indexOf(d.entry.id); if (i >= 0) r.log[i] = d.entry; else r.log.push(d.entry); }); };
+    $('#rpPrev').onclick = function () { var win = window.open('', '_blank'); run(function () { msg('Making the PDF…'); var s = repSnapshot(r); return M.report.pdf(s).then(function (o) { var u = URL.createObjectURL(o.blob); if (win) win.location = u; else M.report.save(o.blob, o.name); toast(pl(o.pages, 'page')); }); }); };
+    $('#rpPdf').onclick = function () { run(function () { msg('Making the PDF…'); var s = repSnapshot(r); return M.report.pdf(s).then(function (o) { M.report.save(o.blob, o.name); return logIt(s, 'PDF downloaded'); }).then(redraw); }); };
+    $('#rpDocx').onclick = function () { run(function () { msg('Making the Word file…'); var s = repSnapshot(r); return M.report.docx(s).then(function (o) { M.report.save(o.blob, o.name); return logIt(s, 'Word downloaded'); }).then(redraw); }); };
+    $('#rpSend').onclick = function () {
+      var s = repSnapshot(r);
+      if (!s.recipients.length) return toast('Tick who the report goes to', true);
+      if (!r.email) {   // no email set up: the email app, with the summary; attach the PDF
+        var body = (s.headline + '\n\n' + s.points.map(function (x) { return '- ' + x; }).join('\n') + (s.next.length ? '\n\nNext:\n' + s.next.map(function (x) { return '- ' + x; }).join('\n') : '') + '\n\nThe full report is attached.\n\nRegards');
+        location.href = 'mailto:' + s.recipients.map(function (x) { return x.email; }).join(',') + '?subject=' + encodeURIComponent(s.title + ': ' + s.project.name + ' (' + s.periodText + ')') + '&body=' + encodeURIComponent(body);
+        return run(function () { return M.report.pdf(s).then(function (o) { M.report.save(o.blob, o.name); return logIt(s, 'Email drafted'); }).then(redraw); });
+      }
+      M.modal('<h2>✉ Email the ' + esc(s.title.toLowerCase()) + '</h2><p class="muted" style="margin:4px 0 8px">To ' + esc(s.recipients.map(function (x) { return x.name === x.email ? x.email : x.name; }).join(', ')) + '. The email shows the RAG status, the headline and the key points; the full report is attached.</p>' +
+        '<div class="form"><label class="full">Subject<input id="rsSubj" value="' + esc(s.title + ': ' + s.project.name + ' (' + s.periodText + ')') + '"></label><label class="full">Message (optional)<textarea id="rsMsg" rows="3" placeholder="Hi all, here is this week\'s update.">' + esc(r.message || '') + '</textarea></label>' +
+        '<label class="qchk full"><input type="checkbox" id="rsPdf" checked> Attach the PDF</label><label class="qchk full"><input type="checkbox" id="rsDocx"> Attach the Word file too</label></div>' +
+        '<div class="actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="rsGo" type="button">✉ Send</button></div>');
+      $('#rsGo').onclick = function () {
+        var go = $('#rsGo'), subj = $('#rsSubj').value, mess = $('#rsMsg').value, wantPdf = $('#rsPdf').checked, wantDoc = $('#rsDocx').checked; r.message = mess;
+        if (!wantPdf && !wantDoc) return toast('Attach the PDF or the Word file', true);
+        go.disabled = true; go.textContent = 'Sending…';
+        M.report.pdf(s).then(function (pdf) { return (wantDoc ? M.report.docx(s) : Promise.resolve(null)).then(function (doc) {
+          return api('reportSend', { core: S.core, report: s, subject: subj, message: mess, pdf: wantPdf ? pdf.base64 : '', pdfName: pdf.name, docx: doc ? doc.base64 : '', docxName: doc ? doc.name : '' }); }); })
+          .then(function (d) { M.closeModal(); var i = r.log.map(function (e) { return e.id; }).indexOf(d.entry.id); if (i >= 0) r.log[i] = d.entry; else r.log.push(d.entry); toast(d.test ? 'Sent to you only (test site), marked [TEST]' : 'Emailed to ' + pl(s.recipients.length, 'person', 'people').replace(/persons$/, 'people')); redraw(); })
+          .catch(function (e) { go.disabled = false; go.textContent = '✉ Send'; fail(e); });
+      };
+    };
+    B.querySelectorAll('tr[data-rid]').forEach(function (tr) {
+      var id = tr.getAttribute('data-rid');
+      tr.querySelectorAll('[data-rdl]').forEach(function (b) { b.onclick = function () { var f = b.getAttribute('data-rdl'); api('reportGet', { core: S.core, id: id }).then(function (d) { return M.report[f](d.report); }).then(function (o) { M.report.save(o.blob, o.name); }).catch(fail); }; });
+      tr.querySelector('[data-rdel]').onclick = function () { M.confirmBox('Delete this report from the log?', 'It can\'t be downloaded again afterwards. Emails already sent are not affected.', 'Delete', true).then(function (y) { if (!y) return; api('reportDelete', { core: S.core, id: id }).then(function () { r.log = r.log.filter(function (e) { return e.id !== id; }); if (r.id === id) r.id = ''; redraw(); }).catch(fail); }); };
+    });
+  }
+  function repAi(r) {
+    if (r.aiBusy) return;
+    var s = repSnapshot(r), core = S.core;
+    var facts = { audience: r.aud === 'customer' ? 'CUSTOMER' : r.aud === 'team' ? 'TEAM' : 'ALL STAKEHOLDERS', report: s.type, period: s.periodText, project: s.project.name, today: today(),
+      rag: Object.keys(s.rag).map(function (k) { return s.rag[k].label + ': ' + RAGW[s.rag[k].c] + ' (' + s.rag[k].note + ')'; }), kpis: s.kpis.map(function (k) { return k.label + ': ' + k.value; }),
+      draft: { headline: s.headline, points: s.points, next: s.next, asks: s.asks },
+      tables: s.sections.filter(function (x) { return x.kind === 'table'; }).map(function (x) { return { title: x.title, head: x.head, rows: x.rows.slice(0, 12).map(function (row) { return row.map(function (c) { return c && c.t != null ? c.t : c; }); }) }; }) };
+    if (r.aud === 'customer') delete facts.tables;   // no internal detail for the customer
+    r.aiBusy = true; reportsTab();
+    var id = Array.from(crypto.getRandomValues(new Uint8Array(10))).map(function (b) { return b.toString(16).padStart(2, '0'); }).join(''), t0 = Date.now();
+    var end = function () { r.aiBusy = false; if (S.tab === 'reports' && S.core === core) reportsTab(); };
+    var poll = function () {
+      if (Date.now() - t0 > 180000) { end(); return toast('The AI took too long. Try again.', true); }
+      return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
+        if (d.status === 'done') { var x = d.words; r.words = { headline: x.headline || s.headline, points: x.points.length ? x.points : s.points, next: x.next.length ? x.next : s.next, asks: x.asks.length ? x.asks : s.asks }; end(); toast('Written for ' + RAUD[r.aud].who.toLowerCase() + ': check it, then download or email'); return; }
+        if (d.status === 'error') { end(); return toast(d.error || 'The AI could not write it', true); }
+        return poll();
+      });
+    };
+    fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ mode: 'report', id: id, core: core, facts: facts }) })
+      .then(function (x) { if (x.status >= 400) throw new Error('Could not start the AI (' + x.status + ')'); return poll(); }).catch(function (e) { end(); fail(e); });
+  }
 
   /* ---------- v52: 🧠 Project Intelligence ---------- */
   // Ask anything about this project. The AI answers from the plan and the documents uploaded here (contract, specs ...),

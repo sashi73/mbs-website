@@ -7,6 +7,7 @@ import { buildAiPlan, fitPlanAi } from '../lib/plan.mjs';
 import * as INTEL from '../lib/plan-intel.mjs';
 import * as SWMS from '../lib/swms.mjs';
 import * as COMMS from '../lib/comms.mjs';
+import * as REPORTS from '../lib/reports.mjs';
 
 const ok = () => new Response('', { status: 202 });
 export default async (req) => {
@@ -24,6 +25,11 @@ export default async (req) => {
       const r = await SWMS.generate({ core: body.core }, `Admin (${session.u})`);
       await kv.set('aiplan:' + id, { swms: r.swms ? true : false, error: r.error, tokens: r.tokens, cutOff: r.cutOff, status: r.error ? 'error' : 'done', at: Date.now() });
       if (!r.error) await A.audit(session.u, `AI wrote the SWMS for ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
+      return ok();
+    }
+    if (body.mode === 'report') {   // v62: ✨ the wording of a report, for its audience
+      const r = await REPORTS.write({ core: body.core, facts: body.facts }, `Admin (${session.u})`);
+      await kv.set('aiplan:' + id, { words: r.error ? null : r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
       return ok();
     }
     if (body.mode === 'meet') {   // v60: 📞 what a meeting transcript means for the plan
