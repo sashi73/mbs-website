@@ -1,4 +1,4 @@
-// v64: the Board remodelled: owner (from the Stakeholder register), priority, story points, filters and sorting, 4 columns that fit a laptop.
+// v65: the Board as themes (tasks) with user stories (sub-tasks): owner picker, H/M/L, Fibonacci points adding up to the theme, RAG cards, ＋ story, filters, fits a laptop.
 // Checks the rows, sub-tasks, links (Predecessors), milestones, dates, and that no costs are exported. Real Blobs, Chromium.
 // node gantt-export-test.js <site> [folder with node_modules/exceljs]
 const { chromium } = require('playwright');
@@ -42,47 +42,69 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     await p.goto(`${BASE}/admin/#plan/${core}`); await p.waitForSelector('#tplType'); await p.selectOption('#tplType', 'kitchen-reno'); await p.click('#tplCreate'); await p.waitForSelector('table.gt'); await sleep(1200);
     const pl0 = await P.get(core);
     pl0.stakeholders = [{ id: 's1', name: 'Bea Board', role: 'Customer', raci: 'A' }, { id: 's2', name: 'Sam Sparky', role: 'Electrician', raci: 'R' }, { id: 's3', name: 'Tina Tiler', role: 'Tiler', raci: 'R' }];
+    const d = new Date(); d.setDate(d.getDate() - 12); pl0.start = d.toISOString().slice(0, 10); pl0.emergency = true;   // started 12 days ago: some work is late
     await P.save(core, pl0, pl0.rev, 'test');
     await p.goto(`${BASE}/admin/#projects`); await sleep(300);
-    await p.goto(`${BASE}/admin/#plan/${core}/board`); await p.waitForSelector('.kcard'); await sleep(300);
+    await p.goto(`${BASE}/admin/#plan/${core}/board`); await p.waitForSelector('.kcard'); await sleep(900);
     const cols = await p.$$eval('.kcol', (a) => a.map((x) => Math.round(x.getBoundingClientRect().width)));
     const tops = await p.$$eval('.kcol', (a) => a.map((x) => Math.round(x.getBoundingClientRect().top)));
     ok('Fit', 'on a 14" laptop (1366 wide, menu open) the 4 columns sit side by side, no sideways scrolling', cols.length === 4 && new Set(tops).size === 1 && Math.min(...cols) >= 200 && await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), cols.join(',') + ' / ' + tops.join(','));
-    await sleep(800); const colBottom = await p.$eval('.kcol-todo .kcards', (e) => e.getBoundingClientRect().bottom);
-    ok('Fit', 'each column scrolls on its own, so the board fits the screen height', colBottom <= 768 + 2 && await p.$eval('.kcol-todo .kcards', (e) => e.scrollHeight > e.clientHeight), String(colBottom));
-    ok('Card', 'every card has Owner (from the Stakeholder register), Priority and Points', (await p.$$eval('.kcard', (a) => a.every((c) => c.querySelector('[data-kf=owner]') && c.querySelector('[data-kf=priority]') && c.querySelector('[data-kf=points]')))) &&
-      (await p.$$eval('.kcard:first-child [data-kf=owner] option', (o) => o.map((x) => x.textContent))).join() === 'Owner…,Bea Board,Sam Sparky,Tina Tiler' && (await p.$$eval('.kcard:first-child [data-kf=priority] option', (o) => o.map((x) => x.textContent))).join() === 'Prio,High,Med,Low');
-    const card = (n) => `.kcard:nth-child(${n})`;
-    const id1 = await p.getAttribute(card(1), 'data-tid'), id2 = await p.getAttribute(card(2), 'data-tid'), id3 = await p.getAttribute(card(3), 'data-tid');
-    await p.selectOption(`[data-tid="${id1}"] [data-kf=owner]`, 's2'); await p.selectOption(`[data-tid="${id1}"] [data-kf=priority]`, 'High'); await p.selectOption(`[data-tid="${id1}"] [data-kf=points]`, '5');
-    await p.selectOption(`[data-tid="${id2}"] [data-kf=owner]`, 's3'); await p.selectOption(`[data-tid="${id2}"] [data-kf=priority]`, 'Low'); await p.selectOption(`[data-tid="${id2}"] [data-kf=points]`, '8');
-    await p.selectOption(`[data-tid="${id3}"] [data-kf=priority]`, 'Medium'); await p.selectOption(`[data-tid="${id3}"] [data-kf=points]`, '2');
-    const c1 = await p.textContent(`[data-tid="${id1}"]`);
-    ok('Card', 'the card shows the owner\'s initials, a High chip and "5 pts", with a red edge', (await p.textContent(`[data-tid="${id1}"] .kav`)) === 'SS' && /High/.test(c1) && /5 pts/.test(c1) && (await p.getAttribute(`[data-tid="${id1}"]`, 'class')).includes('kp-high'));
-    ok('Points', 'the column and the board add up the points (15 to do, 0 done)', /15 pts/.test(await p.textContent('.kcol-todo h3')) && /0 of 15 points done/.test(await p.textContent('.kpts')));
-    await sleep(1500);
-    const sv = await P.get(core), t1 = sv.tasks.find((t) => t.id === id1);
-    ok('Saved', 'owner, priority and points are saved with the task', t1.owner === 's2' && t1.priority === 'High' && t1.points === 5, JSON.stringify({ o: t1.owner, p: t1.priority, n: t1.points }));
-    await p.click(`[data-tid="${id1}"] [data-step="1"]`); await sleep(300);
-    ok('Move', '→ moves the card to In progress and its points go with it', !!(await p.$(`.kcol-doing [data-tid="${id1}"]`)) && /5 pts/.test(await p.textContent('.kcol-doing h3')) && /10 pts/.test(await p.textContent('.kcol-todo h3')));
-    await p.click(`[data-tid="${id2}"] [data-tick]`); await sleep(300);
-    ok('Points', 'ticking a card done counts its points as done', /8 of 15 points done/.test(await p.textContent('.kpts')));
-    await p.selectOption('#kbOwner', 's2'); await sleep(200);
-    ok('Filter', 'filter by owner shows only their cards', (await p.$$('.kcard')).length === 1 && !!(await p.$(`[data-tid="${id1}"]`)));
-    await p.selectOption('#kbOwner', '-'); await sleep(200);
-    ok('Filter', '"No owner" shows the cards nobody owns yet', (await p.$$('.kcard')).length === sv.tasks.length - 2);
-    await p.selectOption('#kbOwner', ''); await p.selectOption('#kbPrio', 'Medium'); await sleep(200);
-    ok('Filter', 'filter by priority', (await p.$$('.kcard')).length === 1 && !!(await p.$(`[data-tid="${id3}"]`)) && /No cards match/.test(await p.textContent('.kcol-done')));
-    await p.selectOption('#kbPrio', ''); await p.selectOption('#kbSort', 'prio'); await sleep(200);
-    const order = await p.$$eval('.kcol-todo .kcard', (a) => a.map((x) => x.getAttribute('data-tid')));
-    ok('Sort', 'sort by priority puts Medium before the cards with none', order[0] === id3, order.slice(0, 3).join());
-    await p.fill('#kbQ', 'cabinet'); await sleep(200);
-    ok('Search', 'search finds cards by name', (await p.$$('.kcard')).length >= 1 && (await p.$$eval('.kcard .kname', (a) => a.every((x) => /cabinet/i.test(x.textContent)))) && (await p.inputValue('#kbQ')) === 'cabinet');
+    const colBottom = await p.$eval('.kcol-todo .kcards', (e) => e.getBoundingClientRect().bottom);
+    ok('Fit', 'each column scrolls on its own, so the board fits the screen height', colBottom <= 768 + 2, String(colBottom));
+    const bench = (await P.get(core)).tasks.find((t) => /benchtop/i.test(t.name)), B = `.kcard[data-tid="${bench.id}"]`;
+    await p.$eval(B, (e) => e.scrollIntoView());
+    ok('Theme', 'a task with sub-tasks is a THEME card with its user stories inside, dates and number of days on the right', /THEME/.test(await p.textContent(`${B} .kid`)) && (await p.$$(`${B} .kst`)).length === 3 && /\d+ days/.test(await p.textContent(`${B} .kdays`)) && /\d/.test(await p.textContent(`${B} .kdates`)));
+    ok('Story', 'every story has an owner button, H / M / L and a points button', (await p.$$(`${B} .kst .kown`)).length === 3 && (await p.$$(`${B} .kst .kseg button`)).length === 9 && (await p.$$(`${B} .kst .kptb`)).length === 3);
+    const st = (i) => `${B} .kst:nth-child(${i})`;
+    await p.click(`${st(1)} .kown`); await p.waitForSelector('#kPop');
+    ok('Owner', 'the owner button opens a picker with the Stakeholder register (searchable)', (await p.$$eval('#kPop [data-own]', (a) => a.map((x) => x.getAttribute('data-own')))).join() === 'Bea Board,Sam Sparky,Tina Tiler');
+    await p.fill('#kPop .kpop-q', 'sam'); await sleep(100);
+    ok('Owner', 'typing filters the list (and offers to use what was typed)', (await p.$$eval('#kPop [data-own]', (a) => a.map((x) => x.getAttribute('data-own')))).join() === 'Sam Sparky,sam');
+    await p.click('#kPop [data-own="Sam Sparky"]'); await sleep(250);
+    ok('Owner', 'picking sets the story owner (initials and name on the button)', (await p.textContent(`${st(1)} .kown-n`)) === 'Sam Sparky' && (await p.textContent(`${st(1)} .kav`)) === 'SS');
+    await p.click(`${st(2)} .kown`); await p.fill('#kPop .kpop-q', 'Oakwood Joinery'); await p.keyboard.press('Enter'); await sleep(250);
+    ok('Owner', 'or type any name (Enter) for someone not on the register', (await p.textContent(`${st(2)} .kown-n`)) === 'Oakwood Joinery');
+    await p.click(`${st(1)} .kseg-H`); await sleep(150);
+    ok('Priority', 'H / M / L are colour-coded buttons: H turns red', (await p.getAttribute(`${st(1)} .kseg-H`, 'class')).includes('on'));
+    await p.click(`${st(1)} .kseg-H`); await sleep(150);
+    ok('Priority', 'clicking it again clears it', !(await p.getAttribute(`${st(1)} .kseg-H`, 'class')).includes('on'));
+    await p.click(`${st(1)} .kseg-H`); await p.click(`${st(2)} .kseg-M`); await p.click(`${st(3)} .kseg-L`); await sleep(150);
+    await p.click(`${st(1)} .kptb`); await p.waitForSelector('#kPop');
+    ok('Points', 'the points button offers the Fibonacci numbers 1, 2, 3, 5, 8, 13', (await p.$$eval('#kPop [data-pt]', (a) => a.map((x) => x.textContent))).join() === '1,2,3,5,8,13');
+    await p.click('#kPop [data-pt="5"]'); await sleep(150);
+    await p.click(`${st(2)} .kptb`); await p.click('#kPop [data-pt="8"]'); await sleep(150);
+    await p.click(`${st(3)} .kptb`); await p.click('#kPop [data-pt="3"]'); await sleep(250);
+    ok('Points', 'the theme\'s points are its stories added up (5 + 8 + 3 = 16)', (await p.textContent(`${B} .ktp`)) === '16 pts' && /16 pts/.test(await p.textContent('.kcol-todo h3')) && /0 of 16 points done/.test(await p.textContent('.kpts')));
+    await p.check(`${st(2)} [data-subtick]`); await sleep(400);
+    ok('Points', 'ticking a story done counts its points as done, and the theme moves on (its % is weighted by the stories\' days: 4 of 6 = 67%, In review)', /8 of 16 points done/.test(await p.textContent('.kpts')) && !!(await p.$(`.kcol-review ${B}`)));
+    await sleep(1300);
+    const sv = (await P.get(core)).tasks.find((t) => t.id === bench.id);
+    ok('Saved', 'owner, priority and points are saved on each story', sv.subs[0].owner === 'Sam Sparky' && sv.subs[0].priority === 'High' && sv.subs[0].points === 5 && sv.subs[1].owner === 'Oakwood Joinery' && sv.subs[1].priority === 'Medium' && sv.subs[1].points === 8 && sv.subs[2].priority === 'Low' && sv.subs[2].points === 3, JSON.stringify(sv.subs.map((x) => [x.owner, x.priority, x.points])));
+    // RAG colours
+    const cards = await p.$$eval('.kcard', (a) => a.map((c) => ({ cls: c.className, due: (c.querySelector('.kdue') || {}).textContent || '' })));
+    const consistent = cards.every((c) => (/kr-r/.test(c.cls) ? /late/.test(c.due) : /kr-a/.test(c.cls) ? /Due (today|in [123] day)/.test(c.due) : /kr-g/.test(c.cls)));
+    ok('RAG', 'cards are red when the due date has passed, amber within 3 days, green on track', consistent && cards.some((c) => /kr-r/.test(c.cls)) && cards.some((c) => /kr-g/.test(c.cls)), JSON.stringify(cards.slice(0, 6)));
+    ok('RAG', 'the board counts themes on track, close to due and late', /\d+.*\d+.*\d+/.test(await p.textContent('.krag-sum')));
+    // a task without stories: its own owner / priority / points, and ＋ story
+    const plain = (await P.get(core)).tasks.find((t) => /cabinets/i.test(t.name)), C = `.kcard[data-tid="${plain.id}"]`;
+    await p.$eval(C, (e) => e.scrollIntoView());
+    ok('Theme', 'a task without stories has its own owner, priority and points', !!(await p.$(`${C} > .kctl .kown`)) && !(await p.$(`${C} .kst`)));
+    await p.click(`${C} [data-kadd]`); await p.fill(`${C} .kadd-in`, 'Check the levels'); await p.keyboard.press('Enter'); await sleep(300);
+    ok('Story', '＋ story adds a user story, and the card becomes a theme', /THEME/.test(await p.textContent(`${C} .kid`)) && /Check the levels/.test(await p.textContent(`${C} .kst`)));
+    // filters
+    await p.selectOption('#kbOwner', 'Sam Sparky'); await sleep(250);
+    ok('Filter', 'filter by owner shows the themes with their stories, and only that person\'s stories', (await p.$$('.kcard')).length === 1 && (await p.$$(`${B} .kst`)).length === 1 && /2 more stories hidden/.test(await p.textContent(B)));
+    await p.selectOption('#kbOwner', ''); await p.selectOption('#kbPrio', 'Low'); await sleep(250);
+    ok('Filter', 'filter by priority', (await p.$$('.kcard')).length === 1 && (await p.$$(`${B} .kst`)).length === 1);
+    await p.selectOption('#kbPrio', ''); await p.selectOption('#kbSort', 'points'); await sleep(250);
+    ok('Sort', 'sort by points puts the 16-point theme first in its column (it is in In review)', (await p.getAttribute('.kcol-review .kcard', 'data-tid')) === bench.id);
+    await p.fill('#kbQ', 'levels'); await sleep(200);
+    ok('Search', 'search finds stories too', (await p.$$('.kcard')).length === 1 && !!(await p.$(C)));
     await p.fill('#kbQ', ''); await sleep(200);
-    await p.reload(); await p.waitForSelector('.kcard'); await sleep(300);
-    ok('Filter', 'the sort choice is remembered', (await p.inputValue('#kbSort')) === 'prio');
-    const subBtn = await p.$('[data-ksub]');
-    if (subBtn) { await subBtn.click(); await sleep(200); ok('Card', 'sub-tasks fold away and open with ▸', !!(await p.$('.kchk-i'))); }
+    await p.click(`${B} [data-step="1"]`); await sleep(300);
+    ok('Move', '→ moves the theme on to Done with its points (all its stories done)', !!(await p.$(`.kcol-done ${B}`)) && /16 pts/.test(await p.textContent('.kcol-done h3')) && /16 of \d+ points done/.test(await p.textContent('.kpts')));
+    await p.reload(); await p.waitForSelector('.kcard'); await sleep(900); await p.screenshot({ path: path.join(os.tmpdir(), 'board65.png') });
+    ok('Filter', 'the sort choice is remembered', (await p.inputValue('#kbSort')) === 'points');
     await p.setViewportSize({ width: 390, height: 844 }); await sleep(300);
     ok('Phone', 'on a phone the columns stack, no sideways scrolling', await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
     ok('Console', 'no JavaScript errors', errors.length === 0, errors.join(' | '));

@@ -953,3 +953,49 @@ body.gcr-drag,body.gcr-drag *{cursor:col-resize!important;user-select:none}
 @media (max-width:1180px){.kanban{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
 @media (max-width:900px){.kanban{grid-template-columns:repeat(4,minmax(220px,1fr))!important;overflow-x:auto;padding-bottom:6px}}
 @media (max-width:820px){.kanban{grid-template-columns:1fr!important;overflow:visible}.kcards{max-height:none}.kbar input[type=search]{width:100%}}
+
+/* v65: Board as themes with user stories; RAG cards; owner / priority / points pickers */
+.kcard{border-left-width:5px;padding:8px 9px 7px;gap:6px}
+.kcard.kr-g{border-left-color:#16A34A;background:#F7FDF9}.kcard.kr-a{border-left-color:#F59E0B;background:#FFFCF2}.kcard.kr-r{border-left-color:#DC2626;background:#FFF7F7}
+.kth{display:flex;gap:8px;align-items:flex-start}
+.kth-l{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.kth-r{text-align:right;flex:none;font-size:11.5px;line-height:1.35}
+.kdates{font-weight:700;color:#1F1D18;white-space:nowrap}.kdays{color:#6B665A}
+.kdue{font-weight:700;margin-top:1px}.kdue-g{color:#15803D}.kdue-a{color:#B45309}.kdue-r{color:#B91C1C}
+.kid{font-size:10.5px;font-weight:700;color:#8A8577;letter-spacing:.03em}
+.ktp{align-self:flex-start;font-size:11px;font-weight:700;background:#E0E7FF;color:#3730A3;border-radius:99px;padding:0 8px;line-height:1.7}
+.kstories{display:grid;gap:5px}
+.kst{background:#fff;border:1px solid #ECE8DC;border-radius:8px;padding:5px 6px;display:grid;gap:4px}
+.kst.done .kst-h span{text-decoration:line-through;color:#8A8577}
+.kst-h{display:flex;gap:6px;align-items:flex-start;font-size:12.5px;font-weight:600}
+.kst-h label{display:flex;gap:6px;align-items:flex-start;cursor:pointer;min-width:0}.kst-h input{width:auto;margin-top:2px}
+.kd{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none;margin-top:4px;font-style:normal}
+.kd-g{background:#16A34A}.kd-a{background:#F59E0B}.kd-r{background:#DC2626}
+.kctl{display:flex;gap:4px;align-items:center;min-width:0}
+.kown{flex:1;min-width:0;display:flex;align-items:center;gap:5px;border:1px solid #E7E2D4;background:#FDFCF8;border-radius:99px;padding:1px 8px 1px 1px;font:inherit;font-size:11.5px;cursor:pointer;height:24px}
+.kown:hover{border-color:#C9A227}.kown.none{color:#8A8577}
+.kown-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kav{width:20px;height:20px;flex:none;font-size:9.5px}
+.kseg{display:inline-flex;border:1px solid #E7E2D4;border-radius:6px;overflow:hidden;flex:none}
+.kseg button{border:0;background:#fff;font:inherit;font-size:11px;font-weight:700;width:21px;height:22px;cursor:pointer;color:#A8A29E;padding:0}
+.kseg button+button{border-left:1px solid #E7E2D4}
+.kseg .kseg-H.on{background:#DC2626;color:#fff}.kseg .kseg-M.on{background:#F59E0B;color:#fff}.kseg .kseg-L.on{background:#16A34A;color:#fff}
+.kseg button:not(.on):hover{background:#F6F3EA;color:#1F1D18}
+.kptb{flex:none;border:1px solid #E7E2D4;background:#fff;border-radius:6px;font:inherit;font-size:11px;font-weight:700;height:24px;padding:0 7px;cursor:pointer;color:#A8A29E;min-width:44px}
+.kptb.on{background:#E0E7FF;border-color:#C7D2FE;color:#3730A3}
+.kadd{border:1px dashed #D6D0C1;background:transparent;border-radius:8px;font:inherit;font-size:12px;color:#6B665A;padding:3px;cursor:pointer}.kadd:hover{border-color:#C9A227;color:#1F1D18}
+.kadd-in{width:100%;font-size:12.5px;padding:5px 7px}
+.kmore{font-size:11.5px;color:#8A8577;font-style:italic}
+.kfoot{grid-template-columns:minmax(0,1fr) auto auto auto}
+.krag-sum{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700}.krag-sum .kd{margin:0 0 0 6px}
+.kpop{position:fixed;z-index:70;width:240px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.16);padding:8px}
+.kpop-q{width:100%;padding:5px 8px;font-size:13px;margin-bottom:6px}
+.kpop-list{display:grid;gap:2px;max-height:230px;overflow:auto}
+.kpop-list button{display:flex;gap:8px;align-items:center;border:0;background:none;border-radius:7px;padding:4px 6px;font:inherit;text-align:left;cursor:pointer}
+.kpop-list button:hover,.kpop-list button.on{background:#FBF8EF}
+.kpop-list small{display:block;color:#8A8577;font-size:11px}.kpop-list b{font-size:12.5px}
+.kpop-pts{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.kpop-pts button{border:1px solid #E7E2D4;background:#fff;border-radius:7px;height:32px;font:inherit;font-weight:700;cursor:pointer}
+.kpop-pts button:hover{border-color:#6366F1}.kpop-pts button.on{background:#4F46E5;color:#fff;border-color:#4F46E5}
+.kpop-clear{margin-top:6px;width:100%;border:0;background:#F6F3EA;border-radius:7px;padding:4px;font:inherit;font-size:12px;cursor:pointer}
+.kcrew{font-size:11.5px;color:#6B665A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

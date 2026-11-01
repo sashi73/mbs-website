@@ -128,7 +128,8 @@ function cleanSubs(list, t, uid) {
   const D = Math.max(1, t.dur);
   return list.slice(0, 40).map((x) => {
     const off = int(x.off, 0, D - 1, 0);
-    return { id: uid(x.id, 's'), name: str(x.name, 160) || 'Sub-task', owner: str(x.owner, 80), off, dur: int(x.dur, 1, D - off, 1), status: STAT.includes(x.status) ? x.status : 'todo' };
+    return { id: uid(x.id, 's'), name: str(x.name, 160) || 'Sub-task', owner: str(x.owner, 80), off, dur: int(x.dur, 1, D - off, 1), status: STAT.includes(x.status) ? x.status : 'todo',
+      priority: ['High', 'Medium', 'Low'].includes(x.priority) ? x.priority : '', points: [1, 2, 3, 5, 8, 13].includes(Number(x.points)) ? Number(x.points) : 0 };   // v65: user stories on the Board
   });
 }
 function clean(p, core) {
@@ -143,7 +144,7 @@ function clean(p, core) {
     dur: int(t.dur, 0, 365, 1), snet: ymdOk(t.snet), fixed: !!(t.fixed && ymdOk(t.snet)), pred: (Array.isArray(t.pred) ? t.pred : []).map((x) => str(x, 20)).slice(0, 10),
     item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000),
     // v64: the Board: owner (a stakeholder), priority and story points
-    owner: str(t.owner, 30), priority: ['High', 'Medium', 'Low'].includes(t.priority) ? t.priority : '', points: int(t.points, 0, 100, 0)
+    owner: str(t.owner, 80), priority: ['High', 'Medium', 'Low'].includes(t.priority) ? t.priority : '', points: int(t.points, 0, 100, 0)
     };
     // v56: materials from stock: any number of items, each with its own quantity (and the price at the time).
     // Older plans had one item on the task (the task's own qty and rate were that item): moved into the list, same cost.

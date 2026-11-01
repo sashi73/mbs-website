@@ -205,7 +205,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const col = async (k) => p.$$eval(`.kcol[data-col=${k}] .kcard`, (cs) => cs.map((c) => c.textContent));
     ok('Board', 'board has To do / In progress / In review / QA / Done', JSON.stringify(await p.$$eval('.kcol', (c) => c.map((x) => x.getAttribute('data-col')))) === '["todo","doing","review","done"]' && /In review \/ QA/.test(await p.textContent('.kanban')));
     ok('Board', 'cards are in the right columns (ticked = Done, 50% = In progress)', (await col('done')).some((t) => /Site inspection/.test(t)) && (await col('doing')).some((t) => /Buy tiles/.test(t)) && (await col('todo')).length >= 13);
-    ok('Board', 'cards show the people with the lead ★', (await col('todo')).some((t) => /★ Ali/.test(t) && /Skip hire/.test(t)));
+    ok('Board', 'cards show the lead ★ and how many more people', (await col('todo')).some((t) => /★ Ali/.test(t) && /Skip hire|\+1/.test(t)));
     const orderId = await tid('Order membrane & plumbing parts');
     const gpct = async (id) => { await p.click('#planTabs >> text=Schedule'); await p.waitForSelector('table.gt'); const r = await p.evaluate((id) => [document.querySelector(`tr[data-gtid="${id}"] .gpct`).textContent, document.querySelector(`tr[data-gtid="${id}"] .gfill`).style.width], id); await p.click('#planTabs >> text=Board'); await p.waitForSelector('.kanban'); return r.join(' '); };
     await p.dragAndDrop(`.kcard[data-tid="${orderId}"]`, '.kcol[data-col=doing]', { sourcePosition: { x: 30, y: 8 } }); await saved();
