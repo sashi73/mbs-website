@@ -1,5 +1,5 @@
 // v62: 📊 Reports for a project, for three audiences: the customer, the team (crew, trades) and all stakeholders.
-// Weekly or ad hoc; RAG (red, amber, green) status; a Gantt chart; at most 3 pages; Word or PDF (made in the browser);
+// Weekly or ad hoc; RAG (red, amber, green) status; a Gantt chart; what was done, what is planned, blockers, risks and issues; at most 4 pages; Word or PDF (made in the browser);
 // emailed with the PDF attached (Resend), and every report kept in a log so it can be downloaded again later.
 //   preports:<core>          the log: [{ id, no, audience, type, from, to, at, by, overall, headline, recipients, action, emailed }]
 //   preport:<core>:<id>      the report itself (all its content), so the same Word / PDF can be made again

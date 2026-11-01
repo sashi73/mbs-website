@@ -1,5 +1,5 @@
 // v62: 📊 Reports. Customer, team and all-stakeholder reports: RAG from the plan (and changed by hand), a first draft of the
-// wording and ✨ the AI's (stand-in), recipients from the Stakeholder register and the job, PDF (at most 3 pages, with the
+// wording and ✨ the AI's (stand-in), recipients from the Stakeholder register and the job, PDF (at most 4 pages, with the
 // Gantt chart) and Word, email with the PDF attached (stand-in Resend), and the report log (download again, delete).
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
@@ -84,12 +84,12 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     // PDF
     const dl = async (sel) => { const [d] = await Promise.all([p.waitForEvent('download'), p.click(sel)]); const f = path.join(tmp, d.suggestedFilename()); await d.saveAs(f); return { name: d.suggestedFilename(), buf: fs.readFileSync(f) }; };
     let f = await dl('#rpPdf'); let pdf = await PDFDocument.load(f.buf);
-    ok('PDF', 'the customer PDF: at most 3 pages, with the Gantt chart picture, small enough to email', /Customer-update.*\.pdf$/.test(f.name) && pdf.getPageCount() <= 3 && /\/Subtype\s*\/Image/.test(f.buf.toString('latin1')) && f.buf.length < 1500000, f.name + ' ' + pdf.getPageCount() + ' pages, ' + f.buf.length + ' bytes');
+    ok('PDF', 'the customer PDF: at most 4 pages, with the Gantt chart picture, small enough to email', /Customer-update.*\.pdf$/.test(f.name) && pdf.getPageCount() <= 4 && /\/Subtype\s*\/Image/.test(f.buf.toString('latin1')) && f.buf.length < 1500000, f.name + ' ' + pdf.getPageCount() + ' pages, ' + f.buf.length + ' bytes');
     await p.waitForSelector('tr[data-rid]');
     ok('Log', 'the download is kept in the report log (#1, RAG, headline, "PDF downloaded")', (await p.$$('tr[data-rid]')).length === 1 && /Customer update #1/.test(await p.textContent('tr[data-rid]')) && /AI: your kitchen/.test(await p.textContent('tr[data-rid]')) && /PDF downloaded/.test(await p.textContent('tr[data-rid]')));
     f = await dl('#rpDocx');
     const wtxt = (await mammoth.extractRawText({ buffer: f.buf })).value;
-    ok('Word', 'the Word file has the title, the RAG, the headline, the milestones and the Gantt chart picture', /\.docx$/.test(f.name) && /Customer update/.test(wtxt) && /GREEN|AMBER|RED/.test(wtxt) && /AI: your kitchen/.test(wtxt) && /Milestones/.test(wtxt) && /What we need from you/.test(wtxt) && /word\/media\/[^\s]*\.png/.test(f.buf.toString('latin1')) && !/Budget|\$\d/.test(wtxt), wtxt.slice(0, 200));
+    ok('Word', 'the Word file has the title, RAG, headline, what was done, what we plan to do, blockers, risks, issues, milestones and the Gantt chart picture', /\.docx$/.test(f.name) && /Customer update/.test(wtxt) && /GREEN|AMBER|RED/.test(wtxt) && /AI: your kitchen/.test(wtxt) && /Milestones/.test(wtxt) && /What we need from you/.test(wtxt) && /What was done/.test(wtxt) && /What we plan to do/.test(wtxt) && /Anything holding us up/.test(wtxt) && /Risks we are managing/.test(wtxt) && /Open issues/.test(wtxt) && /word\/media\/[^\s]*\.png/.test(f.buf.toString('latin1')) && !/Budget|\$\d/.test(wtxt), wtxt.slice(0, 200));
     ok('Log', 'downloading Word for the same report updates the same log line', (await p.$$('tr[data-rid]')).length === 1);
     // email
     await p.click('#rpSend'); await p.waitForSelector('#rsGo'); await p.fill('#rsMsg', 'Hi Rita, here is this week\'s update.'); await p.click('#rsGo');
@@ -103,18 +103,18 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     ok('Team', 'the team look-ahead has RAG for Overall, Programme, Blockers and Safety (no SWMS yet: amber)', rg.length === 4 && /Blockers/.test(rg[2]) && /Safety:A/.test(rg[3]), rg.join(' '));
     ok('Team', 'it goes to the trades (RACI R) by default', (await rcp()).sort().join() === 's2,s3', (await rcp()).join());
     f = await dl('#rpPdf'); pdf = await PDFDocument.load(f.buf);
-    ok('Team', 'the team PDF stays within 3 pages', pdf.getPageCount() <= 3, pdf.getPageCount() + ' pages');
+    ok('Team', 'the team PDF stays within 4 pages', pdf.getPageCount() <= 4, pdf.getPageCount() + ' pages');
     f = await dl('#rpDocx'); const ttxt = (await mammoth.extractRawText({ buffer: f.buf })).value;
-    ok('Team', 'it has the 2-week look-ahead (who and when), the 3-week Gantt, blockers and safety', /Look-ahead: the next 2 weeks/.test(ttxt) && /3-week look-ahead/.test(ttxt) && /Blockers and open issues/.test(ttxt) && /Safety/.test(ttxt) && /SWMS/.test(ttxt), ttxt.slice(0, 300));
+    ok('Team', 'it has the 2-week look-ahead (who and when), the 3-week Gantt, blockers and safety', /What was done/.test(ttxt) && /What we plan to do: the next 2 weeks/.test(ttxt) && /Risks/.test(ttxt) && /Open issues/.test(ttxt) && /3-week look-ahead/.test(ttxt) && /Blockers/.test(ttxt) && /Safety/.test(ttxt) && /SWMS/.test(ttxt), ttxt.slice(0, 300));
     // all stakeholders, with lots of rows: still 3 pages
     await p.click('[data-aud=all]'); await sleep(400);
     rg = await ragL();
     ok('All', 'the stakeholder report has RAG for Overall, Scope, Time, Cost, Risks and Issues, and goes to everyone (the customer once, though she is on the job and the register)', rg.length === 6 && /Cost/.test(rg[3]) && (await rcp()).length === 4, rg.join(' ') + ' ' + (await rcp()).join());
     await p.check('#rpCost'); await sleep(300);
     f = await dl('#rpPdf'); pdf = await PDFDocument.load(f.buf);
-    ok('All', 'with 60 tasks, 25 risks and 20 issues the PDF is still at most 3 pages', pdf.getPageCount() <= 3, pdf.getPageCount() + ' pages');
+    ok('All', 'with 60 tasks, 25 risks and 20 issues the PDF is still at most 4 pages', pdf.getPageCount() <= 4, pdf.getPageCount() + ' pages');
     f = await dl('#rpDocx'); const atxt = (await mammoth.extractRawText({ buffer: f.buf })).value;
-    ok('All', 'it has the executive summary, programme, milestones, top risks, open issues, decisions and the $ figures when ticked', /Executive summary/.test(atxt) && /Programme/.test(atxt) && /Top risks/.test(atxt) && /Open issues/.test(atxt) && /Decisions needed/.test(atxt) && /BUDGET/.test(atxt) && /more \(see the project plan\)/.test(atxt), atxt.slice(0, 300));
+    ok('All', 'it has the executive summary, programme, milestones, top risks, open issues, decisions and the $ figures when ticked', /Executive summary/.test(atxt) && /What was done/.test(atxt) && /What we plan to do/.test(atxt) && /Blockers/.test(atxt) && /Programme/.test(atxt) && /Top risks/.test(atxt) && /Open issues/.test(atxt) && /Decisions needed/.test(atxt) && /BUDGET/.test(atxt) && /more \(see the project plan\)/.test(atxt), atxt.slice(0, 300));
     // a guest
     await p.waitForFunction(() => document.querySelectorAll('tr[data-rid]').length === 3); await sleep(300);
     await p.fill('#rpGuest', 'ann@bank.com.au'); await p.click('#rpGuestAdd');
@@ -129,7 +129,7 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     ok('Log', 'three reports in the log (customer emailed, team and stakeholder downloaded)', rows.length === 3, String(rows.length));
     const custRow = await p.$('tr[data-rid]:has-text("Customer update")');
     const [d2] = await Promise.all([p.waitForEvent('download'), custRow.$eval('[data-rdl=pdf]', (b) => b.click())]); const f2 = path.join(tmp, 'again.pdf'); await d2.saveAs(f2);
-    ok('Log', '⬇ PDF from the log makes that report again, as it was', (await PDFDocument.load(fs.readFileSync(f2))).getPageCount() <= 3 && /Customer-update/.test(d2.suggestedFilename()));
+    ok('Log', '⬇ PDF from the log makes that report again, as it was', (await PDFDocument.load(fs.readFileSync(f2))).getPageCount() <= 4 && /Customer-update/.test(d2.suggestedFilename()));
     await custRow.$eval('[data-rdel]', (b) => b.click()); await p.click('#okBtn'); await sleep(500);
     ok('Log', '✕ deletes a report from the log', (await p.$$('tr[data-rid]')).length === 2);
     await p.setViewportSize({ width: 390, height: 844 }); await sleep(400);

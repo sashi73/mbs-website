@@ -1,5 +1,5 @@
 /* MBS Console v62: 📊 project reports (customer, team, all stakeholders): the Gantt chart as a picture, and the report
-   as PDF (jsPDF) or Word (docx), at most 3 pages. Everything is made here in the browser from the report's content
+   as PDF (jsPDF) or Word (docx), at most 4 pages. Everything is made here in the browser from the report's content
    (window.MBS.report.pdf / .docx / .gantt), so a report in the log can be made again exactly as it was sent. */
 (function () {
   'use strict';
@@ -65,7 +65,7 @@
     return { url: c.toDataURL('image/png'), jpg: c.toDataURL('image/jpeg', 0.88), w: W, h: H };
   }
 
-  /* ---------- PDF (A4 portrait), kept to 3 pages ---------- */
+  /* ---------- PDF (A4 portrait), kept to 4 pages ---------- */
   function pdfOnce(s, lim) {
     var J = window.jspdf.jsPDF, doc = new J({ unit: 'mm', format: 'a4', compress: true }), W = 210, L = 14, R = W - 14, y = 0, dark = [31, 29, 24], gold = [201, 162, 39], muted = [107, 102, 90];
     var need = function (h) { if (y + h > 282) { doc.addPage(); y = 16; } };
@@ -102,7 +102,7 @@
         styles: { fontSize: 8.2, cellPadding: 1.5, overflow: 'linebreak', valign: 'top' }, headStyles: { fillColor: dark, textColor: 255, fontSize: 8 }, alternateRowStyles: { fillColor: [250, 248, 242] }, columnStyles: t.cols || {},
         didParseCell: function (d) { if (d.section !== 'body') return; var c = rows[d.row.index][d.column.index]; if (c && c.rag) { d.cell.styles.fillColor = RAGF[c.rag]; d.cell.styles.textColor = 255; d.cell.styles.fontStyle = 'bold'; } if (c && c.b) d.cell.styles.fontStyle = 'bold'; } });
       y = doc.lastAutoTable.finalY + (more ? 1 : 5);
-      if (more) { doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor.apply(doc, muted); doc.text('... and ' + more + ' more (see the project plan)', L, y + 3); y += 7; }
+      if (more) { doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor.apply(doc, muted); doc.text('... and ' + more + ' more (see the project plan)', L, y + 3); y += 10; }
     };
     s.sections.forEach(function (sec) {
       if (sec.kind === 'gantt') {
@@ -121,7 +121,7 @@
   function pdf(s) {
     return libsPdf().then(function () {
       var doc, k = 0;
-      for (; k < LIMITS.length; k++) { doc = pdfOnce(s, LIMITS[k]); if (doc.getNumberOfPages() <= 3) break; }
+      for (; k < LIMITS.length; k++) { doc = pdfOnce(s, LIMITS[k]); if (doc.getNumberOfPages() <= 4) break; }
       s.lim = Math.min(k, LIMITS.length - 1);
       var blob = doc.output('blob'); return b64(blob).then(function (x) { return { blob: blob, base64: x, pages: doc.getNumberOfPages(), name: fname(s, 'pdf') }; });
     });

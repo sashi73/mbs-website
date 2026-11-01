@@ -2360,11 +2360,11 @@
 
   /* ---------- v62: 📊 Reports: customer, team and all stakeholders; weekly or ad hoc; RAG; Gantt; Word/PDF; email; log ---------- */
   var RAUD = {
-    customer: { name: 'Customer update', icon: '🏠', who: 'The customer', blurb: 'Plain-English progress: what was done, what is next and what it means for them, what we need from them, the milestones and a simple Gantt chart. No internal costs.',
+    customer: { name: 'Customer update', icon: '🏠', who: 'The customer', blurb: 'Plain-English progress: what was done, what we plan to do, anything holding us up, the risks and issues we are managing, milestones, what we need from them and the programme Gantt chart. No internal costs.',
       asks: 'What we need from you', points: 'Highlights', next: 'Coming up (next 2 weeks)' },
-    team: { name: 'Team look-ahead', icon: '👷', who: 'Crew and trades', blurb: 'The next 2 weeks task by task: who does what and when, critical and late tasks, blockers, safety (SWMS) and a 3-week look-ahead Gantt chart.',
+    team: { name: 'Team look-ahead', icon: '👷', who: 'Crew and trades', blurb: 'What was done, the next 2 weeks task by task (who, when, critical tasks), blockers, risks and issues, safety (SWMS) and a 3-week look-ahead Gantt chart.',
       asks: 'Help needed / blockers to clear', points: 'This week\'s focus', next: 'Next steps' },
-    all: { name: 'Stakeholder status report', icon: '📣', who: 'All stakeholders', blurb: 'Executive summary with RAG for scope, time, cost, risks and issues, milestones, top risks and issues, decisions needed, meetings and the programme Gantt chart.',
+    all: { name: 'Stakeholder status report', icon: '📣', who: 'All stakeholders', blurb: 'Executive summary with RAG for scope, time, cost, risks and issues: what was done, what we plan to do, blockers, top risks, open issues, milestones, decisions needed, meetings and the programme Gantt chart.',
       asks: 'Decisions needed', points: 'Executive summary', next: 'Next steps' } };
   var RAGW = { G: 'Green', A: 'Amber', R: 'Red' }, RORD = { G: 0, A: 1, R: 2 };
   function repState() {
@@ -2468,34 +2468,44 @@
     var topRows = F.rows.filter(function (x) { return x.t.es; });
     var g = { title: 'Task', from: addDays(R.start || r.from, -2), to: addDays(R.finish || r.to, 3), today: today(), rows: topRows.map(function (x) { var t = x.t; return { label: '#' + x.n + ' ' + t.name.replace(/^[✓◆\s]+/, ''), es: t.es, ef: t.ef, pct: t.pct, mile: t.dur === 0, crit: !!F.crit[t.id], late: t.pct < 100 && t.ef < today(), status: t.status, level: 1 }; }) };
     var kpis, sections = [];
-    var pctRow = { label: 'Complete', value: R.pct + '%' };
-    if (r.aud === 'customer') {
+    var pctRow = { label: 'Complete', value: R.pct + '%' }, cust = r.aud === 'customer';
+    // v63: the same four parts in every report: what was done, what we plan to do, blockers, risks and issues
+    var who = function (t) { return t.resource || (cust ? 'MBS' : 'Not assigned'); }, rag3 = function (pr) { return pr === 'Critical' ? 'R' : pr === 'High' ? 'A' : undefined; };
+    var doneRows = F.done.map(function (x) { return { x: x, s: { t: 'Done ' + dmy(x.t.ef), rag: 'G' } }; }).concat(F.doing.map(function (x) { var late = x.t.ef < today(); return { x: x, s: { t: x.t.pct + '% done' + (late ? ', late' : ''), rag: late ? 'R' : undefined } }; }));
+    var SDone = { kind: 'table', title: 'What was done (' + dmy(r.from) + ' to ' + dmy(r.to) + ')', head: cust ? ['Work', 'Progress'] : ['#', 'Task', 'Who', 'Progress'], wordCols: cust ? [7, 3] : [1, 6, 4, 3],
+      rows: doneRows.map(function (d) { return cust ? [d.x.t.name, d.s] : [String(d.x.n), d.x.t.name, who(d.x.t), d.s]; }), cols: cust ? { 1: { cellWidth: 40 } } : { 0: { cellWidth: 9 }, 3: { cellWidth: 32 } }, always: true, empty: 'No work finished or under way in this period.' };
+    var plan = F.rows.filter(function (x) { return x.t.es && x.t.status !== 'done' && x.t.es <= F.horizon && x.t.ef >= r.to; });
+    var SPlan = { kind: 'table', title: 'What we plan to do (next 2 weeks)', head: cust ? ['Work', 'Starts', 'Finishes'] : ['#', 'Task', 'Who', 'Start', 'Finish', 'Status', 'Critical'], wordCols: cust ? [6, 2, 2] : [1, 6, 4, 2, 2, 2, 2],
+      rows: plan.map(function (x) { var t = x.t; return cust ? [t.name.replace(/^[✓◆\s]+/, ''), dLong(t.es), dLong(t.ef)] : [String(x.n), { t: t.name, b: !!F.crit[t.id] }, who(t), dmy(t.es), dmy(t.ef), { t: st(t), rag: st(t) === 'Late' ? 'R' : undefined }, F.crit[t.id] ? { t: 'Yes', rag: 'A' } : '']; }),
+      cols: cust ? { 1: { cellWidth: 30 }, 2: { cellWidth: 30 } } : { 0: { cellWidth: 9 }, 3: { cellWidth: 20 }, 4: { cellWidth: 20 }, 5: { cellWidth: 20 }, 6: { cellWidth: 16 } }, always: true, empty: 'Nothing scheduled in the next two weeks.' };
+    var blk = F.late.map(function (x) { var d = workBetween(x.t.ef, today()) - 1; return [cust ? x.t.name + ' is running late' : '#' + x.n + ' ' + x.t.name + ' is late (' + x.t.pct + '% done)', { t: 'Late task', rag: F.crit[x.t.id] ? 'R' : 'A' }, who(x.t), { t: 'Due ' + dmy(x.t.ef) + (d > 0 ? ' (' + pl(d, 'day') + ' ago)' : '') }]; })
+      .concat(F.issues.filter(function (x) { return /High|Critical/.test(x.priority); }).map(function (x) { return [x.title, { t: x.priority + ' issue', rag: rag3(x.priority) }, x.owner || '', x.due ? 'Due ' + dmy(x.due) : '']; }));
+    var SBlock = { kind: 'table', title: cust ? 'Anything holding us up' : 'Blockers', head: ['Blocker', 'Type', 'Owner', 'When'], wordCols: [6, 2, 3, 3], rows: blk, cols: { 1: { cellWidth: 26 }, 2: { cellWidth: 30 }, 3: { cellWidth: 34 } }, always: true, empty: 'Nothing is blocking the work right now.' };
+    var SRisk = { kind: 'table', title: cust ? 'Risks we are managing' : 'Risks', head: ['Risk', 'Score', 'What we are doing', 'Owner'], wordCols: [4, 1, 5, 2], rows: F.risks.map(function (x) { var sc = x.p * x.i; return [x.title, { t: String(sc), rag: sc >= 15 ? 'R' : sc >= 12 ? 'A' : 'G' }, x.response + (x.action ? ': ' + x.action : ''), x.owner]; }), cols: { 1: { cellWidth: 14, halign: 'center' }, 3: { cellWidth: 28 } }, always: true, empty: 'No open risks.' };
+    var SIss = { kind: 'table', title: 'Open issues', head: ['Issue', 'Priority', 'Owner', 'Due'], wordCols: [6, 2, 3, 2], rows: F.issues.map(function (x) { return [x.title, { t: x.priority, rag: rag3(x.priority) }, x.owner, dmy(x.due)]; }), cols: { 1: { cellWidth: 20 }, 3: { cellWidth: 22 } }, always: true, empty: 'No open issues.' };
+    var SMiles = { kind: 'table', title: 'Milestones', head: ['Milestone', 'Date', 'Status'], rows: milesRows, wordCols: [6, 2, 2], cols: { 1: { cellWidth: 28 }, 2: { cellWidth: 24 } } };
+    if (cust) {
       kpis = [pctRow, { label: 'Started', value: dmy(R.start) }, { label: 'Forecast finish', value: dmy(R.finish) }, { label: p.finishBy ? 'Agreed finish' : 'Working days to go', value: p.finishBy ? dmy(p.finishBy) : String(wdLeft(R)) }];
-      sections = [{ kind: 'bullets', title: A.points, items: w.points }, { kind: 'gantt', title: 'Where we are: the programme' }, { kind: 'table', title: 'Milestones', head: ['Milestone', 'Date', 'Status'], rows: milesRows, wordCols: [6, 2, 2], cols: { 1: { cellWidth: 28 }, 2: { cellWidth: 24 } } },
-        { kind: 'bullets', title: A.next, items: w.next, always: true, empty: 'Nothing new starts in the next two weeks.' }, { kind: 'bullets', title: A.asks, items: w.asks, box: true, always: true, empty: 'Nothing needed from you right now. Thank you!' }];
+      sections = [{ kind: 'bullets', title: A.points, items: w.points }, { kind: 'gantt', title: 'Where we are: the programme' }, SDone, SPlan, SBlock, SRisk, SIss, SMiles,
+        { kind: 'bullets', title: 'What it means for you', items: w.next }, { kind: 'bullets', title: A.asks, items: w.asks, box: true, always: true, empty: 'Nothing needed from you right now. Thank you!' }];
     } else if (r.aud === 'team') {
-      var win0 = addDays(r.to, -3), win1 = addDays(r.to, 21), look = F.rows.filter(function (x) { return x.t.es && x.t.status !== 'done' && x.t.es <= F.horizon && x.t.ef >= r.to; });
+      var win0 = addDays(r.to, -3), win1 = addDays(r.to, 21);
       g = { title: 'Task (3-week look-ahead)', from: win0, to: win1, today: today(), rows: [] };
       F.rows.forEach(function (x) { var t = x.t; if (!t.es || t.ef < win0 || t.es > win1) return; g.rows.push({ label: '#' + x.n + ' ' + t.name.replace(/^[✓◆\s]+/, '') + (t.resource ? ' · ' + t.resource : ''), es: t.es, ef: t.ef, pct: t.pct, mile: t.dur === 0, crit: !!F.crit[t.id], late: t.pct < 100 && t.ef < today(), status: t.status, level: 1 });
         (t.subs || []).forEach(function (sb) { var d = subDates(t, sb); if (d.ef < win0 || d.es > win1) return; g.rows.push({ label: sb.name + (sb.owner ? ' · ' + sb.owner : ''), es: d.es, ef: d.ef, pct: stPct[sb.status], status: sb.status, level: 2 }); }); });
-      kpis = [pctRow, { label: 'Tasks next 2 weeks', value: String(look.length) }, { label: 'Late tasks', value: String(F.late.length) }, { label: 'Critical next 2 weeks', value: String(look.filter(function (x) { return F.crit[x.t.id]; }).length) }, { label: 'Open issues', value: String(F.issues.length) }];
-      var sw = S.rep.swms, safety = sw ? ['SWMS version ' + sw.version + ' (' + sw.status + '): ' + sw.steps + ' job steps. Read and sign it before starting high-risk work.'] : ['No SWMS yet for this job: write it on the 🦺 SWMS tab before high-risk work starts.'];
+      kpis = [pctRow, { label: 'Tasks next 2 weeks', value: String(plan.length) }, { label: 'Late tasks', value: String(F.late.length) }, { label: 'Critical next 2 weeks', value: String(plan.filter(function (x) { return F.crit[x.t.id]; }).length) }, { label: 'Open issues', value: String(F.issues.length) }];
+      var sw = S.rep.swms, safety = sw ? ['SWMS version ' + sw.version + ' (' + sw.status + '): ' + sw.steps + ' job steps. Read and sign it before starting high-risk work.'] : ['No SWMS yet for this job: write it on the SWMS tab before high-risk work starts.'];
       if (sw && sw.hrcw.length) safety.push('High-risk work on this job: ' + sw.hrcw.join('; ') + '.');
       safety.push('Toolbox talk: go over this week\'s tasks, the hazards and who does what before starting.');
-      sections = [{ kind: 'bullets', title: A.points, items: w.points }, { kind: 'table', title: 'Look-ahead: the next 2 weeks', head: ['#', 'Task', 'Who', 'Start', 'Finish', 'Status', 'Critical'], wordCols: [1, 6, 4, 2, 2, 2, 2],
-          rows: look.map(function (x) { var t = x.t; return [String(x.n), { t: t.name, b: !!F.crit[t.id] }, t.resource || 'Not assigned', dmy(t.es), dmy(t.ef), { t: st(t), rag: st(t) === 'Late' ? 'R' : undefined }, F.crit[t.id] ? { t: 'Yes', rag: 'A' } : '']; }),
-          cols: { 0: { cellWidth: 9 }, 3: { cellWidth: 20 }, 4: { cellWidth: 20 }, 5: { cellWidth: 20 }, 6: { cellWidth: 16 } }, always: true, empty: 'Nothing scheduled in the next two weeks.' },
-        { kind: 'gantt', title: '3-week look-ahead' },
-        { kind: 'table', title: 'Late: catch up first', head: ['#', 'Task', 'Who', 'Was due', '% done'], wordCols: [1, 6, 4, 2, 2], rows: F.late.map(function (x) { return [String(x.n), x.t.name, x.t.resource || 'Not assigned', { t: dmy(x.t.ef), rag: 'R' }, x.t.pct + '%']; }), cols: { 0: { cellWidth: 9 }, 3: { cellWidth: 22 }, 4: { cellWidth: 16 } } },
-        { kind: 'table', title: 'Blockers and open issues', head: ['Issue', 'Priority', 'Owner', 'Due'], wordCols: [6, 2, 3, 2], rows: F.issues.map(function (x) { return [x.title, { t: x.priority, rag: x.priority === 'Critical' ? 'R' : x.priority === 'High' ? 'A' : undefined }, x.owner, dmy(x.due)]; }), cols: { 1: { cellWidth: 20 }, 3: { cellWidth: 22 } } },
-        { kind: 'bullets', title: '🦺 Safety'.replace('🦺 ', ''), items: safety }, { kind: 'bullets', title: A.asks, items: w.asks, box: true }];
+      SPlan.title = 'What we plan to do: the next 2 weeks';
+      sections = [{ kind: 'bullets', title: A.points, items: w.points }, SDone, SPlan, { kind: 'gantt', title: '3-week look-ahead' }, SBlock, SRisk, SIss,
+        { kind: 'bullets', title: 'Safety', items: safety }, { kind: 'bullets', title: A.asks, items: w.asks, box: true }];
     } else {
       kpis = [pctRow, { label: 'Forecast finish', value: dmy(R.finish) }, { label: p.finishBy ? 'Finish by' : 'Baseline finish', value: dmy(p.finishBy || (p.baseline && p.baseline.finish)) || 'Not set' }, { label: 'SPI (time)', value: R.SPI == null ? 'n/a' : String(R.SPI) }];
       if (r.showCost) kpis = kpis.concat([{ label: 'Budget', value: money(R.BAC) }, { label: 'Spent', value: money(R.AC) }, { label: 'CPI (cost)', value: R.CPI == null ? 'n/a' : String(R.CPI) }]);
       else kpis.push({ label: 'Open risks / issues', value: F.risks.length + ' / ' + F.issues.length });
-      sections = [{ kind: 'bullets', title: A.points, items: w.points }, { kind: 'gantt', title: 'Programme' }, { kind: 'table', title: 'Milestones', head: ['Milestone', 'Date', 'Status'], rows: milesRows, wordCols: [6, 2, 2], cols: { 1: { cellWidth: 28 }, 2: { cellWidth: 24 } } },
-        { kind: 'table', title: 'Top risks', head: ['Risk', 'Score', 'Response and action', 'Owner'], wordCols: [4, 1, 5, 2], rows: F.risks.map(function (x) { var sc = x.p * x.i; return [x.title, { t: String(sc), rag: sc >= 15 ? 'R' : sc >= 12 ? 'A' : 'G' }, x.response + (x.action ? ': ' + x.action : ''), x.owner]; }), cols: { 1: { cellWidth: 14, halign: 'center' }, 3: { cellWidth: 28 } } },
-        { kind: 'table', title: 'Open issues', head: ['Issue', 'Priority', 'Owner', 'Due'], wordCols: [6, 2, 3, 2], rows: F.issues.map(function (x) { return [x.title, { t: x.priority, rag: x.priority === 'Critical' ? 'R' : x.priority === 'High' ? 'A' : undefined }, x.owner, dmy(x.due)]; }), cols: { 1: { cellWidth: 20 }, 3: { cellWidth: 22 } } },
+      SRisk.title = 'Top risks';
+      sections = [{ kind: 'bullets', title: A.points, items: w.points }, { kind: 'gantt', title: 'Programme' }, SDone, SPlan, SBlock, SRisk, SIss, SMiles,
         { kind: 'bullets', title: A.next, items: w.next }, { kind: 'bullets', title: A.asks, items: w.asks, box: true, always: true, empty: 'No decisions needed this period.' },
         { kind: 'table', title: 'Coming meetings', head: ['When', 'Meeting', 'Platform'], wordCols: [3, 6, 2], rows: F.meets.map(function (m) { return [dmy(m.date) + ' ' + m.start, m.title, PLAT[m.platform || 'google'][0]]; }), cols: { 0: { cellWidth: 32 }, 2: { cellWidth: 32 } } }];
     }
@@ -2520,7 +2530,7 @@
       '<td><span class="rp-chip rp-' + e.overall + '">' + RAGW[e.overall] + '</span></td><td class="rp-hl">' + esc(e.headline) + '</td><td title="' + esc(e.recipients.map(function (x) { return x.name + ' <' + x.email + '>'; }).join(', ')) + '">' + (e.recipients.length ? pl(e.recipients.length, 'person', 'people').replace(/persons$/, 'people') : '<span class="muted">–</span>') + '</td>' +
       '<td>' + (e.emailed ? '<span class="cm-ok">✉ Emailed</span>' : '<span class="muted">' + esc(e.action) + '</span>') + '</td><td class="nowrap acts"><button class="btn btn-sm" data-rdl="pdf">⬇ PDF</button><button class="btn btn-sm" data-rdl="docx">⬇ Word</button><button class="btn btn-sm" data-rdel title="Delete">✕</button></td></tr>'; }).join('');
     B.innerHTML = '<div class="rp-wrap"><div class="card"><div class="card-h"><h2>📊 Project reports</h2><span class="sp"></span>' + (r.id && (r.log || []).some(function (e) { return e.id === r.id; }) ? '<button class="btn btn-sm" id="rpNew" type="button">＋ New report</button>' : '') + '</div>' +
-      '<p class="muted" style="margin:-4px 0 10px">One plan, three messages: each report says what matters to its readers, with a RAG status, the Gantt chart and the next steps, in at most 3 pages. Download it as Word or PDF, or email it; every report is kept in the log below.</p>' +
+      '<p class="muted" style="margin:-4px 0 10px">One plan, three messages: each report says what matters to its readers, with a RAG status, the Gantt chart, what was done, what we plan to do, blockers, risks and issues, in at most 4 pages. Download it as Word or PDF, or email it; every report is kept in the log below.</p>' +
       '<div class="rp-auds">' + ['customer', 'team', 'all'].map(card).join('') + '</div><p class="rp-blurb">' + esc(A.blurb) + '</p>' +
       '<div class="form rp-period"><label>Report<select id="rpType"><option' + (r.type === 'Weekly' ? ' selected' : '') + '>Weekly</option><option' + (r.type === 'Ad hoc' ? ' selected' : '') + '>Ad hoc</option></select></label><label>From<input type="date" id="rpFrom" value="' + esc(r.from) + '"></label><label>To<input type="date" id="rpTo" value="' + esc(r.to) + '"></label>' +
         (r.aud === 'all' ? '<label class="qchk" style="align-self:end"><input type="checkbox" id="rpCost"' + (r.showCost ? ' checked' : '') + '> Show $ amounts (budget, spent)</label>' : '<span></span>') + '</div>' +
