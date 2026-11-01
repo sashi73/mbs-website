@@ -1,17 +1,21 @@
-// End-to-end test of the dashboard pipeline board (v26): real Blobs, local site, headless Chromium.
+// v64: the Board remodelled: owner (from the Stakeholder register), priority, story points, filters and sorting, 4 columns that fit a laptop.
+// Checks the rows, sub-tasks, links (Predecessors), milestones, dates, and that no costs are exported. Real Blobs, Chromium.
+// node gantt-export-test.js <site> [folder with node_modules/exceljs]
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
 const path = require('path'), fs = require('fs'), os = require('os');
 const SITE = path.resolve(process.argv[2]);
-const PORT = 8903, BASE = `http://127.0.0.1:${PORT}`;
+const XL = path.resolve(process.argv[3] || path.join(__dirname, 'xl'));
+const PORT = 8964, BASE = `http://127.0.0.1:${PORT}`;
 const results = []; let errorsAll = [];
-const ok = (area, name, pass, detail = '') => { results.push({ area, name, pass: !!pass, detail }); };
+const ok = (area, name, pass, detail = '') => results.push({ area, name, pass: !!pass, detail });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const DAY = 864e5;
+const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; for (let i = 0; i < s.length; i++) { const c = s[i]; if (q) { if (c === '"' && s[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; } else if (c === '"') q = true; else if (c === ',') { row.push(cur); cur = ''; } else if (c === '\n') { row.push(cur.replace(/\r$/, '')); rows.push(row); row = []; cur = ''; } else cur += c; } if (cur || row.length) { row.push(cur); rows.push(row); } return rows; };
 
 (async () => {
+  let ExcelJS = null; try { ExcelJS = require(require.resolve('exceljs', { paths: [XL, SITE] })); } catch {}
   const { BlobsServer } = await import(require.resolve('@netlify/blobs/server', { paths: [SITE] }));
-  const dir = path.join(os.tmpdir(), 'mbs-board-blobs'); fs.rmSync(dir, { recursive: true, force: true });
+  const dir = path.join(os.tmpdir(), 'mbs-kb-blobs'); fs.rmSync(dir, { recursive: true, force: true });
   const blobs = new BlobsServer({ directory: dir, token: 'tok', port: 0 });
   const { port: bport } = await blobs.start();
   const ctxB64 = Buffer.from(JSON.stringify({ siteID: 'mbs', token: 'tok', edgeURL: `http://localhost:${bport}`, uncachedEdgeURL: `http://localhost:${bport}`, apiURL: `http://localhost:${bport}` })).toString('base64');
@@ -20,133 +24,73 @@ const DAY = 864e5;
   const srv = spawn('node', ['local-server.mjs'], { cwd: SITE, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; srv.stdout.on('data', (d) => (log += d)); srv.stderr.on('data', (d) => (log += d));
   for (let i = 0; i < 40 && !/running/.test(log); i++) await sleep(150);
-  const cleanup = async () => { try { srv.kill(); } catch {} try { await blobs.stop(); } catch {} };
-
+  let br = null;
+  const tmp = path.join(os.tmpdir(), 'mbs-kb-files'); fs.rmSync(tmp, { recursive: true, force: true }); fs.mkdirSync(tmp);
   try {
-    const J = await import(path.join(SITE, 'netlify/lib/jobs.mjs'));
-    const kv = await import(path.join(SITE, 'netlify/lib/kv.mjs'));
-    const P = await import(path.join(SITE, 'netlify/lib/plan.mjs'));
-    const AI = await import(path.join(SITE, 'netlify/lib/ai.mjs'));
-    const today = AI.sydToday();
-    const C = {};
-    const mk = async (key, name, summary, stages = [], back = {}) => {
-      const core = await J.nextCore('M');
-      await J.create({ core, name, phone: '0400 000 000', email: '', suburb: 'Box Hill', service: 'Repair question (Ask Mr. Fixit)', source: 'chat', summary });
-      for (const [st, extra] of stages) await J.setStage(core, st, 'test', extra || {});
-      if (Object.keys(back).length) {   // pretend things happened some days ago
-        const j = await kv.get('job:' + core);
-        for (const [f, d] of Object.entries(back)) j[f] = Date.now() - d * DAY;
-        await kv.set('job:' + core, j); await J.setStage(core, j.stage, 'test');
-        const j2 = await kv.get('job:' + core); for (const [f, d] of Object.entries(back)) j2[f] = Date.now() - d * DAY; await kv.set('job:' + core, j2);
-        await kv.update('index', (idx) => { idx.jobs[core] = J.summary(j2); return idx; });
-      }
-      C[key] = core; return core;
-    };
-    await mk('new', 'Nina New', 'Customer Nina New from Box Hill has asked about a leaking gutter over the back door.');
-    await mk('newOld', 'Oscar Old', 'Customer Oscar Old has asked about cracked bathroom tiles.', [], { created: 4 });
-    await mk('called', 'Cal Called', 'Customer Cal Called has asked about a sticking front door.', [['called']]);
-    await mk('visit', 'Vera Visit', 'Customer Vera Visit has asked about a deck that has rotten boards.', [['called']]);
-    await J.addReminder({ at: Date.now() + 2 * DAY, core: C.visit, chat: 'alerts', text: 'Site visit: measure the deck', by: 'test' });
-    await mk('quoted', 'Quinn Quote', 'Customer Quinn Quote has asked about a new Colorbond fence.', [['called'], ['quoted', { amount: 5200 }]], { quoted_at: 10 });
-    await mk('won', 'Wendy Won', 'Customer Wendy Won has asked about a balcony leak.', [['called'], ['quoted', { amount: 8000 }], ['won']]);
-    await mk('planned', 'Penny Planned', 'Customer Penny Planned has asked about new gutters.', [['called']]);
-    await mk('planning', 'Pat Plan', 'Customer Pat Plan has asked about an exterior repaint.', [['called'], ['quoted', { amount: 12000 }], ['won']]);
-    await mk('progress', 'Pia Progress', 'Customer Pia Progress has asked about a bathroom renovation.', [['called'], ['quoted', { amount: 22000 }], ['won']]);
-    const start = P.prevWork(P.prevWork(P.prevWork(today)));
-    const task = (id, name, dur, pct, pred) => ({ id, name, dur, qty: 1, unit: 'lot', rate: 1000, pct, status: pct >= 100 ? 'done' : pct > 0 ? 'doing' : 'todo', pred: pred || [], res: [], actual: 0 });
-    await P.save(C.planning, { name: 'Repaint plan', start: P.nextWork(P.prevWork(today)), tasks: [task('t1', 'Prep', 2, 0), task('t2', 'Paint', 3, 0, ['t1'])], risks: [], issues: [], charter: {} }, 0, 'test');
-    await P.save(C.planned, { name: 'Gutters plan', start: '2099-02-02', tasks: [task('t1', 'Gutters', 2, 0)], risks: [], issues: [], charter: {} }, 0, 'test');
-    // move the planning plan's start into the future so it is clearly "not started"
-    const pp = await kv.get('plan:' + C.planning); pp.start = '2099-01-05'; await kv.set('plan:' + C.planning, pp);
-    await P.save(C.progress, { name: 'Bathroom plan', start, tasks: [task('t1', 'Strip-out', 1, 100), task('t2', 'Waterproof', 1, 0, ['t1']), task('t3', 'Tile', 5, 0, ['t2'])],
-      risks: [{ id: 'r1', title: 'Asbestos', p: 4, i: 4, status: 'Open' }], issues: [], charter: {} }, 0, 'test');
-    await mk('completed', 'Cora Complete', 'Customer Cora Complete has asked about a new laundry tub.', [['called'], ['quoted', { amount: 900 }], ['won'], ['completed']], { completed_at: 3 });
-    await mk('invoiced', 'Ivan Invoice', 'Customer Ivan Invoice has asked about a hot water system.', [['called'], ['quoted', { amount: 2400 }], ['won'], ['completed'], ['invoiced', { amount: 2400 }]], { invoiced_at: 20 });
-    await mk('paid', 'Paula Paid', 'Customer Paula Paid has asked about a ceiling patch.', [['called'], ['quoted', { amount: 600 }], ['won'], ['completed'], ['invoiced', { amount: 600 }], ['paid']]);
-    await mk('lostOld', 'Larry Lost', 'Customer Larry Lost has asked about a pergola.', [['called'], ['lost', { reason: 'price' }]], { lost_at: 60, updated: 60 });
-
-    // ---- server ----
-    const b = await P.pipelineBoard({ closedDays: 30 });
-    const col = (k) => (b.cards.find((c) => c.core === C[k]) || {}).col;
-    ok('Server', 'eight columns in order (no Planning column)', b.cols.join(',') === 'new,called,visit,won,progress,completed,invoiced,closed');
-    ok('Server', 'each job lands in the right column', col('new') === 'new' && col('newOld') === 'new' && col('called') === 'called' && col('visit') === 'visit' && col('quoted') === 'visit' && col('won') === 'won' && col('planning') === 'won' && col('planned') === 'visit' && col('progress') === 'progress' && col('completed') === 'completed' && col('invoiced') === 'invoiced' && col('paid') === 'closed',
-      JSON.stringify(Object.fromEntries(Object.keys(C).map((k) => [k, col(k)]))));
-    ok('Server', 'closed jobs older than the chosen period are left out (lost 60 days ago, period 30 days)', !col('lostOld'));
-    ok('Server', '…and shown with a longer period (90 days)', (await P.pipelineBoard({ closedDays: 90 })).cards.some((c) => c.core === C.lostOld));
-    const pr = b.cards.find((c) => c.core === C.progress);
-    ok('Server', 'in-progress card carries plan %, SPI, finish and late tasks', pr.plan && pr.plan.pct > 0 && pr.plan.SPI !== null && pr.plan.finish && typeof pr.plan.late === 'number', JSON.stringify(pr.plan));
-    ok('Server', 'cards say what the work is, not "Repair question"', b.cards.find((c) => c.core === C.new).title === 'Leaking gutter over the back door', b.cards.find((c) => c.core === C.new).title);
-
-    // ---- browser ----
-    const br = await chromium.launch();
-    const ctx = await br.newContext({ viewport: { width: 1600, height: 950 } });
-    const p = await ctx.newPage(); p.setDefaultTimeout(10000);
-    const errors = []; errorsAll = errors;
-    p.on('pageerror', (e) => errors.push(e.message));
-    p.on('dialog', (x) => { errors.push('dialog: ' + x.message()); x.dismiss(); });
-    let r = await p.request.post(`${BASE}/.netlify/functions/admin`, { data: { action: 'pipelineBoard' }, headers: { 'X-MBS-Admin': '1' } });
-    ok('Security', 'the board needs a login', r.status() === 401, r.status());
+    const J = await import(path.join(SITE, 'netlify/lib/jobs.mjs')), kv = await import(path.join(SITE, 'netlify/lib/kv.mjs')), P = await import(path.join(SITE, 'netlify/lib/plan.mjs'));
+    const core = await J.nextCore('G');
+    await J.create({ core, name: 'Bea Board', phone: '0400 101 202', email: '', suburb: 'Kellyville', service: 'Kitchen renovation', source: 'phone', summary: 'Kitchen renovation.' });
+    br = await chromium.launch();
+    const ctx = await br.newContext({ viewport: { width: 1500, height: 950 }, acceptDownloads: true });
+    const p = await ctx.newPage(); p.setDefaultTimeout(20000);
+    const errors = []; errorsAll = errors; p.on('pageerror', (e) => errors.push(e.message));
+    await p.setViewportSize({ width: 1366, height: 768 });
     await p.goto(`${BASE}/admin/`, { waitUntil: 'networkidle' });
+    await p.evaluate(() => { localStorage.removeItem('mbsBoardF'); });
     await p.fill('[name=username]', 'sashi73'); await p.fill('[name=password]', 'sashi98'); await p.click('#loginForm button');
-    await p.waitForSelector('#app:not([hidden])'); await p.waitForSelector('[data-dash]');
-    ok('Toggle', 'dashboard opens on Summary with a "Pipeline board" switch', await p.isVisible('.kpis') && /Pipeline board/.test(await p.textContent('.dashmode')));
-    await p.click('[data-dash=board]'); await p.waitForSelector('.pcard');
-    const heads = await p.$$eval('.pcol .pcol-h b', (h) => h.map((x) => x.textContent));
-    ok('Board', 'columns: New enquiry, Called, Site visit, planned & quoted, Job won, Job in progress, Completed, Invoiced, Closed', heads.join('|') === 'New enquiry|Called|Site visit, planned & quoted|Job won|Job in progress|Completed|Invoiced|Closed', heads.join('|'));
-    const counts = await p.$$eval('.pcol', (c) => c.map((x) => x.getAttribute('data-col') + ':' + x.querySelector('.pcol-n').textContent));
-    ok('Board', 'counts per column (2 new, 1 called, 3 visit/planned/quoted, 2 won, 1 in progress, 1 completed, 1 invoiced, 1 closed)', counts.join(',') === 'new:2,called:1,visit:3,won:2,progress:1,completed:1,invoiced:1,closed:1', counts.join(','));
-    ok('Board', 'a called job with a plan sits in "Site visit, planned & quoted" (Planned: quote it); a won job with a plan not started stays in Job won (Plan ready: starts …)', /Planned: quote it/.test(await p.textContent(`.pcard[data-core="${C.planned}"]`)) && /Plan ready: starts 5 Jan/.test(await p.textContent(`.pcard[data-core="${C.planning}"]`)));
-    const inCol = (k, who) => p.evaluate(([k, w]) => !!document.querySelector(`.pcol[data-col=${k}]`).textContent.includes(w), [k, who]);
-    ok('Board', 'cards sit in the right columns', await inCol('visit', 'Vera Visit') && await inCol('visit', 'Quinn Quote') && await inCol('progress', 'Pia Progress') && await inCol('closed', 'Paula Paid'));
-    const txt = async (k) => p.textContent(`.pcard[data-core="${C[k]}"]`);
-    ok('Card', 'card shows ref, customer, the work, suburb and value', /Quinn Quote/.test(await txt('quoted')) && /Colorbond fence/.test(await txt('quoted')) && /Box Hill/.test(await txt('quoted')) && /\$5,200/.test(await txt('quoted')), await txt('quoted'));
-    ok('Card', 'warnings: not called for 4 days (red), quote follow-up after 10 days, no plan yet', /Not called yet: 4 days/.test(await txt('newOld')) && !!(await p.$(`.pcard[data-core="${C.newOld}"] .pf-red`)) && /Quote sent 10 days ago: follow up/.test(await txt('quoted')) && /No project plan yet/.test(await txt('won')));
-    ok('Card', 'site visit booked: shown with the reminder', /Site visit booked/.test(await txt('visit')) && /Site visit: measure the deck/.test(await txt('visit')));
-    ok('Card', 'in progress: progress bar, SPI with colour, finish date, high risk', !!(await p.$(`.pcard[data-core="${C.progress}"] .pbar`)) && /SPI \d\.\d\d/.test(await txt('progress')) && /Finish/.test(await txt('progress')) && /1 high risk/.test(await txt('progress')) && !!(await p.$(`.pcard[data-core="${C.progress}"] .pc-ev`)), await txt('progress'));
-    ok('Card', 'completed but not invoiced for 3 days; invoiced and unpaid for 20 days; closed shows Paid', /Not invoiced: 3 days/.test(await txt('completed')) && /Unpaid: 20 days/.test(await txt('invoiced')) && /Paid ✓/.test(await txt('paid')));
-    ok('Board', 'column totals: Site visit & quoted shows $5,200', /\$5,200/.test(await p.textContent('.pcol[data-col=visit] header')));
-    ok('Board', 'summary line: open jobs and value', /11<\/b> open jobs/.test(await p.innerHTML('#pbSum')) || /11 open jobs/.test(await p.textContent('#pbSum')), await p.textContent('#pbSum'));
-    await p.screenshot({ path: 'MBS_board.jpg', type: 'jpeg', quality: 80 });
-
-    // search
-    await p.fill('#pbQ', 'fence'); await sleep(100);
-    ok('Search', 'search narrows the board (fence → Quinn only)', (await p.$$('.pcard')).length === 1 && /Quinn/.test(await p.textContent('#pboard')));
-    await p.fill('#pbQ', ''); await sleep(100);
-    // closed period
-    await p.selectOption('#pbDays', '90'); await p.waitForFunction(() => document.querySelector('.pcol[data-col=closed] .pcol-n').textContent === '2');
-    ok('Closed', 'closed period 90 days brings back the job lost 60 days ago (shown faded, "Lost")', /Larry Lost/.test(await p.textContent('.pcol[data-col=closed]')) && !!(await p.$('.pcard.lost')));
-    // full screen
-    await p.click('#pbFull');
-    const fs1 = await p.evaluate(() => ({ full: document.body.classList.contains('board-full'), side: getComputedStyle(document.querySelector('.side')).display, right: Math.max(...[...document.querySelectorAll('.pcol')].map((c) => c.getBoundingClientRect().right)), w: innerWidth }));
-    ok('Full screen', 'Full screen hides the menu and all eight columns fit across 1600 px', fs1.full && fs1.side === 'none' && fs1.right <= fs1.w + 1, JSON.stringify(fs1));
-    await p.screenshot({ path: 'MBS_board_full.jpg', type: 'jpeg', quality: 80 });
-    await p.keyboard.press('Escape');
-    ok('Full screen', 'Esc leaves full screen', !(await p.evaluate(() => document.body.classList.contains('board-full'))));
-    // click through
-    await p.click(`.pcard[data-core="${C.progress}"] .pc-plink`); await p.waitForSelector('table.gt, #planBody');
-    ok('Links', '"📅 Plan" on a card opens the project plan', /#plan\//.test(p.url()));
-    await p.goto(`${BASE}/admin/#dashboard`); await p.waitForSelector('.pcard');
-    ok('Toggle', 'the board choice is remembered', await p.isVisible('#pboard'));
-    await p.click(`.pcard[data-core="${C.quoted}"]`); await p.waitForFunction(() => /#job\//.test(location.hash));
-    ok('Links', 'clicking a card opens the job', new RegExp(C.quoted).test(p.url()));
-    await p.goto(`${BASE}/admin/#dashboard`); await p.waitForSelector('[data-dash=summary]');
-    await p.click('[data-dash=summary]'); await p.waitForSelector('.kpis');
-    ok('Toggle', 'flip back to Summary', await p.isVisible('.kpis') && !(await p.$('#pboard')));
-    await p.reload(); await p.waitForSelector('.kpis');
-    ok('Toggle', 'Summary is remembered too', !(await p.$('#pboard')));
-    // phone
-    const ph = await ctx.newPage(); await ph.setViewportSize({ width: 390, height: 844 });
-    ph.on('pageerror', (e) => errors.push('phone: ' + e.message));
-    await ph.goto(`${BASE}/admin/#dashboard`, { waitUntil: 'domcontentloaded' }); await ph.waitForSelector('[data-dash=board]'); await ph.click('[data-dash=board]'); await ph.waitForSelector('.pcard');
-    ok('Phone', 'on a phone the board scrolls sideways inside itself; the page does not', await ph.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-    await ph.screenshot({ path: 'MBS_board_phone.jpg', type: 'jpeg', quality: 80 });
-    await ph.click('[data-dash=summary]'); await ph.close();
+    await p.waitForSelector('#app:not([hidden])');
+    await p.goto(`${BASE}/admin/#plan/${core}`); await p.waitForSelector('#tplType'); await p.selectOption('#tplType', 'kitchen-reno'); await p.click('#tplCreate'); await p.waitForSelector('table.gt'); await sleep(1200);
+    const pl0 = await P.get(core);
+    pl0.stakeholders = [{ id: 's1', name: 'Bea Board', role: 'Customer', raci: 'A' }, { id: 's2', name: 'Sam Sparky', role: 'Electrician', raci: 'R' }, { id: 's3', name: 'Tina Tiler', role: 'Tiler', raci: 'R' }];
+    await P.save(core, pl0, pl0.rev, 'test');
+    await p.goto(`${BASE}/admin/#projects`); await sleep(300);
+    await p.goto(`${BASE}/admin/#plan/${core}/board`); await p.waitForSelector('.kcard'); await sleep(300);
+    const cols = await p.$$eval('.kcol', (a) => a.map((x) => Math.round(x.getBoundingClientRect().width)));
+    const tops = await p.$$eval('.kcol', (a) => a.map((x) => Math.round(x.getBoundingClientRect().top)));
+    ok('Fit', 'on a 14" laptop (1366 wide, menu open) the 4 columns sit side by side, no sideways scrolling', cols.length === 4 && new Set(tops).size === 1 && Math.min(...cols) >= 200 && await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), cols.join(',') + ' / ' + tops.join(','));
+    await sleep(800); const colBottom = await p.$eval('.kcol-todo .kcards', (e) => e.getBoundingClientRect().bottom);
+    ok('Fit', 'each column scrolls on its own, so the board fits the screen height', colBottom <= 768 + 2 && await p.$eval('.kcol-todo .kcards', (e) => e.scrollHeight > e.clientHeight), String(colBottom));
+    ok('Card', 'every card has Owner (from the Stakeholder register), Priority and Points', (await p.$$eval('.kcard', (a) => a.every((c) => c.querySelector('[data-kf=owner]') && c.querySelector('[data-kf=priority]') && c.querySelector('[data-kf=points]')))) &&
+      (await p.$$eval('.kcard:first-child [data-kf=owner] option', (o) => o.map((x) => x.textContent))).join() === 'Owner…,Bea Board,Sam Sparky,Tina Tiler' && (await p.$$eval('.kcard:first-child [data-kf=priority] option', (o) => o.map((x) => x.textContent))).join() === 'Prio,High,Med,Low');
+    const card = (n) => `.kcard:nth-child(${n})`;
+    const id1 = await p.getAttribute(card(1), 'data-tid'), id2 = await p.getAttribute(card(2), 'data-tid'), id3 = await p.getAttribute(card(3), 'data-tid');
+    await p.selectOption(`[data-tid="${id1}"] [data-kf=owner]`, 's2'); await p.selectOption(`[data-tid="${id1}"] [data-kf=priority]`, 'High'); await p.selectOption(`[data-tid="${id1}"] [data-kf=points]`, '5');
+    await p.selectOption(`[data-tid="${id2}"] [data-kf=owner]`, 's3'); await p.selectOption(`[data-tid="${id2}"] [data-kf=priority]`, 'Low'); await p.selectOption(`[data-tid="${id2}"] [data-kf=points]`, '8');
+    await p.selectOption(`[data-tid="${id3}"] [data-kf=priority]`, 'Medium'); await p.selectOption(`[data-tid="${id3}"] [data-kf=points]`, '2');
+    const c1 = await p.textContent(`[data-tid="${id1}"]`);
+    ok('Card', 'the card shows the owner\'s initials, a High chip and "5 pts", with a red edge', (await p.textContent(`[data-tid="${id1}"] .kav`)) === 'SS' && /High/.test(c1) && /5 pts/.test(c1) && (await p.getAttribute(`[data-tid="${id1}"]`, 'class')).includes('kp-high'));
+    ok('Points', 'the column and the board add up the points (15 to do, 0 done)', /15 pts/.test(await p.textContent('.kcol-todo h3')) && /0 of 15 points done/.test(await p.textContent('.kpts')));
+    await sleep(1500);
+    const sv = await P.get(core), t1 = sv.tasks.find((t) => t.id === id1);
+    ok('Saved', 'owner, priority and points are saved with the task', t1.owner === 's2' && t1.priority === 'High' && t1.points === 5, JSON.stringify({ o: t1.owner, p: t1.priority, n: t1.points }));
+    await p.click(`[data-tid="${id1}"] [data-step="1"]`); await sleep(300);
+    ok('Move', '→ moves the card to In progress and its points go with it', !!(await p.$(`.kcol-doing [data-tid="${id1}"]`)) && /5 pts/.test(await p.textContent('.kcol-doing h3')) && /10 pts/.test(await p.textContent('.kcol-todo h3')));
+    await p.click(`[data-tid="${id2}"] [data-tick]`); await sleep(300);
+    ok('Points', 'ticking a card done counts its points as done', /8 of 15 points done/.test(await p.textContent('.kpts')));
+    await p.selectOption('#kbOwner', 's2'); await sleep(200);
+    ok('Filter', 'filter by owner shows only their cards', (await p.$$('.kcard')).length === 1 && !!(await p.$(`[data-tid="${id1}"]`)));
+    await p.selectOption('#kbOwner', '-'); await sleep(200);
+    ok('Filter', '"No owner" shows the cards nobody owns yet', (await p.$$('.kcard')).length === sv.tasks.length - 2);
+    await p.selectOption('#kbOwner', ''); await p.selectOption('#kbPrio', 'Medium'); await sleep(200);
+    ok('Filter', 'filter by priority', (await p.$$('.kcard')).length === 1 && !!(await p.$(`[data-tid="${id3}"]`)) && /No cards match/.test(await p.textContent('.kcol-done')));
+    await p.selectOption('#kbPrio', ''); await p.selectOption('#kbSort', 'prio'); await sleep(200);
+    const order = await p.$$eval('.kcol-todo .kcard', (a) => a.map((x) => x.getAttribute('data-tid')));
+    ok('Sort', 'sort by priority puts Medium before the cards with none', order[0] === id3, order.slice(0, 3).join());
+    await p.fill('#kbQ', 'cabinet'); await sleep(200);
+    ok('Search', 'search finds cards by name', (await p.$$('.kcard')).length >= 1 && (await p.$$eval('.kcard .kname', (a) => a.every((x) => /cabinet/i.test(x.textContent)))) && (await p.inputValue('#kbQ')) === 'cabinet');
+    await p.fill('#kbQ', ''); await sleep(200);
+    await p.reload(); await p.waitForSelector('.kcard'); await sleep(300);
+    ok('Filter', 'the sort choice is remembered', (await p.inputValue('#kbSort')) === 'prio');
+    const subBtn = await p.$('[data-ksub]');
+    if (subBtn) { await subBtn.click(); await sleep(200); ok('Card', 'sub-tasks fold away and open with ▸', !!(await p.$('.kchk-i'))); }
+    await p.setViewportSize({ width: 390, height: 844 }); await sleep(300);
+    ok('Phone', 'on a phone the columns stack, no sideways scrolling', await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
     ok('Console', 'no JavaScript errors', errors.length === 0, errors.join(' | '));
-    await br.close();
-  } catch (e) { ok('Run', 'test run completed', false, e.stack.split('\n').slice(0, 4).join(' / ') + ' ERRORS: ' + errorsAll.join(' | ')); }
-  await cleanup();
+    await br.close(); br = null;
+  } catch (e) { try { if (br) await br.close(); } catch {} ok('Run', 'test run completed', false, e.stack.split('\n').slice(0, 4).join(' / ') + ' ERRORS: ' + errorsAll.join(' | ') + ' LOG: ' + log.slice(-400)); }
+  try { srv.kill(); } catch {} try { await blobs.stop(); } catch {}
   let pass = 0;
   for (const x of results) { if (x.pass) pass++; console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.detail !== '' && !x.pass ? '  (' + x.detail + ')' : ''}`); }
   console.log(`\n${pass}/${results.length} passed`);
-  if (pass !== results.length) console.log('\n--- server log ---\n' + log.slice(-2000));
+  process.exit(0);
 })();

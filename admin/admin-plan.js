@@ -1634,6 +1634,7 @@
       var list = p.tasks.filter(function (t) { return t.status === x[0]; });
       list.forEach(function (t, ri) {
         var lines = [(t.dur === 0 ? '◆ ' : '') + t.name, (resShort(t) || 'No one assigned') + ' · ' + pretty(t.es) + (t.dur ? ' – ' + pretty(t.ef) : '') + ' · ' + t.pct + '%'];
+        if (t.owner || t.priority || t.points) lines.push([ownerOf(t) ? 'Owner: ' + ownerOf(t) : '', t.priority ? t.priority + ' priority' : '', t.points ? t.points + ' pts' : ''].filter(Boolean).join(' · '));
         (t.subs || []).forEach(function (sb) { lines.push((sb.status === 'done' ? '☑ ' : '☐ ') + sb.name + (sb.owner ? ' (' + sb.owner + ')' : '')); });
         var c = bd.getCell(5 + ri, ci + 1); c.value = lines.join('\n'); c.alignment = { wrapText: true, vertical: 'top' }; c.border = box; c.fill = fill(STC[x[0]]);
         var h = 16 * lines.length + 6; if ((bd.getRow(5 + ri).height || 0) < h) bd.getRow(5 + ri).height = h;
@@ -1839,29 +1840,62 @@
   }
 
   /* ---------- board (Planner style): To do → In progress → In review / QA → Done ---------- */
+  /* ---------- board (Planner / Jira style): owner, priority, points; filters; columns fit the screen ---------- */
+  var PRIO = ['High', 'Medium', 'Low'], PTS = [1, 2, 3, 5, 8, 13, 21];
+  function bfState() { if (!S.bf) { var v = {}; try { v = JSON.parse(localStorage.getItem('mbsBoardF') || '{}') || {}; } catch (e) {} S.bf = { owner: v.owner || '', prio: v.prio || '', sort: v.sort || 'plan', q: '', open: {} }; } return S.bf; }
+  function bfSave() { try { localStorage.setItem('mbsBoardF', JSON.stringify({ owner: S.bf.owner, prio: S.bf.prio, sort: S.bf.sort })); } catch (e) {} }
+  function ownerOf(t) { var sh = (S.plan.stakeholders || []).filter(function (x) { return x.id === t.owner; })[0]; return sh ? (sh.name || sh.role) : ''; }
+  function initials(n) { return String(n || '').split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0].toUpperCase(); }).join('') || '?'; }
+  function kFit() {   // each column scrolls on its own, in the space left on the screen
+    var first = document.querySelector('#planBody .kcards'); if (!first || window.innerWidth <= 820) return;
+    var h = Math.max(260, window.innerHeight - first.getBoundingClientRect().top - 14);
+    document.querySelectorAll('#planBody .kcards').forEach(function (k) { k.style.maxHeight = h + 'px'; });
+  }
   function board() {
-    var p = S.plan, t0 = today();
-    $('#planBody').innerHTML = '<p class="muted" style="margin:0 0 10px">Drag a card to the next column as the work moves on. The Gantt chart follows automatically: To do 0%, In progress 33%, In review / QA 67%, Done 100%.</p><div class="kanban">' + STATUS.map(function (c) {
-      var list = ordered().filter(function (r) { return r.t.status === c[0]; });
-      return '<div class="kcol kcol-' + c[0] + '" data-col="' + c[0] + '"><h3>' + c[1] + ' <span class="muted">' + list.length + ' · ' + c[2] + '%</span></h3>' + list.map(function (r) {
-        var t = r.t, late = t.pct < 100 && t.ef < t0;
-        return '<div class="kcard' + (late ? ' late' : '') + '" draggable="true" data-tid="' + esc(t.id) + '"><label class="row" style="gap:8px;font-weight:700;flex-wrap:nowrap"><input type="checkbox" data-tick' + (t.pct >= 100 ? ' checked' : '') + ' style="width:auto" title="Done">' + (t.dur === 0 ? '◆ ' : '') + esc(t.name) + '</label>' +
-          ((t.res || []).length ? '<div class="kres">' + t.res.map(function (n) { return '<span class="rchip' + (n === t.lead ? ' lead' : '') + '">' + (n === t.lead ? '★ ' : '') + esc(n) + '</span>'; }).join('') + '</div>' : '<small class="muted">No one assigned yet</small>') +
-          '<small>#' + r.n + ' · ' + esc(pretty(t.es)) + (t.dur ? ' – ' + esc(pretty(t.ef)) : '') + (late ? ' · <b style="color:#C2410C">late</b>' : '') + (cost(t) ? ' · ' + money(cost(t)) : '') + '</small>' +
-          ((t.subs || []).length ? '<div class="kchk"><small class="muted">' + t.subs.filter(function (x) { return x.status === 'done'; }).length + ' of ' + t.subs.length + ' sub-tasks done</small>' + t.subs.map(function (x) {
-            return '<label class="kchk-i' + (x.status === 'done' ? ' done' : '') + '"><input type="checkbox" data-subtick="' + esc(x.id) + '"' + (x.status === 'done' ? ' checked' : '') + ' style="width:auto">' + esc(x.name) + (x.owner ? ' <small class="muted">· ' + esc(x.owner) + '</small>' : '') + '</label>'; }).join('') + '</div>' : '') +
-          '<div class="pbar st-' + t.status + '"><span style="width:' + t.pct + '%"></span></div>' +
-          '<div class="kmove">' + (c[0] !== 'todo' ? '<button class="btn btn-sm" data-step="-1" title="Back one column">←</button>' : '') + '<span class="muted">' + t.pct + '%</span>' + (c[0] !== 'done' ? '<button class="btn btn-sm" data-step="1" title="Next column">→</button>' : '') + '</div></div>';
-      }).join('') + '</div>';
-    }).join('') + '</div>';
+    var p = S.plan, t0 = today(), F = bfState(), sh = (p.stakeholders || []).filter(function (x) { return x.name || x.role; });
+    var match = function (r) { var t = r.t; if (F.owner === '-' ? t.owner && ownerOf(t) : F.owner && t.owner !== F.owner) return false; if (F.prio === '-' ? t.priority : F.prio && t.priority !== F.prio) return false; return !F.q || (t.name + ' ' + (t.resource || '') + ' ' + ownerOf(t)).toLowerCase().indexOf(F.q.toLowerCase()) >= 0; };
+    var sorter = { plan: function (a, b) { return a.n - b.n; }, prio: function (a, b) { var x = PRIO.indexOf(a.t.priority), y = PRIO.indexOf(b.t.priority); return ((x < 0 ? 9 : x) - (y < 0 ? 9 : y)) || a.n - b.n; },
+      points: function (a, b) { return (b.t.points || 0) - (a.t.points || 0) || a.n - b.n; }, due: function (a, b) { return (a.t.ef || '9') < (b.t.ef || '9') ? -1 : (a.t.ef || '9') > (b.t.ef || '9') ? 1 : a.n - b.n; } }[F.sort] || function (a, b) { return a.n - b.n; };
+    var rows = ordered().filter(match), totP = rows.reduce(function (a, r) { return a + (r.t.points || 0); }, 0), doneP = rows.filter(function (r) { return r.t.status === 'done'; }).reduce(function (a, r) { return a + (r.t.points || 0); }, 0);
+    var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (String(cur) === String(v) ? ' selected' : '') + '>' + esc(label) + '</option>'; };
+    var bar = '<div class="kbar"><input type="search" id="kbQ" placeholder="Search cards…" value="' + esc(F.q) + '">' +
+      '<label>Owner <select id="kbOwner">' + opt('', 'Everyone', F.owner) + opt('-', 'No owner', F.owner) + sh.map(function (x) { return opt(x.id, x.name || x.role, F.owner); }).join('') + '</select></label>' +
+      '<label>Priority <select id="kbPrio">' + opt('', 'All', F.prio) + PRIO.map(function (x) { return opt(x, x, F.prio); }).join('') + opt('-', 'Not set', F.prio) + '</select></label>' +
+      '<label>Sort <select id="kbSort">' + opt('plan', 'Plan order', F.sort) + opt('prio', 'Priority', F.sort) + opt('points', 'Points', F.sort) + opt('due', 'Due date', F.sort) + '</select></label>' +
+      '<span class="sp"></span><span class="kpts" title="Story points done of the points on the cards shown">⬤ ' + doneP + ' of ' + totP + ' points done' + (totP ? ' (' + Math.round(doneP / totP * 100) + '%)' : '') + '</span>' +
+      (sh.length ? '' : '<span class="muted" style="font-size:12px">Add people on 👥 Stakeholders to pick owners</span>') + '</div>';
+    $('#planBody').innerHTML = bar + '<div class="kanban">' + STATUS.map(function (c) {
+      var list = rows.filter(function (r) { return r.t.status === c[0]; }).sort(sorter), pts = list.reduce(function (a, r) { return a + (r.t.points || 0); }, 0);
+      return '<div class="kcol kcol-' + c[0] + '" data-col="' + c[0] + '"><h3><span>' + c[1] + '</span><span class="kcount">' + list.length + (pts ? ' · ' + pts + ' pts' : '') + '</span></h3><div class="kcards">' + list.map(function (r) {
+        var t = r.t, late = t.pct < 100 && t.ef < t0, own = ownerOf(t), subsDone = (t.subs || []).filter(function (x) { return x.status === 'done'; }).length, op = !!F.open[t.id];
+        return '<div class="kcard' + (late ? ' late' : '') + (t.priority ? ' kp-' + t.priority.toLowerCase() : '') + '" draggable="true" data-tid="' + esc(t.id) + '">' +
+          '<div class="ktop"><span class="kid">#' + r.n + '</span>' + (t.priority ? '<span class="kprio kprio-' + t.priority.toLowerCase() + '">' + t.priority + '</span>' : '') + (t.points ? '<span class="kpt" title="Story points">' + t.points + ' pts</span>' : '') + (late ? '<span class="klate">Late</span>' : '') + '<span class="sp"></span><span class="kdate">' + esc(pretty(t.es)) + (t.dur ? ' – ' + esc(pretty(t.ef)) : '') + '</span></div>' +
+          '<label class="kname"><input type="checkbox" data-tick' + (t.pct >= 100 ? ' checked' : '') + ' title="Done"><span>' + (t.dur === 0 ? '◆ ' : '') + esc(t.name) + '</span></label>' +
+          ((t.res || []).length ? '<div class="kres">' + t.res.map(function (n) { return '<span class="rchip' + (n === t.lead ? ' lead' : '') + '">' + (n === t.lead ? '★ ' : '') + esc(n) + '</span>'; }).join('') + '</div>' : '') +
+          '<div class="kmeta"><span class="kav' + (own ? '' : ' none') + '" title="' + esc(own || 'No owner') + '">' + (own ? esc(initials(own)) : '?') + '</span>' +
+            '<select data-kf="owner" title="Owner (from the Stakeholder register)">' + opt('', 'Owner…', t.owner || '') + sh.map(function (x) { return opt(x.id, x.name || x.role, t.owner || ''); }).join('') + (t.owner && !own ? opt(t.owner, '(removed)', t.owner) : '') + '</select>' +
+            '<select data-kf="priority" title="Priority" class="kps-' + (t.priority || 'none').toLowerCase() + '">' + opt('', 'Prio', t.priority || '') + PRIO.map(function (x) { return opt(x, x === 'Medium' ? 'Med' : x, t.priority || ''); }).join('') + '</select>' +
+            '<select data-kf="points" title="Story points">' + opt(0, 'Pts', t.points || 0) + PTS.map(function (x) { return opt(x, String(x), t.points || 0); }).join('') + '</select></div>' +
+          ((t.subs || []).length ? '<button type="button" class="ksubs" data-ksub>' + (op ? '▾' : '▸') + ' ' + subsDone + ' of ' + t.subs.length + ' sub-tasks</button>' + (op ? '<div class="kchk">' + t.subs.map(function (x) {
+            return '<label class="kchk-i' + (x.status === 'done' ? ' done' : '') + '"><input type="checkbox" data-subtick="' + esc(x.id) + '"' + (x.status === 'done' ? ' checked' : '') + ' style="width:auto">' + esc(x.name) + (x.owner ? ' <small class="muted">· ' + esc(x.owner) + '</small>' : '') + '</label>'; }).join('') + '</div>' : '') : '') +
+          '<div class="kfoot"><div class="pbar st-' + t.status + '"><span style="width:' + t.pct + '%"></span></div>' + (c[0] !== 'todo' ? '<button class="btn btn-sm" data-step="-1" title="Back one column">←</button>' : '') + '<span class="muted">' + t.pct + '%</span>' + (c[0] !== 'done' ? '<button class="btn btn-sm" data-step="1" title="Next column">→</button>' : '') + '</div></div>';
+      }).join('') + (list.length ? '' : '<div class="kempty">' + (rows.length < p.tasks.length ? 'No cards match the filter' : 'Drop a card here') + '</div>') + '</div></div>';
+    }).join('') + '</div><p class="muted" style="margin:8px 0 0;font-size:12px">Drag a card to another column as the work moves on (To do 0%, In progress 33%, In review / QA 67%, Done 100%); the Gantt chart follows. Owner, priority and points are kept with the task.</p>';
     var B = $('#planBody'), find = function (id) { return p.tasks.filter(function (t) { return t.id === id; })[0]; };
     var move = function (t, k) { if (!t || t.status === k) return; setStatus(t, k); dirty(stName[k] + ': ' + t.name); render(); };
-    B.querySelectorAll('.kcard').forEach(function (c) { c.addEventListener('dragstart', function (e) { e.dataTransfer.setData('text/plain', c.getAttribute('data-tid')); }); });
+    kFit(); setTimeout(kFit, 80); setTimeout(kFit, 700); if (!S.kFitOn) { S.kFitOn = true; window.addEventListener('resize', function () { if (S.tab === 'board') kFit(); }); }
+    $('#kbQ').oninput = function () { F.q = this.value; var pos = this.selectionStart; board(); var q = $('#kbQ'); q.focus(); try { q.setSelectionRange(pos, pos); } catch (e) {} };
+    $('#kbOwner').onchange = function () { F.owner = this.value; bfSave(); board(); };
+    $('#kbPrio').onchange = function () { F.prio = this.value; bfSave(); board(); };
+    $('#kbSort').onchange = function () { F.sort = this.value; bfSave(); board(); };
+    B.querySelectorAll('.kcard').forEach(function (c) { c.addEventListener('dragstart', function (e) { if (/SELECT|INPUT|BUTTON/.test(e.target.tagName)) return; e.dataTransfer.setData('text/plain', c.getAttribute('data-tid')); }); });
     B.querySelectorAll('.kcol').forEach(function (col) {
       col.addEventListener('dragover', function (e) { e.preventDefault(); col.classList.add('over'); });
       col.addEventListener('dragleave', function () { col.classList.remove('over'); });
       col.addEventListener('drop', function (e) { e.preventDefault(); col.classList.remove('over'); move(find(e.dataTransfer.getData('text/plain')), col.getAttribute('data-col')); });
     });
+    B.querySelectorAll('[data-kf]').forEach(function (sel) { sel.onchange = function () { var t = find(sel.closest('.kcard').getAttribute('data-tid')), k = sel.getAttribute('data-kf'); t[k] = k === 'points' ? +sel.value : sel.value; dirty(k + ' of ' + t.name + ': ' + (k === 'owner' ? ownerOf(t) || 'none' : sel.value || 'none')); board(); }; });
+    B.querySelectorAll('[data-ksub]').forEach(function (b) { b.onclick = function () { var id = b.closest('.kcard').getAttribute('data-tid'); F.open[id] = !F.open[id]; board(); }; });
     B.querySelectorAll('[data-step]').forEach(function (b) { b.onclick = function () { var t = find(b.closest('.kcard').getAttribute('data-tid')), i = STATUS.map(function (x) { return x[0]; }).indexOf(t.status) + (+b.getAttribute('data-step')); if (STATUS[i]) move(t, STATUS[i][0]); }; });
     B.querySelectorAll('[data-tick]').forEach(function (cb) { cb.onchange = function () { move(find(cb.closest('.kcard').getAttribute('data-tid')), cb.checked ? 'done' : 'todo'); }; });
     B.querySelectorAll('[data-subtick]').forEach(function (cb) {

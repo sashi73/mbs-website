@@ -141,7 +141,9 @@ function clean(p, core) {
     const o = {
     id: uid(t.id, 't'), name: str(t.name, 160) || 'New task', phase: phIds.has(t.phase) ? t.phase : phases[0].id,
     dur: int(t.dur, 0, 365, 1), snet: ymdOk(t.snet), fixed: !!(t.fixed && ymdOk(t.snet)), pred: (Array.isArray(t.pred) ? t.pred : []).map((x) => str(x, 20)).slice(0, 10),
-    item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000)
+    item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000),
+    // v64: the Board: owner (a stakeholder), priority and story points
+    owner: str(t.owner, 30), priority: ['High', 'Medium', 'Low'].includes(t.priority) ? t.priority : '', points: int(t.points, 0, 100, 0)
     };
     // v56: materials from stock: any number of items, each with its own quantity (and the price at the time).
     // Older plans had one item on the task (the task's own qty and rate were that item): moved into the list, same cost.
