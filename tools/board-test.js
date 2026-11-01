@@ -54,6 +54,7 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     const bench = (await P.get(core)).tasks.find((t) => /benchtop/i.test(t.name)), B = `.kcard[data-tid="${bench.id}"]`;
     await p.$eval(B, (e) => e.scrollIntoView());
     ok('Theme', 'a task with sub-tasks is a THEME card with its user stories inside, dates and number of days on the right', /THEME/.test(await p.textContent(`${B} .kid`)) && (await p.$$(`${B} .kst`)).length === 3 && /\d+ days/.test(await p.textContent(`${B} .kdays`)) && /\d/.test(await p.textContent(`${B} .kdates`)));
+    ok('Story', 'next to each story on the right: its dates and (days left / late / due)', (await p.$$eval(`${B} .kst-d`, (a) => a.map((x) => x.textContent))).every((t) => /\d+.*(Oct|Nov|Dec|Jan).*\((\d+ days? (left|late)|due (today|in \d+ days?)|starts in \d+ days?|done)\)/.test(t)), (await p.$$eval(`${B} .kst-d`, (a) => a.map((x) => x.textContent))).join(' | '));
     ok('Story', 'every story has an owner button, H / M / L and a points button', (await p.$$(`${B} .kst .kown`)).length === 3 && (await p.$$(`${B} .kst .kseg button`)).length === 9 && (await p.$$(`${B} .kst .kptb`)).length === 3);
     const st = (i) => `${B} .kst:nth-child(${i})`;
     await p.click(`${st(1)} .kown`); await p.waitForSelector('#kPop');
