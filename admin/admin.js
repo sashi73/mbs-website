@@ -65,6 +65,46 @@
   $('#menuBtn').addEventListener('click', function () { $('#side').classList.toggle('open'); });
   $('#sideClose').addEventListener('click', closeMenu);
   $('#backdrop').addEventListener('click', closeMenu);
+
+  /* v55: fold the menu into a slim strip of icons (desktop and tablet): tap the ‹ › tab, drag it, swipe the menu, or press [ */
+  (function () {
+    var side = $('#side'), fold = $('#sideFold'), KEY = 'mbsSideMini';
+    var get = function () { try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; } };
+    var set = function (mini) {
+      document.body.classList.toggle('side-mini', mini);
+      fold.textContent = mini ? '›' : '‹';
+      fold.setAttribute('aria-label', mini ? 'Show the menu' : 'Hide the menu');
+      fold.title = mini ? 'Show the menu (or swipe right). Press [ to switch.' : 'Hide the menu (or swipe left). Press [ to switch.';
+      try { localStorage.setItem(KEY, mini ? '1' : '0'); } catch (e) {}
+      setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 260);   // charts, maps and the Gantt fit the new width
+    };
+    // the names show as tooltips when only the icons are showing
+    Array.prototype.forEach.call(document.querySelectorAll('.side-nav a'), function (a) { if (!a.title) a.title = a.textContent.trim(); });
+    set(get());
+    // tap = switch; drag the tab left or right = fold or unfold (a slider)
+    var drag = null;
+    fold.addEventListener('pointerdown', function (e) { drag = { x: e.clientX, moved: false }; try { fold.setPointerCapture(e.pointerId); } catch (x) {} });
+    fold.addEventListener('pointermove', function (e) { if (drag && Math.abs(e.clientX - drag.x) > 6) drag.moved = true; });
+    fold.addEventListener('pointerup', function (e) {
+      if (!drag) return; var dx = e.clientX - drag.x, was = drag; drag = null;
+      if (was.moved && Math.abs(dx) > 25) set(dx < 0); else if (!was.moved) set(!document.body.classList.contains('side-mini'));
+    });
+    fold.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); set(!document.body.classList.contains('side-mini')); } });
+    // swipe on the menu itself (touch screens)
+    var sx = null, sy = null;
+    side.addEventListener('touchstart', function (e) { if (window.innerWidth <= 820) return; sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+    side.addEventListener('touchend', function (e) {
+      if (sx == null) return; var t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy; sx = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) set(dx < 0);
+    }, { passive: true });
+    // keyboard: [ switches (not while typing)
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== '[' || e.ctrlKey || e.metaKey || e.altKey || window.innerWidth <= 820) return;
+      var a = document.activeElement; if (a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable)) return;
+      set(!document.body.classList.contains('side-mini'));
+    });
+    window.MBS_sideMini = set;   // for tests
+  })();
   $('#topSearch').addEventListener('submit', function (e) { e.preventDefault(); var q = $('#q').value.trim(); location.hash = q ? '#jobs/search/' + encodeURIComponent(q) : '#jobs'; });
 
   /* ---------------- router ---------------- */
