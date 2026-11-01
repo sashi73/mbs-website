@@ -958,7 +958,7 @@
     var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['stake', '👥 Stakeholders'], ['contracts', '📜 Contracts'], ['swms', '🦺 SWMS'], ['intel', '🧠 Project Intelligence']];
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>' +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
-      '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote" title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
+      '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote" title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
       '<div id="planChain"></div>' +
       '<div class="grid pkpis">' +
         mini('Scope', R.pct + '% complete', R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8)) +
@@ -975,6 +975,7 @@
     };
     drawChain();
     $('#planXls').onclick = function () { exportExcel(); };
+    $('#planCsv').onclick = function () { ganttCsvDialog(); };
     $('#planDel').onclick = function () {
       M.confirmBox('Delete this project plan?', 'The plan “' + esc(p.name) + '” for ' + esc(S.job.ref) + ' will be deleted: tasks, dates, costs, risks and issues. The job itself, its quotes and invoices stay. This can\'t be undone.', 'Delete plan', true).then(function (ok) {
         if (!ok) return;
@@ -1375,6 +1376,116 @@
     if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
     if (!xlsLib) xlsLib = new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = 'vendor/exceljs.min.js?v=440'; sc.onload = function () { res(window.ExcelJS); }; sc.onerror = function () { xlsLib = null; rej(new Error('Could not load the Excel tool. Check your connection and try again.')); }; document.head.appendChild(sc); });
     return xlsLib;
+  }
+  /* ---------- v58: ⬇ Gantt export: only the schedule (tasks, sub-tasks, dates, durations, links, progress, who), no costs.
+     CSV (any tool), Microsoft Project XML (MS Project, Primavera P6, ProjectLibre, GanttProject, Smartsheet), Excel (.xlsx)
+     and calendar (.ics for Google, Outlook, Apple). ---------- */
+  var GX_FORMATS = [['csv', 'CSV (.csv)', 'Any tool: Microsoft Project, Smartsheet, Asana, Monday.com, Wrike, ClickUp, Jira, Excel'],
+    ['mspdi', 'Microsoft Project XML (.xml)', 'Opens in Microsoft Project with links and calendar; imports into Primavera P6, ProjectLibre, GanttProject, Smartsheet'],
+    ['xlsx', 'Excel (.xlsx)', 'Smartsheet, Monday.com, Asana and Excel itself (real dates)'],
+    ['ics', 'Calendar (.ics)', 'Google Calendar, Outlook, Apple Calendar: each task as an all-day event']];
+  var CSV_DATES = [['dmy', 'DD/MM/YYYY (Australia: Microsoft Project, Excel set to Australia)'], ['ymd', 'YYYY-MM-DD (Smartsheet, Asana, Monday.com, Jira, most web tools)'], ['mdy', 'MM/DD/YYYY (US settings)']];
+  function ganttRows(p, subsOn) {   // the schedule as flat rows: tasks (level 1) with their sub-tasks (level 2) under them
+    schedule(p);
+    var rows = [], idOf = {}, n = 0;
+    p.tasks.forEach(function (t) { idOf[t.id] = ++n; if (subsOn) n += (t.subs || []).length; });
+    p.tasks.forEach(function (t, i) {
+      var subs = subsOn ? (t.subs || []) : [];
+      rows.push({ uid: idOf[t.id], wbs: String(i + 1), lvl: 1, name: t.name, es: t.es, ef: t.dur === 0 ? t.es : t.ef, dur: t.dur, preds: (t.pred || []).map(function (x) { return idOf[x]; }).filter(Boolean),
+        mile: t.dur === 0, pct: t.pct || 0, status: stName[t.status] || '', res: (t.res || []).slice(), resTxt: resText(t), lead: t.lead || '', summary: subs.length > 0, notes: t.notes || '' });
+      subs.forEach(function (sb, j) { var d = subDates(t, sb);
+        rows.push({ uid: idOf[t.id] + j + 1, wbs: (i + 1) + '.' + (j + 1), lvl: 2, name: sb.name, es: d.es, ef: d.ef, dur: sb.dur, preds: [], mile: false, pct: stPct[sb.status] || 0, status: stName[sb.status] || '',
+          res: sb.owner ? [sb.owner] : [], resTxt: sb.owner || '', lead: sb.owner || '', summary: false, parent: t.name, notes: '' }); });
+    });
+    return rows;
+  }
+  var gxFmt = function (s, dates) { if (!s) return ''; var y = s.slice(0, 4), m = s.slice(5, 7), d = s.slice(8, 10); return dates === 'ymd' ? s : dates === 'mdy' ? m + '/' + d + '/' + y : d + '/' + m + '/' + y; };
+  var GX_HEAD = ['ID', 'WBS', 'Outline Level', 'Task Name', 'Start Date', 'Finish Date', 'Duration', 'Duration (days)', 'Predecessors', 'Milestone', '% Complete', 'Status', 'Resource Names', 'Assignee', 'Parent Task', 'Notes'];
+  function gxValues(r, dates, all) { return [r.uid, r.wbs, r.lvl, r.name, gxFmt(r.es, dates), gxFmt(r.ef, dates), r.dur + (r.dur === 1 ? ' day' : ' days') + (all ? ' (calendar)' : ''), r.dur, r.preds.join(','), r.mile ? 'Yes' : 'No', r.pct + '%', r.status, r.resTxt, r.lead, r.parent || '', r.notes]; }
+  function ganttCsv(p, o) {
+    o = o || {}; var rows = ganttRows(p, o.subs !== false), all = !!(p.emergency || p.weekends);
+    var q = function (v) { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    return '﻿' + [GX_HEAD.map(q).join(',')].concat(rows.map(function (r) { return gxValues(r, o.dates, all).map(q).join(','); })).join('\r\n') + '\r\n';
+  }
+  function ganttMspdi(p, o) {   // Microsoft Project XML (MSPDI); 8-hour days 08:00-17:00 with a lunch hour
+    o = o || {}; var rows = ganttRows(p, o.subs !== false), all = !!(p.emergency || p.weekends);
+    var x = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+    var st = function (d) { return d ? d + 'T08:00:00' : ''; }, fi = function (d, mile) { return d ? d + (mile ? 'T08:00:00' : 'T17:00:00') : ''; };
+    var dur = function (n) { return 'PT' + (n * 8) + 'H0M0S'; };
+    var R = rows.filter(function (r) { return r.es; }), first = R.reduce(function (m, r) { return !m || r.es < m ? r.es : m; }, ''), last = R.reduce(function (m, r) { return r.ef > m ? r.ef : m; }, '');
+    var res = []; rows.forEach(function (r) { r.res.forEach(function (n) { if (n && res.indexOf(n) < 0) res.push(n); }); });
+    var day = function (n, work) { return '<WeekDay><DayType>' + n + '</DayType><DayWorking>' + (work ? 1 : 0) + '</DayWorking>' + (work ? '<WorkingTimes><WorkingTime><FromTime>08:00:00</FromTime><ToTime>12:00:00</ToTime></WorkingTime><WorkingTime><FromTime>13:00:00</FromTime><ToTime>17:00:00</ToTime></WorkingTime></WorkingTimes>' : '') + '</WeekDay>'; };
+    var out = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>', '<Project xmlns="http://schemas.microsoft.com/project">',
+      '<SaveVersion>14</SaveVersion><Name>' + x(p.name) + '.xml</Name><Title>' + x(p.name) + '</Title><Company>' + x((S.job && S.job.ref) || '') + '</Company>',
+      '<ScheduleFromStart>1</ScheduleFromStart><StartDate>' + st(first) + '</StartDate><FinishDate>' + fi(last) + '</FinishDate><CalendarUID>1</CalendarUID>',
+      '<DefaultStartTime>08:00:00</DefaultStartTime><DefaultFinishTime>17:00:00</DefaultFinishTime><MinutesPerDay>480</MinutesPerDay><MinutesPerWeek>' + (all ? 3360 : 2400) + '</MinutesPerWeek><DaysPerMonth>' + (all ? 30 : 20) + '</DaysPerMonth><DurationFormat>7</DurationFormat>',
+      '<Calendars><Calendar><UID>1</UID><Name>' + (all ? 'Seven-day week' : 'Standard') + '</Name><IsBaseCalendar>1</IsBaseCalendar><WeekDays>' + [1, 2, 3, 4, 5, 6, 7].map(function (n) { return day(n, all || (n > 1 && n < 7)); }).join('') + '</WeekDays></Calendar></Calendars>',
+      '<Tasks><Task><UID>0</UID><ID>0</ID><Name>' + x(p.name) + '</Name><OutlineNumber>0</OutlineNumber><OutlineLevel>0</OutlineLevel><Summary>1</Summary><Start>' + st(first) + '</Start><Finish>' + fi(last) + '</Finish></Task>'];
+    rows.forEach(function (r) {
+      out.push('<Task><UID>' + r.uid + '</UID><ID>' + r.uid + '</ID><Name>' + x(r.name) + '</Name><Type>1</Type><Manual>0</Manual><WBS>' + r.wbs + '</WBS><OutlineNumber>' + r.wbs + '</OutlineNumber><OutlineLevel>' + r.lvl + '</OutlineLevel>' +
+        (r.es ? '<Start>' + st(r.es) + '</Start><Finish>' + fi(r.ef, r.mile) + '</Finish>' : '') + '<Duration>' + dur(r.dur) + '</Duration><DurationFormat>7</DurationFormat><Milestone>' + (r.mile ? 1 : 0) + '</Milestone><Summary>' + (r.summary ? 1 : 0) + '</Summary><PercentComplete>' + r.pct + '</PercentComplete>' +
+        (!r.preds.length && r.es && !r.summary ? '<ConstraintType>4</ConstraintType><ConstraintDate>' + st(r.es) + '</ConstraintDate>' : '<ConstraintType>0</ConstraintType>') +
+        (r.notes ? '<Notes>' + x(r.notes) + '</Notes>' : '') +
+        r.preds.map(function (u) { return '<PredecessorLink><PredecessorUID>' + u + '</PredecessorUID><Type>1</Type><CrossProject>0</CrossProject><LinkLag>0</LinkLag><LagFormat>7</LagFormat></PredecessorLink>'; }).join('') + '</Task>');
+    });
+    out.push('</Tasks><Resources><Resource><UID>0</UID><ID>0</ID><Type>1</Type><IsNull>0</IsNull></Resource>' + res.map(function (n, k) { return '<Resource><UID>' + (k + 1) + '</UID><ID>' + (k + 1) + '</ID><Name>' + x(n) + '</Name><Type>1</Type><CalendarUID>1</CalendarUID></Resource>'; }).join('') + '</Resources><Assignments>');
+    var a = 0; rows.forEach(function (r) { if (r.summary) return; r.res.forEach(function (n) { out.push('<Assignment><UID>' + (++a) + '</UID><TaskUID>' + r.uid + '</TaskUID><ResourceUID>' + (res.indexOf(n) + 1) + '</ResourceUID><Units>1</Units></Assignment>'); }); });
+    out.push('</Assignments></Project>');
+    return out.join('\r\n');
+  }
+  function ganttIcs(p, o) {   // each task an all-day event (sub-tasks too if ticked); milestones as one-day events
+    o = o || {}; var rows = ganttRows(p, o.subs !== false).filter(function (r) { return r.es && !r.summary; });
+    var esc2 = function (s) { return String(s || '').replace(/\\/g, '\\\\').replace(/[,;]/g, '\\$&').replace(/\n/g, '\\n'); };
+    var d8 = function (s) { return s.replace(/-/g, ''); }, next = function (s) { var dt = new Date(s + 'T00:00:00Z'); dt.setUTCDate(dt.getUTCDate() + 1); return dt.toISOString().slice(0, 10); };
+    var fold = function (l) { var out = '', u = l; while (u.length > 73) { out += u.slice(0, 73) + '\r\n '; u = u.slice(73); } return out + u; };
+    var stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    var L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MBS Console//Gantt export//EN', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:' + esc2(p.name)];
+    rows.forEach(function (r) {
+      L.push('BEGIN:VEVENT', 'UID:' + (S.core || 'plan') + '-' + r.uid + '@mbs-console', 'DTSTAMP:' + stamp, 'DTSTART;VALUE=DATE:' + d8(r.es), 'DTEND;VALUE=DATE:' + d8(next(r.ef || r.es)),
+        fold('SUMMARY:' + esc2((r.mile ? '◆ ' : '') + '#' + r.wbs + ' ' + r.name)), fold('DESCRIPTION:' + esc2([p.name + (S.job ? ' (' + S.job.ref + ')' : ''), r.parent ? 'Part of: ' + r.parent : '', r.preds.length ? 'After task ID ' + r.preds.join(', ') : '', r.resTxt ? 'Who: ' + r.resTxt : '', r.pct + '% complete · ' + r.status].filter(Boolean).join('\n'))),
+        'TRANSP:TRANSPARENT', 'END:VEVENT');
+    });
+    L.push('END:VCALENDAR'); return L.join('\r\n') + '\r\n';
+  }
+  function ganttXlsx(p, o) {
+    o = o || {}; var rows = ganttRows(p, o.subs !== false), all = !!(p.emergency || p.weekends);
+    return loadXls().then(function (XL) {
+      var wb = new XL.Workbook(), ws = wb.addWorksheet('Gantt', { views: [{ state: 'frozen', ySplit: 1, xSplit: 4 }] });
+      ws.columns = [6, 7, 8, 44, 12, 12, 12, 9, 13, 9, 10, 15, 28, 18, 30, 30].map(function (w, k) { return { header: GX_HEAD[k], width: w }; });
+      var D = function (s) { if (!s) return null; var a = s.split('-').map(Number); return new Date(Date.UTC(a[0], a[1] - 1, a[2])); };
+      rows.forEach(function (r) { var v = gxValues(r, 'ymd', all); v[4] = D(r.es); v[5] = D(r.ef); v[10] = r.pct / 100; var row = ws.addRow(v); row.getCell(5).numFmt = row.getCell(6).numFmt = 'dd/mm/yyyy'; row.getCell(11).numFmt = '0%'; if (r.lvl === 2) { row.outlineLevel = 1; row.getCell(4).alignment = { indent: 2 }; } if (r.summary) row.font = { bold: true }; });
+      ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }; ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: GX_HEAD.length } };
+      return wb.xlsx.writeBuffer();
+    });
+  }
+  function ganttCsvDialog() {
+    var get = function (k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }, put = function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} };
+    var fmt0 = get('mbsGxFmt', 'csv'), dates0 = get('mbsCsvDates', 'dmy');
+    M.modal('<h2>⬇ Export the Gantt chart</h2><p class="muted" style="margin:6px 0 12px">Only the schedule: tasks and sub-tasks, start and finish dates, durations, links (Predecessors), milestones, % complete and who. No costs or other plan details.</p>' +
+      '<div class="gx-fmts">' + GX_FORMATS.map(function (f) { return '<label class="gx-fmt"><input type="radio" name="gxf" value="' + f[0] + '"' + (f[0] === fmt0 ? ' checked' : '') + '><span><b>' + esc(f[1]) + '</b><small>' + esc(f[2]) + '</small></span></label>'; }).join('') + '</div>' +
+      '<label id="gxDatesL" style="margin-top:10px">Date format (CSV)<select id="csvDates">' + CSV_DATES.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === dates0 ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="sc-cb" style="margin-top:10px"><input type="checkbox" id="csvSubs" checked> Include sub-tasks (under their task)</label>' +
+      '<details style="margin-top:10px;font-size:13px"><summary style="cursor:pointer;font-weight:700">How to import</summary><ul style="margin:6px 0 0;padding-left:18px;line-height:1.5">' +
+        '<li><b>Microsoft Project:</b> best with the XML file: File › Open › choose it (tasks, links, sub-tasks, calendar and people come across). With CSV: Import Wizard › match Task Name, Start, Finish, Duration, Predecessors, Outline Level, Resource Names.</li>' +
+        '<li><b>Primavera P6:</b> File › Import › Microsoft Project (XML) with the XML file.</li>' +
+        '<li><b>ProjectLibre / GanttProject:</b> open or import the XML file.</li>' +
+        '<li><b>Smartsheet:</b> Import › Microsoft Project (XML) keeps the links; or Import › Excel/CSV and set Start Date, Finish Date, Duration and Predecessors in Project settings.</li>' +
+        '<li><b>Asana / Monday.com / ClickUp / Wrike / Jira:</b> import CSV or Excel; match Task Name, Start Date, Finish Date (due date), Assignee, Status. Use YYYY-MM-DD dates for CSV.</li>' +
+        '<li><b>Google / Outlook / Apple Calendar:</b> import the .ics file into a calendar (best a new one for this project).</li></ul></details>' +
+      '<div class="actions" style="margin-top:14px"><button class="btn" data-close type="button">Cancel</button> <button class="btn btn-gold" id="csvGo" type="button">⬇ Download</button></div>');
+    var sync = function () { var f = (document.querySelector('input[name=gxf]:checked') || {}).value; $('#gxDatesL').style.display = f === 'csv' ? '' : 'none'; };
+    document.querySelectorAll('input[name=gxf]').forEach(function (r) { r.onchange = sync; }); sync();
+    $('#csvGo').onclick = function () {
+      var f = document.querySelector('input[name=gxf]:checked').value, dates = $('#csvDates').value, o = { dates: dates, subs: $('#csvSubs').checked }, plan = JSON.parse(JSON.stringify(S.plan));
+      put('mbsGxFmt', f); put('mbsCsvDates', dates);
+      var base = 'Gantt-' + (S.job.ref || S.core) + '-' + today();
+      var save = function (data, type, ext) { var url = URL.createObjectURL(new Blob([data], { type: type })), a = document.createElement('a'); a.href = url; a.download = base + '.' + ext; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 5000); M.closeModal(); toast('Gantt chart downloaded: ' + base + '.' + ext); };
+      if (f === 'csv') save(ganttCsv(plan, o), 'text/csv;charset=utf-8', 'csv');
+      else if (f === 'mspdi') save(ganttMspdi(plan, o), 'application/xml;charset=utf-8', 'xml');
+      else if (f === 'ics') save(ganttIcs(plan, o), 'text/calendar;charset=utf-8', 'ics');
+      else ganttXlsx(plan, o).then(function (buf) { save(buf, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx'); }).catch(fail);
+    };
   }
   function exportExcel() {
     var btn = $('#planXls'); if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
