@@ -52,7 +52,7 @@ export async function remove(core, id) {
 }
 
 // ---------- the context the AI gets ----------
-function scrub(text, job, people) {
+export function scrub(text, job, people) {
   let t = P.privateOut(text, job);
   for (const x of people) { if (x.phone) t = t.split(x.phone).join('[phone]'); if (x.email) t = t.split(x.email).join('[email]'); }
   return t;
@@ -87,7 +87,7 @@ function pickChunks(all, question) {
   keep.sort((a, b) => all.indexOf(a) - all.indexOf(b));
   return { chunks: keep, partial: true };
 }
-async function context(job, plan, question) {
+export async function context(job, plan, question) {
   const today = sydToday(), R = P.rollup(JSON.parse(JSON.stringify(plan)), today);
   const crit = R.finish ? P.critTasks(JSON.parse(JSON.stringify(plan)), R) : new Set();
   const people = plan.stakeholders || [];
@@ -105,7 +105,7 @@ async function context(job, plan, question) {
     risks: (plan.risks || []).map((r) => ({ risk: sc(r.title), cause: sc(r.cause), probability: r.p, impact: r.i, score: r.p * r.i, response: r.response, action: sc(r.action), owner: sc(r.owner), status: r.status })),
     issues: (plan.issues || []).map((x) => ({ issue: sc(x.title), detail: sc(x.detail), priority: x.priority, owner: sc(x.owner), due: x.due, status: x.status })),
     stakeholders: people.map((x, i) => ({ ref: 'S' + (i + 1), name: sc(x.name), role: sc(x.role), raci: x.raci, has_email: /@/.test(x.email || '') })),
-    meetings: (plan.meetings || []).slice(-5).map((m) => ({ title: sc(m.title), date: m.date, start: m.start, minutes: m.minutes })),
+    meetings: (plan.meetings || []).slice(-12).map((m) => ({ title: sc(m.title), date: m.date, start: m.start, minutes: m.minutes, platform: m.platform || 'google', status: m.status || 'Scheduled', transcript: !!m.doc, analysed: !!m.analysed })),
     contracts: (plan.contracts || []).map((c) => ({ type: c.type, with: c.type === 'Customer' ? 'the customer' : sc(c.party), document: c.docs[0] || '' })),
     documents: []
   };
@@ -155,6 +155,18 @@ export async function ask({ core, question, history }, by) {
       risks: [], stakeholders: [], meeting: null, sources: [], follow_ups: ['What PPE is needed for this job?', 'Which steps have the highest risk?'], tokens: g.tokens, today: g.today, swms: { version: s.version, steps: s.steps.length, hrcw: s.hrcw.length } };
     await kv.update('pchat:' + job.core, (x) => { x.log = (x.log || []).concat([{ at: Date.now(), by: str(by, 60), q, r }]).slice(-30); return x; }, () => ({ log: [] }));
     return r;
+  }
+  // v60: "analyse my meeting on 3 Nov: what does it change?" reads that meeting's transcript and works out the impact
+  const COMMS = await import('./comms.mjs');
+  if (COMMS.MEET_Q(q)) {
+    const today = sydToday(), pick = COMMS.pickMeeting(plan, q, today), m = pick.meeting;
+    const save = async (r) => { await kv.update('pchat:' + job.core, (x) => { x.log = (x.log || []).concat([{ at: Date.now(), by: str(by, 60), q, r }]).slice(-30); return x; }, () => ({ log: [] })); return r; };
+    const none = (msg) => save({ answer: msg, risks: [], stakeholders: [], meeting: null, sources: [], follow_ups: ['Set up a meeting with the stakeholders next week'], tokens: 0 });
+    if (!m) return none(pick.date ? '## No meeting on ' + pick.date.split('-').reverse().join('/') + '\nThere is no meeting on that date in the 📞 Comms meeting log. Check the date, or add the meeting there.' : '## No meetings yet\nThe 📞 Comms meeting log is empty. Set up a meeting there, then upload its transcript.');
+    if (!m.doc) return none('## “' + m.title + '” has no transcript yet\nUpload the meeting transcript (Word, PDF, text or the Teams/Zoom .vtt file) on that meeting in the 📞 Comms meeting log, then ask again.');
+    const a = await COMMS.analyse({ core: job.core, id: m.id, question: q }, by);
+    if (a.error) return { error: a.error };
+    return save({ answer: a.report, risks: [], stakeholders: [], meeting: null, sources: [(await docList(job.core)).find((d) => d.id === m.doc)?.name || 'Meeting transcript'], follow_ups: a.follow_ups, tokens: a.tokens, today: a.today, impact: a });
   }
   try { await checkLimit(); } catch (e) { return { error: e.message }; }
   const { ctx, stakeholders } = await context(job, plan, q);

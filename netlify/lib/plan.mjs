@@ -173,11 +173,19 @@ function clean(p, core) {
       docs: (Array.isArray(c.docs) ? c.docs : []).slice(0, 5).map((d) => str(d, 30)), at: Number(c.at) || Date.now() })),
     // v52: team meetings set up from Project Intelligence (Google Meet / calendar invites)
     meetings: (Array.isArray(p.meetings) ? p.meetings : []).slice(0, 50).map((m) => ({ id: uid(m.id, 'm'), title: str(m.title, 160), date: ymdOk(m.date), start: /^\d{2}:\d{2}$/.test(m.start || '') ? m.start : '10:00',
-      minutes: Math.max(15, Math.min(240, Math.round(Number(m.minutes) || 45))), attendees: (Array.isArray(m.attendees) ? m.attendees : []).slice(0, 50).map((a) => str(a, 20)), agenda: str(m.agenda, 2000), link: /^https:\/\/meet\.google\.com\/[a-z0-9-]+$/i.test(m.link || '') ? m.link : '', at: Number(m.at) || Date.now() })),
+      minutes: Math.max(15, Math.min(240, Math.round(Number(m.minutes) || 45))), attendees: (Array.isArray(m.attendees) ? m.attendees : []).slice(0, 50).map((a) => str(a, 20)), agenda: str(m.agenda, 2000), at: Number(m.at) || Date.now(),
+      // v60 📞 Comms: platform, join link, guests who are not stakeholders, what happened, the transcript and its analysis
+      platform: ['google', 'teams', 'zoom'].includes(m.platform) ? m.platform : 'google', link: meetLink(m.link), extId: str(m.extId, 200), passcode: str(m.passcode, 20),
+      guests: (Array.isArray(m.guests) ? m.guests : []).map((e) => str(e, 160)).filter((e) => /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(e)).slice(0, 30),
+      status: ['Scheduled', 'Took place', 'Rescheduled', 'Cancelled'].includes(m.status) ? m.status : 'Scheduled', was: (Array.isArray(m.was) ? m.was : []).map((x) => str(x, 40)).slice(-10),
+      doc: str(m.doc, 30), analysed: Number(m.analysed) || 0, applied: Number(m.applied) || 0, notes: str(m.notes, 1000) })),
     baseline: p.baseline && typeof p.baseline === 'object' ? { at: Number(p.baseline.at) || Date.now(), finish: ymdOk(p.baseline.finish), BAC: r2(p.baseline.BAC),
       tasks: Object.fromEntries(Object.entries(p.baseline.tasks || {}).slice(0, 300).map(([k, v]) => [str(k, 20), { es: ymdOk(v.es), ef: ymdOk(v.ef), cost: r2(v.cost) }])) } : null
   };
 }
+
+// a meeting's join link: only https links to Google Meet, Microsoft Teams or Zoom
+function meetLink(u) { const s = str(u, 600); return /^https:\/\/([a-z0-9-]+\.)*(meet\.google\.com|teams\.microsoft\.com|teams\.live\.com|zoom\.us|zoomgov\.com)\//i.test(s) ? s : ''; }
 
 // ---------- storage ----------
 export async function get(core) { return kv.get('plan:' + core); }

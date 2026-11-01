@@ -955,7 +955,7 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['stake', '👥 Stakeholders'], ['contracts', '📜 Contracts'], ['swms', '🦺 SWMS'], ['intel', '🧠 Project Intelligence']];
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['stake', '👥 Stakeholders'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['swms', '🦺 SWMS'], ['intel', '🧠 Project Intelligence']];
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>' +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
       '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote" title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
@@ -992,7 +992,7 @@
         p.baseline = { at: Date.now(), finish: R.finish, BAC: R.BAC, tasks: tasks }; saveNow('baseline set'); toast('Baseline set'); render();
       });
     };
-    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, swms: swmsTab, intel: intelTab }[S.tab] || scheduleTab)(R);
+    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, swms: swmsTab, intel: intelTab }[S.tab] || scheduleTab)(R);
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
@@ -2023,13 +2023,286 @@
     }).catch(fail);
   }
 
+  /* ---------- v60: 📞 Comms: set up meetings (Google Meet, Teams, Zoom), the meeting log, transcripts and their impact ---------- */
+  var MST = ['Scheduled', 'Took place', 'Rescheduled', 'Cancelled'];
+  var LVL_C = { None: 'lv-none', Low: 'lv-low', Medium: 'lv-med', High: 'lv-high' };
+  var AREA_N = [['scope', '🎯 Scope'], ['time', '⏱ Time'], ['cost', '💲 Cost'], ['quality', '✅ Quality'], ['risk', '⚠ Risk'], ['issues', '❗ Issues'], ['stakeholders', '👥 Stakeholders']];
+  function cmDraft() {
+    var p = S.plan, plat = 'google'; try { plat = localStorage.getItem('mbsMeetPlat') || 'google'; } catch (e) {}
+    return { platform: PLAT[plat] ? plat : 'google', title: 'Project meeting: ' + p.name, date: addWork(nextWork(today()), 1), start: '10:00', minutes: 45,
+      attendees: (p.stakeholders || []).filter(function (x) { return /@/.test(x.email || ''); }).map(function (x) { return x.id; }), guests: [], agenda: '', link: '' };
+  }
+  function cmState() { if (!S.comms || S.comms.core !== S.core) S.comms = { core: S.core, d: cmDraft(), view: '', an: {}, busy: '' }; return S.comms; }
+  function cmWhen(m) { return dmy(m.date) + ' · ' + m.start; }
+  function cmGuestNote(e) { return '<span class="cm-gnote">Not in the Stakeholder register</span>'; }
+  function commsTab() {
+    var B = $('#planBody'), p = S.plan, C = cmState(), d = C.d;
+    p.meetings = p.meetings || [];
+    p.meetings.forEach(function (m) { if (MST.indexOf(m.status) < 0) m.status = 'Scheduled'; if (!PLAT[m.platform]) m.platform = 'google'; m.was = m.was || []; m.guests = m.guests || []; m.attendees = m.attendees || []; });
+    if (!S.commsSetup) { B.innerHTML = '<div class="empty">Loading Comms…</div>'; api('commsSetup', {}).then(function (r) { S.commsSetup = r; }).catch(function () { S.commsSetup = {}; }).then(function () { if (S.tab === 'comms') commsTab(); }); return; }
+    if ((!S.intel || S.intel.core !== S.core) && !S.cmIntel) { var cmc = S.core; S.cmIntel = cmc; api('intelGet', { core: cmc }).then(function (r) { if (S.core === cmc) S.intel = { core: cmc, docs: r.docs, log: r.log, open: {} }; }).catch(function () {}).then(function () { S.cmIntel = ''; if (S.tab === 'comms') commsTab(); }); }
+    var SU = S.commsSetup, sh = p.stakeholders || [], L = piMeetLinks(Object.assign({ id: 'draft' }, d)), direct = !!SU[d.platform];
+    var log = p.meetings.slice().sort(function (a, b) { return (b.date + b.start).localeCompare(a.date + a.start); });
+    var form = '<div class="card cm-new"><div class="card-h"><h2>📞 Set up a meeting</h2></div>' +
+      '<p class="muted" style="margin:-4px 0 10px">Pick the platform and the people from the Stakeholder register. Every meeting goes into the meeting log below, where you mark what happened and upload the transcript for the AI to work out what it means for the plan.</p>' +
+      '<div class="cm-plats">' + ['google', 'teams', 'zoom'].map(function (k) { return '<button type="button" class="cm-plat' + (d.platform === k ? ' on' : '') + '" data-plat="' + k + '"><b>' + PLAT[k][1] + ' ' + PLAT[k][0] + '</b><small>' + (SU[k] ? '✓ Connected: created directly' : k === 'google' ? 'Opens Google Calendar with Meet' : k === 'teams' ? 'Opens a new Teams meeting' : 'Opens Zoom to schedule') + '</small></button>'; }).join('') + '</div>' +
+      '<div class="form cm-form"><label class="full">Title<input id="cmTitle" maxlength="160" value="' + esc(d.title) + '"></label><label>Date<input type="date" id="cmDate" value="' + esc(d.date) + '"></label><label>Start<input type="time" id="cmStart" value="' + esc(d.start) + '"></label>' +
+        '<label>Length<select id="cmMin">' + [15, 30, 45, 60, 90, 120].map(function (n) { return '<option value="' + n + '"' + (d.minutes === n ? ' selected' : '') + '>' + n + ' min</option>'; }).join('') + '</select></label></div>' +
+      '<div class="cm-sec"><div class="row" style="gap:8px"><b>Who</b><span class="muted" style="font-size:12.5px">from the 👥 Stakeholder register</span><span class="sp"></span>' + (sh.length ? '<button class="btn btn-sm" id="cmAll" type="button">All</button><button class="btn btn-sm" id="cmNone" type="button">None</button>' : '') + '</div>' +
+        (sh.length ? '<div class="cm-who">' + sh.map(function (x) { var em = /@/.test(x.email || ''); return '<label class="sc-cb' + (em ? '' : ' cm-noem') + '"><input type="checkbox" data-cmw="' + esc(x.id) + '"' + (d.attendees.indexOf(x.id) >= 0 ? ' checked' : '') + '> <span><b>' + esc(x.name || x.role) + '</b> <span class="raci raci-' + x.raci + '">' + x.raci + '</span><br><small class="muted">' + esc(x.role) + (em ? ' · ' + esc(x.email) : ' · no email: add it on Stakeholders') + '</small></span></label>'; }).join('') + '</div>'
+          : '<p class="muted" style="margin:6px 0">No stakeholders yet. Add the people on the <a href="#plan/' + esc(S.core) + '/stake">👥 Stakeholders</a> tab, or type their email below.</p>') + '</div>' +
+      '<div class="cm-sec"><b>Someone not on the list?</b><div class="inline-form" style="margin-top:6px"><input type="email" id="cmGuest" placeholder="name@company.com.au"><button class="btn btn-sm" id="cmGuestAdd" type="button">＋ Add guest</button></div>' +
+        (d.guests.length ? '<div class="cm-guests">' + d.guests.map(function (e, i) { return '<div class="cm-guest"><span>✉ ' + esc(e) + '</span>' + cmGuestNote(e) + '<span class="sp"></span><button class="btn btn-sm btn-gold" data-cmreg="' + i + '" type="button">＋ Add to Stakeholders</button><button class="btn btn-sm" data-cmgx="' + i + '" type="button" title="Remove">✕</button></div>'; }).join('') + '</div>' +
+          '<p class="sk-warn" style="margin:8px 0 0">💡 Best to add everyone who takes part to the Stakeholder register (name, role and RACI), so the register stays a true record of who is involved in this project.</p>' : '') + '</div>' +
+      '<label class="cm-sec" style="display:block"><b>Agenda</b><textarea id="cmAgenda" rows="4" placeholder="One item per line, e.g. Progress against the plan&#10;Lead times and deliveries&#10;Risks and issues&#10;Next steps">' + esc(d.agenda) + '</textarea></label>' +
+      (direct ? '' : '<label class="cm-sec" style="display:block"><b>Join link</b> <small class="muted">(optional: paste it once ' + esc(PLAT[d.platform][0]) + ' has made the meeting)</small><input id="cmLink" placeholder="https://…" value="' + esc(d.link) + '"></label>') +
+      (L.missing.length ? '<p class="sk-warn" style="margin:8px 0 0">No email for ' + esc(L.missing.map(function (x) { return x.name || x.role; }).join(', ')) + ': add it on the Stakeholders tab to invite them.</p>' : '') +
+      '<div class="row" style="gap:6px;margin-top:10px"><button class="btn btn-gold" id="cmGo" type="button">' + (direct ? '📞 Create the ' + esc(PLAT[d.platform][0]) + ' meeting' : '📅 Open ' + esc(d.platform === 'google' ? 'Google Calendar' : PLAT[d.platform][0]) + ' and add to the log') + '</button>' +
+        '<button class="btn btn-sm" id="cmIcs" type="button">⬇ Invite (.ics)</button><a class="btn btn-sm" id="cmMail" href="' + esc(L.mail) + '">✉ Email the invite</a><span class="muted" style="font-size:12.5px">' + (L.emails.length === 1 ? '1 person' : L.emails.length + ' people') + ' invited</span></div>' +
+      '<p class="muted" style="font-size:12px;margin:8px 0 0">' + (direct ? 'Created straight in ' + esc(PLAT[d.platform][0]) + ' (connected in Netlify); the join link is saved on the log.' + (d.platform === 'teams' ? ' Outlook emails the invites.' : ' Send the invite with ✉ or the .ics file.')
+        : 'Not connected, so it opens ' + esc(PLAT[d.platform][0]) + ' with the details filled in' + (d.platform === 'zoom' ? ' (Zoom\'s page doesn\'t take the details: copy them from the invite)' : '') + '. To create meetings directly, add the ' + (d.platform === 'teams' ? 'Microsoft Teams (MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET, MS_ORGANIZER)' : d.platform === 'zoom' ? 'Zoom (ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET)' : 'Teams or Zoom') + ' keys in Netlify.') + '</p></div>';
+    var rows = log.map(function (m) {
+      var who = piPeople(m.attendees), g = (m.guests || []).length, busy = C.busy === m.id;
+      return '<tr data-mid="' + esc(m.id) + '" class="' + (C.view === m.id ? 'on ' : '') + 'cm-' + m.status.replace(' ', '').toLowerCase() + '"><td class="nowrap"><b>' + esc(cmWhen(m)) + '</b><br><small class="muted">' + m.minutes + ' min' + ((m.was || []).length ? ' · moved from ' + esc(m.was[m.was.length - 1]) : '') + '</small></td>' +
+        '<td><b>' + esc(m.title) + '</b>' + (m.link ? '<br><a href="' + esc(m.link) + '" target="_blank" rel="noopener" class="cm-join">🔗 Join</a>' : '') + '</td><td class="nowrap">' + PLAT[m.platform || 'google'][1] + ' ' + esc(PLAT[m.platform || 'google'][0]) + '</td>' +
+        '<td title="' + esc(who.map(function (x) { return x.name || x.role; }).concat(m.guests || []).join(', ')) + '">' + pl(who.length, 'stakeholder') + (g ? '<br><small class="cm-gnote">+ ' + pl(g, 'guest') + ' not in the register</small>' : '') + '</td>' +
+        '<td><select data-mst class="cm-st">' + MST.map(function (s) { return '<option' + (m.status === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select></td>' +
+        '<td>' + (m.doc ? '<span class="cm-tx">🎙 ' + esc(cmDocName(m.doc)) + '</span> <button class="btn btn-sm" data-mtdl title="Download the transcript">⬇</button>' : '<label class="btn btn-sm" title="Word, PDF, text or the Teams / Zoom .vtt transcript">⬆ Transcript<input type="file" data-mtx hidden accept=".pdf,.docx,.txt,.md,.vtt,.srt"></label>') + '</td>' +
+        '<td class="nowrap">' + (busy ? '<span class="ask-think">Analysing…</span>' : m.doc ? (m.analysed ? '<button class="btn btn-sm btn-gold" data-mview>📊 Impact</button> <button class="btn btn-sm" data-man title="Analyse again">↻</button>' : '<button class="btn btn-sm btn-gold" data-man>✨ Analyse impact</button>') : '<span class="muted" style="font-size:12px">upload the transcript</span>') + (m.applied ? '<br><small class="cm-ok">✓ applied to the plan</small>' : '') + '</td>' +
+        '<td class="nowrap acts"><button class="btn btn-sm" data-mics title="Invite (.ics)">⬇</button><a class="btn btn-sm" data-mmail title="Email" href="' + esc(piMeetLinks(m).mail) + '">✉</a><button class="btn btn-sm" data-mdel title="Delete">✕</button></td></tr>';
+    }).join('');
+    var logH = '<div class="card cm-log"><div class="card-h"><h2>🗒 Meeting log</h2><span class="sp"></span><span class="muted">' + pl(log.length, 'meeting') + (log.filter(function (m) { return m.doc; }).length ? ' · ' + pl(log.filter(function (m) { return m.doc; }).length, 'transcript') : '') + '</span></div>' +
+      (log.length ? '<div class="table-wrap"><table class="pi-tbl cm-tbl"><thead><tr><th>When</th><th>Meeting</th><th>Platform</th><th>Who</th><th>Status</th><th>Transcript</th><th>AI: impact on the plan</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        '<p class="muted" style="font-size:12px;margin:8px 0 0">Meetings set up here or by 🧠 Project Intelligence are logged automatically. You can also ask Project Intelligence: “Analyse my meeting on ' + dmy(log[0].date) + ', summarise the outcome and the impact on the project”.</p>'
+        : '<div class="empty">No meetings yet. Set one up above.</div>') + '</div>';
+    B.innerHTML = '<div class="cm-wrap">' + form + logH + '<div id="cmView"></div></div>';
+    commsWire(B, L);
+    if (C.view) cmShow(C.view);
+  }
+  function cmDocName(id) { var d = S.intel && S.intel.core === S.core ? S.intel.docs.filter(function (x) { return x.id === id; })[0] : null; return d ? d.name : 'transcript'; }
+  function commsWire(B, L) {
+    var p = S.plan, C = S.comms, d = C.d;
+    var keep = function () { d.title = $('#cmTitle').value; d.date = $('#cmDate').value; d.start = $('#cmStart').value; d.minutes = +$('#cmMin').value; d.agenda = $('#cmAgenda').value; if ($('#cmLink')) d.link = $('#cmLink').value.trim(); };
+    var refresh = function () { keep(); var L2 = piMeetLinks(Object.assign({ id: 'draft' }, d)); $('#cmMail').href = L2.mail; };
+    ['#cmTitle', '#cmDate', '#cmStart', '#cmMin', '#cmAgenda', '#cmLink'].forEach(function (k) { var el = $(k); if (el) el.addEventListener('input', refresh); if (el) el.addEventListener('change', refresh); });
+    B.querySelectorAll('[data-plat]').forEach(function (b) { b.onclick = function () { keep(); d.platform = b.getAttribute('data-plat'); try { localStorage.setItem('mbsMeetPlat', d.platform); } catch (e) {} commsTab(); }; });
+    B.querySelectorAll('[data-cmw]').forEach(function (c) { c.onchange = function () { keep(); var id = c.getAttribute('data-cmw'); d.attendees = d.attendees.filter(function (x) { return x !== id; }); if (c.checked) d.attendees.push(id); commsTab(); }; });
+    var all = $('#cmAll'); if (all) all.onclick = function () { keep(); d.attendees = (p.stakeholders || []).map(function (x) { return x.id; }); commsTab(); };
+    var none = $('#cmNone'); if (none) none.onclick = function () { keep(); d.attendees = []; commsTab(); };
+    var addG = function () {
+      keep(); var e = $('#cmGuest').value.trim().toLowerCase();
+      if (!/^[^\s@<>,;]+@[^\s@<>,;]+\.[a-z]{2,}$/i.test(e)) return toast('Type a full email address', true);
+      var st = (p.stakeholders || []).filter(function (x) { return (x.email || '').toLowerCase() === e; })[0];
+      if (st) { if (d.attendees.indexOf(st.id) < 0) d.attendees.push(st.id); toast((st.name || e) + ' is already in the Stakeholder register: ticked'); commsTab(); return; }
+      if (d.guests.indexOf(e) < 0) d.guests.push(e); commsTab(); toast('Guest added. Best to add them to the Stakeholder register too.');
+    };
+    $('#cmGuestAdd').onclick = addG; $('#cmGuest').onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); addG(); } };
+    B.querySelectorAll('[data-cmgx]').forEach(function (b) { b.onclick = function () { keep(); d.guests.splice(+b.getAttribute('data-cmgx'), 1); commsTab(); }; });
+    B.querySelectorAll('[data-cmreg]').forEach(function (b) { b.onclick = function () { keep(); var e = d.guests[+b.getAttribute('data-cmreg')]; cmRegister(e, function (st) { d.guests = d.guests.filter(function (x) { return x !== e; }); d.attendees.push(st.id); commsTab(); }); }; });
+    $('#cmIcs').onclick = function () { keep(); piIcs(Object.assign({ id: 'm' + Date.now().toString(36) }, d)); };
+    $('#cmGo').onclick = function () {
+      keep();
+      if (!d.title.trim()) return toast('Give the meeting a title', true);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date)) return toast('Pick a date', true);
+      if (d.link && !/^https:\/\//.test(d.link)) return toast('The join link must start with https://', true);
+      var m = { id: 'm' + Date.now().toString(36), title: d.title.trim(), date: d.date, start: d.start || '10:00', minutes: d.minutes, attendees: d.attendees.slice(), guests: d.guests.slice(), agenda: d.agenda.trim(), platform: d.platform, link: d.link, status: 'Scheduled', was: [], at: Date.now() };
+      var Lm = piMeetLinks(m), save = function (msg) { p.meetings.push(m); dirty('meeting set up: ' + m.title); C.d = cmDraft(); C.d.platform = m.platform; commsTab(); toast(msg); };
+      if (S.commsSetup[d.platform]) {
+        var btn = $('#cmGo'); btn.disabled = true; btn.textContent = 'Creating…';
+        api('commsCreate', { core: S.core, platform: m.platform, title: m.title, date: m.date, start: m.start, minutes: m.minutes, agenda: m.agenda, emails: Lm.emails }).then(function (r) {
+          m.link = r.link || ''; m.extId = r.extId || ''; m.passcode = r.passcode || '';
+          save(PLAT[m.platform][0] + ' meeting created' + (r.invited ? ': invites sent' : ': send the invite with ✉ or ⬇') + ', and added to the meeting log');
+        }).catch(function (e) { btn.disabled = false; btn.textContent = 'Try again'; fail(e); });
+        return;
+      }
+      window.open(Lm.open, '_blank', 'noopener');
+      save('Added to the meeting log. Finish it in ' + PLAT[m.platform][0] + (m.platform === 'google' ? ' (press Save there)' : '') + '.');
+    };
+    // the meeting log
+    B.querySelectorAll('tr[data-mid]').forEach(function (tr) {
+      var m = p.meetings.filter(function (x) { return x.id === tr.getAttribute('data-mid'); })[0]; if (!m) return;
+      var q = function (k) { return tr.querySelector(k); };
+      q('[data-mst]').onchange = function () {
+        var v = this.value, old = m.status;
+        if (v === 'Rescheduled') { this.value = old; return cmReschedule(m); }
+        m.status = v; dirty('meeting ' + m.title + ': ' + v); commsTab();
+        toast(v === 'Cancelled' ? 'Marked cancelled. Use ✉ to let everyone know (the email and the .ics now say cancelled).' : v === 'Took place' ? 'Marked as held. Upload the transcript to see what it means for the plan.' : 'Status: ' + v);
+      };
+      q('[data-mics]').onclick = function () { piIcs(m); };
+      q('[data-mdel]').onclick = function () {
+        M.confirmBox('Delete this meeting?', '“' + esc(m.title) + '” on ' + esc(cmWhen(m)) + ' is taken off the meeting log' + (m.doc ? ', with its transcript and analysis' : '') + '. Changes already applied to the plan stay.', 'Delete', true).then(function (y) {
+          if (!y) return;
+          if (m.doc) { api('intelDocDelete', { core: S.core, id: m.doc }).catch(function () {}); if (S.intel && S.intel.core === S.core) S.intel.docs = S.intel.docs.filter(function (x) { return x.id !== m.doc; }); api('commsForget', { core: S.core, id: m.id }).catch(function () {}); }
+          p.meetings = p.meetings.filter(function (x) { return x !== m; }); if (C.view === m.id) C.view = ''; dirty('meeting deleted'); commsTab();
+        });
+      };
+      var tx = q('[data-mtx]'); if (tx) tx.onchange = function () { var f = this.files[0]; this.value = ''; if (f) cmTranscript(m, f); };
+      var tdl = q('[data-mtdl]'); if (tdl) tdl.onclick = function () { api('intelDocFile', { core: S.core, id: m.doc }).then(function (r) {
+        var bin = atob(r.file), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        var url = URL.createObjectURL(new Blob([u8], { type: r.type })), a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 5000); }).catch(fail); };
+      var an = q('[data-man]'); if (an) an.onclick = function () { cmAnalyse(m); };
+      var vw = q('[data-mview]'); if (vw) vw.onclick = function () { C.view = C.view === m.id ? '' : m.id; commsTab(); if (C.view) setTimeout(function () { var v = $('#cmView'); if (v) v.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); };
+    });
+  }
+  function cmRegister(email, then) {
+    var raci = ['R', 'A', 'C', 'I'];
+    M.modal('<h2>＋ Add to the Stakeholder register</h2><p class="muted" style="margin:4px 0 10px">So the register stays a true record of who is involved in this project.</p><div class="form"><label>Name<input id="crName" maxlength="120" value="' + esc(email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); })) + '"></label>' +
+      '<label>Role<input id="crRole" maxlength="120" placeholder="e.g. Tiling supplier, Certifier"></label><label>RACI<select id="crRaci">' + raci.map(function (r) { return '<option' + (r === 'C' ? ' selected' : '') + '>' + r + '</option>'; }).join('') + '</select></label><label>Phone<input id="crPhone" maxlength="40"></label><label class="full">Email<input id="crEmail" value="' + esc(email) + '" readonly></label></div>' +
+      '<p class="muted" style="font-size:12px">R Responsible (does the work) · A Accountable (signs off) · C Consulted · I Informed</p><div class="actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="crSave" type="button">Add to Stakeholders</button></div>');
+    setTimeout(function () { var r = $('#crRole'); if (r) r.focus(); }, 30);
+    $('#crSave').onclick = function () {
+      var p = S.plan, st = { id: 's' + Date.now().toString(36), name: $('#crName').value.trim(), role: $('#crRole').value.trim(), raci: $('#crRaci').value, phone: $('#crPhone').value.trim(), email: email, sub: '' };
+      if (!st.name) return toast('Type their name', true);
+      (p.stakeholders = p.stakeholders || []).push(st); dirty('stakeholder added from Comms: ' + st.name); M.closeModal(); toast(st.name + ' added to the Stakeholder register'); then(st);
+    };
+  }
+  function cmReschedule(m) {
+    M.modal('<h2>↔ Reschedule</h2><p class="muted" style="margin:4px 0 10px">“' + esc(m.title) + '”, now ' + esc(cmWhen(m)) + '.</p><div class="form"><label>New date<input type="date" id="rsDate" value="' + esc(m.date) + '"></label><label>Start<input type="time" id="rsStart" value="' + esc(m.start) + '"></label></div>' +
+      '<div class="actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="rsSave" type="button">Save the new time</button></div>');
+    $('#rsSave').onclick = function () {
+      var nd = $('#rsDate').value, ns = $('#rsStart').value || m.start;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(nd)) return toast('Pick the new date', true);
+      if (nd === m.date && ns === m.start) return toast('That is the same time', true);
+      (m.was = m.was || []).push(cmWhen(m)); m.date = nd; m.start = ns; m.status = 'Rescheduled'; dirty('meeting rescheduled: ' + m.title); M.closeModal();
+      var Lm = piMeetLinks(m);
+      M.modal('<h2>✓ Moved to ' + esc(cmWhen(m)) + '</h2><p>Let everyone know the new time:</p><div class="row" style="gap:6px">' + (m.platform !== 'zoom' || !m.link ? '<a class="btn btn-gold" target="_blank" rel="noopener" href="' + esc(Lm.open) + '">📅 Open ' + esc(m.platform === 'google' ? 'Google Calendar' : PLAT[m.platform][0]) + '</a>' : '') +
+        '<button class="btn" id="rsIcs" type="button">⬇ New invite (.ics)</button><a class="btn" href="' + esc(Lm.mail) + '">✉ Email the new time</a></div><div class="actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Done</button></div>');
+      $('#rsIcs').onclick = function () { piIcs(m); };
+      commsTab();
+    };
+  }
+  function cmTranscript(m, f) {
+    var core = S.core; toast('Reading “' + f.name + '”…');
+    piExtract(f).then(function (x) {
+      if (!x.text || x.text.replace(/\[page \d+\]/g, '').trim().length < 40) throw new Error('No text found in “' + f.name + '”. If it is a scanned PDF, save it as a text PDF or Word file first.');
+      var send = function (b64) { return api('intelUpload', { core: core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text, file: b64, kind: 'Meeting transcript' }); };
+      if (f.size > 3.5 * 1024 * 1024) return send('');
+      return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).replace(/^data:[^,]*,/, '')); }; rd.readAsDataURL(f); }).then(send);
+    }).then(function (r) {
+      if (S.core !== core) return;
+      if (S.intel && S.intel.core === core) S.intel.docs.push(r.doc); else S.intel = null;
+      m.doc = r.doc.id; m.analysed = 0; m.applied = 0; if (m.status === 'Scheduled' || m.status === 'Rescheduled') m.status = 'Took place';
+      dirty('transcript uploaded for ' + m.title); if (S.tab === 'comms') commsTab(); toast('Transcript added. Press ✨ Analyse impact to see what it means for the plan.');
+    }).catch(function (e) { toast(e.message, true); });
+  }
+  function cmAnalyse(m) {
+    var C = S.comms, core = S.core;
+    if (C.busy) return toast('One analysis at a time', true);
+    C.busy = m.id; commsTab();
+    var id = Array.from(crypto.getRandomValues(new Uint8Array(10))).map(function (b) { return b.toString(16).padStart(2, '0'); }).join(''), t0 = Date.now();
+    var end = function () { C.busy = ''; if (S.tab === 'comms' && S.core === core) commsTab(); };
+    var poll = function () {
+      if (Date.now() - t0 > 300000) { end(); return toast('The AI took too long. Try again.', true); }
+      return new Promise(function (res) { setTimeout(res, 2500); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
+        if (d.status === 'done') { C.an[m.id] = d.analysis; m.analysed = Date.now(); m.applied = 0; C.view = m.id; dirty('meeting analysed: ' + m.title); end(); return; }
+        if (d.status === 'error') { end(); return toast(d.error || 'The AI could not analyse the meeting', true); }
+        return poll();
+      });
+    };
+    (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () {
+      return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ mode: 'meet', id: id, core: core, meeting: m.id }) });
+    }).then(function (r) { if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); }).catch(function (e) { end(); fail(e); });
+  }
+  function cmShow(mid) {
+    var C = S.comms, box = $('#cmView'), m = (S.plan.meetings || []).filter(function (x) { return x.id === mid; })[0];
+    if (!box || !m) return;
+    var a = C.an[mid];
+    if (!a) { box.innerHTML = '<div class="card"><p class="ask-think">Loading the analysis…</p></div>'; api('commsAnalysis', { core: S.core, id: mid }).then(function (r) { if (!r.analysis) { C.view = ''; return toast('No analysis yet: press ✨ Analyse impact', true); } C.an[mid] = r.analysis; if (S.tab === 'comms' && C.view === mid) cmShow(mid); }).catch(fail); return; }
+    box.innerHTML = '<div class="card cm-an"><div class="card-h"><h2>📊 What this meeting means for the project</h2><span class="sp"></span><button class="btn btn-sm" id="cmClose" type="button">✕ Close</button></div>' +
+      '<div class="pi-md">' + piMd(a.report) + '</div>' + impactHtml(a, m) + '<small class="muted">Analysed ' + esc(new Date(a.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + (a.tokens ? ' · about ' + a.tokens.toLocaleString('en-AU') + ' tokens' : '') + '. AI suggestions: check them before relying on them.</small></div>';
+    $('#cmClose').onclick = function () { C.view = ''; commsTab(); };
+    impactWire(box, a, m, function () { commsTab(); });
+  }
+
+  // the impact block, used on the Comms tab and in Project Intelligence answers
+  function impactHtml(a, m) {
+    var p = S.plan, num = {}; p.tasks.forEach(function (t, i) { num[t.id] = i + 1; });
+    var applied = m && m.applied && m.analysed && m.applied >= m.analysed;
+    var area = '<h4>Impact on the project</h4><div class="table-wrap"><table class="pi-tbl im-tbl"><thead><tr><th>Area</th><th>Impact</th><th>What it means</th></tr></thead><tbody>' +
+      AREA_N.map(function (x) { var v = a.impact[x[0]] || { level: 'None', text: '' }; return '<tr><td class="nowrap"><b>' + x[1] + '</b></td><td><span class="lv ' + LVL_C[v.level] + '">' + v.level + '</span></td><td>' + (esc(v.text) || '<span class="muted">No change</span>') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    var item = function (k, i, on, html) { return '<label class="im-it"><input type="checkbox" data-im="' + k + ':' + i + '"' + (on ? ' checked' : '') + (applied ? ' disabled' : '') + '><span>' + html + '</span></label>'; };
+    var g = [];
+    var have = function (id) { return p.tasks.some(function (t) { return t.id === id; }); };
+    if (a.task_changes.length) g.push(['⏱ Schedule and cost', a.task_changes.map(function (c, i) {
+      var w = []; if (c.durTo !== c.durFrom) w.push('days ' + c.durFrom + ' → <b>' + c.durTo + '</b>'); if (c.notBefore) w.push('not before <b>' + esc(dmy(c.notBefore)) + '</b>'); if (c.extra) w.push('<b>+' + money(c.extra) + '</b>');
+      return item('t', i, have(c.id), '<b>#' + (num[c.id] || c.n) + ' ' + esc(c.name) + '</b>: ' + w.join(', ') + (c.why ? '<br><small class="muted">' + esc(c.why) + '</small>' : '') + (have(c.id) ? '' : ' <small class="bad">(task no longer in the plan)</small>'));
+    })]);
+    if (a.new_tasks.length) g.push(['＋ New tasks', a.new_tasks.map(function (t, i) { return item('n', i, true, '<b>' + esc(t.name) + '</b>: ' + pl(t.days, 'day') + (t.after.length ? ', after #' + t.after.map(function (x) { return num[x]; }).filter(Boolean).join(', #') : '') + (t.cost ? ', ' + money(t.cost) : '') + (t.why ? '<br><small class="muted">' + esc(t.why) + '</small>' : '')); })]);
+    if (a.scope_changes.length) g.push(['🎯 Scope', a.scope_changes.map(function (x, i) { return item('s', i, true, '<b>' + x.type + ':</b> ' + esc(x.text) + (x.why ? '<br><small class="muted">' + esc(x.why) + '</small>' : '')); })]);
+    if (a.risks.length) g.push(['⚠ Risks for the register', a.risks.map(function (x, i) { var dup = (p.risks || []).some(function (y) { return y.title.toLowerCase() === x.title.toLowerCase(); }); return item('r', i, !dup, '<b>' + esc(x.title) + '</b> ' + (x.critical ? '<span class="pi-crit">⚡ Critical</span> ' : '') + '<small>P' + x.p + ' × I' + x.i + ' = <b>' + (x.p * x.i) + '</b> · ' + esc(x.response) + '</small><br><small class="muted">' + esc(x.cause) + (x.action ? ' → ' + esc(x.action) : '') + '</small>' + (dup ? ' <small class="muted">(already in the register)</small>' : '')); })]);
+    if (a.issues.length) g.push(['❗ Issues for the log', a.issues.map(function (x, i) { return item('i', i, true, '<b>' + esc(x.title) + '</b> <small>' + esc(x.priority) + (x.owner ? ' · ' + esc(x.owner) : '') + (x.due ? ' · due ' + esc(dmy(x.due)) : '') + '</small>' + (x.detail ? '<br><small class="muted">' + esc(x.detail) + '</small>' : '')); })]);
+    if (a.stakeholders.length) g.push(['👥 New stakeholders', a.stakeholders.map(function (x, i) { var dup = (p.stakeholders || []).some(function (y) { return y.name && y.name.toLowerCase() === x.name.toLowerCase(); }); return item('k', i, !dup, '<b>' + esc(x.name) + '</b> · ' + esc(x.role) + ' <span class="raci raci-' + x.raci + '">' + x.raci + '</span>' + (dup ? ' <small class="muted">(listed)</small>' : '')); })]);
+    if (a.quality.length) g.push(['✅ Quality (added to the acceptance criteria)', a.quality.map(function (x, i) { return item('q', i, true, esc(x)); })]);
+    if (!g.length) return area + '<p class="muted">No changes to the plan came out of this meeting.</p>';
+    return area + '<div class="im-box"><h4>Changes to apply to the plan</h4><div class="im-prev" data-imprev></div>' + g.map(function (x) { return '<div class="im-g"><b class="im-gh">' + x[0] + '</b>' + x[1].join('') + '</div>'; }).join('') +
+      '<div class="row" style="gap:6px;margin-top:8px">' + (applied ? '<span class="cm-ok">✓ Applied to the plan ' + esc(new Date(m.applied).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + '</span>' + (S.fitUndo && S.fitUndo.core === S.core && S.fitUndo.meet === m.id ? '<button class="btn btn-sm" data-imundo type="button">↶ Undo</button>' : '')
+        : '<button class="btn btn-gold" data-imgo type="button">✓ Apply the ticked changes</button><span class="muted" style="font-size:12.5px">The Gantt chart, budget, scope and registers update; ↶ Undo puts it back.</span>') + '</div></div>';
+  }
+  function impactPicks(box) { var o = {}; box.querySelectorAll('[data-im]:checked').forEach(function (c) { o[c.getAttribute('data-im')] = 1; }); return o; }
+  function impactApply(p, a, picks, m) {   // works on any plan object (the real one, or a copy for the preview)
+    var byId = {}; p.tasks.forEach(function (t) { byId[t.id] = t; });
+    var tag = m ? ' (meeting ' + dmy(m.date) + ')' : ' (meeting)', n = 0;
+    a.task_changes.forEach(function (c, i) {
+      var t = byId[c.id]; if (!picks['t:' + i] || !t) return; n++;
+      if (c.durTo !== c.durFrom) { t.dur = c.durTo; fitSubs(t); derive(t); }
+      if (c.notBefore && (!t.snet || c.notBefore > t.snet)) t.snet = c.notBefore;
+      if (c.extra) { if ((+t.qty || 0) > 0) t.rate = Math.round(((+t.rate || 0) + c.extra / t.qty) * 100) / 100; else { t.qty = 1; t.rate = c.extra; t.unit = t.unit || 'item'; } }
+      t.notes = ((t.notes ? t.notes + '\n' : '') + (c.why || 'Changed') + tag).slice(0, 1000);
+    });
+    a.new_tasks.forEach(function (x, i) {
+      if (!picks['n:' + i]) return; n++;
+      var after = x.after.filter(function (id) { return byId[id]; }), at = after.length ? Math.max.apply(null, after.map(function (id) { return p.tasks.indexOf(byId[id]); })) + 1 : p.tasks.length;
+      var t = { id: 't' + Date.now().toString(36) + i, phase: 'ph1', name: x.name, dur: x.days, res: [], lead: '', resource: '', qty: x.cost ? 1 : 0, unit: x.cost ? 'item' : '', rate: x.cost || 0, actual: 0, pct: 0, status: 'todo', pred: after, snet: '', notes: ((x.why || '') + tag).trim(), mats: [], subs: [] };
+      p.tasks.splice(at, 0, t); byId[t.id] = t;
+    });
+    p.charter = p.charter || {};
+    a.scope_changes.forEach(function (x, i) {
+      if (!picks['s:' + i]) return; n++;
+      var line = '- ' + x.text + tag;
+      if (x.type === 'Remove') p.charter.outScope = ((p.charter.outScope ? p.charter.outScope + '\n' : '') + line).slice(0, 2000);
+      else p.charter.inScope = ((p.charter.inScope ? p.charter.inScope + '\n' : '') + (x.type === 'Change' ? '- Changed: ' + x.text + tag : line)).slice(0, 3000);
+    });
+    a.quality.forEach(function (x, i) { if (!picks['q:' + i]) return; n++; p.charter.acceptance = ((p.charter.acceptance ? p.charter.acceptance + '\n' : '') + '- ' + x + tag).slice(0, 2000); });
+    p.risks = p.risks || []; p.issues = p.issues || []; p.stakeholders = p.stakeholders || [];
+    a.risks.forEach(function (x, i) { if (!picks['r:' + i]) return; n++; p.risks.push({ id: 'r' + Date.now().toString(36) + 'm' + i, title: x.title, cause: x.cause + (x.critical ? ' (affects the critical path)' : '') + tag, p: x.p, i: x.i, response: x.response, action: x.action, owner: x.owner || p.charter.manager || '', review: '', status: 'Open', raised: today() }); });
+    a.issues.forEach(function (x, i) { if (!picks['i:' + i]) return; n++; p.issues.push({ id: 'i' + Date.now().toString(36) + 'm' + i, title: x.title, detail: (x.detail + tag).trim(), priority: x.priority, owner: x.owner || p.charter.manager || '', raised: today(), due: x.due || '', status: 'Open', resolution: '' }); });
+    a.stakeholders.forEach(function (x, i) { if (!picks['k:' + i]) return; n++; p.stakeholders.push({ id: 's' + Date.now().toString(36) + 'm' + i, name: x.name, role: x.role, raci: x.raci, phone: '', email: '', sub: '' }); });
+    return n;
+  }
+  function impactWire(box, a, m, after) {
+    var prev = box.querySelector('[data-imprev]');
+    var show = function () {
+      if (!prev) return;
+      var picks = impactPicks(box), R0 = rollup(S.plan, today()), copy = JSON.parse(JSON.stringify(S.plan)); impactApply(copy, a, picks, m); var R1 = rollup(copy, today());
+      var dd = R0.finish && R1.finish ? (R1.finish > R0.finish ? workBetween(R0.finish, R1.finish) - 1 : R1.finish < R0.finish ? -(workBetween(R1.finish, R0.finish) - 1) : 0) : 0, dc = Math.round((R1.BAC - R0.BAC) * 100) / 100;
+      prev.className = 'im-prev' + (dd > 0 || dc > 0 ? ' worse' : '');
+      prev.innerHTML = '<b>With the ticked changes:</b> finish ' + esc(dmy(R0.finish)) + ' → <b>' + esc(dmy(R1.finish)) + '</b> (' + (dd ? (dd > 0 ? '+' : '') + pl(dd, 'working day') : 'no change') + ')' +
+        ' · budget ' + money(R0.BAC) + ' → <b>' + money(R1.BAC) + '</b> (' + (dc ? (dc > 0 ? '+' : '−') + money(Math.abs(dc)) : 'no change') + ')' + (p0finishBy(R1) ? ' · <span class="bad">after the Finish by date ' + esc(dmy(S.plan.finishBy)) + '</span>' : '');
+    };
+    box.querySelectorAll('[data-im]').forEach(function (c) { c.onchange = show; });
+    show();
+    var go = box.querySelector('[data-imgo]'); if (go) go.onclick = function () {
+      var picks = impactPicks(box); if (!Object.keys(picks).length) return toast('Tick the changes to apply', true);
+      var R0 = rollup(S.plan, today());
+      S.fitUndo = { core: S.core, plan: JSON.parse(JSON.stringify(S.plan)), meet: m ? m.id : 'pi' };
+      var n = impactApply(S.plan, a, picks, m);
+      var mm = m ? (S.plan.meetings || []).filter(function (x) { return x.id === m.id; })[0] : null; if (mm) mm.applied = Date.now();
+      dirty('meeting changes applied' + (m ? ': ' + m.title : '')); var R1 = rollup(S.plan, today());
+      toast(pl(n, 'change') + ' applied. Finish ' + dmy(R1.finish) + (R1.finish !== R0.finish ? ' (was ' + dmy(R0.finish) + ')' : '') + ', budget ' + money(R1.BAC) + '.');
+      after();
+    };
+    var un = box.querySelector('[data-imundo]'); if (un) un.onclick = function () { fitUndo(); after(); };
+  }
+  function p0finishBy(R) { return S.plan.finishBy && R.finish && R.finish > S.plan.finishBy; }
+
   /* ---------- v52: 🧠 Project Intelligence ---------- */
   // Ask anything about this project. The AI answers from the plan and the documents uploaded here (contract, specs ...),
   // can suggest risks and a stakeholder register, and set up a team meeting (Google Calendar invite with Google Meet, .ics).
   var PI_EX = ['Work out the critical and non-critical risks for this project', 'What would a stakeholder register look like for this project?',
     'Summarise the contract: price, payment stages, variations, defects period and delays', 'What could delay the finish date, and what should we do this week?',
-    'Set up a 45-minute Google Meet with the stakeholders next Tuesday at 10am to review progress', 'Generate a SWMS for this project'];
-  var PI_KIND = { Contract: '📜', Specification: '📐', Quote: '💲', Variation: '🔁', Drawings: '🗺', Invoice: '🧾', Certificate: '✅', 'Meeting notes': '🗒', Correspondence: '✉', Document: '📄' };
+    'Set up a 45-minute Google Meet with the stakeholders next Tuesday at 10am to review progress', 'Generate a SWMS for this project',
+    'Analyse my last meeting: summarise the outcome and the impact on scope, time, cost, risks, issues and stakeholders'];
+  var PI_KIND = { Contract: '📜', Specification: '📐', Quote: '💲', Variation: '🔁', Drawings: '🗺', Invoice: '🧾', Certificate: '✅', 'Meeting notes': '🗒', 'Meeting transcript': '🎙', Correspondence: '✉', Document: '📄' };
   function piLoad(src, test) { return test() ? Promise.resolve() : new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = function () { rej(new Error('Could not load ' + src)); }; document.head.appendChild(s); }); }
   function piMd(s) {   // small, safe markdown: escaped first, then headings, bullets, tables, bold, code
     var L = esc(String(s || '')).split('\n'), out = [], list = null, tbl = null;
@@ -2062,19 +2335,27 @@
   function piStamp(d) { return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''); }
   function piLocal(date, hm, plus) { var a = date.split('-').map(Number), b = hm.split(':').map(Number), d = new Date(Date.UTC(a[0], a[1] - 1, a[2], b[0], b[1] + (plus || 0))); return d.toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', 'T') + '00'; }
   function piPeople(ids) { return (S.plan.stakeholders || []).filter(function (x) { return ids.indexOf(x.id) >= 0; }); }
+  var PLAT = { google: ['Google Meet', '🟢'], teams: ['Microsoft Teams', '🟣'], zoom: ['Zoom', '🔵'] };
   function piMeetLinks(m) {
-    var who = piPeople(m.attendees), emails = who.map(function (x) { return x.email; }).filter(function (e) { return /@/.test(e || ''); });
-    var details = (m.agenda ? 'Agenda:\n' + m.agenda.split('\n').map(function (x) { return '- ' + x; }).join('\n') + '\n\n' : '') + 'Project: ' + S.plan.name + ' (' + S.job.ref + ')\nGoogle Meet: the video link is added by Google Calendar.' + (m.link ? '\nJoin: ' + m.link : '');
+    var who = piPeople(m.attendees), guests = (m.guests || []).filter(function (e) { return /@/.test(e); }), plat = PLAT[m.platform] ? m.platform : 'google', pn = PLAT[plat][0], off = m.status === 'Cancelled';
+    var emails = who.map(function (x) { return x.email; }).filter(function (e) { return /@/.test(e || ''); }).concat(guests).filter(function (e, i, a) { return a.indexOf(e) === i; });
+    var details = (m.agenda ? 'Agenda:\n' + m.agenda.split('\n').map(function (x) { return '- ' + x; }).join('\n') + '\n\n' : '') + 'Project: ' + S.plan.name + ' (' + S.job.ref + ')\n' +
+      (m.link ? pn + ': ' + m.link + (m.passcode ? ' (passcode ' + m.passcode + ')' : '') : plat === 'google' ? 'Google Meet: the video link is added by Google Calendar.' : pn + ': the join link is in the invite.') + (m.link && plat === 'google' ? '\nJoin: ' + m.link : '');
     var g = 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent(m.title) + '&dates=' + piLocal(m.date, m.start) + '/' + piLocal(m.date, m.start, m.minutes) +
-      '&ctz=Australia/Sydney&details=' + encodeURIComponent(details) + '&location=' + encodeURIComponent(m.link || 'Google Meet') + (emails.length ? '&add=' + encodeURIComponent(emails.join(',')) : '');
+      '&ctz=Australia/Sydney&details=' + encodeURIComponent(details) + '&location=' + encodeURIComponent(m.link || pn) + (emails.length ? '&add=' + encodeURIComponent(emails.join(',')) : '');
     var s = piUtc(m.date, m.start), e = new Date(s.getTime() + m.minutes * 60000);
-    var ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MBS Console//Project Intelligence//EN', 'METHOD:REQUEST', 'BEGIN:VEVENT', 'UID:' + (m.id || ('m' + Date.now())) + '@mbs-console', 'DTSTAMP:' + piStamp(new Date()),
-      'DTSTART:' + piStamp(s), 'DTEND:' + piStamp(e), 'SUMMARY:' + m.title.replace(/[,;]/g, '\\$&'), 'LOCATION:' + (m.link || 'Google Meet'), 'DESCRIPTION:' + details.replace(/[,;]/g, '\\$&').replace(/\n/g, '\\n')]
+    var teams = 'https://teams.microsoft.com/l/meeting/new?subject=' + encodeURIComponent(m.title) + '&startTime=' + encodeURIComponent(s.toISOString()) + '&endTime=' + encodeURIComponent(e.toISOString()) +
+      '&content=' + encodeURIComponent(details.slice(0, 900)) + (emails.length ? '&attendees=' + encodeURIComponent(emails.join(',')) : '');
+    var ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MBS Console//Project Intelligence//EN', 'METHOD:' + (off ? 'CANCEL' : 'REQUEST'), 'BEGIN:VEVENT', 'UID:' + (m.id || ('m' + Date.now())) + '@mbs-console', 'DTSTAMP:' + piStamp(new Date()),
+      'SEQUENCE:' + ((m.was || []).length + (off ? 1 : 0)), 'DTSTART:' + piStamp(s), 'DTEND:' + piStamp(e), 'SUMMARY:' + ((off ? 'Cancelled: ' : '') + m.title).replace(/[,;]/g, '\\$&'), 'LOCATION:' + (m.link || pn), 'DESCRIPTION:' + details.replace(/[,;]/g, '\\$&').replace(/\n/g, '\\n')]
+      .concat(off ? ['STATUS:CANCELLED'] : [])
       .concat(who.filter(function (x) { return /@/.test(x.email || ''); }).map(function (x) { return 'ATTENDEE;CN=' + (x.name || x.email).replace(/[,;:"]/g, ' ') + ';ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:' + x.email; }))
-      .concat(['BEGIN:VALARM', 'TRIGGER:-PT15M', 'ACTION:DISPLAY', 'DESCRIPTION:Reminder', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR']).join('\r\n');
+      .concat(guests.map(function (x) { return 'ATTENDEE;CN=' + x + ';ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:' + x; }))
+      .concat(off ? [] : ['BEGIN:VALARM', 'TRIGGER:-PT15M', 'ACTION:DISPLAY', 'DESCRIPTION:Reminder', 'END:VALARM']).concat(['END:VEVENT', 'END:VCALENDAR']).join('\r\n');
     var when = new Date(m.date + 'T00:00:00Z').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) + ' at ' + m.start + ' (Sydney time), ' + m.minutes + ' minutes';
-    var mail = 'mailto:' + emails.join(',') + '?subject=' + encodeURIComponent(m.title + ': ' + when) + '&body=' + encodeURIComponent('Hello,\n\nPlease join our project meeting on Google Meet.\n\nWhen: ' + when + '\n' + (m.link ? 'Join: ' + m.link + '\n' : 'The Google Meet link is in the calendar invite.\n') + '\n' + details + '\n\nRegards');
-    return { gcal: g, ics: ics, mail: mail, emails: emails, missing: who.filter(function (x) { return !/@/.test(x.email || ''); }), when: when };
+    var mail = 'mailto:' + emails.join(',') + '?subject=' + encodeURIComponent((off ? 'Cancelled: ' : (m.was || []).length ? 'New time: ' : '') + m.title + ': ' + when) + '&body=' + encodeURIComponent(off ? 'Hello,\n\nOur project meeting "' + m.title + '" on ' + when + ' is cancelled. We will be in touch with a new time.\n\nRegards' :
+      'Hello,\n\nPlease join our project meeting on ' + pn + '.\n\nWhen: ' + when + '\n' + ((m.was || []).length ? '(This replaces the earlier time: ' + m.was[m.was.length - 1] + '.)\n' : '') + (m.link ? 'Join: ' + m.link + (m.passcode ? ' (passcode ' + m.passcode + ')' : '') + '\n' : 'The ' + pn + ' link is in the calendar invite.\n') + '\n' + details + '\n\nRegards');
+    return { gcal: g, teams: teams, zoom: 'https://zoom.us/meeting/schedule', open: plat === 'teams' ? teams : plat === 'zoom' ? 'https://zoom.us/meeting/schedule' : g, ics: ics, mail: mail, emails: emails, missing: who.filter(function (x) { return !/@/.test(x.email || ''); }), when: when, name: pn };
   }
   function intelTab() {
     var B = $('#planBody');
@@ -2090,7 +2371,7 @@
         '<div class="pi-ex">' + PI_EX.map(function (x) { return '<button class="pi-chip" data-piex="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') + '</div>' +
         '<div id="piLog">' + (S.piBusy ? '<div class="pi-a"><div class="pi-q">“' + esc(S.piBusy) + '”</div><p class="ask-think">Reading the plan' + (I.docs.length ? ' and ' + pl(I.docs.length, 'document') : '') + '… (this can take up to a minute)</p></div>' : '') +
           I.log.slice().reverse().map(function (e, k) { return piAnswer(e, I.log.length - 1 - k); }).join('') + (!I.log.length && !S.piBusy ? '<div class="empty">No questions yet. Try one of the examples above.</div>' : '') + '</div></div></div>' +
-      '<div class="pi-side"><div class="card"><div class="card-h"><h2>📎 Documents</h2><span class="sp"></span><label class="btn btn-sm btn-gold" for="piFile">＋ Upload</label><input type="file" id="piFile" multiple hidden accept=".pdf,.docx,.txt,.md,.csv,.html,.htm,.eml,.json"></div>' +
+      '<div class="pi-side"><div class="card"><div class="card-h"><h2>📎 Documents</h2><span class="sp"></span><label class="btn btn-sm btn-gold" for="piFile">＋ Upload</label><input type="file" id="piFile" multiple hidden accept=".pdf,.docx,.txt,.md,.csv,.html,.htm,.eml,.json,.vtt,.srt"></div>' +
         '<p class="muted" style="font-size:12.5px;margin:-4px 0 8px">The contract, specification, quotes, variations, letters or meeting notes (PDF, Word .docx or text). The text is read here in your browser and kept with this project.</p>' +
         '<div id="piUp"></div>' + (I.docs.length ? '<ul class="pi-docs">' + I.docs.map(function (d) { return '<li data-did="' + esc(d.id) + '"><span class="pi-dk" title="' + esc(d.kind) + '">' + (PI_KIND[d.kind] || '📄') + '</span><div><b>' + esc(d.name) + '</b><br><small class="muted">' + esc(d.kind) + (d.pages ? ' · ' + pl(d.pages, 'page') : '') + ' · ' + (d.words || 0).toLocaleString('en-AU') + ' words · ' + dmy(new Date(d.at + 10 * 3600e3).toISOString().slice(0, 10)) + '</small></div><span class="sp"></span><button class="btn btn-sm" data-ddl title="Download">⬇</button><button class="btn btn-sm" data-ddel title="Delete">✕</button></li>'; }).join('') + '</ul>' : '<div class="empty" style="padding:12px">No documents yet. Upload the contract to ask about it.</div>') +
         '<p class="muted" style="font-size:12px;margin:10px 0 0">🔒 Before anything goes to the AI, the customer\'s name, phone numbers and emails are taken out, and stakeholders\' phone numbers and emails never leave MBS.</p></div>' +
@@ -2147,6 +2428,7 @@
         '<div class="row" style="gap:6px;margin-top:8px"><a class="btn btn-gold btn-sm" data-mgo target="_blank" rel="noopener" href="' + esc(L.gcal) + '">📅 Create in Google Calendar + Meet</a><button class="btn btn-sm" data-mdl>⬇ Invite (.ics)</button><a class="btn btn-sm" data-mmail href="' + esc(L.mail) + '">✉ Email the invite</a><button class="btn btn-sm" data-msave' + (saved ? ' disabled' : '') + '>' + (saved ? '✓ Saved to this project' : '💾 Save to this project') + '</button></div>' +
         '<p class="muted" style="font-size:12px;margin:8px 0 0">Google Calendar opens with the time, guests and agenda filled in and adds the Google Meet video link; press <b>Save</b> there and Google emails the invites. A free Google account allows group calls up to 60 minutes, so 45 minutes fits.</p></div>';
     }
+    if (r.impact) { var im = (p.meetings || []).filter(function (x) { return x.id === r.impact.meeting.id; })[0] || null; h += '<div class="pi-act pi-imp">' + impactHtml(r.impact, im) + (im ? '<p style="margin:6px 0 0"><a class="btn btn-sm" href="#plan/' + esc(S.core) + '/comms">📞 Open the meeting log</a></p>' : '') + '</div>'; }
     if (r.swms) h += '<div class="pi-act"><div class="row" style="gap:6px"><a class="btn btn-gold btn-sm" href="#swms/' + esc(S.core) + '">🦺 Open the SWMS</a><button class="btn btn-sm" data-swdl="docx">⬇ Word</button><button class="btn btn-sm" data-swdl="pdf">⬇ PDF</button></div></div>';
     if ((r.sources || []).length) h += '<p class="pi-src">📎 ' + r.sources.map(esc).join(' · ') + (r.partial ? ' <span class="muted">(the most relevant parts of long documents were read)</span>' : '') + '</p>';
     if ((r.follow_ups || []).length) h += '<div class="pi-ex" style="margin-top:6px">' + r.follow_ups.map(function (x) { return '<button class="pi-chip" data-pifu="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') + '</div>';
@@ -2160,6 +2442,7 @@
       box.querySelector('[data-pitog]').onclick = function () { st.fold = !piFolded(i); intelTab(); };
       box.querySelector('[data-pidel]').onclick = function () { M.confirmBox('Clear this answer?', '“' + esc(String(e.q).slice(0, 120)) + '” and its answer are cleared for everyone. Anything already added to the plan stays.', 'Clear', true).then(function (y) { if (!y) return;
         api('intelClear', { core: S.core, at: e.at }).then(function () { S.intel.log = S.intel.log.filter(function (x) { return x !== e; }); S.intel.open = {}; toast('Answer cleared'); intelTab(); }).catch(fail); }); };
+      if (r.impact && box.querySelector('[data-imprev]')) impactWire(box, r.impact, (p.meetings || []).filter(function (x) { return x.id === r.impact.meeting.id; })[0] || null, intelTab);
       box.querySelectorAll('[data-swdl]').forEach(function (b) { b.onclick = function () { if (M.swms) M.swms.download(S.core, b.getAttribute('data-swdl')).catch(fail); }; });
       var ar = box.querySelector('[data-addrisks]'); if (ar) ar.onclick = function () {
         var n = 0; box.querySelectorAll('[data-rk]:checked:not(:disabled)').forEach(function (c) { var x = r.risks[+c.getAttribute('data-rk')]; n++;
@@ -2188,7 +2471,9 @@
     var poll = function () {
       if (Date.now() - t0 > 180000) { done(); return toast('The AI took too long. Try again, or ask a shorter question.', true); }
       return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
-        if (d.status === 'done') { S.intel.log.push({ at: Date.now(), by: '', q: q, r: d.intel }); S.intel.log = S.intel.log.slice(-30); done(); return; }
+        if (d.status === 'done') { S.intel.log.push({ at: Date.now(), by: '', q: q, r: d.intel }); S.intel.log = S.intel.log.slice(-30);
+          if (d.intel && d.intel.impact && S.core === core) { var mm = (S.plan.meetings || []).filter(function (x) { return x.id === d.intel.impact.meeting.id; })[0]; if (mm) { mm.analysed = Date.now(); mm.applied = 0; if (S.comms && S.comms.core === core) S.comms.an[mm.id] = d.intel.impact; dirty('meeting analysed by Project Intelligence'); } }
+          done(); return; }
         if (d.status === 'error') { done(); toast(d.error || 'The AI could not answer', true); return; }
         return poll();
       });
@@ -2211,7 +2496,7 @@
     });
     if (/\.docx$/.test(name)) return piLoad('vendor/mammoth.browser.min.js?v=180', function () { return !!window.mammoth; }).then(function () { return f.arrayBuffer(); }).then(function (buf) { return window.mammoth.extractRawText({ arrayBuffer: buf }); }).then(function (r) { return { text: r.value, pages: 0 }; });
     if (/\.doc$/.test(name)) return Promise.reject(new Error('Old Word .doc files can\'t be read: open it in Word and save as .docx or PDF.'));
-    if (/\.(txt|md|csv|json|eml|html?)$/.test(name) || /^text\//.test(f.type)) return f.text().then(function (t) { if (/\.html?$/.test(name)) { var d = document.createElement('div'); d.innerHTML = t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ''); t = d.textContent; } return { text: t, pages: 0 }; });
+    if (/\.(txt|md|csv|json|eml|html?|vtt|srt)$/.test(name) || /^text\//.test(f.type)) return f.text().then(function (t) { if (/\.html?$/.test(name)) { var d = document.createElement('div'); d.innerHTML = t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ''); t = d.textContent; } return { text: t, pages: 0 }; });
     return Promise.reject(new Error('“' + f.name + '” is not a PDF, Word (.docx) or text file.'));
   }
   function piUpload(files) {

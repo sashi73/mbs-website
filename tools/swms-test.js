@@ -54,7 +54,7 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     await p.goto(`${BASE}/admin/#plan/${core}`); await p.waitForSelector('#tplType'); await p.selectOption('#tplType', { index: 1 }); await p.click('#tplCreate'); await p.waitForSelector('table.gt');
 
     const tabs = await p.$$eval('#planTabs .tab', (x) => x.map((a) => a.textContent.trim()));
-    ok('Tab', '"🦺 SWMS" sits just before Project Intelligence', tabs.indexOf('🦺 SWMS') === tabs.indexOf('🧠 Project Intelligence') - 1 && tabs.indexOf('🦺 SWMS') === tabs.indexOf('📜 Contracts') + 1, tabs.join(' | '));
+    ok('Tab', '"🦺 SWMS" sits just before Project Intelligence', tabs.indexOf('🦺 SWMS') === tabs.indexOf('🧠 Project Intelligence') - 1 && tabs.indexOf('🦺 SWMS') === tabs.indexOf('📞 Comms') + 1, tabs.join(' | '));
     await p.click('#planTabs >> text=SWMS'); await p.waitForSelector('#swGo');
     await p.click('#swGo');
     await p.waitForFunction(() => /^#swms\//.test(location.hash) && document.querySelector('table.sw-steps'), null, { timeout: 60000 });

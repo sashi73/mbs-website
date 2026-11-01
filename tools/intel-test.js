@@ -87,7 +87,7 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     const tabs = await p.$$eval('#planTabs .tab', (x) => x.map((a) => a.textContent.trim()));
     ok('Tab', '"🧠 Project Intelligence" comes after Stakeholders, Contracts and SWMS', tabs.indexOf('🧠 Project Intelligence') === tabs.indexOf('🦺 SWMS') + 1 && tabs.indexOf('📜 Contracts') === tabs.indexOf('👥 Stakeholders') + 1, tabs.join(' | '));
     await p.click('#planTabs >> text=Project Intelligence'); await p.waitForSelector('#piQ');
-    ok('Tab', 'opens at #plan/<job>/intel with example questions and an upload button', /\/intel$/.test(await p.evaluate(() => location.hash)) && (await p.$$eval('[data-piex]', (x) => x.length)) === 6 && await p.isVisible('label[for=piFile]'));
+    ok('Tab', 'opens at #plan/<job>/intel with example questions and an upload button', /\/intel$/.test(await p.evaluate(() => location.hash)) && (await p.$$eval('[data-piex]', (x) => x.length)) === 7 && await p.isVisible('label[for=piFile]'));
 
     // upload
     await p.setInputFiles('#piFile', [path.join(tmp, 'Contract.pdf'), path.join(tmp, 'Bathroom spec.txt')]);
