@@ -209,7 +209,14 @@ export async function intelPost(action, body, { who, by, audit }) {
       const t = await kv.get(`pdoctext:${core}:${id}`); if (!t) return out(404, { error: 'Document not found' });
       return out(200, { name: ((await docList(core)).find((d) => d.id === id) || {}).name + '.txt', type: 'text/plain', file: Buffer.from(t.text).toString('base64') });
     }
-    case 'intelClear': { await kv.set('pchat:' + core, { log: [] }); return out(200, { ok: true }); }
+    case 'intelClear': {
+      // one answer (at), everything older than the newest `keep`, or all of it
+      const at = Number(body.at) || 0, keep = Math.max(0, Math.min(30, Number(body.keep) || 0));
+      let left = [];
+      if (at || keep) await kv.update('pchat:' + core, (x) => { const L = x.log || []; x.log = at ? L.filter((e) => e.at !== at) : L.slice(-keep); left = x.log; return x; }, () => ({ log: [] }));
+      else await kv.set('pchat:' + core, { log: [] });
+      return out(200, { ok: true, log: left });
+    }
     default: return null;
   }
 }

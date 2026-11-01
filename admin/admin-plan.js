@@ -2084,7 +2084,7 @@
       return;
     }
     var I = S.intel, p = S.plan;
-    B.innerHTML = '<div class="pi-wrap"><div class="pi-main"><div class="card"><div class="card-h"><h2>🧠 Project Intelligence</h2><span class="sp"></span>' + (I.log.length ? '<button class="btn btn-sm" id="piClear">Clear answers</button>' : '') + '</div>' +
+    B.innerHTML = '<div class="pi-wrap"><div class="pi-main"><div class="card"><div class="card-h"><h2>🧠 Project Intelligence</h2><span class="sp"></span>' + (I.log.length > 1 ? '<button class="btn btn-sm" id="piFold" title="Fold or open all the answers">' + (I.log.every(function (e, k) { return piFolded(k); }) ? '▾ Open all' : '▸ Fold all') + '</button>' : '') + (I.log.length > 3 ? '<button class="btn btn-sm" id="piKeep" title="Keep only the 3 newest answers">🧹 Keep newest 3</button>' : '') + (I.log.length ? '<button class="btn btn-sm" id="piClear" title="Clear every question and answer">🗑 Clear all (' + I.log.length + ')</button>' : '') + '</div>' +
         '<p class="muted" style="margin:-4px 0 10px">Ask anything about this project. The AI reads the plan (tasks, dates, critical path, costs, risks, issues, stakeholders) and the documents on the right, and can add risks and stakeholders or set up a Google Meet.</p>' +
         '<div class="pi-ask"><textarea id="piQ" rows="2" placeholder="e.g. Work out the critical and non-critical risks for this project">' + esc(S.piDraft || '') + '</textarea><button class="btn btn-gold" id="piGo"' + (S.piBusy ? ' disabled' : '') + '>' + (S.piBusy ? 'Thinking…' : 'Ask') + '</button></div>' +
         '<div class="pi-ex">' + PI_EX.map(function (x) { return '<button class="pi-chip" data-piex="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') + '</div>' +
@@ -2102,7 +2102,9 @@
     $('#piQ').onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } };
     B.querySelectorAll('[data-piex]').forEach(function (b) { b.onclick = function () { $('#piQ').value = S.piDraft = b.getAttribute('data-piex'); go(); }; });
     B.querySelectorAll('[data-pifu]').forEach(function (b) { b.onclick = function () { $('#piQ').value = S.piDraft = b.getAttribute('data-pifu'); go(); }; });
-    var cl = $('#piClear'); if (cl) cl.onclick = function () { M.confirmBox('Clear the answers?', 'The questions and answers on this project are cleared for everyone. Documents, risks and meetings stay.', 'Clear').then(function (y) { if (!y) return; api('intelClear', { core: S.core }).then(function () { I.log = []; intelTab(); }).catch(fail); }); };
+    var cl = $('#piClear'); if (cl) cl.onclick = function () { M.confirmBox('Clear all the answers?', 'All ' + pl(I.log.length, 'question') + ' and answers on this project are cleared for everyone. Documents, risks, stakeholders, meetings and the SWMS stay.', 'Clear all', true).then(function (y) { if (!y) return; api('intelClear', { core: S.core }).then(function () { I.log = []; I.open = {}; toast('Answers cleared'); intelTab(); }).catch(fail); }); };
+    var kp = $('#piKeep'); if (kp) kp.onclick = function () { M.confirmBox('Keep only the 3 newest?', pl(I.log.length - 3, 'older answer') + ' will be cleared for everyone. Documents, risks, stakeholders, meetings and the SWMS stay.', 'Clear older', true).then(function (y) { if (!y) return; api('intelClear', { core: S.core, keep: 3 }).then(function (d) { I.log = d.log || I.log.slice(-3); I.open = {}; toast('Older answers cleared'); intelTab(); }).catch(fail); }); };
+    var fo = $('#piFold'); if (fo) fo.onclick = function () { var shut = !I.log.every(function (e, k) { return piFolded(k); }); I.log.forEach(function (e, k) { (I.open[k] = I.open[k] || {}).fold = shut; }); intelTab(); };
     $('#piFile').onchange = function () { piUpload(Array.prototype.slice.call(this.files)); this.value = ''; };
     B.querySelectorAll('[data-ddel]').forEach(function (b) { b.onclick = function () { var id = b.closest('li').getAttribute('data-did'), d = I.docs.filter(function (x) { return x.id === id; })[0];
       M.confirmBox('Delete this document?', '“' + d.name + '” is removed from this project. Answers already given stay.', 'Delete').then(function (y) { if (!y) return; api('intelDocDelete', { core: S.core, id: id }).then(function () { I.docs = I.docs.filter(function (x) { return x.id !== id; }); intelTab(); toast('Document deleted'); }).catch(fail); }); }; });
@@ -2114,9 +2116,13 @@
     piWire(B);
   }
   function piIcs(m) { var L = piMeetLinks(m), url = URL.createObjectURL(new Blob([L.ics], { type: 'text/calendar' })), a = document.createElement('a'); a.href = url; a.download = (m.title || 'meeting').replace(/[^\w -]+/g, '').slice(0, 60) + '.ics'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 5000); }
+  // newest 2 answers are open, older ones folded to one line (unless opened)
+  function piFolded(i) { var st = S.intel.open[i]; return st && typeof st.fold === 'boolean' ? st.fold : i < S.intel.log.length - 2; }
   function piAnswer(e, i) {
-    var r = e.r || {}, p = S.plan, st = S.intel.open[i] = S.intel.open[i] || {};
-    var h = '<div class="pi-a" data-pia="' + i + '"><div class="pi-q">“' + esc(e.q) + '”<small class="muted"> · ' + esc(new Date(e.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + (e.by ? ' · ' + esc(String(e.by).replace(/^Admin \((.*)\)$/, '$1')) : '') + '</small></div>' +
+    var r = e.r || {}, p = S.plan, st = S.intel.open[i] = S.intel.open[i] || {}, fold = piFolded(i);
+    var head = '<div class="pi-q"><button class="pi-tog" data-pitog title="' + (fold ? 'Open' : 'Fold') + ' this answer">' + (fold ? '▸' : '▾') + '</button><span class="pi-qt">“' + esc(e.q) + '”<small class="muted"> · ' + esc(new Date(e.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + (e.by ? ' · ' + esc(String(e.by).replace(/^Admin \((.*)\)$/, '$1')) : '') + '</small></span><button class="pi-x" data-pidel title="Clear this answer">✕</button></div>';
+    if (fold) return '<div class="pi-a pi-folded" data-pia="' + i + '">' + head + '<div class="pi-peek">' + esc(String(r.answer || '').replace(/[#*_`>|-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)) + '</div></div>';
+    var h = '<div class="pi-a" data-pia="' + i + '">' + head +
       '<div class="pi-md">' + piMd(r.answer) + '</div>';
     if (r.risks && r.risks.length) {
       var crit = r.risks.filter(function (x) { return x.critical; }).length;
@@ -2151,6 +2157,9 @@
     var p = S.plan;
     B.querySelectorAll('[data-pia]').forEach(function (box) {
       var i = +box.getAttribute('data-pia'), e = S.intel.log[i], r = e.r || {}, st = S.intel.open[i] = S.intel.open[i] || {};
+      box.querySelector('[data-pitog]').onclick = function () { st.fold = !piFolded(i); intelTab(); };
+      box.querySelector('[data-pidel]').onclick = function () { M.confirmBox('Clear this answer?', '“' + esc(String(e.q).slice(0, 120)) + '” and its answer are cleared for everyone. Anything already added to the plan stays.', 'Clear', true).then(function (y) { if (!y) return;
+        api('intelClear', { core: S.core, at: e.at }).then(function () { S.intel.log = S.intel.log.filter(function (x) { return x !== e; }); S.intel.open = {}; toast('Answer cleared'); intelTab(); }).catch(fail); }); };
       box.querySelectorAll('[data-swdl]').forEach(function (b) { b.onclick = function () { if (M.swms) M.swms.download(S.core, b.getAttribute('data-swdl')).catch(fail); }; });
       var ar = box.querySelector('[data-addrisks]'); if (ar) ar.onclick = function () {
         var n = 0; box.querySelectorAll('[data-rk]:checked:not(:disabled)').forEach(function (c) { var x = r.risks[+c.getAttribute('data-rk')]; n++;
@@ -2160,7 +2169,7 @@
         var n = 0; p.stakeholders = p.stakeholders || [];
         box.querySelectorAll('[data-sk]:checked:not(:disabled)').forEach(function (c) { var x = r.stakeholders[+c.getAttribute('data-sk')]; n++; p.stakeholders.push({ id: 's' + Date.now().toString(36) + n, name: x.name, role: x.role, raci: x.raci, phone: '', email: '' }); });
         if (!n) return toast('Tick the stakeholders to add', true); dirty(); toast(pl(n, 'stakeholder') + ' added: add their phone and email on the Stakeholders tab'); intelTab(); };
-      if (!r.meeting) return;
+      if (!r.meeting || !st.meeting || !box.querySelector('[data-mgo]')) return;
       var m = st.meeting;
       var refresh = function () { var L = piMeetLinks(m); box.querySelector('[data-mgo]').href = L.gcal; box.querySelector('[data-mmail]').href = L.mail; };
       box.querySelectorAll('[data-mf]').forEach(function (el) { el.addEventListener('input', function () { var k = el.getAttribute('data-mf'); m[k] = k === 'minutes' ? +el.value : el.value; refresh(); }); el.addEventListener('change', function () { var k = el.getAttribute('data-mf'); m[k] = k === 'minutes' ? +el.value : el.value; refresh(); }); });
