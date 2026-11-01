@@ -100,7 +100,7 @@ async function context(job, plan, question) {
       budget_BAC: R.BAC, actual_cost: R.AC, earned_value: R.EV, planned_value: R.PV, SPI: R.SPI, CPI: R.CPI, forecast_EAC: R.EAC, baseline_finish: plan.baseline ? plan.baseline.finish : '' },
     scope: { objective: sc(C.objective), in_scope: sc(C.inScope), out_of_scope: sc(C.outScope), deliverables: sc(C.deliverables), acceptance: sc(C.acceptance), assumptions: sc(C.assumptions), budget: C.budget || 0 },
     tasks: plan.tasks.slice(0, 120).map((t, i) => ({ n: i + 1, task: sc(t.name), days: t.dur, start: t.es, finish: t.ef, after: (t.pred || []).map((id) => num[id]).filter(Boolean), critical: crit.has(t.id),
-      pct: t.pct || 0, status: t.status || '', who: sc(t.resource || ''), cost: Math.round((t.qty || 0) * (t.rate || 0) * 100) / 100, subtasks: (t.subs || []).map((x) => sc(x.name)).slice(0, 10) })),
+      pct: t.pct || 0, status: t.status || '', who: sc(t.resource || ''), cost: P.taskCost(t), materials: (t.mats || []).length, subtasks: (t.subs || []).map((x) => sc(x.name)).slice(0, 10) })),
     risks: (plan.risks || []).map((r) => ({ risk: sc(r.title), cause: sc(r.cause), probability: r.p, impact: r.i, score: r.p * r.i, response: r.response, action: sc(r.action), owner: sc(r.owner), status: r.status })),
     issues: (plan.issues || []).map((x) => ({ issue: sc(x.title), detail: sc(x.detail), priority: x.priority, owner: sc(x.owner), due: x.due, status: x.status })),
     stakeholders: people.map((x, i) => ({ ref: 'S' + (i + 1), name: sc(x.name), role: sc(x.role), raci: x.raci, has_email: /@/.test(x.email || '') })),

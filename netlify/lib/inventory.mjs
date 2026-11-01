@@ -88,12 +88,12 @@ export async function allocations(onlyIds = null) {
   const keys = await kv.keys('plan:');
   const plans = (await kv.getMany(keys)).filter(Boolean);
   const map = {};
-  for (const p of plans) for (const t of p.tasks || []) {
-    if (!t.item || (onlyIds && !onlyIds.includes(t.item))) continue;
-    const m = (map[t.item] = map[t.item] || { qty: 0, uses: [] });
+  for (const p of plans) for (const t of p.tasks || []) for (const x of matsOf(t)) {   // v56: every stock material on the task
+    if (onlyIds && !onlyIds.includes(x.item)) continue;
+    const m = (map[x.item] = map[x.item] || { qty: 0, uses: [] });
     const done = t.status === 'done' || t.pct >= 100;
-    if (!done) m.qty = q3(m.qty + (Number(t.qty) || 0));
-    m.uses.push({ job: p.core, plan: p.name, task: t.name, qty: q3(t.qty), done });
+    if (!done) m.qty = q3(m.qty + (Number(x.qty) || 0));
+    m.uses.push({ job: p.core, plan: p.name, task: t.name, qty: q3(x.qty), done });
   }
   return map;
 }
@@ -179,15 +179,14 @@ export const refresh = (ids, by) => reindex([...new Set(ids)].filter(Boolean), b
 
 // ---------- project plans: allocate while not done, use when Done, give back if reopened ----------
 export async function syncPlan(core, before, after, by) {
-  const sig = (p) => JSON.stringify(((p && p.tasks) || []).filter((t) => t.item).map((t) => [t.id, t.item, q3(t.qty), t.status === 'done' || t.pct >= 100]));
+  const sig = (p) => JSON.stringify(((p && p.tasks) || []).filter((t) => matsOf(t).length).map((t) => [t.id, matsOf(t).map((m) => [m.item, q3(m.qty)]), t.status === 'done' || t.pct >= 100]));
   if (before && after && sig(before) === sig(after)) return [];   // nothing stock-related changed
   const want = {};   // itemId -> { key: qty } that should be "used" now
   const touch = new Set();
-  for (const t of (before && before.tasks) || []) if (t.item) touch.add(t.item);
-  for (const t of (after && after.tasks) || []) {
-    if (!t.item) continue;
-    touch.add(t.item);
-    if ((t.status === 'done' || t.pct >= 100) && Number(t.qty) > 0) (want[t.item] = want[t.item] || {})[`plan:${core}:${t.id}`] = { qty: q3(t.qty), task: t.name };
+  for (const t of (before && before.tasks) || []) for (const m of matsOf(t)) touch.add(m.item);
+  for (const t of (after && after.tasks) || []) for (const m of matsOf(t)) {
+    touch.add(m.item);
+    if ((t.status === 'done' || t.pct >= 100) && Number(m.qty) > 0) (want[m.item] = want[m.item] || {})[`plan:${core}:${t.id}`] = { qty: q3(m.qty), task: t.name };
   }
   const ids = [...touch];
   for (const id of ids) {
@@ -269,6 +268,9 @@ export async function sendReorder(id, f, by) {
   const o = await setOnOrder(id, { qty, supplier: f.supplier, expected: f.expected, via: 'email' }, by);
   return { ok: true, to, item: o.item };
 }
+
+// a task's stock materials (v56 list, or the single item of older plans)
+function matsOf(t) { return Array.isArray(t.mats) && t.mats.length ? t.mats : t.item ? [{ item: t.item, qty: Number(t.qty) || 0 }] : []; }
 
 // ---------- lists for the console and the SQL wizard ----------
 export async function list() {

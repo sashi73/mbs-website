@@ -42,19 +42,24 @@ function workSpan(p) {
 const datesLine = (snap) => (snap.workStart || snap.start) ? `Work planned to start ${ACC.prettyDate(snap.workStart || snap.start)} and finish ${ACC.prettyDate(snap.workFinish || snap.finish)} (about ${PLAN.workBetween(snap.workStart || snap.start, snap.workFinish || snap.finish, !!(snap.emergency || snap.weekends))} ${snap.emergency || snap.weekends ? 'days, weekends included' : 'working days'}), subject to acceptance, access and weather.` : '';
 // what the price depends on: if this changes after a quote was made, the quote is out of date
 export function fingerprint(plan) {
-  return JSON.stringify([(plan.tasks || []).map((t) => [t.name, r2(t.qty), t.unit || '', r2(t.rate), t.dur]), str((plan.charter || {}).inScope, 1500)]);
+  return JSON.stringify([(plan.tasks || []).map((t) => [t.name, r2(t.qty), t.unit || '', r2(t.rate), t.dur, (t.mats || []).map((m) => [m.item, m.qty, m.price])]), str((plan.charter || {}).inScope, 1500)]);
 }
 // quote lines from the plan: one per task that has a cost (sub-step names listed), or one total line
 export function linesFromPlan(plan, { mode = 'tasks', margin = 0 } = {}) {
   const k = 1 + Math.max(0, Math.min(200, Number(margin) || 0)) / 100;
-  const costed = plan.tasks.filter((t) => r2(t.qty) * r2(t.rate) > 0);
+  const costed = plan.tasks.filter((t) => PLAN.taskCost(t) > 0);
   if (mode === 'lump') {
-    const total = r2(costed.reduce((a, t) => a + r2(t.qty) * r2(t.rate), 0) * k);
+    const total = r2(costed.reduce((a, t) => a + PLAN.taskCost(t), 0) * k);
     const what = costed.map((t) => t.name).slice(0, 12).join('; ');
     return total > 0 ? [{ desc: `${plan.name}: supply and install as per the project plan (${what})`.slice(0, 400), qty: 1, price: total, gst: true }] : [];
   }
   return costed.map((t) => {
     const subs = (t.subs || []).map((s) => s.name).filter(Boolean);
+    if ((t.mats || []).length) {   // v56: a task with stock materials is one line at its total (labour + materials)
+      const own = r2(t.qty) * r2(t.rate) > 0 ? `${r2(t.qty)} ${t.unit || ''} labour, `.replace(' ,', ',') : '';
+      const mat = t.mats.map((m) => `${r2(m.qty)} x ${(plan.matNames && plan.matNames[m.item]) || 'stock item ' + m.item}`).join(', ');
+      return { desc: (t.name + ' (' + own + 'materials: ' + mat + ')' + (subs.length ? ': ' + subs.join(', ') : '')).slice(0, 400), qty: 1, price: r2(PLAN.taskCost(t) * k), gst: true };
+    }
     const unit = t.unit && !/^lot$/i.test(t.unit) ? ` (${r2(t.qty)} ${t.unit})` : '';
     return { desc: (t.name + unit + (subs.length ? ': ' + subs.join(', ') : '')).slice(0, 400), qty: r2(t.qty), price: r2(r2(t.rate) * k), gst: true };
   });
@@ -91,6 +96,9 @@ export async function planQuotePost(action, body, { who, by, audit }) {
   }
   // planQuote: make a new quote, or refresh a draft quote that came from this plan
   const mode = body.mode === 'lump' ? 'lump' : 'tasks', margin = Math.max(0, Math.min(200, Number(body.margin) || 0));
+  if (plan.tasks.some((t) => (t.mats || []).length)) {   // v56: names of the stock materials for the quote lines
+    try { const ix = await kv.get('inv-index'); plan.matNames = Object.fromEntries(Object.values((ix && ix.items) || {}).map((i) => [i.id, i.name])); } catch {}
+  }
   const items = linesFromPlan(plan, { mode, margin });
   if (!items.length) return out(400, { error: 'No task in the plan has a cost yet. Fill in Qty and Unit $ on the Schedule (or the $ Costs view) first.' });
   const c = body.customer || {};

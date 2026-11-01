@@ -92,7 +92,7 @@ export function rollup(plan, today) {
   schedule(plan);
   const tasks = plan.tasks;
   const A = allDays(plan), frac = (t) => (!t.es ? 0 : today < t.es ? 0 : today >= t.ef ? 1 : workBetween(t.es, today, A) / Math.max(1, workBetween(t.es, t.ef, A)));
-  const cost = (t) => r2((Number(t.qty) || 0) * (Number(t.rate) || 0));
+  const cost = taskCost;
   const BAC = r2(tasks.reduce((a, t) => a + cost(t), 0));
   const PV = r2(tasks.reduce((a, t) => a + cost(t) * frac(t), 0));
   const EV = r2(tasks.reduce((a, t) => a + cost(t) * (t.pct || 0) / 100, 0));
@@ -143,6 +143,11 @@ function clean(p, core) {
     dur: int(t.dur, 0, 365, 1), snet: ymdOk(t.snet), fixed: !!(t.fixed && ymdOk(t.snet)), pred: (Array.isArray(t.pred) ? t.pred : []).map((x) => str(x, 20)).slice(0, 10),
     item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000)
     };
+    // v56: materials from stock: any number of items, each with its own quantity (and the price at the time).
+    // Older plans had one item on the task (the task's own qty and rate were that item): moved into the list, same cost.
+    let mats = (Array.isArray(t.mats) ? t.mats : []).map((m) => ({ item: str(m.item, 12), qty: Math.max(0, Math.round((Number(m.qty) || 0) * 1000) / 1000), price: Math.max(0, r2(m.price)) })).filter((m) => m.item);
+    if (!mats.length && o.item) { mats = [{ item: o.item, qty: Math.max(0, o.qty), price: Math.max(0, o.rate) }]; o.qty = 0; o.rate = 0; o.unit = ''; }
+    const seen = new Set(); o.mats = mats.filter((m) => !seen.has(m.item) && seen.add(m.item)).slice(0, 30); o.item = '';
     o.subs = cleanSubs(t.subs, o, uid);
     if (o.subs.length) { const w = o.subs.reduce((a, x) => a + x.dur, 0); o.pct = Math.round(o.subs.reduce((a, x) => a + x.dur * SPCT[x.status], 0) / w); o.status = statusOf(o.pct); }
     return o;
@@ -176,6 +181,12 @@ function clean(p, core) {
 
 // ---------- storage ----------
 export async function get(core) { return kv.get('plan:' + core); }
+// what a task costs: its own quantity x rate (labour, hire ...) plus the stock materials on it
+export function matsOf(t) { return Array.isArray(t.mats) && t.mats.length ? t.mats : t.item ? [{ item: t.item, qty: Number(t.qty) || 0, price: Number(t.rate) || 0, legacy: true }] : []; }
+export function taskCost(t) {
+  const m = matsOf(t), own = m.length && m[0].legacy ? 0 : (Number(t.qty) || 0) * (Number(t.rate) || 0);
+  return r2(own + m.reduce((a, x) => a + (Number(x.qty) || 0) * (Number(x.price) || 0), 0));
+}
 export async function save(core, plan, rev, by) {
   const c = clean(plan, core);
   let conflict = null, saved = null;
@@ -313,33 +324,36 @@ export function privateOut(text, job = {}) {
 }
 
 // ---------- ✨ AI builds a plan (runs in a background function, so it can take longer than a normal request) ----------
-const planCap = () => Math.max(800, Math.min(4000, Number(env('AI_PLAN_MAX_TOKENS', '3000')) || 3000));   // AI plan reply cap: default 3000, AI_PLAN_MAX_TOKENS 800-4000
+// AI plan reply cap (v56): default 10,000 tokens so big multi-phase projects are planned end to end; AI_PLAN_MAX_TOKENS 2,000-32,000
+const planCap = () => Math.max(2000, Math.min(32000, Number(env('AI_PLAN_MAX_TOKENS', '10000')) || 10000));
 export async function buildAiPlan({ core, describe, scope, type, start, finish, emergency, weekends }, by) {
   const job = core ? await J.find(core) : null;
   if (!job) return { error: 'Job not found' };
-  const text = privateOut(str(describe, 1500) || str(scope, 1500), job);   // never send the customer's name, phone or email
+  const text = privateOut(str(describe, 6000) || str(scope, 6000), job);   // never send the customer's name, phone or email
   if (text.length < 10) return { error: 'Describe the job first (what the customer wants done).' };
   if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.' };
   try { await checkLimit(); } catch (e) { return { error: e.message }; }
-  const system = 'You are an experienced NSW residential building and remedial project manager. Build a practical WATERFALL project plan for a small builder from the job description. ' +
-    'Include: site inspection, quote accepted (milestone, 0 days), any approvals needed (council, strata, engineer), ordering materials with realistic lead times, the trade work in the right order (with sub-steps where useful), inspections/tests (e.g. flood test), clean-up, handover and invoice (milestone). ' +
+  const system = 'You are an experienced NSW construction project manager (PMBOK). Build a practical WATERFALL project plan from the job description. Projects range from small residential repairs to large commercial and industrial programmes (e.g. data centres, multi-storey buildings). ' +
+    'SCALE THE DETAIL TO THE PROJECT: a small job has 6 to 20 tasks; a large or multi-phase project has 40 to 140 tasks and MUST cover EVERY phase from start to finish (e.g. feasibility, design, approvals, procurement, site works, each building or stage, commissioning, handover). Never stop after phase 1. ' +
+    'Give every task "ph": the phase name (short, e.g. "Design & approvals"); tasks of a phase are listed together, phases in order. For big projects use weeks of working days realistically and keep sub-steps to the most useful ones. ' +
+    'Include: site inspection, quote accepted (milestone, 0 days), any approvals needed (council, strata, engineer), ordering materials with realistic lead times, the trade work in the right order (with sub-steps where useful), inspections/tests (e.g. flood test), clean-up, handover and invoice (milestone). For big projects add the stage milestones, long-lead equipment, utility connections, testing and commissioning. ' +
     'Days are working days (Monday to Friday; if emergency or weekends_allowed is true, every day counts, Saturday and Sunday included). "after" lists the task numbers (1-based) that must finish first. Sub-tasks must fit inside their task: [name, start offset in days from the task start, days]. ' +
     'Costs: qty, unit (h, m², L, lot, each) and a typical Sydney rate ex GST for labour or materials; use 0 if unsure. Do not invent council rules; say "check with council" where relevant. ' +
     'Also work out the SCOPE for this job: in_scope (the work included, as short "- " lines), out_of_scope (what is NOT included, to avoid arguments later), deliverables (e.g. certificates, photos, finished work), acceptance (how the customer knows it is done) and assumptions/constraints. ' +
-    'And the RISKS specific to this job (4-6): [title, cause, probability 1-5, impact 1-5, response Avoid|Mitigate|Transfer|Accept, action]. Plus 3-6 short planning tips (lead times, permits, weather, inspections, access, safety). Keep every text short. ' +
+    'And the RISKS specific to this job (4-6; 8-12 for a large project): [title, cause, probability 1-5, impact 1-5, response Avoid|Mitigate|Transfer|Accept, action]. Plus 3-8 short planning tips (lead times, permits, weather, inspections, access, safety). Keep every text short so the WHOLE plan fits. ' +
     'Dates: start_date is when the plan starts (site inspection). Unless emergency is true, the work after "quote accepted" waits cooling_off_days business days; if emergency is true, the work starts the same day as the site inspection. ' +
     'If finish_by is given, the whole plan must finish by then: everything has to fit in working_days_available (order long-lead items first, run tasks in parallel only where it is safe and give those tasks the same "after"). If it truly cannot fit, say so in the FIRST tip with the realistic number of working days. ' +
     'Set "emergency": true only if the description says it is an emergency or urgent (e.g. burst pipe, active leak doing damage, storm damage, "ASAP"). ' +
-    'JSON only: {"emergency":false,"name":"short plan name","objective":"one sentence","in_scope":"","out_of_scope":"","deliverables":"","acceptance":"","assumptions":"","tips":[""],"tasks":[{"n":"","d":1,"after":[],"q":0,"u":"h","r":0,"s":[["",0,1]]}],"risks":[["","",3,3,"Mitigate",""]]}';
+    'JSON only: {"emergency":false,"name":"short plan name","objective":"one sentence","in_scope":"","out_of_scope":"","deliverables":"","acceptance":"","assumptions":"","tips":[""],"tasks":[{"ph":"","n":"","d":1,"after":[],"q":0,"u":"h","r":0,"s":[["",0,1]]}],"risks":[["","",3,3,"Mitigate",""]]}';
   const st = ymdOk(start) || new Date().toISOString().slice(0, 10), fin = ymdOk(finish);
   const user = { job_type: str(type, 120), work: str(job.service, 120), suburb: str(job.suburb, 60), start_date: st, emergency: !!emergency, weekends_allowed: !!weekends, cooling_off_days: emergency ? 0 : 3, description: text };
   if (fin && fin >= st) { user.finish_by = fin; user.working_days_available = workBetween(nextWork(st, !!(emergency || weekends)), fin, !!(emergency || weekends)); }
-  let o, used;
-  try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: planCap(), timeoutMs: 150000, temperature: 0.3 })); }
+  let o, used, cutOff = false;
+  try { ({ data: o, used, cutOff } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: planCap(), timeoutMs: 600000, temperature: 0.3 })); }
   catch (e) { return { error: e.message }; }
   const today = await usage(true, used);
-  const tasks = (Array.isArray(o.tasks) ? o.tasks : []).slice(0, 40).map((t) => ({
-    n: str(t.n || t.name, 160), d: int(t.d ?? t.days, 0, 120, 1), after: (Array.isArray(t.after) ? t.after : []).map((x) => int(x, 1, 40, 0)).filter(Boolean),
+  const tasks = (Array.isArray(o.tasks) ? o.tasks : []).slice(0, 150).map((t) => ({
+    ph: str(t.ph || t.phase, 60), n: str(t.n || t.name, 160), d: int(t.d ?? t.days, 0, 365, 1), after: (Array.isArray(t.after) ? t.after : []).map((x) => int(x, 1, 150, 0)).filter(Boolean).slice(0, 10),
     q: Math.max(0, r2(t.q)), u: str(t.u, 12), r: Math.max(0, r2(t.r)), s: (Array.isArray(t.s) ? t.s : []).slice(0, 12).map((x) => Array.isArray(x) ? [str(x[0], 120), int(x[1], 0, 120, 0), int(x[2], 1, 120, 1)] : null).filter((x) => x && x[0])
   })).filter((t) => t.n);
   if (tasks.length < 2) return { error: 'The AI did not return a usable plan. Add a bit more detail and try again.', tokens: used, today };
@@ -347,7 +361,7 @@ export async function buildAiPlan({ core, describe, scope, type, start, finish, 
   const list = (x, n, m) => (Array.isArray(x) ? x : []).slice(0, n).map((v) => str(v, m)).filter(Boolean);
   const txt = (x, m) => Array.isArray(x) ? x.map((v) => str(v, 300)).filter(Boolean).map((v) => /^[-•]/.test(v) ? v : '- ' + v).join('\n').slice(0, m) : str(x, m);
   // risks: [title, cause, p, i, response, action]; older shape [title, p, i, response, action] also accepted. Sent on as [title, p, i, response, action, cause]
-  const risks = (Array.isArray(o.risks) ? o.risks : []).slice(0, 8).map((r) => {
+  const risks = (Array.isArray(o.risks) ? o.risks : []).slice(0, 12).map((r) => {
     if (r && !Array.isArray(r) && typeof r === 'object') r = [r.title, r.cause, r.p ?? r.probability, r.i ?? r.impact, r.response, r.action];
     if (!Array.isArray(r)) return null;
     const old = typeof r[1] === 'number' || /^\d$/.test(String(r[1]));
@@ -355,7 +369,7 @@ export async function buildAiPlan({ core, describe, scope, type, start, finish, 
     return [str(t, 160), int(p, 1, 5, 3), int(i, 1, 5, 3), RESP.includes(resp) ? resp : 'Mitigate', str(act, 300), str(c, 300)];
   }).filter((r) => r && r[0]);
   return { plan: { emergency: o.emergency === true, name: str(o.name, 100), objective: str(o.objective, 400), inScope: txt(o.in_scope, 1500), outScope: txt(o.out_of_scope, 800), deliverables: txt(o.deliverables, 800), acceptance: txt(o.acceptance, 600),
-    assumptions: txt(o.assumptions, 800), tips: list(o.tips, 8, 240), tasks, risks }, tokens: used, today };
+    assumptions: txt(o.assumptions, 800), tips: (cutOff ? ['⚠ The AI ran out of room after ' + tasks.length + ' tasks, so the end of the plan may be missing. Add the rest by hand, or raise AI_PLAN_MAX_TOKENS in Netlify (now ' + planCap().toLocaleString('en-AU') + ').'] : []).concat(list(o.tips, 8, 240)), tasks, risks }, tokens: used, today, cutOff };
 }
 
 // ---------- dashboard pipeline board: New enquiry > Called > Site visit, planned & quoted > Job won > In progress > Completed > Invoiced > Closed ----------
@@ -552,7 +566,7 @@ export async function planPost(action, body, { who, by, audit }) {
     const had = await get(job.core);
     if (!had) return out(404, { error: 'This job has no plan' });
     await kv.del('plan:' + job.core);
-    try { await INV.refresh((had.tasks || []).map((t) => t.item), by); } catch (e) { console.error('Stock refresh failed:', e.message); }
+    try { await INV.refresh((had.tasks || []).flatMap((t) => matsOf(t).map((m) => m.item)), by); } catch (e) { console.error('Stock refresh failed:', e.message); }
     if (audit) await audit(who, `Plan ${job.core}: deleted ("${had.name}")`);
     return out(200, { ok: true });
   }

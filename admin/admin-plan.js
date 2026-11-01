@@ -105,7 +105,10 @@
       if (!changed) break;
     }
   }
-  var cost = function (t) { return r2((Number(t.qty) || 0) * (Number(t.rate) || 0)); };
+  // v56: a task's cost = its own qty x rate (labour, hire ...) + its stock materials (each item x its quantity)
+  var matsOf = function (t) { return Array.isArray(t.mats) ? t.mats : []; };
+  var matCost = function (t) { return r2(matsOf(t).reduce(function (a, m) { return a + (Number(m.qty) || 0) * (Number(m.price) || 0); }, 0)); };
+  var cost = function (t) { return r2((Number(t.qty) || 0) * (Number(t.rate) || 0) + matCost(t)); };
   function rollup(p, day) {
     schedule(p);
     var T = p.tasks, frac = function (t) { return !t.es ? 0 : day < t.es ? 0 : day >= t.ef ? 1 : workBetween(t.es, day) / Math.max(1, workBetween(t.es, t.ef)); };
@@ -322,6 +325,9 @@
     p.phases = [{ id: 'ph1', name: 'Work' }];
     p.tasks.forEach(function (t) {
       t.phase = 'ph1';
+      if (!Array.isArray(t.mats)) t.mats = [];
+      if (t.item && !t.mats.length) { t.mats = [{ item: t.item, qty: Number(t.qty) || 0, price: Number(t.rate) || 0 }]; t.qty = 0; t.rate = 0; t.unit = ''; }   // v56: older single stock item
+      t.item = '';
       if (!Array.isArray(t.res)) t.res = t.resource ? String(t.resource).split(/\s*,\s*/).filter(Boolean) : [];
       fixRes(t);
       if (!stPct.hasOwnProperty(t.status) || (t.status === 'done') !== (t.pct >= 100)) t.status = statusFromPct(t.pct || 0);
@@ -347,7 +353,7 @@
         S.busy = false;
         if (S.core !== core) return;
         S.rev = r.plan.rev; plan.rev = r.plan.rev;
-        if (plan.tasks.some(function (t) { return t.item; })) loadInv().then(function () { if (S.plan === plan && (S.tab === 'schedule' || S.tab === 'overview') && !S.timer && !document.activeElement.closest('#planBody')) render(); });
+        if (plan.tasks.some(function (t) { return matsOf(t).length; })) loadInv().then(function () { if (S.plan === plan && (S.tab === 'schedule' || S.tab === 'overview') && !S.timer && !document.activeElement.closest('#planBody')) render(); });
         if (r.low && r.low.length && M.inv) M.inv.prompt(r.low);
         var el = $('#planSave'); if (el && !S.timer) el.textContent = 'Saved ✓';
         if (S.chain && liveQuote(S.chain)) { clearTimeout(S.chainT); S.chainT = setTimeout(loadChain, 1500); }   // is the quote still in step with the plan?
@@ -483,6 +489,20 @@
   }
   function fromAi(d, job, start, scope) {   // the AI draft -> the same row format as the templates
     var rows = d.tasks.map(function (x, i) { return [0, 'a' + (i + 1), x.n, x.d, '', x.q, x.u, x.r, (x.after || []).map(function (a) { return 'a' + a; }), x.s]; });
+    // v56: big plans come in phases: mark the end of each phase with a milestone that waits for the phase's last tasks
+    var phases = []; d.tasks.forEach(function (x) { var ph = String(x.ph || '').trim(); if (ph && phases.indexOf(ph) < 0) phases.push(ph); });
+    if (phases.length > 1) {
+      var out = [];
+      phases.forEach(function (ph, k) {
+        var idx = []; d.tasks.forEach(function (x, i) { if (String(x.ph || '').trim() === ph) idx.push(i); });
+        var inPh = idx.map(function (i) { return 'a' + (i + 1); });
+        var ends = inPh.filter(function (id) { return !idx.some(function (i) { return (d.tasks[i].after || []).some(function (a) { return 'a' + a === id; }); }); });
+        idx.forEach(function (i) { out.push(rows[i]); });
+        out.push([0, 'ph' + (k + 1), '✓ Phase ' + (k + 1) + ' complete: ' + ph, 0, '', 0, '', 0, (ends.length ? ends : inPh.slice(-1)).slice(0, 10)]);
+      });
+      d.tasks.forEach(function (x, i) { if (!String(x.ph || '').trim()) out.push(rows[i]); });
+      rows = out;
+    }
     var p = newPlan({ name: d.name || (job.title || 'Project plan'), objective: d.objective || '', scope: d.inScope ? d.inScope : '', rows: rows, risks: d.risks || [] }, job, start, scope,
       { outScope: d.outScope, deliverables: d.deliverables, acceptance: d.acceptance, assumptions: d.assumptions, notes: (d.tips || []).map(function (x) { return '• ' + x; }).join('\n') });
     var cs = String(scope || '').trim();
@@ -540,7 +560,7 @@
       } else {
         mb.innerHTML = '<label style="display:grid;gap:4px;font-weight:700">Describe the plan for the AI <small class="muted" style="font-weight:400">(leave empty to use the scope above)</small><textarea id="aiDescribe" rows="4" placeholder="e.g. Replace the exhaust fan in a 2nd-floor unit bathroom, duct it outside through the eave, patch and paint the ceiling. Strata building; customer wants it done before Christmas.">' + esc(S.aiText || '') + '</textarea></label>' +
           '<p class="muted" style="font-size:13px;margin:8px 0 0">' + ($('#aiFinish') && $('#aiFinish').value ? 'The AI fits the work between the <b>Start date</b> and <b>Finish by</b> above.' : 'No <b>Finish by</b> date above, so ✨ <b>the AI works out the end date</b> for this job.') + '</p>' +
-          '<div class="row" style="margin-top:8px"><button class="btn btn-gold btn-sm" id="aiGo">✨ Build the plan with AI</button><small class="muted">Usually 20–60 seconds. No names or contact details are sent.</small></div><div id="aiOut"></div>';
+          '<div class="row" style="margin-top:8px"><button class="btn btn-gold btn-sm" id="aiGo">✨ Build the plan with AI</button><small class="muted">Small jobs take 20–60 seconds; big multi-phase projects a few minutes (up to 10,000 tokens). No names or contact details are sent.</small></div><div id="aiOut"></div>';
         $('#aiDescribe').oninput = function () { S.aiText = this.value; };
         dateBoxes(mb);
         $('#aiGo').onclick = aiRun;
@@ -565,7 +585,7 @@
       if ((desc || scope).length < 10) { toast('Describe the job first (what the customer wants done)', true); ($('#aiDescribe').value ? $('#aiDescribe') : $('#tplScope')).focus(); return; }
       var id = rid(), go = $('#aiGo'), out = $('#aiOut');
       S.aiId = id; S.aiDraft = null; $('#tplCreate').disabled = true; go.disabled = true;
-      out.innerHTML = '<p class="ask-think" style="margin:10px 0 0">AI is building the plan… this usually takes 20–60 seconds</p>';
+      out.innerHTML = '<p class="ask-think" style="margin:10px 0 0">AI is building the plan… a small job takes 20–60 seconds; a big multi-phase project can take 3–8 minutes (up to 10,000 tokens). You can keep working in another tab.</p>';
       var t0 = Date.now(), cat = catalogItem($('#tplType') ? $('#tplType').value : S.tplType || '');
       var poll = function () {
         return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
@@ -575,7 +595,7 @@
             var eb = $('#tplEmerg'), aiEm = d.plan.emergency && eb && !eb.checked && !S.emergTouched; if (aiEm) eb.checked = true;
             showDraft(); toast(aiEm ? '🚨 The AI reads this as an emergency, so Emergency is ticked (untick it if not)' : 'AI plan ready (' + (d.tokens || 0) + ' tokens)'); return; }
           if (d.status === 'error') throw new Error(d.error || 'The AI plan could not be made');
-          if (Date.now() - t0 > 170000) throw new Error('The AI is taking too long. Try again, or pick a job type instead.');
+          if (Date.now() - t0 > 660000) throw new Error('The AI is taking too long. Try again, or pick a job type instead.');
           return poll();
         });
       };
@@ -707,8 +727,8 @@
   }
   function quoteLines(mode, margin) {   // same rule as the server (plan-quote.mjs)
     var k = 1 + Math.max(0, Math.min(200, +margin || 0)) / 100;
-    var costed = S.plan.tasks.filter(function (t) { return r2(t.qty) * r2(t.rate) > 0; });
-    if (mode === 'lump') { var tot = r2(costed.reduce(function (a, t) { return a + r2(t.qty) * r2(t.rate); }, 0) * k); return tot > 0 ? [{ qty: 1, price: tot }] : []; }
+    var costed = S.plan.tasks.filter(function (t) { return cost(t) > 0; });
+    if (mode === 'lump') { var tot = r2(costed.reduce(function (a, t) { return a + cost(t); }, 0) * k); return tot > 0 ? [{ qty: 1, price: tot }] : []; }
     return costed.map(function (t) { return { qty: r2(t.qty), price: r2(r2(t.rate) * k) }; });
   }
   function quoteDialog(updating) {
@@ -992,11 +1012,65 @@
   // stock items (Inventory) used by tasks
   function invItem(id) { return id && S.inv ? S.inv[id] : null; }
   function stockChip(t) {
-    if (!t.item) return '';
-    var i = invItem(t.item);
-    if (!i) return '<span class="pkchip">📦 stock item ' + esc(t.item) + '</span>';
+    var ms = matsOf(t); if (!ms.length) return '';
+    if (ms.length > 1) {
+      var shortN = t.status !== 'done' ? ms.filter(function (m) { var x = invItem(m.item); return x && x.available < 0; }).length : 0;
+      return '<span class="pkchip' + (shortN ? ' short' : '') + '" title="' + esc(ms.map(function (m) { var x = invItem(m.item); return (m.qty || 0) + ' × ' + (x ? x.name + ' (' + x.unit + ')' : m.item); }).join('\n')) + '">📦 ' + ms.length + ' items · ' + money(matCost(t)) + (shortN ? ' · ' + shortN + ' short' : '') + '</span>';
+    }
+    var i = invItem(ms[0].item), qn = Number(ms[0].qty) || 0;
+    if (!i) return '<span class="pkchip">📦 ' + qn + ' × stock item ' + esc(ms[0].item) + '</span>';
+    if (true) { var sh = t.status !== 'done' && i.available < 0; return '<span class="pkchip' + (sh ? ' short' : '') + '" title="' + esc(qn + ' ' + i.unit + ' of ' + i.name + ': ' + i.available + ' ' + i.unit + ' available after what jobs have set aside') + '">📦 ' + qn + ' × ' + esc(i.name) + ' · ' + (t.status === 'done' ? 'used' : sh ? 'short ' + (-i.available) + ' ' + esc(i.unit) : i.available + ' ' + esc(i.unit) + ' left') + '</span>'; }
     var short = t.status !== 'done' && i.available < 0;
     return '<span class="pkchip' + (short ? ' short' : '') + '" title="' + esc(i.name + ': ' + i.available + ' ' + i.unit + ' available after what jobs have set aside') + '">📦 ' + esc(i.name) + ' · ' + (t.status === 'done' ? 'used' : short ? 'short ' + (-i.available) + ' ' + esc(i.unit) : i.available + ' ' + esc(i.unit) + ' left') + '</span>';
+  }
+  // v56: 📦 materials on a task: any number of stock items, each with its own quantity (e.g. 4 × Paint 10L, 2 × Roller kit)
+  function matsEditor(t) {
+    if (!M.inv) return toast('Inventory is not available', true);
+    var list = matsOf(t).map(function (m) { return { item: m.item, qty: m.qty, price: m.price }; }), all = [];
+    var draw = function () {
+      var tot = list.reduce(function (a, m) { return a + (Number(m.qty) || 0) * (Number(m.price) || 0); }, 0), q = (($('#mtQ') || {}).value || '').toLowerCase();
+      $('#mtRows').innerHTML = list.length ? '<table class="mt-tbl"><thead><tr><th>Stock item</th><th class="num">Qty</th><th>Unit</th><th class="num">Price each</th><th class="num">Total</th><th class="num">Available</th><th></th></tr></thead><tbody>' + list.map(function (m, k) {
+        var x = all.filter(function (i) { return i.id === m.item; })[0] || invItem(m.item) || { name: m.item, unit: '', available: '' };
+        return '<tr data-mk="' + k + '"><td><b>' + esc(x.name) + '</b>' + (x.sku ? '<br><small class="muted">' + esc(x.sku) + '</small>' : '') + '</td><td class="num"><span class="mt-q"><button class="btn btn-sm" data-mq="-1" type="button" aria-label="Less">−</button><input data-mqty type="number" min="0" step="any" value="' + (m.qty || 0) + '"><button class="btn btn-sm" data-mq="1" type="button" aria-label="More">+</button></span></td>' +
+          '<td>' + esc(x.unit || '') + '</td><td class="num"><input data-mprice type="number" min="0" step="any" value="' + (m.price || 0) + '" style="width:90px"></td><td class="num"><b>' + money((Number(m.qty) || 0) * (Number(m.price) || 0)) + '</b></td>' +
+          '<td class="num' + (typeof x.available === 'number' && x.available < (Number(m.qty) || 0) && t.status !== 'done' ? ' bad' : '') + '">' + (x.available === '' ? '' : x.available + ' ' + esc(x.unit || '')) + '</td><td><button class="btn btn-sm" data-mdel type="button" title="Remove">✕</button></td></tr>';
+      }).join('') + '</tbody><tfoot><tr><td colspan="4"><b>Materials on this task</b></td><td class="num"><b>' + money(tot) + '</b></td><td colspan="2"></td></tr></tfoot></table>'
+        : '<div class="empty" style="padding:12px">No materials yet. Find a stock item below and press it to add it.</div>';
+      var have = list.map(function (m) { return m.item; });
+      var l = all.filter(function (i) { return !q || [i.name, i.sku, i.category].join(' ').toLowerCase().indexOf(q) >= 0; }).slice(0, 60);
+      $('#mtList').innerHTML = l.length ? l.map(function (i) { var on = have.indexOf(i.id) >= 0;
+        return '<button class="item pk' + (on ? ' on' : '') + '" data-madd="' + esc(i.id) + '" type="button"><div style="text-align:left"><b>' + esc(i.name) + '</b>' + (on ? ' <small class="muted">(on the task: + adds 1 more)</small>' : '') + '<br><small>' + [i.sku, i.category].filter(Boolean).map(esc).join(' · ') + '</small></div>' +
+          '<div style="text-align:right"><b' + (i.low ? ' style="color:#B42318"' : '') + '>' + i.available + ' ' + esc(i.unit) + '</b><br><small>' + (i.price ? money(i.price) + '/' + esc(i.unit) : 'no price') + '</small></div></button>'; }).join('') : '<div class="empty">No stock items' + (q ? ' match' : ' yet') + '.</div>';
+      var B = $('#modalBody');
+      B.querySelectorAll('tr[data-mk]').forEach(function (tr) {
+        var m = list[+tr.getAttribute('data-mk')];
+        tr.querySelector('[data-mqty]').onchange = function () { m.qty = Math.max(0, parseFloat(this.value) || 0); draw(); };
+        tr.querySelector('[data-mprice]').onchange = function () { m.price = Math.max(0, parseFloat(this.value) || 0); draw(); };
+        tr.querySelectorAll('[data-mq]').forEach(function (b) { b.onclick = function () { m.qty = Math.max(0, Math.round(((Number(m.qty) || 0) + Number(b.getAttribute('data-mq'))) * 1000) / 1000); draw(); }; });
+        tr.querySelector('[data-mdel]').onclick = function () { list.splice(+tr.getAttribute('data-mk'), 1); draw(); };
+      });
+      B.querySelectorAll('[data-madd]').forEach(function (b) { b.onclick = function () {
+        var id = b.getAttribute('data-madd'), x = all.filter(function (i) { return i.id === id; })[0], m = list.filter(function (y) { return y.item === id; })[0];
+        if (m) m.qty = (Number(m.qty) || 0) + 1; else list.push({ item: id, qty: 1, price: x.price || 0 });
+        S.inv = S.inv || {}; S.inv[id] = x; draw();
+        var r = $('#mtRows tr[data-mk="' + (m ? list.indexOf(m) : list.length - 1) + '"] [data-mqty]'); if (r) { r.focus(); r.select(); }
+      }; });
+    };
+    M.inv.load().then(function (d) {
+      all = (d.items || []).filter(function (i) { return !i.archived; }); S.inv = S.inv || {}; all.forEach(function (i) { S.inv[i.id] = i; });
+      M.modal('<h2>📦 Materials for “' + esc(t.name) + '”</h2><p class="muted" style="margin:4px 0 10px">Add as many stock items as the task needs, each with its quantity (e.g. 4 buckets of paint). While the task is not done the quantities are set aside; when it is Done they are taken out of stock. The task cost adds them up.</p>' +
+        '<div id="mtRows"></div><h3 style="font-size:14px;margin:14px 0 6px">Add from stock</h3><input id="mtQ" placeholder="Search stock: name, code or category…" autocomplete="off"><div class="list" id="mtList" style="margin-top:8px;max-height:34vh;overflow:auto"></div>' +
+        '<div class="actions" style="justify-content:space-between;margin-top:12px"><a class="btn" href="#inventory">Manage stock</a><span><button class="btn" data-close type="button">Cancel</button> <button class="btn btn-gold" id="mtSave" type="button">Save materials</button></span></div>');
+      $('#modal .modal-card').classList.add('sc-wide');
+      $('#mtQ').oninput = draw; draw(); $('#mtQ').focus();
+      $('#mtSave').onclick = function () {
+        var before = matsOf(t).length;
+        t.mats = list.filter(function (m) { return m.item; }).map(function (m) { return { item: m.item, qty: Number(m.qty) || 0, price: Number(m.price) || 0 }; });
+        if (t.mats.length && /^New (task|milestone)$/.test(t.name)) t.name = 'Supply ' + (S.inv[t.mats[0].item] || {}).name + (t.mats.length > 1 ? ' and ' + (t.mats.length - 1) + ' more' : '');
+        M.closeModal(); dirty('materials on ' + t.name + ': ' + t.mats.length + ' item' + (t.mats.length === 1 ? '' : 's')); render();
+        toast(t.mats.length ? pl(t.mats.length, 'stock item') + ' on “' + t.name + '”: ' + money(matCost(t)) : before ? 'Materials removed' : 'No materials');
+      };
+    }).catch(fail);
   }
   function loadInv() { return M.inv ? M.inv.load().then(function (d) { S.inv = {}; d.items.forEach(function (i) { S.inv[i.id] = i; }); }).catch(function () {}) : Promise.resolve(); }
   function resCell(t) {
@@ -1055,7 +1129,7 @@
       var subs = t.subs || [], open = subs.length && !S.closed[t.id];
       html += '<tr data-tid="' + esc(t.id) + '" class="' + (t.pct >= 100 ? 'tdone' : '') + (late ? ' tlate' : '') + (t.dur === 0 ? ' tmile' : '') + (subs.length ? ' tparent' : '') + '"><td class="muted nowrap">' + '<span class="grip" data-grip title="Drag up or down to move this task">⠿</span>' + (subs.length ? '<button class="subtog" type="button" data-tog title="' + (open ? 'Hide' : 'Show') + ' sub-tasks">' + (open ? '▾' : '▸') + '</button>' : '') + '<input class="posin" data-pos inputmode="numeric" value="' + r.n + '" title="Type a number to move this task there (1 = first)"></td>' +
         '<td><input type="checkbox" data-k="done"' + (t.pct >= 100 ? ' checked' : '') + ' title="Done" style="width:auto"></td>' +
-        '<td><div class="tname"><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"><button class="pkbtn" type="button" data-pick title="' + (t.item ? 'Change the stock item' : 'Use a stock item from Inventory') + '">📦</button></div>' + stockChip(t) +
+        '<td><div class="tname"><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"><button class="pkbtn" type="button" data-pick title="' + (matsOf(t).length ? 'Materials from stock (' + matsOf(t).length + '): change them' : 'Add materials from stock (any number, each with a quantity)') + '">📦</button></div>' + stockChip(t) +
           (t.dur === 0 ? '' : '<button class="subadd" type="button" data-addsub title="Break this task into smaller steps (they stay inside its dates)">＋ sub-task' + (subs.length ? ' · ' + subs.filter(function (x) { return x.status === 'done'; }).length + '/' + subs.length + ' done' : '') + '</button>') + '</td>' +
         '<td>' + resCell(t) + '</td>' +
         '<td><input data-k="dur" type="number" min="0" max="365" value="' + t.dur + '" style="width:50px" title="0 days = milestone"></td>' +
@@ -1234,13 +1308,7 @@
       b.onclick = function () {
         var t = task(b);
         if (!M.inv) return toast('Inventory is not available', true);
-        M.inv.pick(t.item, function (it) {
-          if (!it) { t.item = ''; dirty('stock item removed: ' + t.name); render(); return; }
-          t.item = it.id; t.unit = it.unit; if (it.price) t.rate = it.price; if (!t.qty) t.qty = 1;
-          if (/^New (task|milestone)$/.test(t.name)) t.name = 'Supply ' + it.name;
-          S.inv = S.inv || {}; S.inv[it.id] = it;
-          dirty('stock item: ' + it.name + ' on ' + t.name); render(); toast('Linked to ' + it.name + ': unit and price filled in');
-        });
+        matsEditor(t);
       };
     });
     var add = function (mile) {
@@ -1373,16 +1441,16 @@
 
     /* 2. Schedule (tasks + sub-tasks grouped under them) */
     var sc = wb.addWorksheet('Schedule', { views: [{ state: 'frozen', xSplit: 2, ySplit: 4 }], properties: { outlineProperties: { summaryBelow: false } } });
-    var cols = ['#', 'Task / sub-task', 'People (lead first)', 'Lead', 'Days', 'Start', 'Finish', 'After #', 'Qty', 'Unit', 'Unit $', 'Cost', 'Actual $', 'Status', '% complete', 'Late', 'Stock item'];
+    var cols = ['#', 'Task / sub-task', 'People (lead first)', 'Lead', 'Days', 'Start', 'Finish', 'After #', 'Qty', 'Unit', 'Unit $', 'Cost', 'Actual $', 'Status', '% complete', 'Late', 'Stock materials'];
     sc.columns = [6, 40, 28, 14, 7, 13, 13, 9, 8, 8, 11, 13, 12, 15, 11, 7, 26].map(function (w) { return { width: w }; });
     titleBlock(sc, 'Schedule', cols.length);
     header(sc, 4, cols);
     var row = 5, first = 5;
     p.tasks.forEach(function (t, i) {
-      var late = t.pct < 100 && t.ef && t.ef < t0, it = invItem(t.item);
+      var late = t.pct < 100 && t.ef && t.ef < t0, mts = matsOf(t).map(function (m) { var x = invItem(m.item); return (m.qty || 0) + ' × ' + (x ? x.name : m.item); }).join(', ');
       var r = sc.getRow(row);
       r.values = [i + 1, (t.dur === 0 ? '◆ ' : '') + t.name, resText(t), t.lead || '', t.dur, D(t.es), D(t.ef), (t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', '),
-        Number(t.qty) || 0, t.unit || '', Number(t.rate) || 0, { formula: 'I' + row + '*K' + row, result: cost(t) }, Number(t.actual) || 0, stName[t.status], (t.pct || 0) / 100, late ? 'Yes' : '', it ? it.name : (t.item || '')];
+        Number(t.qty) || 0, t.unit || '', Number(t.rate) || 0, (matsOf(t).length ? { formula: 'I' + row + '*K' + row + '+' + matCost(t), result: cost(t) } : { formula: 'I' + row + '*K' + row, result: cost(t) }), Number(t.actual) || 0, stName[t.status], (t.pct || 0) / 100, late ? 'Yes' : '', mts];
       r.font = { bold: !!(t.subs && t.subs.length), color: late ? { argb: 'FFB42318' } : undefined };
       [6, 7].forEach(function (c) { r.getCell(c).numFmt = dateF; }); [11, 12, 13].forEach(function (c) { r.getCell(c).numFmt = money$; }); r.getCell(15).numFmt = '0%';
       r.getCell(14).fill = fill(STC[t.status]); r.eachCell({ includeEmpty: true }, function (c) { c.border = box; c.alignment = { vertical: 'top', wrapText: c.col === 2 || c.col === 3 }; });
@@ -1541,7 +1609,7 @@
 
     /* 8. Materials from stock (only when tasks use stock items) */
     var by = {};
-    p.tasks.forEach(function (t) { if (!t.item) return; var b = by[t.item] = by[t.item] || { need: 0, used: 0, tasks: [] }; if (t.status === 'done') b.used += Number(t.qty) || 0; else b.need += Number(t.qty) || 0; b.tasks.push(t.name); });
+    p.tasks.forEach(function (t) { matsOf(t).forEach(function (m) { var b = by[m.item] = by[m.item] || { need: 0, used: 0, tasks: [] }; if (t.status === 'done') b.used += Number(m.qty) || 0; else b.need += Number(m.qty) || 0; b.tasks.push(t.name + ' (' + (m.qty || 0) + ')'); }); });
     if (Object.keys(by).length) {
       var mt = wb.addWorksheet('Materials', { views: [{ state: 'frozen', ySplit: 4 }] });
       mt.columns = [34, 10, 12, 12, 14, 12, 40].map(function (w) { return { width: w }; });
@@ -2155,7 +2223,7 @@
 
   function materialsCard() {
     var p = S.plan, by = {};
-    p.tasks.forEach(function (t) { if (!t.item) return; var b = by[t.item] = by[t.item] || { need: 0, used: 0, tasks: 0 }; b.tasks++; if (t.status === 'done') b.used += Number(t.qty) || 0; else b.need += Number(t.qty) || 0; });
+    p.tasks.forEach(function (t) { matsOf(t).forEach(function (m) { var b = by[m.item] = by[m.item] || { need: 0, used: 0, tasks: 0 }; b.tasks++; if (t.status === 'done') b.used += Number(m.qty) || 0; else b.need += Number(m.qty) || 0; }); });
     var ids = Object.keys(by);
     if (!ids.length) return '<div class="card"><h2>Materials from stock</h2><p class="muted" style="margin:0">Press 📦 next to a task name to use an item from Inventory. Its quantity is set aside for this job and taken out of stock when the task is Done.</p></div>';
     return '<div class="card"><h2>Materials from stock</h2><div class="list">' + ids.map(function (id) {

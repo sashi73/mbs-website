@@ -748,3 +748,78 @@ body.side-mini .side-foot .who,body.side-mini .side-foot .ver{display:none}
 body.side-mini #logout{font-size:0}body.side-mini #logout::before{content:'⎋';font-size:18px}
 @media (max-width:820px){.side-fold{display:none}body.side-mini .app{grid-template-columns:1fr}body.side-mini .side-nav a{font-size:inherit;justify-content:flex-start;padding:9px 10px;gap:10px}body.side-mini .side-brand span,body.side-mini .side-foot .who,body.side-mini .side-foot .ver{display:revert}body.side-mini .side-h{font-size:10.5px;height:auto;background:none}body.side-mini #logout{font-size:inherit}body.side-mini #logout::before{content:none}}
 @media print{.side-fold{display:none}}
+/* v56: materials on a task */
+table.mt-tbl{font-size:13.5px}table.mt-tbl td{vertical-align:middle}table.mt-tbl tfoot td{border-top:2px solid var(--line)}
+.mt-q{display:inline-flex;gap:4px;align-items:center}.mt-q input{width:70px;text-align:right}.mt-q .btn{padding:2px 9px}
+td.num.bad{color:#B42318;font-weight:800}
+/* v56: the project plan fits a 14" laptop (about 1366x768 to 1536x864): smaller text and tighter spacing on the plan page only */
+@media (min-width:821px) and (max-width:1680px),(min-width:821px) and (max-height:920px){
+  .view:has(#planTabs){padding:12px 16px 30px}
+  .view:has(#planTabs)>.row:first-child{margin-bottom:6px!important;gap:6px;row-gap:6px}
+  .view:has(#planTabs)>.row:first-child h2{font-size:17px!important}
+  .view:has(#planTabs)>.row:first-child>span.muted{font-size:12px;max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .view:has(#planTabs) .btn{padding:4px 9px;font-size:12.5px;border-radius:8px}
+  .view:has(#planTabs) .btn-sm{padding:3px 8px;font-size:12px}
+  #planChain{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  #planChain .vchain{flex:1;margin:0;border-radius:9px}
+  #planChain .vstep{padding:3px 10px 3px 14px;gap:0;font-size:11.5px}
+  #planChain .vstep b{font-size:12.5px}
+  #planChain .vact{margin:0;flex:none}
+  .pkpis{gap:8px;margin-bottom:6px}
+  .pkpis .card.kpi{padding:7px 12px;min-height:0;border-radius:10px}
+  .pkpis .kpi .k{font-size:10px}
+  .pkpis .kpi .v{font-size:16px;margin-top:2px}
+  .pkpis .kpi .s{font-size:11px;line-height:1.3}
+  .pkpis .tdl{margin:2px 0;gap:0 8px}.pkpis .tdl dt{font-size:9.5px}.pkpis .tdl dd{font-size:12.5px;line-height:1.3}
+  .rag-card{border-top-width:3px}
+  #planTabs{gap:4px;margin:4px 0 8px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
+  #planTabs .tab{padding:3px 9px;font-size:12px;white-space:nowrap}
+  #planBody>.card{padding:10px 12px}
+  #planBody .tabs .tab{padding:3px 9px;font-size:12px}
+  .qgate{padding:3px 10px;font-size:12px;gap:2px;border-radius:8px}
+  .qgate select{padding:2px 6px;font-size:12px}
+  .phint{font-size:11px;line-height:1.35}
+  .pdline{padding:3px 10px;gap:4px 14px;border-radius:9px;font-size:12.5px}
+  .pdline input{padding:3px 6px;font-size:12.5px;height:28px}
+  .pviews{gap:6px}
+  table.gt{font-size:12px}
+  table.gt th{font-size:10px;padding:4px 3px}
+  table.gt td{padding:1px 3px}
+  table.gt input,table.gt select{padding:2px 4px;font-size:12px;height:24px}
+  table.gt input[type=date]{width:104px}
+  table.gt td small{font-size:10px}
+  /* "+ sub-task" floats on the right of the name when you point at a task, instead of taking a second line */
+  table.gt td:has(>.subadd){position:relative}
+  table.gt .subadd{position:absolute;right:26px;bottom:1px;margin:0;padding:0 5px;font-size:10px;background:#FBF8EF;border:1px solid #EFE6CC;opacity:0;pointer-events:none}
+  table.gt tr:hover .subadd,table.gt tr:focus-within .subadd{opacity:1;pointer-events:auto}
+  .pkbtn{font-size:11px;padding:0 4px}
+  .pkchip{font-size:10.5px;padding:1px 6px;margin-top:0}
+  .gsplit{max-height:calc(100vh - 150px)}
+  .gtrack,.gtr .gtrack{height:26px}.gtrack-sub{height:20px!important}
+  td.gcol{height:26px}
+  /* slimmer page title bar and plan header */
+  .main:has(#planTabs)>.top{padding-top:8px;padding-bottom:8px}
+  .main:has(#planTabs)>.top h1{font-size:20px}
+  .view:has(#planTabs)>.row:first-child>span.muted{max-width:220px}
+  /* summary cards: the headline figures only */
+  .pkpis .kpi .s{display:none}
+  .pkpis .tdl{grid-template-columns:auto 1fr auto 1fr;gap:0 6px}
+  .pkpis .tdl dd{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+  .pkpis .tdl dd:last-of-type{grid-column:span 3}
+  .view:has(#planTabs)>.row:first-child .btn{padding:3px 7px;font-size:11.5px}
+  .view:has(#planTabs)>.row:first-child>span.muted{max-width:160px}
+  /* schedule controls on two short lines: [+ Task][◆ Milestone][Emergency · Weekends · Cooling-off] and [dates][views] */
+  #planBody>.card>.row:first-child{row-gap:6px;column-gap:6px;margin-bottom:6px!important}
+  .qgate{flex:1 1 520px}
+  .pdline{flex:1 1 auto}
+  .pviews{flex:0 0 auto}
+}
+@media (min-width:821px) and (max-height:920px){
+  .phint{display:none}
+  .qgate>div:not(.qrow){display:none}
+}
+@media (min-width:821px) and (max-width:1680px),(min-width:821px) and (max-height:920px){
+  .gbar{top:7px;height:12px}
+  table.gt td.acts{white-space:nowrap;width:auto;min-width:0;line-height:1}
+  .view:has(#planTabs) table.gt td.acts .btn{padding:0 4px;font-size:11px;line-height:1.3;margin:0;height:20px}
+}
