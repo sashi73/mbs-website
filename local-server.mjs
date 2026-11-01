@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-11-01 v56 (plan fits a laptop; AI plan 10,000 tokens; many stock items per task)';
+const VERSION = '2026-11-01 v57 (SWMS)';
 const NEEDS = [
   ['netlify/lib/shared.mjs', 'isTestSite'],
   ['netlify/lib/plan.mjs', 'gateOf'],
@@ -59,6 +59,8 @@ const NEEDS = [
   ['netlify/lib/inventory.mjs', 'invPost'],
   ['netlify/lib/subbies.mjs', 'subPost'],
   ['netlify/lib/plan-intel.mjs', 'intelPost'],
+  ['netlify/lib/swms.mjs', 'swmsPost'],
+  ['admin/admin-swms.js', 'swmsPage'],
   ['admin/admin-plan.js', 'intelTab'],
   ['admin/admin-plan.js', 'contractsTab'],
   ['netlify/lib/sydney-regions.mjs', 'regionOf'],

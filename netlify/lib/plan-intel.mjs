@@ -12,6 +12,7 @@ import * as kv from './kv.mjs';
 import * as J from './jobs.mjs';
 import * as P from './plan.mjs';
 import { llmJson, usage, checkLimit, llmSetup, sydToday } from './ai.mjs';
+import * as SWMS from './swms.mjs';
 
 const str = (s, max = 300) => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
@@ -114,6 +115,8 @@ async function context(job, plan, question) {
   docs.forEach((d, i) => { const t = texts[i] && texts[i].text; if (t) all.push(...chunks(d, scrub(t, job, people))); });
   const pick = pickChunks(all, question);
   ctx.documents = docs.map((d) => ({ name: d.name, kind: d.kind, pages: d.pages, words: d.words }));
+  const sw = await kv.get('swms:' + job.core);   // v57: the SWMS, so questions about it can be answered
+  if (sw) ctx.swms = { version: sw.version, status: sw.status, high_risk_work: sw.hrcw.map((k) => (SWMS.HRCW.find((h) => h[0] === k) || [])[1]), steps: sw.steps.map((s) => ({ step: s.step, hazards: s.hazards, risk: s.risk, controls: s.controls, risk_after: s.residual, who: s.who })), ppe: sw.ppe, plant: sw.plant, licences: sw.quals };
   // which uploaded document is which contract
   ctx.contracts = ctx.contracts.map((c) => ({ type: c.type, with: c.with, document: (docs.find((d) => d.id === c.document) || {}).name || '' }));
   ctx.document_extracts = pick.chunks.map((c) => ({ doc: c.doc, page: c.page || undefined, text: c.text }));
@@ -141,6 +144,18 @@ export async function ask({ core, question, history }, by) {
   const plan = await P.get(job.core); if (!plan) return { error: 'This job has no plan yet. Make the plan first.' };
   const q = str(question, 800); if (!q) return { error: 'Type a question first' };
   if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.' };
+  // v57: "generate a SWMS for this project" writes the Safe Work Method Statement from the plan
+  if (/\bswms\b|safe work method/i.test(q) && /generat|creat|make|prepar|writ|draft|build|produce|do (a|me|us)|give me|need (a|one)|set up|update|redo|new/i.test(q)) {
+    const g = await SWMS.generate({ core: job.core }, by);
+    if (g.error) return { error: g.error };
+    const H = Object.fromEntries(SWMS.HRCW), s = g.swms, high = s.steps.filter((x) => /High|Extreme/.test(x.risk)).length;
+    const r = { answer: '## 🦺 SWMS written (version ' + s.version + ')\nI wrote the Safe Work Method Statement from the project plan: **' + s.steps.length + ' job steps** (' + high + ' with a high or extreme risk before controls), with hazards, control measures, PPE, plant, licences, emergency arrangements and a sign-on sheet.\n\n' +
+        (s.hrcw.length ? '**High-risk construction work in this job:**\n' + s.hrcw.map((k) => '- ' + H[k]).join('\n') : 'No high-risk construction work category was found: check this against the work.') +
+        '\n\nOpen the SWMS to check and change anything, then download it as Word or PDF. It is general guidance: check it against the site and the work before use.',
+      risks: [], stakeholders: [], meeting: null, sources: [], follow_ups: ['What PPE is needed for this job?', 'Which steps have the highest risk?'], tokens: g.tokens, today: g.today, swms: { version: s.version, steps: s.steps.length, hrcw: s.hrcw.length } };
+    await kv.update('pchat:' + job.core, (x) => { x.log = (x.log || []).concat([{ at: Date.now(), by: str(by, 60), q, r }]).slice(-30); return x; }, () => ({ log: [] }));
+    return r;
+  }
   try { await checkLimit(); } catch (e) { return { error: e.message }; }
   const { ctx, stakeholders } = await context(job, plan, q);
   const earlier = (Array.isArray(history) ? history : []).slice(-3).map((h) => ({ q: str(h.q, 300), a: str(h.a, 600) }));

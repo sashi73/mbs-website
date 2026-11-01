@@ -955,7 +955,7 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['stake', '👥 Stakeholders'], ['contracts', '📜 Contracts'], ['intel', '🧠 Project Intelligence']];
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['stake', '👥 Stakeholders'], ['contracts', '📜 Contracts'], ['swms', '🦺 SWMS'], ['intel', '🧠 Project Intelligence']];
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>' +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
       '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote" title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
@@ -991,7 +991,7 @@
         p.baseline = { at: Date.now(), finish: R.finish, BAC: R.BAC, tasks: tasks }; saveNow('baseline set'); toast('Baseline set'); render();
       });
     };
-    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, intel: intelTab }[S.tab] || scheduleTab)(R);
+    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, swms: swmsTab, intel: intelTab }[S.tab] || scheduleTab)(R);
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
@@ -1883,12 +1883,41 @@
     }).catch(function (e) { if (msg) msg.innerHTML = ''; toast(e.message, true); });
   }
 
+  /* ---------- v57: 🦺 SWMS (Safe Work Method Statement) ---------- */
+  // Written by the AI from this plan, then checked and changed in its own editor (#swms/<job>) and downloaded as Word or PDF.
+  function swmsTab() {
+    var B = $('#planBody'), core = S.core;
+    B.innerHTML = '<div class="empty">Loading the SWMS…</div>';
+    api('swmsGet', { core: core }).then(function (d) {
+      if (S.tab !== 'swms' || S.core !== core) return;
+      var w = d.swms, H = {}; d.hrcw.forEach(function (h) { H[h[0]] = h[1]; });
+      var when = function (ms) { return ms ? new Date(ms).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' }) : ''; };
+      var high = w ? w.steps.filter(function (s) { return /High|Extreme/.test(s.risk); }).length : 0;
+      B.innerHTML = '<div class="card sw-card"><div class="card-h"><h2>🦺 Safe Work Method Statement (SWMS)</h2><span class="sp"></span>' + (w ? '<span class="sw-status-chip sw-' + w.status.toLowerCase() + '">' + w.status + ' · version ' + w.version + '</span>' : '') + '</div>' +
+        '<p class="muted" style="margin:-4px 0 12px">Needed before high-risk construction work starts (WHS Regulation 2017 NSW, Part 6.3). The AI writes it from this plan: the high-risk work involved, every job step with its hazards, risk and control measures, PPE, plant, licences, emergency arrangements and a sign-on sheet. Then open it to check and change anything, and download it as Word or PDF. You can also ask 🧠 Project Intelligence: “Generate a SWMS for this project”.</p>' +
+        (w ? '<div class="sw-sum"><div><b>' + w.steps.length + '</b><span>job steps</span></div><div><b>' + high + '</b><span>high or extreme before controls</span></div><div><b>' + w.hrcw.length + '</b><span>high-risk work categories</span></div><div><b>' + w.signon.filter(function (s) { return s.name; }).length + '</b><span>workers signed on</span></div></div>' +
+            (w.hrcw.length ? '<div class="sw-hr">' + w.hrcw.map(function (k) { return '<span class="sw-chip">⚠ ' + esc(H[k] || k) + '</span>'; }).join('') + '</div>' : '') +
+            '<p class="muted" style="font-size:12.5px">' + (w.edited ? 'Last changed ' + when(w.updated) : 'Written by the AI ' + when(w.generated) + ': not checked yet') + '</p>' +
+            '<div class="row" style="gap:6px"><a class="btn btn-gold" href="#swms/' + esc(core) + '">🦺 Open the SWMS (check and change)</a><button class="btn" data-swdl="docx">⬇ Word</button><button class="btn" data-swdl="pdf">⬇ PDF</button><span class="sp"></span><button class="btn btn-sm" id="swAgain">✨ Write again from the plan</button></div>'
+          : '<button class="btn btn-gold" id="swGo">✨ Write the SWMS from this plan</button>') + '<p id="swOut" class="muted" style="margin:10px 0 0"></p></div>';
+      B.querySelectorAll('[data-swdl]').forEach(function (b) { b.onclick = function () { M.swms.download(core, b.getAttribute('data-swdl')).catch(fail); }; });
+      var run = function (btn) {
+        btn.disabled = true;
+        M.swms.generate(core, function (m) { $('#swOut').innerHTML = '<span class="ask-think">' + esc(m) + '</span>'; })
+          .then(function (r) { toast('SWMS written (' + (r.tokens || 0) + ' tokens)'); location.hash = '#swms/' + core; })
+          .catch(function (e) { btn.disabled = false; $('#swOut').innerHTML = '<span class="bad">' + esc(e.message) + '</span>'; });
+      };
+      var g = $('#swGo'); if (g) g.onclick = function () { run(g); };
+      var a = $('#swAgain'); if (a) a.onclick = function () { M.confirmBox('Write the SWMS again?', 'The AI writes a new version from the plan as it is now. Changes made to the current version are replaced.', 'Write again').then(function (y) { if (y) run(a); }); };
+    }).catch(fail);
+  }
+
   /* ---------- v52: 🧠 Project Intelligence ---------- */
   // Ask anything about this project. The AI answers from the plan and the documents uploaded here (contract, specs ...),
   // can suggest risks and a stakeholder register, and set up a team meeting (Google Calendar invite with Google Meet, .ics).
   var PI_EX = ['Work out the critical and non-critical risks for this project', 'What would a stakeholder register look like for this project?',
     'Summarise the contract: price, payment stages, variations, defects period and delays', 'What could delay the finish date, and what should we do this week?',
-    'Set up a 45-minute Google Meet with the stakeholders next Tuesday at 10am to review progress'];
+    'Set up a 45-minute Google Meet with the stakeholders next Tuesday at 10am to review progress', 'Generate a SWMS for this project'];
   var PI_KIND = { Contract: '📜', Specification: '📐', Quote: '💲', Variation: '🔁', Drawings: '🗺', Invoice: '🧾', Certificate: '✅', 'Meeting notes': '🗒', Correspondence: '✉', Document: '📄' };
   function piLoad(src, test) { return test() ? Promise.resolve() : new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = function () { rej(new Error('Could not load ' + src)); }; document.head.appendChild(s); }); }
   function piMd(s) {   // small, safe markdown: escaped first, then headings, bullets, tables, bold, code
@@ -2001,6 +2030,7 @@
         '<div class="row" style="gap:6px;margin-top:8px"><a class="btn btn-gold btn-sm" data-mgo target="_blank" rel="noopener" href="' + esc(L.gcal) + '">📅 Create in Google Calendar + Meet</a><button class="btn btn-sm" data-mdl>⬇ Invite (.ics)</button><a class="btn btn-sm" data-mmail href="' + esc(L.mail) + '">✉ Email the invite</a><button class="btn btn-sm" data-msave' + (saved ? ' disabled' : '') + '>' + (saved ? '✓ Saved to this project' : '💾 Save to this project') + '</button></div>' +
         '<p class="muted" style="font-size:12px;margin:8px 0 0">Google Calendar opens with the time, guests and agenda filled in and adds the Google Meet video link; press <b>Save</b> there and Google emails the invites. A free Google account allows group calls up to 60 minutes, so 45 minutes fits.</p></div>';
     }
+    if (r.swms) h += '<div class="pi-act"><div class="row" style="gap:6px"><a class="btn btn-gold btn-sm" href="#swms/' + esc(S.core) + '">🦺 Open the SWMS</a><button class="btn btn-sm" data-swdl="docx">⬇ Word</button><button class="btn btn-sm" data-swdl="pdf">⬇ PDF</button></div></div>';
     if ((r.sources || []).length) h += '<p class="pi-src">📎 ' + r.sources.map(esc).join(' · ') + (r.partial ? ' <span class="muted">(the most relevant parts of long documents were read)</span>' : '') + '</p>';
     if ((r.follow_ups || []).length) h += '<div class="pi-ex" style="margin-top:6px">' + r.follow_ups.map(function (x) { return '<button class="pi-chip" data-pifu="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') + '</div>';
     if (r.tokens) h += '<small class="muted">About ' + r.tokens.toLocaleString('en-AU') + ' tokens.</small>';
@@ -2010,6 +2040,7 @@
     var p = S.plan;
     B.querySelectorAll('[data-pia]').forEach(function (box) {
       var i = +box.getAttribute('data-pia'), e = S.intel.log[i], r = e.r || {}, st = S.intel.open[i] = S.intel.open[i] || {};
+      box.querySelectorAll('[data-swdl]').forEach(function (b) { b.onclick = function () { if (M.swms) M.swms.download(S.core, b.getAttribute('data-swdl')).catch(fail); }; });
       var ar = box.querySelector('[data-addrisks]'); if (ar) ar.onclick = function () {
         var n = 0; box.querySelectorAll('[data-rk]:checked:not(:disabled)').forEach(function (c) { var x = r.risks[+c.getAttribute('data-rk')]; n++;
           p.risks.push({ id: 'r' + Date.now().toString(36) + n, title: x.title, cause: x.cause + (x.critical ? ' (affects the critical path)' : ''), p: x.p, i: x.i, response: x.response, action: x.action, owner: x.owner || (p.charter || {}).manager || '', review: '', status: 'Open', raised: today() }); });
