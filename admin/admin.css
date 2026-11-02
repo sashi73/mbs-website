@@ -1119,3 +1119,11 @@ textarea.ch-flash{animation:chFlash 1.6s ease}
 @keyframes chFlash{0%{box-shadow:0 0 0 3px rgba(201,162,39,.55);background:#FFFBEA}100%{box-shadow:none;background:#fff}}
 .ch-req{margin-bottom:10px}.ch-req summary{cursor:pointer;font-size:12.5px;font-weight:700;color:#6F6A5D;margin-bottom:6px}
 .ch-mode input[type=radio]{width:auto;flex:none;margin:3px 0 0;padding:0;box-shadow:none}.ch-mode>span{flex:1;min-width:0}
+/* v77: the meeting-impact changes list: tick box in a fixed column, text left-aligned beside it */
+.im-g{margin-top:12px}.im-gh{display:block;font-size:13px;margin:0 0 4px;padding-bottom:4px;border-bottom:1px solid #E7E2D4;color:#1F1D18}
+.im-box label.im-it{display:grid;grid-template-columns:22px minmax(0,1fr);gap:4px 10px;align-items:start;text-align:left;font-weight:500;font-size:13px;color:inherit;padding:7px 8px;margin:0;border-bottom:1px dotted #EEE9DC;border-radius:6px;cursor:pointer}
+.im-box label.im-it:hover{background:#FBF8EF}
+.im-box label.im-it input[type=checkbox]{width:16px;height:16px;min-width:0;padding:0;margin:2px 0 0;flex:none;accent-color:#C9A227;cursor:pointer}
+.im-box label.im-it>span{min-width:0;text-align:left;line-height:1.45}.im-box label.im-it>span small{font-size:12px}
+.im-box label.im-it:has(input:not(:checked))>span{opacity:.55}
+.im-box label.im-it:has(input:disabled){cursor:default}

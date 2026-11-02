@@ -139,6 +139,9 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     const panel = await p.textContent('.cm-an');
     const areas = await p.$$eval('.cm-an .im-tbl tbody tr', (r) => r.map((x) => x.textContent));
     ok('Analysis', 'summary, decisions and actions, and the impact on scope, time, cost, quality, risk, issues and stakeholders', /Outcome/.test(panel) && /Decisions/.test(panel) && /Place the stone order/.test(panel) && areas.length === 7 && /Time.*High/.test(areas[1]), areas.join(' / '));
+    const lay = async (root) => p.$$eval(root + ' label.im-it', (ls) => ls.map((l) => { const c = l.querySelector('input').getBoundingClientRect(), t = l.querySelector('span').getBoundingClientRect(), L = l.getBoundingClientRect(); return { cw: Math.round(c.width), gap: Math.round(t.left - c.right), left: Math.round(c.left - L.left), tw: Math.round(t.width), lw: Math.round(L.width) }; }));
+    const layOk = (xs) => xs.length > 0 && xs.every((x) => x.cw <= 18 && x.gap >= 4 && x.gap <= 16 && x.left <= 12 && x.tw > x.lw * 0.85);
+    { const L1 = await lay('.cm-an'); ok('Layout', 'each change is a tidy row: a small tick box on the left, its text right beside it, using the full width', layOk(L1), JSON.stringify(L1.slice(0, 3))); await (await p.$('.cm-an .im-box')).screenshot({ path: require('path').join(require('os').tmpdir(), 'meeting-impact.png') }); }
     const prev1 = await p.textContent('.cm-an [data-imprev]');
     ok('Preview', 'the preview shows the finish date and budget with the ticked changes (later and dearer)', /finish .* → .*\(\+\d+ working days\)/.test(prev1) && /budget .* → .*\(\+\$1,150/.test(prev1), prev1);
     await p.uncheck('.cm-an [data-im="n:0"]'); await sleep(200);
@@ -166,6 +169,7 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     await p.waitForSelector('#piLog .pi-a .pi-imp', { timeout: 60000 });
     const pia = await p.textContent('#piLog .pi-a');
     ok('Project Intelligence', 'asking about the meeting by date reads that meeting\'s transcript and gives the outcome and the impact', seen.length === nAsk + 1 && /TRANSCRIPT/.test(seen[nAsk].sys) && /Zoom: benchtop and lead times/.test(pia) && /Outcome/.test(pia) && (await p.$$('#piLog .pi-a .im-tbl tbody tr')).length === 7, pia.slice(0, 200));
+    { const L2 = await lay('#piLog .pi-a'); ok('Layout', 'the same tidy rows in the Project Intelligence answer', layOk(L2), JSON.stringify(L2.slice(0, 3))); }
     ok('Project Intelligence', 'the changes can be applied from the answer too (with the finish / budget preview)', !!(await p.$('#piLog .pi-a [data-imgo]')) && /working day/.test(await p.textContent('#piLog .pi-a [data-imprev]')));
     await p.fill('#piQ', 'Analyse the meeting on 2/1/2025 and summarise the outcome'); await p.click('#piGo');
     await p.waitForFunction(() => /No meeting on/.test(document.querySelector('#piLog').textContent), null, { timeout: 30000 });
