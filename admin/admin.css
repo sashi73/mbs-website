@@ -623,3 +623,6 @@ input.predoff{text-decoration:line-through;color:#A8A397}
 .tdl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:6px 0 6px;align-items:baseline}
 .tdl dt{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .tdl dd{margin:0;font-family:'Archivo',sans-serif;font-weight:800;font-size:15.5px;line-height:1.25}
+/* v32e: full-screen modes (plan Wide view, pipeline board full screen) always take the whole width, even with a
+   folded menu column (same rule as the test site's v71 fix) */
+body.plan-wide .app,body.plan-wide.side-mini .app,body.board-full .app,body.board-full.side-mini .app{grid-template-columns:minmax(0,1fr)}
