@@ -165,7 +165,7 @@ function clean(p, core) {
   const res = {
     core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart), finishBy: ymdOk(p.finishBy), emergency: !!p.emergency, weekends: !!p.weekends, coolOff: int(p.coolOff, 0, 10, 3),
     charter: { objective: str(c.objective, 1500), inScope: str(c.inScope, 3000), outScope: str(c.outScope, 2000), deliverables: str(c.deliverables, 2000),
-      acceptance: str(c.acceptance, 2000), assumptions: str(c.assumptions, 2000), notes: str(c.notes, 3000), budget: r2(c.budget), customer: str(c.customer, 120), manager: str(c.manager, 80),
+      acceptance: str(c.acceptance, 2000), assumptions: str(c.assumptions, 2000), notes: str(c.notes, 3000), background: str(c.background, 3000), budget: r2(c.budget), customer: str(c.customer, 120), manager: str(c.manager, 80),
       // v73: the charter document: its version and status
       docVersion: str(c.docVersion, 10) || '1.0', docStatus: ['Draft', 'For approval', 'Approved'].includes(c.docStatus) ? c.docStatus : 'Draft' },
     phases, tasks,
@@ -320,6 +320,58 @@ export async function describe(core, b) {
   let text = (summary ? summary + '\n' : '') + dodTxt();
   if (text.length > MAX) text = text.slice(0, MAX - 1) + '…';
   return { text, tokens: used, today };
+}
+
+// ---------- v76: ✨ the charter's words (sections 2 to 6): improve, expand or just correct, from the plan ----------
+export const CH_AI = { objective: 1500, background: 3000, inScope: 3000, outScope: 2000, deliverables: 2000, acceptance: 2000, assumptions: 2000, notes: 3000 };
+const CH_AI_WHAT = { objective: 'Objective: why we are doing this. 1 to 3 sentences: the outcome, the standard, the time frame. Prose, not a list.',
+  background: 'Background for the charter: the customer\'s request rewritten as a short professional background (who, where, what they asked for, key requirements, constraints). 1 or 2 short paragraphs of prose. Leave out the enquiry channel, the best time to call and anything about photos.',
+  inScope: 'In scope: what we will do. A "- " list of concrete work packages, in the order they happen.',
+  outScope: 'Out of scope: what we will not do. A "- " list. Typical exclusions for this kind of job that the plan does not cover.',
+  deliverables: 'Deliverables: what the customer receives (the built works, certificates, test reports, warranties, manuals, as-built drawings ...). A "- " list.',
+  acceptance: 'Acceptance criteria: how we know it is done. A "- " list of measurable, testable conditions.',
+  assumptions: 'Assumptions and constraints. A "- " list; start each with "Assumption:" or "Constraint:".',
+  notes: 'Planning notes and tips for the project team. A "- " list of practical tips (long-lead items, approvals, sequencing, safety).' };
+export async function charterEnhance({ core, fields, mode, note, texts }, by) {
+  const job = await J.find(core); if (!job) return { error: 'Job not found' };
+  const plan = await get(job.core); if (!plan) return { error: 'This job has no plan' };
+  const keys = (Array.isArray(fields) ? fields : []).filter((k) => CH_AI[k]).slice(0, 8);
+  if (!keys.length) return { error: 'Nothing to improve' };
+  if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.' };
+  try { await checkLimit(); } catch (e) { return { error: e.message }; }
+  const m = ['expand', 'grammar'].includes(mode) ? mode : 'improve';
+  const c = { ...(plan.charter || {}) }; const tx = texts && typeof texts === 'object' ? texts : {};
+  for (const k of Object.keys(CH_AI)) if (typeof tx[k] === 'string') c[k] = tx[k];
+  const P = (x, n) => privateOut(str(x, n), job);
+  const R = plan.tasks.filter((t) => t.dur > 0);
+  const ctx = { project: P(plan.name, 120), work: P(job.service, 120), location: str(job.suburb, 60), customer_request: P(jobScope(job), 2500),
+    start: plan.start, finish_by: plan.finishBy || undefined, budget: c.budget ? '$' + Math.round(c.budget).toLocaleString('en-AU') : undefined,
+    tasks: R.slice(0, 60).map((t) => scrubTask(t.name, job) + ' (' + t.dur + ' days)'), milestones: plan.tasks.filter((t) => !t.dur).slice(0, 20).map((t) => scrubTask(t.name, job)),
+    risks: (plan.risks || []).filter((r) => r.title).slice(0, 12).map((r) => P(r.title, 120)),
+    charter_now: Object.fromEntries(Object.keys(CH_AI).filter((k) => String(c[k] || '').trim()).map((k) => [k, P(c[k], CH_AI[k])])) };
+  const how = m === 'grammar' ? 'Correct ONLY spelling, grammar, punctuation and list formatting. Keep the meaning, the items and the length. Do not add or remove content.'
+    : m === 'expand' ? 'Expand it: keep everything correct that is there, fix the structure and grammar, and add the important items a professional charter would have that are missing (use the tasks, milestones, risks and request). Be specific to this project.'
+    : 'Improve it: fix the structure, grammar and wording; turn pasted text into the right form for the field (e.g. the customer\'s request pasted into In scope becomes a clean list of work packages); remove duplicates and anything that belongs in another field; add the few important items that are clearly missing. If a field is empty, write it from the plan.';
+  const system = 'You are a senior project manager (PMP, PMBOK) writing a project charter for a construction or building services job in NSW, Australia. ' + how +
+    ' Plain Australian English, short and precise, no marketing words, no prices unless already given, no names of people (roles are fine), no em dashes. ' +
+    'Lists: one item per line starting with "- ", each item one line. Write these fields:\n' + keys.map((k) => '- ' + k + ': ' + CH_AI_WHAT[k] + ' At most ' + Math.round(CH_AI[k] * 0.8) + ' characters.').join('\n') +
+    (note ? '\nThe project manager also asks: ' + str(note, 300) : '') +
+    '\nJSON only: {"fields":{' + keys.map((k) => '"' + k + '":""').join(',') + '},"changes":"one short sentence: what you changed"}';
+  let o, used;
+  try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify({ ...ctx, fields_to_write: Object.fromEntries(keys.map((k) => [k, P(c[k], CH_AI[k])])) }) }],
+    { maxTokens: Math.min(5000, 700 + keys.length * 700), timeoutMs: 150000, temperature: m === 'grammar' ? 0.1 : 0.35 })); }
+  catch (e) { return { error: e.message }; }
+  const today = await usage(true, used);
+  const got = (o && o.fields && typeof o.fields === 'object') ? o.fields : o || {};
+  const outF = {};
+  for (const k of keys) {
+    let v = got[k]; if (Array.isArray(v)) v = v.map((x) => '- ' + String(x).replace(/^[-•*]\s*/, '')).join('\n');
+    v = String(v || '').replace(/\r/g, '').replace(/\s*[—–]\s*/g, ', ').replace(/^\s*[•*]\s+/gm, '- ').replace(/\n{3,}/g, '\n\n').trim();
+    if (v.length > CH_AI[k]) { v = v.slice(0, CH_AI[k]); v = v.slice(0, Math.max(v.lastIndexOf('\n'), v.lastIndexOf('. ') + 1, 1)).trim(); }
+    if (v) outF[k] = v;
+  }
+  if (!Object.keys(outF).length) return { error: 'The AI did not write anything useful. Try again.' };
+  return { fields: outF, changes: str(o.changes, 300), mode: m, tokens: used, today };
 }
 
 // ---------- emergency? (the customer picked "Emergency" in the chat, or the enquiry says so) ----------

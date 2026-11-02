@@ -3,7 +3,7 @@
 // as aiplan:<id>; the console asks for it with the "planAiStatus" action until it is ready.
 import * as A from '../lib/admin-lib.mjs';
 import * as kv from '../lib/kv.mjs';
-import { buildAiPlan, fitPlanAi } from '../lib/plan.mjs';
+import { buildAiPlan, fitPlanAi, charterEnhance } from '../lib/plan.mjs';
 import * as INTEL from '../lib/plan-intel.mjs';
 import * as SWMS from '../lib/swms.mjs';
 import * as COMMS from '../lib/comms.mjs';
@@ -42,6 +42,12 @@ export default async (req) => {
       const r = await INTEL.ask({ core: body.core, question: body.question, history: body.history }, `Admin (${session.u})`);
       await kv.set('aiplan:' + id, { intel: r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
       if (!r.error) await A.audit(session.u, `Project Intelligence question on ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
+      return ok();
+    }
+    if (body.mode === 'charter') {   // v76: ✨ the charter's words (sections 2 to 6)
+      const r = await charterEnhance({ core: body.core, fields: body.fields, mode: body.how, note: body.note, texts: body.texts }, `Admin (${session.u})`);
+      await kv.set('aiplan:' + id, { charter: r.error ? null : r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
+      if (!r.error) await A.audit(session.u, `AI ${r.mode === 'grammar' ? 'corrected' : r.mode === 'expand' ? 'expanded' : 'improved'} the charter (${Object.keys(r.fields).join(', ')}) on ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
       return ok();
     }
     if (body.mode === 'fit') {   // v38: fit an existing plan to its "Finish by" date

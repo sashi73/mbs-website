@@ -2041,7 +2041,7 @@
 
   /* ---------- scope (project charter) ---------- */
   /* ---------- scope (project charter): v74 full width, numbered like the charter document, boxes that grow, a sign-off checklist ---------- */
-  var CH_F = [['objective', 1500], ['inScope', 3000], ['outScope', 2000], ['deliverables', 2000], ['acceptance', 2000], ['assumptions', 2000], ['notes', 3000]];
+  var CH_F = [['objective', 1500], ['background', 3000], ['inScope', 3000], ['outScope', 2000], ['deliverables', 2000], ['acceptance', 2000], ['assumptions', 2000], ['notes', 3000]];
   function chGrow(el) { el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight + 2, 64) + 'px'; }
   function chChecks(p) {
     var c = p.charter || {}, has = function (k) { return String(c[k] || '').trim().length > 2; };
@@ -2055,8 +2055,9 @@
     var lim = {}; CH_F.forEach(function (x) { lim[x[0]] = x[1]; });
     var f = function (k, label, hint, ph, list) { return '<div class="chf"><label class="chf-l" for="ch_' + k + '">' + label + '<span class="chf-c" data-cc="' + k + '"></span></label>' + (hint ? '<div class="chf-h">' + hint + '</div>' : '') +
       '<textarea id="ch_' + k + '" data-c="' + k + '"' + (list ? ' data-list' : '') + ' maxlength="' + lim[k] + '" placeholder="' + esc(ph || '') + '">' + esc(c[k] || '') + '</textarea></div>'; };
-    var sec = function (n, title, body, extra) { return '<section class="chs"><div class="chs-h"><span class="chs-n">' + n + '</span><h3>' + title + '</h3>' + (extra || '') + '</div>' + body + '</section>'; };
-    var listHint = 'One item per line. Press Enter for the next “- ” line.';
+    var sec = function (n, title, body, extra, ai) { return '<section class="chs' + (ai && S.chBusy && ai.some(function (k) { return S.chBusy.indexOf(k) >= 0; }) ? ' ch-busy' : '') + '"' + (ai ? ' data-ais="' + ai.join(',') + '"' : '') + '><div class="chs-h"><span class="chs-n">' + n + '</span><h3>' + title + '</h3>' + (extra || '') +
+      (ai ? '<button type="button" class="btn btn-sm ch-ai" data-ai="' + ai.join(',') + '" title="Let the AI improve, expand or correct this section, using the plan, the tasks and the customer\'s request">✨ AI</button>' : '') + '</div>' + (ai ? '<div class="ch-ainote" data-ain="' + ai.join(',') + '"></div>' : '') + body + '</section>'; };
+    var listHint = 'One item per line. Press Enter for the next “- ” line.', hasBg = !!(S.job.scope || c.background);
     var main =
       sec(1, 'Project details', '<div class="chg chg-4"><div class="chf"><label class="chf-l" for="ch_name">Plan name</label><input id="ch_name" data-p="name" value="' + esc(p.name) + '"></div>' +
         '<div class="chf"><label class="chf-l" for="ch_customer">Customer (sponsor)</label><input id="ch_customer" data-c="customer" value="' + esc(c.customer) + '" placeholder="Who approves and pays"></div>' +
@@ -2065,14 +2066,16 @@
         '<div class="ch-facts"><span>Start <b>' + esc(dmy(R.start) || '–') + '</b></span><span>Finish <b>' + esc(dmy(R.finish) || '–') + '</b></span>' + (p.finishBy ? '<span>Finish by <b>' + esc(dmy(p.finishBy)) + '</b></span>' : '') +
         '<span>Planned cost <b>' + money(R.BAC) + '</b></span>' + (c.budget ? '<span class="' + (R.BAC > c.budget ? 'ch-over' : 'ch-ok') + '">' + (R.BAC > c.budget ? 'Over budget by <b>' + money(R.BAC - c.budget) + '</b>' : 'Contingency <b>' + money(c.budget - R.BAC) + '</b>') + '</span>' : '') +
         '<span class="muted">from the Schedule</span></div>') +
-      sec(2, 'Purpose and objective', f('objective', 'Objective: why we are doing this', 'One or two sentences on the outcome the customer wants.', 'e.g. Deliver a Tier IV, 100 MW data centre from feasibility to handover within 12 months')) +
-      (S.job.scope ? sec(3, 'Background: the customer\'s request', '<div class="jobreq"><div>' + esc(S.job.scope) + '</div></div><p class="chf-h" style="margin:6px 0 0">From the enquiry; it goes into the charter as the background. Use it to write the scope below.</p>', '<button type="button" class="btn btn-sm" id="chUseReq" title="Copy the customer\'s request into In scope, to edit">↓ Copy into In scope</button>') : '') +
-      sec(S.job.scope ? 4 : 3, 'Scope', '<div class="chg chg-2">' + f('inScope', 'In scope: what we will do', listHint, '- Site works and earthworks\n- …', true) + f('outScope', 'Out of scope: what we will not do', listHint, '- Land purchase and legal costs\n- …', true) + '</div>') +
-      sec(S.job.scope ? 5 : 4, 'Deliverables and acceptance', '<div class="chg chg-2">' + f('deliverables', 'Deliverables: what the customer receives', listHint, '- Certificates, warranties, as-built drawings\n- …', true) + f('acceptance', 'Acceptance criteria: how we know it is done', listHint, '- All systems pass testing\n- Defects list closed\n- …', true) + '</div>') +
-      sec(S.job.scope ? 6 : 5, 'Assumptions, constraints and notes', '<div class="chg chg-2">' + f('assumptions', 'Assumptions and constraints', listHint, '- Site access weekdays 7am to 5pm\n- …', true) + f('notes', 'Planning notes and tips (optional in the charter)', listHint, '- Order long-lead items first\n- …', true) + '</div>');
+      sec(2, 'Purpose and objective', f('objective', 'Objective: why we are doing this', 'One or two sentences on the outcome the customer wants.', 'e.g. Deliver a Tier IV, 100 MW data centre from feasibility to handover within 12 months'), '', ['objective']) +
+      (hasBg ? sec(3, 'Background: the customer\'s request', (S.job.scope ? '<details class="ch-req"' + (c.background ? '' : ' open') + '><summary>The customer\'s request (from the enquiry)</summary><div class="jobreq"><div>' + esc(S.job.scope) + '</div></div></details>' : '') +
+        f('background', 'Background for the charter', c.background ? 'This goes into the charter as the background. Clear it to use the customer\'s request as it is.' : 'Empty: the charter uses the customer\'s request as it is. ✨ AI writes a professional background from it.', 'A short background: who, where, what was asked for, key requirements'), (S.job.scope ? '<button type="button" class="btn btn-sm" id="chUseReq" title="Copy the customer\'s request into In scope, to edit">↓ Copy into In scope</button>' : ''), ['background']) : '') +
+      sec(hasBg ? 4 : 3, 'Scope', '<div class="chg chg-2">' + f('inScope', 'In scope: what we will do', listHint, '- Site works and earthworks\n- …', true) + f('outScope', 'Out of scope: what we will not do', listHint, '- Land purchase and legal costs\n- …', true) + '</div>', '', ['inScope', 'outScope']) +
+      sec(hasBg ? 5 : 4, 'Deliverables and acceptance', '<div class="chg chg-2">' + f('deliverables', 'Deliverables: what the customer receives', listHint, '- Certificates, warranties, as-built drawings\n- …', true) + f('acceptance', 'Acceptance criteria: how we know it is done', listHint, '- All systems pass testing\n- Defects list closed\n- …', true) + '</div>', '', ['deliverables', 'acceptance']) +
+      sec(hasBg ? 6 : 5, 'Assumptions, constraints and notes', '<div class="chg chg-2">' + f('assumptions', 'Assumptions and constraints', listHint, '- Site access weekdays 7am to 5pm\n- …', true) + f('notes', 'Planning notes and tips (optional in the charter)', listHint, '- Order long-lead items first\n- …', true) + '</div>', '', ['assumptions', 'notes']);
     var checks = chChecks(p), done = checks.filter(function (x) { return x[1]; }).length, pc = Math.round(done / checks.length * 100);
     var side = '<aside class="ch-side"><div class="card ch-card"><div class="ch-doc"><span class="ch-ver">v' + esc(c.docVersion || '1.0') + ' · ' + esc(c.docStatus || 'Draft') + '</span></div>' +
       '<button class="btn btn-gold ch-big" id="chDoc" type="button" title="The project charter as a professional PDF or Word document, with the Gantt chart, critical path, stakeholder register and a sign-off block">📄 Charter: PDF / Word</button>' +
+      '<button class="btn ch-big ch-aiall" type="button" data-ai="all" title="Let the AI go through sections 2 to 6 in one go: structure, grammar and the missing pieces">✨ Improve the whole charter with AI</button>' +
       '<div class="ch-ready"><div class="row" style="justify-content:space-between"><b>Ready to sign off</b><b>' + pc + '%</b></div><div class="ch-bar"><span style="width:' + pc + '%" class="' + (pc >= 100 ? 'ok' : pc >= 70 ? 'mid' : 'low') + '"></span></div></div>' +
       '<ul class="ch-list">' + checks.map(function (x) { return '<li class="' + (x[1] ? 'ok' : '') + '">' + (x[1] ? '✓' : '○') + ' ' + esc(x[0]) + '</li>'; }).join('') + '</ul>' +
       '<p class="muted" style="font-size:12px;margin:8px 0 0">Stakeholders and risks come from their own tabs. Everything saves as you type.</p></div></aside>';
@@ -2104,6 +2107,94 @@
     var ur = $('#chUseReq'); if (ur) ur.onclick = function () { var t = $('#ch_inScope'); var lines = String(S.job.scope).split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean).map(function (x) { return /^[-•]/.test(x) ? x : '- ' + x; });
       t.value = (t.value.trim() ? t.value.replace(/\s+$/, '') + '\n' : '') + lines.join('\n'); t.dispatchEvent(new Event('input')); t.focus(); toast('Copied into In scope: trim it to what you will deliver'); };
     $('#chDoc').onclick = charterDialog;
+    B.querySelectorAll('[data-ai]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation();
+      var keys = b.getAttribute('data-ai') === 'all' ? CH_F.map(function (x) { return x[0]; }).filter(function (k) { return k !== 'background' || hasBg; }) : b.getAttribute('data-ai').split(',');
+      chAiPop(keys, b); }; });
+    if (S.chBusy) chAiBusy(true);
+    chAiNotes();
+  }
+
+  /* ---------- v76: ✨ AI for the charter (sections 2 to 6): improve, expand or correct, with undo ---------- */
+  var CH_LBL = { objective: 'Objective', background: 'Background', inScope: 'In scope', outScope: 'Out of scope', deliverables: 'Deliverables', acceptance: 'Acceptance criteria', assumptions: 'Assumptions and constraints', notes: 'Planning notes' };
+  function chAiPopClose() { var o = document.getElementById('chPop'); if (o) o.remove(); document.removeEventListener('mousedown', chAiPopOut, true); document.removeEventListener('keydown', chAiPopKey, true); }
+  function chAiPopOut(e) { var o = document.getElementById('chPop'); if (o && !o.contains(e.target)) chAiPopClose(); }
+  function chAiPopKey(e) { if (e.key === 'Escape') { e.stopPropagation(); chAiPopClose(); } }
+  function chAiPop(keys, btn) {
+    chAiPopClose();
+    if (S.chBusy) return toast('The AI is still writing. One moment.');
+    var c = S.plan.charter, empty = keys.every(function (k) { return !String(c[k] || '').trim(); });
+    var opt = function (v, t, d, on) { return '<label class="ch-mode"><input type="radio" name="chm" value="' + v + '"' + (on ? ' checked' : '') + '><span><b>' + t + '</b><small>' + d + '</small></span></label>'; };
+    var o = document.createElement('div'); o.id = 'chPop'; o.className = 'ch-pop';
+    o.innerHTML = '<div class="ch-pop-h">✨ AI: ' + esc(keys.length > 3 ? 'the whole charter (sections 2 to ' + (keys.indexOf('background') >= 0 ? 6 : 5) + ')' : keys.map(function (k) { return CH_LBL[k]; }).join(' and ')) + '</div>' +
+      (empty ? '<p class="muted" style="margin:0 0 8px;font-size:12.5px">Empty now: the AI writes it from the plan, the tasks and the customer\'s request.</p>' : '') +
+      opt('improve', empty ? 'Write it' : 'Improve', 'Fix the structure and grammar, tidy pasted text, fill the gaps', true) +
+      opt('expand', 'Expand', 'Add the detail a professional charter would have') +
+      (empty ? '' : opt('grammar', 'Correct only', 'Spelling, grammar and punctuation; nothing added or removed')) +
+      '<input class="ch-note" id="chNote" maxlength="300" placeholder="Anything to tell the AI? (optional) e.g. mention the substation">' +
+      '<div class="ch-pop-b"><button type="button" class="btn btn-sm" data-x>Cancel</button><button type="button" class="btn btn-gold btn-sm" id="chGo">✨ Go</button></div>' +
+      '<p class="muted" style="margin:6px 0 0;font-size:11.5px">You can undo it afterwards.</p>';
+    document.body.appendChild(o);
+    var r = btn.getBoundingClientRect(), w = o.offsetWidth, top = r.bottom + 6;
+    if (top + o.offsetHeight > innerHeight - 8) top = Math.max(8, r.top - o.offsetHeight - 6);
+    o.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.right - w)) + 'px'; o.style.top = top + 'px';
+    o.querySelector('[data-x]').onclick = chAiPopClose;
+    var go = function () { var how = (o.querySelector('input[name=chm]:checked') || {}).value || 'improve', note = $('#chNote').value.trim(); chAiPopClose(); chAiRun(keys, how, note); };
+    $('#chGo').onclick = go; $('#chNote').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+    document.addEventListener('mousedown', chAiPopOut, true); document.addEventListener('keydown', chAiPopKey, true);
+  }
+  function chAiBusy(on) {
+    var B = $('#planBody'); if (!B || S.tab !== 'scope') return;
+    B.querySelectorAll('[data-ais]').forEach(function (sec) { var ks = sec.getAttribute('data-ais').split(','), hit = on && S.chBusy && ks.some(function (k) { return S.chBusy.indexOf(k) >= 0; });
+      sec.classList.toggle('ch-busy', !!hit); var b = sec.querySelector('.ch-ai'); if (b) { b.disabled = !!on; b.textContent = hit ? '✨ Writing…' : '✨ AI'; }
+      ks.forEach(function (k) { var t = $('#ch_' + k); if (t) t.readOnly = !!hit; }); });
+    var all = B.querySelector('.ch-aiall'); if (all) { all.disabled = !!on; all.textContent = on ? '✨ The AI is writing…' : '✨ Improve the whole charter with AI'; }
+  }
+  function chAiNotes() {
+    var B = $('#planBody'); if (!B || S.tab !== 'scope') return;
+    B.querySelectorAll('[data-ain]').forEach(function (n) {
+      var u = S.chUndo, ks = n.getAttribute('data-ain').split(','), hit = u && u.core === S.core && ks.some(function (k) { return k in u.prev; });
+      n.innerHTML = hit ? '<span>✨ ' + esc(u.what) + (u.changes ? ': ' + esc(u.changes) : '') + '</span><button type="button" class="btn btn-sm ch-undo">↶ Undo</button><button type="button" class="ch-keep" title="Keep it">✓ Keep</button>' : '';
+      n.classList.toggle('on', !!hit);
+      if (hit) { n.querySelector('.ch-undo').onclick = chAiUndo; n.querySelector(".ch-keep").onclick = function () { S.chUndo = null; chAiNotes(); }; }
+    });
+  }
+  function chAiSet(k, v, flash) {
+    S.plan.charter[k] = v; var t = $('#ch_' + k);
+    if (t && S.tab === 'scope') { t.value = v; chGrow(t); if (flash) { t.classList.remove('ch-flash'); void t.offsetWidth; t.classList.add('ch-flash'); } }
+  }
+  function chAiUndo() {
+    var u = S.chUndo; if (!u || u.core !== S.core) return;
+    Object.keys(u.prev).forEach(function (k) { chAiSet(k, u.prev[k], false); });
+    S.chUndo = null; dirty(); if (S.tab === 'scope') scope(); toast('Undone: back to what you had');
+  }
+  function chAiRun(keys, how, note) {
+    var c = S.plan.charter, core = S.core, id = rid(), t0 = Date.now(), texts = {};
+    CH_F.forEach(function (x) { texts[x[0]] = String(c[x[0]] || ''); });
+    S.chBusy = keys.slice(); S.chAiId = id; chAiBusy(true);
+    var end = function () { if (S.chAiId !== id) return false; S.chBusy = null; S.chAiId = null; chAiBusy(false); return true; };
+    var poll = function () {
+      return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
+        if (S.chAiId !== id) return;
+        if (d.status === 'done' && d.charter) {
+          if (!end()) return;
+          if (S.core !== core) return toast('The AI finished, but you have moved to another project', true);
+          var f = d.charter.fields, prev = {}, n = 0;
+          Object.keys(f).forEach(function (k) { if (keys.indexOf(k) < 0) return; prev[k] = String(c[k] || ''); if (prev[k] !== f[k]) n++; chAiSet(k, f[k], true); });
+          if (!n) { toast('The AI found nothing to change'); return; }
+          S.chUndo = { core: core, prev: prev, changes: d.charter.changes || '', what: how === 'grammar' ? 'Corrected by AI' : how === 'expand' ? 'Expanded by AI' : 'Improved by AI' };
+          dirty(); if (S.tab === 'scope') scope();
+          var first = $('#ch_' + keys[0]); if (first && keys.length < 3) first.closest('.chs').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          toast('✨ ' + S.chUndo.what + ': check it, or ↶ Undo'); return;
+        }
+        if (d.status === 'error') throw new Error(d.error || 'The AI could not write it');
+        if (Date.now() - t0 > 170000) throw new Error('The AI is taking too long. Try again in a minute.');
+        return poll();
+      });
+    };
+    fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
+      body: JSON.stringify({ id: id, mode: 'charter', core: core, fields: keys, how: how, note: note, texts: texts }) })
+      .then(function (r) { if (r.status === 401 || r.status === 403) throw new Error('Your session has ended. Sign in again.'); if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); })
+      .catch(function (e) { if (end()) fail(e); });
   }
 
   /* ---------- v73: 📄 the project charter as a document (PDF / Word): sign-off ready ---------- */
@@ -2123,7 +2214,7 @@
     var S2 = [{ kind: 'kv', title: '1. Project at a glance', rows: glance },
       { kind: 'text', title: '2. Purpose and objective', text: c.objective, always: true, empty: 'Not stated yet.' }];
     var n = 3, H = function (t) { return (n++) + '. ' + t; };
-    if (o.background && S.job.scope) S2.push({ kind: 'text', title: H('Background: the customer\'s request'), text: S.job.scope });
+    if (o.background && (c.background || S.job.scope)) S2.push({ kind: 'text', title: H(c.background ? 'Background' : 'Background: the customer\'s request'), text: c.background || S.job.scope });
     S2.push({ kind: 'text', title: H('In scope'), text: c.inScope, always: true, empty: 'Not stated yet.' }, { kind: 'text', title: H('Out of scope'), text: c.outScope, always: true, empty: 'Nothing excluded yet: state what is not included.' },
       { kind: 'text', title: H('Deliverables'), text: c.deliverables, always: true, empty: 'Not stated yet.' }, { kind: 'text', title: H('Acceptance criteria'), text: c.acceptance, always: true, empty: 'Not stated yet.' },
       { kind: 'text', title: H('Assumptions and constraints'), text: c.assumptions, always: true, empty: 'None stated.' });

@@ -1099,3 +1099,23 @@ body.plan-wide .side-fold,body.board-full .side-fold{display:none}
 .rc-c:not(.rc-x):hover{box-shadow:0 0 0 2px #C9A227}
 .rc-tbl{width:auto!important}.rc-tbl tbody .rc-act{text-transform:none;letter-spacing:normal;font-size:13.5px;color:#1F1D18}
 .rc-tbl .rc-act{min-width:320px;max-width:420px}.rc-tbl td.rc-chk,.rc-tbl th.rc-chk{min-width:90px;text-align:left;padding-left:12px}
+/* v76: ✨ AI for the charter */
+.ch-ai{margin-left:4px;background:linear-gradient(135deg,#FFF8E1,#FDF0C4);border-color:#E6C760;color:#6B5310;font-weight:700}
+.ch-ai:hover:not(:disabled){border-color:#C9A227;box-shadow:0 0 0 2px rgba(201,162,39,.2)}
+.ch-aiall{margin-top:8px;background:linear-gradient(135deg,#1F1D18,#3A3426);color:#F5D77A;border-color:#1F1D18;font-weight:700}
+.ch-aiall:hover:not(:disabled){color:#FFE69A}.ch-aiall:disabled,.ch-ai:disabled{opacity:.6;cursor:progress}
+.ch-pop{position:fixed;z-index:90;width:340px;background:#fff;border:1px solid #E4DFD2;border-radius:12px;box-shadow:0 14px 36px rgba(0,0,0,.18);padding:12px 14px}
+.ch-pop-h{font-weight:800;margin-bottom:8px;font-size:14px}
+.ch-mode{display:flex;gap:9px;align-items:flex-start;padding:7px 8px;border-radius:8px;cursor:pointer;border:1px solid transparent}
+.ch-mode:hover{background:#FBF8EF}.ch-mode:has(input:checked){background:#FDF6DD;border-color:#EAD48A}
+.ch-mode input{margin-top:3px}.ch-mode b{display:block;font-size:13.5px}.ch-mode small{display:block;color:#6F6A5D;font-size:12px;line-height:1.35}
+.ch-note{width:100%;box-sizing:border-box;margin-top:8px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px}
+.ch-pop-b{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+.chs.ch-busy textarea{background:linear-gradient(90deg,#fff 0%,#FBF3D6 40%,#fff 80%);background-size:300% 100%;animation:chShim 1.6s linear infinite;color:#8A8577}
+@keyframes chShim{0%{background-position:100% 0}100%{background-position:-100% 0}}
+.ch-ainote{display:none}.ch-ainote.on{display:flex;align-items:center;gap:10px;margin:-2px 0 10px;padding:7px 10px;background:#FDF6DD;border:1px solid #EAD48A;border-radius:9px;font-size:12.5px;color:#5C480B}
+.ch-ainote span{flex:1}.ch-keep{background:none;border:0;color:#15803D;font:inherit;font-weight:700;cursor:pointer;font-size:12.5px}
+textarea.ch-flash{animation:chFlash 1.6s ease}
+@keyframes chFlash{0%{box-shadow:0 0 0 3px rgba(201,162,39,.55);background:#FFFBEA}100%{box-shadow:none;background:#fff}}
+.ch-req{margin-bottom:10px}.ch-req summary{cursor:pointer;font-size:12.5px;font-weight:700;color:#6F6A5D;margin-bottom:6px}
+.ch-mode input[type=radio]{width:auto;flex:none;margin:3px 0 0;padding:0;box-shadow:none}.ch-mode>span{flex:1;min-width:0}
