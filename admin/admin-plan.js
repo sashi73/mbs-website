@@ -2040,20 +2040,69 @@
   }
 
   /* ---------- scope (project charter) ---------- */
+  /* ---------- scope (project charter): v74 full width, numbered like the charter document, boxes that grow, a sign-off checklist ---------- */
+  var CH_F = [['objective', 1500], ['inScope', 3000], ['outScope', 2000], ['deliverables', 2000], ['acceptance', 2000], ['assumptions', 2000], ['notes', 3000]];
+  function chGrow(el) { el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight + 2, 64) + 'px'; }
+  function chChecks(p) {
+    var c = p.charter || {}, has = function (k) { return String(c[k] || '').trim().length > 2; };
+    return [['Project manager named', !!String(c.manager || '').trim()], ['Customer (sponsor) named', !!String(c.customer || '').trim()], ['Objective', has('objective')], ['In scope', has('inScope')], ['Out of scope', has('outScope')],
+      ['Deliverables', has('deliverables')], ['Acceptance criteria', has('acceptance')], ['Assumptions and constraints', has('assumptions')], ['Approved budget', !!c.budget],
+      ['Stakeholders listed', (p.stakeholders || []).some(function (x) { return x.name; })], ['Risks recorded', (p.risks || []).some(function (x) { return x.title && x.status !== 'Closed'; })]];
+  }
   function scope() {
-    var c = S.plan.charter, p = S.plan;
-    var f = function (k, label, rows, ph) { return '<label class="full">' + label + '<textarea data-c="' + k + '" rows="' + rows + '" placeholder="' + esc(ph || '') + '">' + esc(c[k] || '') + '</textarea></label>'; };
-    $('#planBody').innerHTML = '<div class="card" style="max-width:980px"><div class="card-h"><h2>Project charter (scope)</h2><span class="sp"></span><span class="ch-ver">v' + esc(c.docVersion || '1.0') + ' · ' + esc(c.docStatus || 'Draft') + '</span><button class="btn btn-sm btn-gold" id="chDoc" type="button" title="The project charter as a professional PDF or Word document, with the Gantt chart, critical path, stakeholder register and a sign-off block">📄 Charter: PDF / Word</button></div><p class="muted" style="margin:-4px 0 12px">What is (and isn\'t) being delivered. Agree it with the customer before work starts, then have it signed off.</p><div class="form">' +
-      '<label>Plan name<input data-p="name" value="' + esc(p.name) + '"></label><label>Customer (sponsor)<input data-c="customer" value="' + esc(c.customer) + '"></label>' +
-      '<label>Project manager<input data-c="manager" value="' + esc(c.manager) + '"></label><label>Approved budget ($)<input data-c="budget" inputmode="decimal" value="' + esc(c.budget || '') + '"></label>' +
-      f('objective', 'Objective (why we are doing this)', 2, 'e.g. Stop the leak into the unit below and give the customer a modern bathroom') +
-      (S.job.scope ? '<div class="full jobreq"><b>Customer\'s request (from the enquiry)</b><div>' + esc(S.job.scope) + '</div></div>' : '') + f('inScope', 'In scope (what the customer wants done)', 4, 'What is included') + f('outScope', 'Out of scope', 2, 'What is NOT included (avoids arguments later), e.g. electrical work, painting outside the bathroom') +
-      f('deliverables', 'Deliverables', 2, 'e.g. Waterproofing certificate, flood-test photos, finished bathroom, warranty') +
-      f('acceptance', 'Acceptance criteria (how we know it\'s done)', 2, '') + f('assumptions', 'Assumptions & constraints', 2, 'e.g. Access weekdays 7am-5pm; no work in heavy rain; customer supplies tapware') +
-      f('notes', 'Planning notes & tips', 3, 'e.g. Order tiles 2 weeks ahead; book the plumber for day 3; strata needs 48 h notice') +
-      '</div>' + (c.budget ? '<p style="margin:12px 0 0">Planned cost <b>' + money(rollup(p, today()).BAC) + '</b> against an approved budget of <b>' + money(c.budget) + '</b>.</p>' : '') + '</div>';
-    $('#planBody').querySelectorAll('[data-c]').forEach(function (el) { el.oninput = function () { var k = el.getAttribute('data-c'); c[k] = k === 'budget' ? r2(String(el.value).replace(/[$,]/g, '')) : el.value; dirty(); }; });
-    $('#planBody').querySelector('[data-p=name]').oninput = function () { p.name = this.value; dirty(); };
+    var c = S.plan.charter, p = S.plan, R = rollup(p, today());
+    var money0 = function (v) { return v ? '$' + Number(v).toLocaleString('en-AU', { maximumFractionDigits: 2 }) : ''; };
+    var lim = {}; CH_F.forEach(function (x) { lim[x[0]] = x[1]; });
+    var f = function (k, label, hint, ph, list) { return '<div class="chf"><label class="chf-l" for="ch_' + k + '">' + label + '<span class="chf-c" data-cc="' + k + '"></span></label>' + (hint ? '<div class="chf-h">' + hint + '</div>' : '') +
+      '<textarea id="ch_' + k + '" data-c="' + k + '"' + (list ? ' data-list' : '') + ' maxlength="' + lim[k] + '" placeholder="' + esc(ph || '') + '">' + esc(c[k] || '') + '</textarea></div>'; };
+    var sec = function (n, title, body, extra) { return '<section class="chs"><div class="chs-h"><span class="chs-n">' + n + '</span><h3>' + title + '</h3>' + (extra || '') + '</div>' + body + '</section>'; };
+    var listHint = 'One item per line. Press Enter for the next “- ” line.';
+    var main =
+      sec(1, 'Project details', '<div class="chg chg-4"><div class="chf"><label class="chf-l" for="ch_name">Plan name</label><input id="ch_name" data-p="name" value="' + esc(p.name) + '"></div>' +
+        '<div class="chf"><label class="chf-l" for="ch_customer">Customer (sponsor)</label><input id="ch_customer" data-c="customer" value="' + esc(c.customer) + '" placeholder="Who approves and pays"></div>' +
+        '<div class="chf"><label class="chf-l" for="ch_manager">Project manager</label><input id="ch_manager" data-c="manager" value="' + esc(c.manager) + '" placeholder="Who runs the project"></div>' +
+        '<div class="chf"><label class="chf-l" for="ch_budget">Approved budget</label><input id="ch_budget" data-c="budget" inputmode="decimal" value="' + esc(money0(c.budget)) + '" placeholder="$0"></div></div>' +
+        '<div class="ch-facts"><span>Start <b>' + esc(dmy(R.start) || '–') + '</b></span><span>Finish <b>' + esc(dmy(R.finish) || '–') + '</b></span>' + (p.finishBy ? '<span>Finish by <b>' + esc(dmy(p.finishBy)) + '</b></span>' : '') +
+        '<span>Planned cost <b>' + money(R.BAC) + '</b></span>' + (c.budget ? '<span class="' + (R.BAC > c.budget ? 'ch-over' : 'ch-ok') + '">' + (R.BAC > c.budget ? 'Over budget by <b>' + money(R.BAC - c.budget) + '</b>' : 'Contingency <b>' + money(c.budget - R.BAC) + '</b>') + '</span>' : '') +
+        '<span class="muted">from the Schedule</span></div>') +
+      sec(2, 'Purpose and objective', f('objective', 'Objective: why we are doing this', 'One or two sentences on the outcome the customer wants.', 'e.g. Deliver a Tier IV, 100 MW data centre from feasibility to handover within 12 months')) +
+      (S.job.scope ? sec(3, 'Background: the customer\'s request', '<div class="jobreq"><div>' + esc(S.job.scope) + '</div></div><p class="chf-h" style="margin:6px 0 0">From the enquiry; it goes into the charter as the background. Use it to write the scope below.</p>', '<button type="button" class="btn btn-sm" id="chUseReq" title="Copy the customer\'s request into In scope, to edit">↓ Copy into In scope</button>') : '') +
+      sec(S.job.scope ? 4 : 3, 'Scope', '<div class="chg chg-2">' + f('inScope', 'In scope: what we will do', listHint, '- Site works and earthworks\n- …', true) + f('outScope', 'Out of scope: what we will not do', listHint, '- Land purchase and legal costs\n- …', true) + '</div>') +
+      sec(S.job.scope ? 5 : 4, 'Deliverables and acceptance', '<div class="chg chg-2">' + f('deliverables', 'Deliverables: what the customer receives', listHint, '- Certificates, warranties, as-built drawings\n- …', true) + f('acceptance', 'Acceptance criteria: how we know it is done', listHint, '- All systems pass testing\n- Defects list closed\n- …', true) + '</div>') +
+      sec(S.job.scope ? 6 : 5, 'Assumptions, constraints and notes', '<div class="chg chg-2">' + f('assumptions', 'Assumptions and constraints', listHint, '- Site access weekdays 7am to 5pm\n- …', true) + f('notes', 'Planning notes and tips (optional in the charter)', listHint, '- Order long-lead items first\n- …', true) + '</div>');
+    var checks = chChecks(p), done = checks.filter(function (x) { return x[1]; }).length, pc = Math.round(done / checks.length * 100);
+    var side = '<aside class="ch-side"><div class="card ch-card"><div class="ch-doc"><span class="ch-ver">v' + esc(c.docVersion || '1.0') + ' · ' + esc(c.docStatus || 'Draft') + '</span></div>' +
+      '<button class="btn btn-gold ch-big" id="chDoc" type="button" title="The project charter as a professional PDF or Word document, with the Gantt chart, critical path, stakeholder register and a sign-off block">📄 Charter: PDF / Word</button>' +
+      '<div class="ch-ready"><div class="row" style="justify-content:space-between"><b>Ready to sign off</b><b>' + pc + '%</b></div><div class="ch-bar"><span style="width:' + pc + '%" class="' + (pc >= 100 ? 'ok' : pc >= 70 ? 'mid' : 'low') + '"></span></div></div>' +
+      '<ul class="ch-list">' + checks.map(function (x) { return '<li class="' + (x[1] ? 'ok' : '') + '">' + (x[1] ? '✓' : '○') + ' ' + esc(x[0]) + '</li>'; }).join('') + '</ul>' +
+      '<p class="muted" style="font-size:12px;margin:8px 0 0">Stakeholders and risks come from their own tabs. Everything saves as you type.</p></div></aside>';
+    $('#planBody').innerHTML = '<div class="ch-wrap"><div class="ch-main"><div class="ch-top"><div><h2>Project charter (scope)</h2><p class="muted">What is (and isn\'t) being delivered. Agree it with the customer before work starts, then have it signed off. The numbers match the charter document.</p></div></div>' + main + '</div>' + side + '</div>';
+    var B = $('#planBody');
+    var count = function (el) { var k = el.getAttribute('data-c'), m = lim[k], n = el.value.length, cc = B.querySelector('[data-cc="' + k + '"]'); if (cc) { cc.textContent = n > m * 0.8 ? n + ' / ' + m : ''; cc.className = 'chf-c' + (n >= m ? ' full' : ''); } };
+    var refreshSide = function () { var ch = chChecks(p), d = ch.filter(function (x) { return x[1]; }).length, q = Math.round(d / ch.length * 100), side2 = B.querySelector('.ch-side');
+      if (!side2) return; side2.querySelector('.ch-ready b:last-child').textContent = q + '%'; var bar = side2.querySelector('.ch-bar span'); bar.style.width = q + '%'; bar.className = q >= 100 ? 'ok' : q >= 70 ? 'mid' : 'low';
+      side2.querySelector('.ch-list').innerHTML = ch.map(function (x) { return '<li class="' + (x[1] ? 'ok' : '') + '">' + (x[1] ? '✓' : '○') + ' ' + esc(x[0]) + '</li>'; }).join(''); };
+    B.querySelectorAll('textarea[data-c]').forEach(function (el) {
+      chGrow(el); count(el);
+      el.addEventListener('input', function () { c[el.getAttribute('data-c')] = el.value; chGrow(el); count(el); dirty(); refreshSide(); });
+      if (el.hasAttribute('data-list')) el.addEventListener('keydown', function (e) {   // lists: Enter starts the next "- " line
+        if (e.key !== 'Enter' || e.shiftKey) return;
+        var v = el.value, at = el.selectionStart, ls = v.lastIndexOf('\n', at - 1) + 1, line = v.slice(ls, at);
+        if (!/^\s*[-•]\s/.test(line) && v.trim()) return;
+        e.preventDefault();
+        if (/^\s*[-•]\s*$/.test(line)) { el.value = v.slice(0, ls) + v.slice(at); el.selectionStart = el.selectionEnd = ls; }   // an empty "- " line: end the list
+        else { var ins = '\n- '; if (!v.trim()) ins = '- '; el.value = v.slice(0, at) + ins + v.slice(el.selectionEnd); el.selectionStart = el.selectionEnd = at + ins.length; }
+        el.dispatchEvent(new Event('input'));
+      });
+    });
+    B.querySelectorAll('input[data-c]').forEach(function (el) {
+      var k = el.getAttribute('data-c');
+      el.addEventListener('input', function () { c[k] = k === 'budget' ? r2(String(el.value).replace(/[$,\s]/g, '')) : el.value; dirty(); refreshSide(); });
+      if (k === 'budget') el.addEventListener('blur', function () { el.value = money0(c.budget); });   // typed as 45000, $45,000 or 45,000
+    });
+    B.querySelector('[data-p=name]').oninput = function () { p.name = this.value; dirty(); };
+    var ur = $('#chUseReq'); if (ur) ur.onclick = function () { var t = $('#ch_inScope'); var lines = String(S.job.scope).split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean).map(function (x) { return /^[-•]/.test(x) ? x : '- ' + x; });
+      t.value = (t.value.trim() ? t.value.replace(/\s+$/, '') + '\n' : '') + lines.join('\n'); t.dispatchEvent(new Event('input')); t.focus(); toast('Copied into In scope: trim it to what you will deliver'); };
     $('#chDoc').onclick = charterDialog;
   }
 
