@@ -1193,3 +1193,16 @@ input.est-in{background:#FFFBEB!important;border-color:#F3C969!important;border-
 .cr-pick{display:grid;gap:6px;max-height:40vh;overflow:auto}.cr-pick label{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px;align-items:start;font-weight:500;padding:7px 10px;border:1px solid var(--line);border-radius:9px;cursor:pointer}
 .cr-pick input{width:auto;margin:3px 0 0}.cr-pick small{display:block;color:#6F6A5D}
 .cr-sent{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}
+/* v84: delete a task or sub-task from its name, with undo */
+.tdel{flex:none;background:none;border:1px solid transparent;border-radius:6px;cursor:pointer;font-size:12px;line-height:1;padding:3px 4px;opacity:.38;filter:grayscale(1)}
+tr:hover .tdel,.tdel:focus-visible{opacity:.85}.tdel:hover{opacity:1;filter:none;background:#FEF2F2;border-color:#FCA5A5}
+@media (hover:none){.tdel{opacity:.7}}
+.undo-bar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:95;display:flex;gap:14px;align-items:center;background:#1F1D18;color:#fff;border-radius:12px;padding:10px 12px 10px 16px;box-shadow:0 10px 28px rgba(0,0,0,.3);font-size:13.5px;max-width:92vw}
+.undo-bar .btn{background:#F5D77A;border-color:#F5D77A;color:#1F1D18;font-weight:800}
+/* v84: the hover "＋ sub-task" button sits clear of the 🗑 and 📦 buttons */
+@media (min-width:0){table.gt .subadd{right:64px}table.gt tr:hover .tdel{position:relative;z-index:2}}
+.kdel{margin-left:auto;opacity:.5;filter:grayscale(1)}.kcard:hover .kdel{opacity:.9}.kdel:hover{opacity:1;filter:none;background:#FEF2F2;border-color:#FCA5A5}
+.kdel-s{flex:none;background:none;border:1px solid transparent;border-radius:6px;cursor:pointer;font-size:11px;line-height:1;padding:2px 3px;margin-left:2px;opacity:.3;filter:grayscale(1)}
+.kst:hover .kdel-s{opacity:.85}.kdel-s:hover{opacity:1;filter:none;background:#FEF2F2;border-color:#FCA5A5}
+@media (hover:none){.kdel,.kdel-s{opacity:.7}}
+.kfoot{grid-template-columns:minmax(0,1fr);grid-auto-flow:column;grid-auto-columns:auto}.kfoot .kdel{margin-left:0}

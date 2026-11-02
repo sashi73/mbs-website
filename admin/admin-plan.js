@@ -1194,6 +1194,30 @@
     $('#estApply').onclick = function () { estApply(r, false); };
   }
 
+  // v84: delete a task (with its sub-tasks) or a sub-task, from the Schedule or the Board; the links close up; ↶ Undo
+  function taskDelete(t) {
+    var p = S.plan; if (!t) return;
+    var nm = String(t.name || '').replace(/^[✓◆\s]+/, '').trim() || 'this untitled task', ns = (t.subs || []).length, after = p.tasks.filter(function (x) { return (x.pred || []).indexOf(t.id) >= 0; });
+    M.confirmBox('Delete “' + nm + '”' + (ns ? ' and its ' + pl(ns, 'sub-task') : '') + '?', (after.length ? pl(after.length, 'task') + ' that came after it will now wait for what it was waiting for, so the order stays. ' : '') + 'You can undo it straight after.', 'Delete', true).then(function (ok) { if (!ok) return;
+      var snap = JSON.parse(JSON.stringify(p.tasks));
+      p.tasks = p.tasks.filter(function (x) { return x !== t; });
+      p.tasks.forEach(function (x) { var i = (x.pred || []).indexOf(t.id); if (i < 0) return; x.pred.splice(i, 1); (t.pred || []).forEach(function (id) { if (x.pred.indexOf(id) < 0 && id !== x.id) x.pred.push(id); }); });   // keep the chain: A → (deleted) → C becomes A → C
+      dirty('task deleted: ' + nm); render(); undoBar('Deleted “' + nm + '”' + (ns ? ' and ' + pl(ns, 'sub-task') : ''), function () { S.plan.tasks = snap; dirty('task restored: ' + nm); render(); });
+    });
+  }
+  function subDelete(t, sb) {
+    if (!t || !sb) return;
+    var keep = JSON.parse(JSON.stringify(t)), nm = String(sb.name || '').trim() || 'untitled sub-task';
+    t.subs = t.subs.filter(function (x) { return x !== sb; }); derive(t); if (!t.subs.length) setStatus(t, t.status); dirty('sub-task deleted: ' + nm); render();
+    undoBar('Deleted “' + nm + '”', function () { var x = S.plan.tasks.filter(function (y) { return y.id === keep.id; })[0]; if (x) { x.subs = keep.subs; x.pct = keep.pct; x.status = keep.status; } dirty('sub-task restored: ' + nm); render(); });
+  }
+  function undoBar(msg, fn) {   // v84: a few seconds to take a delete back
+    var old = document.getElementById('undoBar'); if (old) old.remove(); clearTimeout(S.undoT);
+    var d = document.createElement('div'); d.id = 'undoBar'; d.className = 'undo-bar'; d.innerHTML = '<span>' + esc(msg) + '</span><button type="button" class="btn btn-sm">↶ Undo</button>';
+    document.body.appendChild(d);
+    d.querySelector('button').onclick = function () { d.remove(); clearTimeout(S.undoT); fn(); toast('Undone'); };
+    S.undoT = setTimeout(function () { d.remove(); }, 9000);
+  }
   function scheduleTab(R) {
     var p = S.plan, rows = ordered(), num = {}, idOf = {};
     rows.forEach(function (r) { num[r.t.id] = r.n; idOf[r.n] = r.t.id; });
@@ -1241,7 +1265,7 @@
       var subs = t.subs || [], open = subs.length && !S.closed[t.id];
       html += '<tr data-tid="' + esc(t.id) + '" class="' + (t.pct >= 100 ? 'tdone' : '') + (late ? ' tlate' : '') + (t.dur === 0 ? ' tmile' : '') + (subs.length ? ' tparent' : '') + '"><td class="muted nowrap">' + '<span class="grip" data-grip title="Drag up or down to move this task">⠿</span>' + (subs.length ? '<button class="subtog" type="button" data-tog title="' + (open ? 'Hide' : 'Show') + ' sub-tasks">' + (open ? '▾' : '▸') + '</button>' : '') + '<input class="posin" data-pos inputmode="numeric" value="' + r.n + '" title="Type a number to move this task there (1 = first)"></td>' +
         '<td><input type="checkbox" data-k="done"' + (t.pct >= 100 ? ' checked' : '') + ' title="Done" style="width:auto"></td>' +
-        '<td><div class="tname"><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"><button class="pkbtn" type="button" data-pick title="' + (matsOf(t).length ? 'Materials from stock (' + matsOf(t).length + '): change them' : 'Add materials from stock (any number, each with a quantity)') + '">📦</button></div>' + stockChip(t) +
+        '<td><div class="tname"><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"><button class="tdel" type="button" data-del title="Delete this task' + (subs.length ? ' and its ' + pl(subs.length, 'sub-task') : '') + '" aria-label="Delete task">🗑</button><button class="pkbtn" type="button" data-pick title="' + (matsOf(t).length ? 'Materials from stock (' + matsOf(t).length + '): change them' : 'Add materials from stock (any number, each with a quantity)') + '">📦</button></div>' + stockChip(t) +
           (t.dur === 0 ? '' : '<button class="subadd" type="button" data-addsub title="Break this task into smaller steps (they stay inside its dates)">＋ sub-task' + (subs.length ? ' · ' + subs.filter(function (x) { return x.status === 'done'; }).length + '/' + subs.length + ' done' : '') + '</button>') + '</td>' +
         '<td>' + resCell(t) + '</td>' +
         '<td><input data-k="dur" type="number" min="0" max="365" value="' + t.dur + '" style="width:50px" title="0 days = milestone"></td>' +
@@ -1263,7 +1287,7 @@
         var left = d.es ? x(d.es) : 0, sw = d.es ? (daysBetween(d.es, d.ef) + 1) * dayW : 0;
         html += '<tr class="tsub' + (sb.status === 'done' ? ' tdone' : '') + (sl ? ' tlate' : '') + '" data-sid="' + esc(sb.id) + '" data-ptid="' + esc(t.id) + '"><td class="muted nowrap subn"><span class="grip" data-grip title="Drag up or down to reorder (stays inside this task)">⠿</span>' + r.n + '.<input class="posin sub" data-spos inputmode="numeric" value="' + (j + 1) + '" title="Type a number to move this sub-task there (inside this task)"></td>' +
           '<td><input type="checkbox" data-sk="done"' + (sb.status === 'done' ? ' checked' : '') + ' style="width:auto" title="Done"></td>' +
-          '<td><div class="subname"><span class="subarrow">↳</span><input data-sk="name" value="' + esc(sb.name) + '"></div></td>' +
+          '<td><div class="subname"><span class="subarrow">↳</span><input data-sk="name" value="' + esc(sb.name) + '"><button class="tdel" type="button" data-sdel title="Delete this sub-task" aria-label="Delete sub-task">🗑</button></div></td>' +
           '<td><input data-sk="owner" list="resList" value="' + esc(sb.owner || '') + '" placeholder="Who" style="min-width:90px;width:110px"></td>' +
           '<td><input data-sk="dur" type="number" min="1" max="' + maxDur + '" value="' + sb.dur + '" style="width:50px" title="At most ' + maxDur + ' day' + (maxDur === 1 ? '' : 's') + ' (to stay inside the task)"></td>' +
           '<td><input data-sk="start" type="date" value="' + esc(d.es) + '" min="' + esc(t.es) + '" max="' + esc(t.ef) + '" title="Between ' + esc(dmy(t.es)) + ' and ' + esc(dmy(t.ef)) + ' (the task\'s dates)"></td>' +
@@ -1357,7 +1381,7 @@
     });
     B.querySelectorAll('[data-rlead]').forEach(function (b) { b.onclick = function () { var t = task(b); t.lead = b.getAttribute('data-rlead'); fixRes(t); dirty(); render(); }; });
     B.querySelectorAll('[data-rx]').forEach(function (b) { b.onclick = function () { var t = task(b), n = b.getAttribute('data-rx'); t.res = t.res.filter(function (x) { return x !== n; }); fixRes(t); dirty(); render(); }; });
-    B.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { var t = task(b); M.confirmBox('Delete “' + t.name + '”?', 'Tasks that come after it will no longer wait for it.', 'Delete', true).then(function (ok) { if (!ok) return; p.tasks = p.tasks.filter(function (x) { return x !== t; }); p.tasks.forEach(function (x) { x.pred = (x.pred || []).filter(function (id) { return id !== t.id; }); }); dirty(); render(); }); }; });
+    B.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { taskDelete(task(b)); }; });
     // type a number in # to move it there (1 = first); the rest close up behind it
     var place = function (arr, item, v) {
       var a = arr.indexOf(item), c = Math.max(1, Math.min(arr.length, Math.round(+v || 0))) - 1;
@@ -1408,7 +1432,7 @@
         derive(t); dirty(k === 'done' || k === 'status' ? stName[sb.status] + ': ' + sb.name + ' (' + t.name + ')' : ''); render();
       });
     });
-    B.querySelectorAll('[data-sdel]').forEach(function (b) { b.onclick = function () { var o = subOf(b); o.t.subs = o.t.subs.filter(function (x) { return x !== o.sb; }); derive(o.t); if (!o.t.subs.length) setStatus(o.t, o.t.status); dirty('sub-task deleted: ' + o.sb.name); render(); }; });
+    B.querySelectorAll('[data-sdel]').forEach(function (b) { b.onclick = function () { var o = subOf(b); subDelete(o.t, o.sb); }; });
     B.querySelectorAll('[data-spos]').forEach(function (inp) {
       var keep = inp.value; posKeys(inp, keep);
       inp.addEventListener('change', function () {
@@ -2084,16 +2108,18 @@
             '<div class="kth-r"><div class="kdates">' + esc(pretty(t.es)) + (t.dur > 1 ? ' – ' + esc(pretty(t.ef)) : '') + '</div><div class="kdays">' + (t.dur ? pl(t.dur, 'day') : 'Milestone') + '</div>' + (rg.txt ? '<div class="kdue kdue-' + rg.c + '">' + esc(rg.txt) + '</div>' : '') + '</div></div>' +
           (subs.length ? '<div class="kstories">' + shown.map(function (x) { var d = subDates(t, x), sr = kRag(d.es, d.ef, x.status === 'done', t0);
               return '<div class="kst' + (x.status === 'done' ? ' done' : '') + '" data-sid="' + esc(x.id) + '"><div class="kst-h"><i class="kd kd-' + sr.c + '" title="' + esc(pretty(d.es) + (d.ef !== d.es ? ' – ' + pretty(d.ef) : '') + (sr.txt ? ' · ' + sr.txt : '')) + '"></i><span class="kst-n">' + esc(x.name) + kInfo('s:' + x.id, x.desc) + '</span>' +
-                '<span class="kst-d kst-d-' + sr.c + '">' + esc(kShort(d.es, d.ef)) + (sr.txt ? ' <b>(' + esc(sr.txt.charAt(0).toLowerCase() + sr.txt.slice(1)) + ')</b>' : '') + '</span></div>' + kSlide(x) + kCtl('s:' + x.id, x.owner, x.priority, x.points) + '</div>'; }).join('') +
+                '<span class="kst-d kst-d-' + sr.c + '">' + esc(kShort(d.es, d.ef)) + (sr.txt ? ' <b>(' + esc(sr.txt.charAt(0).toLowerCase() + sr.txt.slice(1)) + ')</b>' : '') + '</span><button type="button" class="kdel-s" data-kdels title="Delete this story" aria-label="Delete story">🗑</button></div>' + kSlide(x) + kCtl('s:' + x.id, x.owner, x.priority, x.points) + '</div>'; }).join('') +
             (filt && shown.length < subs.length ? '<div class="kmore">' + (subs.length - shown.length) + ' more ' + (subs.length - shown.length === 1 ? 'story' : 'stories') + ' hidden by the filter</div>' : '') + '</div>'
             : kCtl('t:' + t.id, ownerOf(t), t.priority, t.points)) +
           (t.dur > 0 ? '<div class="kaddrow" data-addrow></div><button type="button" class="kadd" data-kadd>＋ story</button>' : '') +
           '<div class="kfoot"><div class="pbar st-' + t.status + '"><span style="width:' + t.pct + '%"></span></div>' + (subs.length ? '<span class="muted">' + sdone + '/' + subs.length + '</span>' : '<span class="muted">' + t.pct + '%</span>') +
-            (c[0] !== 'todo' ? '<button class="btn btn-sm" data-step="-1" title="Back one column">←</button>' : '') + (c[0] !== 'done' ? '<button class="btn btn-sm" data-step="1" title="Next column">→</button>' : '') + '</div></div>';
+            (c[0] !== 'todo' ? '<button class="btn btn-sm" data-step="-1" title="Back one column">←</button>' : '') + (c[0] !== 'done' ? '<button class="btn btn-sm" data-step="1" title="Next column">→</button>' : '') + '<button type="button" class="btn btn-sm kdel" data-kdel title="Delete this ' + (subs.length ? 'theme and its ' + subs.length + (subs.length === 1 ? ' story' : ' stories') : t.dur === 0 ? 'milestone' : 'task') + '" aria-label="Delete">🗑</button></div></div>';
       }).join('') + (list.length ? '' : '<div class="kempty">' + (rows.length < p.tasks.length ? 'Nothing matches the filter' : 'Drop a theme here') + '</div>') + '</div></div>';
     }).join('') + '</div><p class="muted" style="margin:8px 0 0;font-size:12px">Each card is a theme (a task) with its user stories (sub-tasks). The theme\'s points add up its stories. 🟩 on track · 🟨 due within 3 days · 🟥 past its due date. Drag a card to another column as the work moves on; the Gantt chart follows.</p>';
     var B = $('#planBody'), find = function (id) { return p.tasks.filter(function (t) { return t.id === id; })[0]; };
     var move = function (t, k) { if (!t || t.status === k) return; setStatus(t, k); dirty(stName[k] + ': ' + t.name); render(); };
+    B.querySelectorAll('[data-kdel]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); taskDelete(find(b.closest('.kcard').getAttribute('data-tid'))); }; });
+    B.querySelectorAll('[data-kdels]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); var t = find(b.closest('.kcard').getAttribute('data-tid')), id = b.closest('.kst').getAttribute('data-sid'); subDelete(t, t && (t.subs || []).filter(function (x) { return x.id === id; })[0]); }; });
     var keep = function () { var cs = Array.prototype.map.call(B.querySelectorAll('.kcards'), function (k) { return k.scrollTop; }); board(); B.querySelectorAll('.kcards').forEach(function (k, i) { k.scrollTop = cs[i] || 0; }); };
     kFit(); setTimeout(kFit, 80); setTimeout(kFit, 700); if (!S.kFitOn) { S.kFitOn = true; window.addEventListener('resize', function () { if (S.tab === 'board') kFit(); }); }
     $('#kbQ').oninput = function () { F.q = this.value; var pos = this.selectionStart; board(); var q = $('#kbQ'); q.focus(); try { q.setSelectionRange(pos, pos); } catch (e) {} };
