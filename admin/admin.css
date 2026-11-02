@@ -1020,3 +1020,12 @@ body.gcr-drag,body.gcr-drag *{cursor:col-resize!important;user-select:none}
 .gleg{display:flex;gap:10px;align-items:center;padding:3px 8px;font-size:11px;color:#6B665A;white-space:nowrap;position:sticky;left:0;width:max-content}
 .gleg span{display:inline-flex;align-items:center;gap:4px}.gleg i{display:inline-block;width:16px;height:8px;border-radius:2px}
 .gleg .pb-0{background:#94A3B8}.gleg .pb-25{background:#F59E0B}.gleg .pb-50{background:#2563EB}.gleg .pb-75{background:#7C3AED}.gleg .pb-100{background:#16A34A}.gleg .pb-late{background:#DC2626}.gleg .pb-mile{width:9px;height:9px;background:#1F1D18;transform:rotate(45deg);border-radius:1px}
+
+/* v69: (i) descriptions on the Board */
+.kinfo{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:5px;vertical-align:1px;border-radius:50%;border:1.3px solid #B8B2A3;background:#fff;color:#8A8577;font:italic 700 10px/1 Georgia,serif;cursor:pointer;padding:0;flex:none}
+.kinfo:hover{border-color:#C9A227;color:#1F1D18;background:#FFFBEB}
+.kinfo.has{background:#1F1D18;border-color:#1F1D18;color:#fff}.kinfo.has:hover{background:#C9A227;border-color:#C9A227}
+.kd-h{display:flex;align-items:center;gap:8px}.kd-h .kinfo{width:20px;height:20px;font-size:13px;margin:0}
+#kdTxt{width:100%;font-size:14px}
+.kd-foot{display:flex;align-items:center;gap:8px;margin:6px 0 4px}
+.kd-count{font-size:12px;color:#8A8577;font-variant-numeric:tabular-nums}.kd-count.near{color:#B45309}.kd-count.full{color:#B91C1C;font-weight:700}

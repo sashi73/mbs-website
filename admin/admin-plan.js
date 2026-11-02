@@ -1880,6 +1880,26 @@
     return '<div class="kslide kslide-' + v + '"><input type="range" min="0" max="100" step="25" value="' + v + '" data-sp="' + esc(x.id) + '" aria-label="Progress of ' + esc(x.name) + '" style="--v:' + v + '%">' +
       '<span class="kslide-v">' + (v >= 100 ? 'Done ✓' : v + '%') + '</span></div>';
   }
+  function kInfo(key, desc) {   // v69: a small (i): the description of a theme or story
+    return '<button type="button" class="kinfo' + (desc ? ' has' : '') + '" data-ki="' + key + '" title="' + esc(desc || 'Add a description') + '" aria-label="Description">i</button>';
+  }
+  function kDesc(it, after) {
+    var o = it.o, max = 200;
+    M.modal('<h2 class="kd-h"><span class="kinfo has">i</span> ' + esc(o.name.replace(/^[✓◆\s]+/, '')) + '</h2><p class="muted" style="margin:2px 0 10px">' + (it.theme ? 'Theme' : 'User story in “' + esc(it.task.name) + '”') + ': what it is about and what “done” looks like.</p>' +
+      '<textarea id="kdTxt" rows="4" maxlength="' + max + '" placeholder="e.g. ' + (it.theme ? 'Site walkover, survey and services scan so design can start; done when the report is signed off.' : 'Walk the site with the surveyor, mark boundaries and levels; done when the survey file is received.') + '">' + esc(o.desc || '') + '</textarea>' +
+      '<div class="kd-foot"><button type="button" class="btn btn-sm btn-gold" id="kdAi">✨ Write it with AI</button><span class="muted" id="kdMsg"></span><span class="sp"></span><span class="kd-count" id="kdCnt"></span></div>' +
+      '<div class="actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="kdSave" type="button">Save</button></div>');
+    var ta = $('#kdTxt'), cnt = function () { var n = ta.value.length; $('#kdCnt').textContent = n + ' / ' + max; $('#kdCnt').className = 'kd-count' + (n >= max ? ' full' : n > max - 20 ? ' near' : ''); };
+    ta.oninput = cnt; cnt(); setTimeout(function () { ta.focus(); }, 30);
+    $('#kdAi').onclick = function () {
+      var b = this; b.disabled = true; $('#kdMsg').innerHTML = '<span class="ask-think">Writing…</span>';
+      (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () {
+        return api('planDescribe', { core: S.core, taskId: it.task.id, subId: it.theme ? '' : o.id, name: o.name, current: ta.value });
+      }).then(function (r) { ta.value = r.text.slice(0, max); cnt(); $('#kdMsg').textContent = 'Check it and change anything, then Save.'; b.disabled = false; })
+        .catch(function (e) { b.disabled = false; $('#kdMsg').textContent = ''; fail(e); });
+    };
+    $('#kdSave').onclick = function () { o.desc = ta.value.trim().slice(0, max); dirty('description of ' + o.name); M.closeModal(); toast(o.desc ? 'Description saved' : 'Description cleared'); after(); };
+  }
   function themePts(t) { return (t.subs || []).length ? t.subs.reduce(function (a, x) { return a + (x.points || 0); }, 0) : (t.points || 0); }
   function kPop(btn, html, wire) {   // a small menu under a button (like the stock picker)
     var old = document.getElementById('kPop'); if (old) { var same = old.getAttribute('data-for') === btn.getAttribute('data-k'); old.remove(); if (same) return; }
@@ -1932,7 +1952,7 @@
     var storyOk = function (x) { if (F.owner && (F.owner === '-' ? x.owner : x.owner !== F.owner)) return false; if (F.prio && (F.prio === '-' ? x.priority : x.priority !== F.prio)) return false; return true; };
     var themeOk = function (t) { if (F.owner && (F.owner === '-' ? ownerOf(t) : ownerOf(t) !== F.owner)) return false; if (F.prio && (F.prio === '-' ? t.priority : t.priority !== F.prio)) return false; return true; };
     var rows = ordered().filter(function (r) {
-      var t = r.t; if (F.q && (t.name + ' ' + (t.subs || []).map(function (x) { return x.name + ' ' + x.owner; }).join(' ') + ' ' + ownerOf(t)).toLowerCase().indexOf(F.q.toLowerCase()) < 0) return false;
+      var t = r.t; if (F.q && (t.name + ' ' + (t.desc || '') + ' ' + (t.subs || []).map(function (x) { return x.name + ' ' + x.owner + ' ' + (x.desc || ''); }).join(' ') + ' ' + ownerOf(t)).toLowerCase().indexOf(F.q.toLowerCase()) < 0) return false;
       return !filt || ((t.subs || []).length ? t.subs.some(storyOk) : themeOk(t));
     });
     var tprio = function (t) { var ps = (t.subs || []).length ? t.subs.map(function (x) { return x.priority; }) : [t.priority]; for (var i = 0; i < PRIO.length; i++) if (ps.indexOf(PRIO[i]) >= 0) return i; return 9; };
@@ -1954,12 +1974,12 @@
         var t = r.t, rg = kRag(t.es, t.ef, t.pct >= 100, t0), subs = t.subs || [], tp = themePts(t), sdone = subs.filter(function (x) { return x.status === 'done'; }).length;
         var shown = filt ? subs.filter(storyOk) : subs;
         return '<div class="kcard kr-' + rg.c + '" draggable="true" data-tid="' + esc(t.id) + '">' +
-          '<div class="kth"><div class="kth-l"><span class="kid">#' + r.n + (subs.length ? ' · THEME' : t.dur === 0 ? ' · MILESTONE' : '') + '</span><label class="kname"><input type="checkbox" data-tick' + (t.pct >= 100 ? ' checked' : '') + ' title="Done"><span>' + esc(t.name.replace(/^[✓◆\s]+/, '')) + '</span></label>' +
+          '<div class="kth"><div class="kth-l"><span class="kid">#' + r.n + (subs.length ? ' · THEME' : t.dur === 0 ? ' · MILESTONE' : '') + '</span><label class="kname"><input type="checkbox" data-tick' + (t.pct >= 100 ? ' checked' : '') + ' title="Done"><span>' + esc(t.name.replace(/^[✓◆\s]+/, '')) + kInfo('t:' + t.id, t.desc) + '</span></label>' +
             ((t.res || []).length ? '<span class="kcrew" title="Crew on this task (from the Schedule): ' + esc(resText(t)) + '">' + esc(resShort(t)) + '</span>' : '') +
             (tp ? '<span class="ktp" title="' + (subs.length ? 'Theme points: the stories added up' : 'Points') + '">' + tp + ' pts</span>' : '') + '</div>' +
             '<div class="kth-r"><div class="kdates">' + esc(pretty(t.es)) + (t.dur > 1 ? ' – ' + esc(pretty(t.ef)) : '') + '</div><div class="kdays">' + (t.dur ? pl(t.dur, 'day') : 'Milestone') + '</div>' + (rg.txt ? '<div class="kdue kdue-' + rg.c + '">' + esc(rg.txt) + '</div>' : '') + '</div></div>' +
           (subs.length ? '<div class="kstories">' + shown.map(function (x) { var d = subDates(t, x), sr = kRag(d.es, d.ef, x.status === 'done', t0);
-              return '<div class="kst' + (x.status === 'done' ? ' done' : '') + '" data-sid="' + esc(x.id) + '"><div class="kst-h"><i class="kd kd-' + sr.c + '" title="' + esc(pretty(d.es) + (d.ef !== d.es ? ' – ' + pretty(d.ef) : '') + (sr.txt ? ' · ' + sr.txt : '')) + '"></i><span class="kst-n">' + esc(x.name) + '</span>' +
+              return '<div class="kst' + (x.status === 'done' ? ' done' : '') + '" data-sid="' + esc(x.id) + '"><div class="kst-h"><i class="kd kd-' + sr.c + '" title="' + esc(pretty(d.es) + (d.ef !== d.es ? ' – ' + pretty(d.ef) : '') + (sr.txt ? ' · ' + sr.txt : '')) + '"></i><span class="kst-n">' + esc(x.name) + kInfo('s:' + x.id, x.desc) + '</span>' +
                 '<span class="kst-d kst-d-' + sr.c + '">' + esc(kShort(d.es, d.ef)) + (sr.txt ? ' <b>(' + esc(sr.txt.charAt(0).toLowerCase() + sr.txt.slice(1)) + ')</b>' : '') + '</span></div>' + kSlide(x) + kCtl('s:' + x.id, x.owner, x.priority, x.points) + '</div>'; }).join('') +
             (filt && shown.length < subs.length ? '<div class="kmore">' + (subs.length - shown.length) + ' more ' + (subs.length - shown.length === 1 ? 'story' : 'stories') + ' hidden by the filter</div>' : '') + '</div>'
             : kCtl('t:' + t.id, ownerOf(t), t.priority, t.points)) +
@@ -1983,6 +2003,7 @@
       col.addEventListener('drop', function (e) { e.preventDefault(); col.classList.remove('over'); move(find(e.dataTransfer.getData('text/plain')), col.getAttribute('data-col')); });
     });
     var item = function (key) { var k = key.split(':'), t = k[0] === 't' ? find(k[1]) : null; if (t) return { o: t, theme: true, task: t }; var tt = p.tasks.filter(function (x) { return (x.subs || []).some(function (y) { return y.id === k[1]; }); })[0]; return tt ? { o: tt.subs.filter(function (y) { return y.id === k[1]; })[0], theme: false, task: tt } : null; };
+    B.querySelectorAll('[data-ki]').forEach(function (b) { b.onclick = function (e) { e.preventDefault(); e.stopPropagation(); var it = item(b.getAttribute('data-ki')); if (it) kDesc(it, keep); }; });
     B.querySelectorAll('[data-k]').forEach(function (b) {
       var k = b.getAttribute('data-k'), kind = k[0], it = item(k.slice(2).replace(/:(High|Medium|Low)$/, '')); if (!it) return;
       b.onclick = function (e) {

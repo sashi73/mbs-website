@@ -3,6 +3,9 @@
 // node gantt-export-test.js <site> [folder with node_modules/exceljs]
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
+const http = require('http');
+const llmSeen = [];
+const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) => c.push(d)); req.on('end', () => { const b = JSON.parse(Buffer.concat(c).toString()); llmSeen.push(b); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ text: 'Walk the whole site with the surveyor and mark the boundaries, levels and services, so design can start. Done when the survey file is received and checked against the title plan. Extra words to go past two hundred characters.' }) }, finish_reason: 'stop' }], usage: { total_tokens: 120 } })); }); });
 const path = require('path'), fs = require('fs'), os = require('os');
 const SITE = path.resolve(process.argv[2]);
 const XL = path.resolve(process.argv[3] || path.join(__dirname, 'xl'));
@@ -13,6 +16,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; for (let i = 0; i < s.length; i++) { const c = s[i]; if (q) { if (c === '"' && s[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; } else if (c === '"') q = true; else if (c === ',') { row.push(cur); cur = ''; } else if (c === '\n') { row.push(cur.replace(/\r$/, '')); rows.push(row); row = []; cur = ''; } else cur += c; } if (cur || row.length) { row.push(cur); rows.push(row); } return rows; };
 
 (async () => {
+  await new Promise((r) => mock.listen(0, '127.0.0.1', r));
   let ExcelJS = null; try { ExcelJS = require(require.resolve('exceljs', { paths: [XL, SITE] })); } catch {}
   const { BlobsServer } = await import(require.resolve('@netlify/blobs/server', { paths: [SITE] }));
   const dir = path.join(os.tmpdir(), 'mbs-kb-blobs'); fs.rmSync(dir, { recursive: true, force: true });
@@ -20,7 +24,7 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
   const { port: bport } = await blobs.start();
   const ctxB64 = Buffer.from(JSON.stringify({ siteID: 'mbs', token: 'tok', edgeURL: `http://localhost:${bport}`, uncachedEdgeURL: `http://localhost:${bport}`, apiURL: `http://localhost:${bport}` })).toString('base64');
   process.env.NETLIFY_BLOBS_CONTEXT = ctxB64;
-  const env = { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', NETLIFY_BLOBS_CONTEXT: ctxB64, ADMIN_USERNAME: 'sashi73', ADMIN_PASSWORD: 'sashi98', LLM_API_KEY: '', TELEGRAM_BOT_TOKEN: '', RESEND_API_KEY: '' };
+  const env = { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', NETLIFY_BLOBS_CONTEXT: ctxB64, ADMIN_USERNAME: 'sashi73', ADMIN_PASSWORD: 'sashi98', LLM_API_KEY: 'test', LLM_BASE_URL: `http://127.0.0.1:${mock.address().port}`, TELEGRAM_BOT_TOKEN: '', RESEND_API_KEY: '' };
   const srv = spawn('node', ['local-server.mjs'], { cwd: SITE, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; srv.stdout.on('data', (d) => (log += d)); srv.stderr.on('data', (d) => (log += d));
   for (let i = 0; i < 40 && !/running/.test(log); i++) await sleep(150);
@@ -92,6 +96,18 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     await sleep(1300);
     const sv = (await P.get(core)).tasks.find((t) => t.id === bench.id);
     ok('Saved', 'owner, priority and points are saved on each story', sv.subs[0].owner === 'Sam Sparky' && sv.subs[0].priority === 'High' && sv.subs[0].points === 5 && sv.subs[1].owner === 'Oakwood Joinery' && sv.subs[1].priority === 'Medium' && sv.subs[1].points === 8 && sv.subs[2].priority === 'Low' && sv.subs[2].points === 3 && sv.subs[1].pct === 100 && sv.subs[1].status === 'done', JSON.stringify(sv.subs.map((x) => [x.owner, x.priority, x.points])));
+    // (i) descriptions
+    ok('Info', 'a small (i) next to the theme name and every story name', !!(await p.$(`${B} .kth .kinfo`)) && (await p.$$(`${B} .kst .kinfo`)).length === 3);
+    await p.click(`${st(1)} .kinfo`); await p.waitForSelector('#kdTxt');
+    ok('Info', 'clicking it opens a box for the description, limited to 200 characters', (await p.getAttribute('#kdTxt', 'maxlength')) === '200' && /0 \/ 200/.test(await p.textContent('#kdCnt')));
+    await p.click('#kdAi'); await p.waitForFunction(() => document.querySelector('#kdTxt').value.length > 50, null, { timeout: 20000 });
+    const aiTxt = await p.inputValue('#kdTxt'), lq = llmSeen[llmSeen.length - 1];
+    ok('Info', '✨ the AI writes it (kept to 200 characters), knowing the story and its theme', aiTxt.length <= 200 && /surveyor/.test(aiTxt) && lq && /Template/.test(lq.messages[1].content) && /Benchtop/.test(lq.messages[1].content) && /200 characters/.test(lq.messages[0].content), aiTxt.length + ': ' + aiTxt);
+    await p.click('#kdSave'); await sleep(300);
+    ok('Info', 'saved: the (i) turns dark and shows the description when you point at it', (await p.getAttribute(`${st(1)} .kinfo`, 'class')).includes('has') && /surveyor/.test(await p.getAttribute(`${st(1)} .kinfo`, 'title')));
+    await p.click(`${B} .kth .kinfo`); await p.waitForSelector('#kdTxt'); await p.fill('#kdTxt', 'Make, template and install the stone benchtop. Done when it is level, sealed and signed off.'); await p.click('#kdSave'); await sleep(1300);
+    const dsv = (await P.get(core)).tasks.find((t) => t.id === bench.id);
+    ok('Info', 'theme and story descriptions are saved with the plan', /stone benchtop/.test(dsv.desc) && /surveyor/.test(dsv.subs[0].desc) && dsv.subs[0].desc.length <= 200);
     // RAG colours
     const cards = await p.$$eval('.kcard', (a) => a.map((c) => ({ cls: c.className, due: (c.querySelector('.kdue') || {}).textContent || '' })));
     const consistent = cards.every((c) => (/kr-r/.test(c.cls) ? /late/.test(c.due) : /kr-a/.test(c.cls) ? /Due (today|in [123] day)/.test(c.due) : /kr-g/.test(c.cls)));
@@ -110,8 +126,10 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     ok('Filter', 'filter by priority', (await p.$$('.kcard')).length === 1 && (await p.$$(`${B} .kst`)).length === 1);
     await p.selectOption('#kbPrio', ''); await p.selectOption('#kbSort', 'points'); await sleep(250);
     ok('Sort', 'sort by points puts the 16-point theme first in its column (it is in In review)', (await p.getAttribute('.kcol-review .kcard', 'data-tid')) === bench.id);
-    await p.fill('#kbQ', 'levels'); await sleep(200);
+    await p.fill('#kbQ', 'check the levels'); await sleep(200);
     ok('Search', 'search finds stories too', (await p.$$('.kcard')).length === 1 && !!(await p.$(C)));
+    await p.fill('#kbQ', 'signed off'); await sleep(200);
+    ok('Search', 'and descriptions', (await p.$$('.kcard')).length === 1 && !!(await p.$(B)));
     await p.fill('#kbQ', ''); await sleep(200);
     await p.click(`${B} [data-step="1"]`); await sleep(300);
     ok('Move', '→ moves the theme on to Done with its points (all its stories done)', !!(await p.$(`.kcol-done ${B}`)) && /16 pts/.test(await p.textContent('.kcol-done h3')) && /16 of \d+ points done/.test(await p.textContent('.kpts')));
@@ -133,7 +151,7 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     ok('Console', 'no JavaScript errors', errors.length === 0, errors.join(' | '));
     await br.close(); br = null;
   } catch (e) { try { if (br) await br.close(); } catch {} ok('Run', 'test run completed', false, e.stack.split('\n').slice(0, 4).join(' / ') + ' ERRORS: ' + errorsAll.join(' | ') + ' LOG: ' + log.slice(-400)); }
-  try { srv.kill(); } catch {} try { await blobs.stop(); } catch {}
+  try { srv.kill(); } catch {} try { await blobs.stop(); } catch {} mock.close();
   let pass = 0;
   for (const x of results) { if (x.pass) pass++; console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.detail !== '' && !x.pass ? '  (' + x.detail + ')' : ''}`); }
   console.log(`\n${pass}/${results.length} passed`);
