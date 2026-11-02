@@ -2146,9 +2146,10 @@
   function chGrow(el) { el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight + 2, 64) + 'px'; }
   function chChecks(p) {
     var c = p.charter || {}, has = function (k) { return String(c[k] || '').trim().length > 2; };
-    return [['Project manager named', !!String(c.manager || '').trim()], ['Customer (sponsor) named', !!String(c.customer || '').trim()], ['Objective', has('objective')], ['In scope', has('inScope')], ['Out of scope', has('outScope')],
-      ['Deliverables', has('deliverables')], ['Acceptance criteria', has('acceptance')], ['Assumptions and constraints', has('assumptions')], ['Approved budget', !!c.budget],
-      ['Stakeholders listed', (p.stakeholders || []).some(function (x) { return x.name; })], ['Risks recorded', (p.risks || []).some(function (x) { return x.title && x.status !== 'Closed'; })]];
+    var sk = (p.stakeholders || []).filter(function (x) { return x.name; });
+    return [['Project manager named', !!String(c.manager || '').trim()], ['Customer (sponsor) named', !!String(c.customer || '').trim()], ['Objective', has('objective')],
+      ['Stakeholders identified (before scope)', sk.length > 0], ['One person Accountable', sk.filter(function (x) { return x.raci === 'A'; }).length === 1], ['In scope', has('inScope')], ['Out of scope', has('outScope')],
+      ['Deliverables', has('deliverables')], ['Acceptance criteria', has('acceptance')], ['Assumptions and constraints', has('assumptions')], ['Approved budget', !!c.budget], ['Risks recorded', (p.risks || []).some(function (x) { return x.title && x.status !== 'Closed'; })]];
   }
   function scope() {
     var c = S.plan.charter, p = S.plan, R = rollup(p, today());
@@ -2158,7 +2159,7 @@
       '<textarea id="ch_' + k + '" data-c="' + k + '"' + (list ? ' data-list' : '') + ' maxlength="' + lim[k] + '" placeholder="' + esc(ph || '') + '">' + esc(c[k] || '') + '</textarea></div>'; };
     var sec = function (n, title, body, extra, ai) { return '<section class="chs' + (ai && S.chBusy && ai.some(function (k) { return S.chBusy.indexOf(k) >= 0; }) ? ' ch-busy' : '') + '"' + (ai ? ' data-ais="' + ai.join(',') + '"' : '') + '><div class="chs-h"><span class="chs-n">' + n + '</span><h3>' + title + '</h3>' + (extra || '') +
       (ai ? '<button type="button" class="btn btn-sm ch-ai" data-ai="' + ai.join(',') + '" title="Let the AI improve, expand or correct this section, using the plan, the tasks and the customer\'s request">✨ AI</button>' : '') + '</div>' + (ai ? '<div class="ch-ainote" data-ain="' + ai.join(',') + '"></div>' : '') + body + '</section>'; };
-    var listHint = 'One item per line. Press Enter for the next “- ” line.', hasBg = !!(S.job.scope || c.background);
+    var listHint = 'One item per line. Press Enter for the next “- ” line.', hasBg = !!(S.job.scope || c.background), skN = (p.stakeholders || []).filter(function (x) { return x.name; }).length;
     var main =
       sec(1, 'Project details', '<div class="chg chg-4"><div class="chf"><label class="chf-l" for="ch_name">Plan name</label><input id="ch_name" data-p="name" value="' + esc(p.name) + '"></div>' +
         '<div class="chf"><label class="chf-l" for="ch_customer">Customer (sponsor)</label><input id="ch_customer" data-c="customer" value="' + esc(c.customer) + '" placeholder="Who approves and pays"></div>' +
@@ -2170,9 +2171,10 @@
       sec(2, 'Purpose and objective', f('objective', 'Objective: why we are doing this', 'One or two sentences on the outcome the customer wants.', 'e.g. Deliver a Tier IV, 100 MW data centre from feasibility to handover within 12 months'), '', ['objective']) +
       (hasBg ? sec(3, 'Background: the customer\'s request', (S.job.scope ? '<details class="ch-req"' + (c.background ? '' : ' open') + '><summary>The customer\'s request (from the enquiry)</summary><div class="jobreq"><div>' + esc(S.job.scope) + '</div></div></details>' : '') +
         f('background', 'Background for the charter', c.background ? 'This goes into the charter as the background. Clear it to use the customer\'s request as it is.' : 'Empty: the charter uses the customer\'s request as it is. ✨ AI writes a professional background from it.', 'A short background: who, where, what was asked for, key requirements'), (S.job.scope ? '<button type="button" class="btn btn-sm" id="chUseReq" title="Copy the customer\'s request into In scope, to edit">↓ Copy into In scope</button>' : ''), ['background']) : '') +
-      sec(hasBg ? 4 : 3, 'Scope', '<div class="chg chg-2">' + f('inScope', 'In scope: what we will do', listHint, '- Site works and earthworks\n- …', true) + f('outScope', 'Out of scope: what we will not do', listHint, '- Land purchase and legal costs\n- …', true) + '</div>', '', ['inScope', 'outScope']) +
-      sec(hasBg ? 5 : 4, 'Deliverables and acceptance', '<div class="chg chg-2">' + f('deliverables', 'Deliverables: what the customer receives', listHint, '- Certificates, warranties, as-built drawings\n- …', true) + f('acceptance', 'Acceptance criteria: how we know it is done', listHint, '- All systems pass testing\n- Defects list closed\n- …', true) + '</div>', '', ['deliverables', 'acceptance']) +
-      sec(hasBg ? 6 : 5, 'Assumptions, constraints and notes', '<div class="chg chg-2">' + f('assumptions', 'Assumptions and constraints', listHint, '- Site access weekdays 7am to 5pm\n- …', true) + f('notes', 'Planning notes and tips (optional in the charter)', listHint, '- Order long-lead items first\n- …', true) + '</div>', '', ['assumptions', 'notes']);
+      chStake(hasBg ? 4 : 3, sec) +
+      sec(hasBg ? 5 : 4, 'Scope', (skN ? '' : '<p class="ch-skfirst">↑ Identify the stakeholders first: their needs, approvals and sign-off shape what is in and out of scope.</p>') + '<div class="chg chg-2">' + f('inScope', 'In scope: what we will do', listHint, '- Site works and earthworks\n- …', true) + f('outScope', 'Out of scope: what we will not do', listHint, '- Land purchase and legal costs\n- …', true) + '</div>', '', ['inScope', 'outScope']) +
+      sec(hasBg ? 6 : 5, 'Deliverables and acceptance', '<div class="chg chg-2">' + f('deliverables', 'Deliverables: what the customer receives', listHint, '- Certificates, warranties, as-built drawings\n- …', true) + f('acceptance', 'Acceptance criteria: how we know it is done', listHint, '- All systems pass testing\n- Defects list closed\n- …', true) + '</div>', '', ['deliverables', 'acceptance']) +
+      sec(hasBg ? 7 : 6, 'Assumptions, constraints and notes', '<div class="chg chg-2">' + f('assumptions', 'Assumptions and constraints', listHint, '- Site access weekdays 7am to 5pm\n- …', true) + f('notes', 'Planning notes and tips (optional in the charter)', listHint, '- Order long-lead items first\n- …', true) + '</div>', '', ['assumptions', 'notes']);
     var checks = chChecks(p), done = checks.filter(function (x) { return x[1]; }).length, pc = Math.round(done / checks.length * 100);
     var side = '<aside class="ch-side"><div class="card ch-card"><div class="ch-doc"><span class="ch-ver">v' + esc(c.docVersion || '1.0') + ' · ' + esc(c.docStatus || 'Draft') + '</span></div>' +
       '<button class="btn btn-gold ch-big" id="chDoc" type="button" title="The project charter as a professional PDF or Word document, with the Gantt chart, critical path, stakeholder register and a sign-off block">📄 Charter: PDF / Word</button>' +
@@ -2208,6 +2210,7 @@
     var ur = $('#chUseReq'); if (ur) ur.onclick = function () { var t = $('#ch_inScope'); var lines = String(S.job.scope).split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean).map(function (x) { return /^[-•]/.test(x) ? x : '- ' + x; });
       t.value = (t.value.trim() ? t.value.replace(/\s+$/, '') + '\n' : '') + lines.join('\n'); t.dispatchEvent(new Event('input')); t.focus(); toast('Copied into In scope: trim it to what you will deliver'); };
     $('#chDoc').onclick = charterDialog;
+    chStakeWire(B);
     B.querySelectorAll('[data-ai]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation();
       var keys = b.getAttribute('data-ai') === 'all' ? CH_F.map(function (x) { return x[0]; }).filter(function (k) { return k !== 'background' || hasBg; }) : b.getAttribute('data-ai').split(',');
       chAiPop(keys, b); }; });
@@ -2216,6 +2219,39 @@
   }
 
   /* ---------- v76: ✨ AI for the charter (sections 2 to 6): improve, expand or correct, with undo ---------- */
+  /* ---------- v79: stakeholders are identified before the scope (PMBOK: Identify Stakeholders comes first, in initiating) ---------- */
+  var SK_ROLE = [['Customer', 'A'], ['Project manager', 'R'], ['Site supervisor', 'R'], ['Certifier', 'C'], ['Council', 'C'], ['Engineer', 'C'], ['Architect', 'C'], ['Strata manager', 'C'], ['Utility provider', 'C'], ['Neighbours', 'I'], ['Tenants', 'I'], ['Supplier', 'I'], ['Insurer', 'I']];
+  var SK_RISK = ['miss requirements and acceptance criteria that matter to the people who sign off',
+    'face late changes, rework and scope creep when someone is brought in after the scope is set',
+    'have no clear sign-off (nobody Accountable), so approvals and payments stall',
+    'meet objections or conflict from people who were never consulted (neighbours, strata, council, tenants)',
+    'miss approvals, inspections or compliance obligations owned by authorities and certifiers',
+    'overrun on time and cost, with no one agreed to decide on changes'];
+  function chStake(n, sec) {
+    var p = S.plan, L = (p.stakeholders || []).filter(function (x) { return x.name; }), nA = L.filter(function (x) { return x.raci === 'A'; }).length;
+    var have = function (role) { return L.some(function (x) { return String(x.role || '').toLowerCase() === role.toLowerCase() || String(x.name || '').toLowerCase() === role.toLowerCase(); }); };
+    var cust = S.job && S.job.name && L.some(function (x) { return x.name.toLowerCase() === String(S.job.name).toLowerCase() || /customer|owner|client|sponsor/i.test(x.role || ''); });
+    var chips = SK_ROLE.filter(function (r) { return !have(r[0]) && !(r[0] === 'Customer' && cust); }).map(function (r) { return '<button type="button" class="ch-skchip" data-skrole="' + esc(r[0]) + '" data-skraci="' + r[1] + '">＋ ' + esc(r[0]) + '</button>'; }).join('');
+    var body = !L.length
+      ? '<div class="ch-skwarn"><b>⚠ No stakeholders identified yet. Do this before you write the scope.</b> Without identifying stakeholders, the project could:<ul>' + SK_RISK.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>'
+      : '<div class="ch-skl">' + L.map(function (x) { return '<span class="ch-sk"><span class="raci raci-' + esc(x.raci) + '">' + esc(x.raci) + '</span><b>' + esc(x.name) + '</b>' + (x.role ? '<small>' + esc(x.role) + '</small>' : '') + '</span>'; }).join('') + '</div>' +
+        (nA !== 1 ? '<p class="ch-skmsg">⚠ ' + (nA ? nA + ' people are Accountable: usually one person signs off, so decisions do not stall.' : 'Nobody is Accountable yet: name the one person who signs off and has the final say.') + '</p>' : '') +
+        (!cust ? '<p class="ch-skmsg">⚠ The customer is not on the list yet.</p>' : '');
+    var add = '<div class="ch-skadd"><input id="chSkName" maxlength="120" placeholder="Name or organisation"><input id="chSkRole" maxlength="120" placeholder="Role, e.g. Certifier" list="chSkRoles">' +
+      '<select id="chSkRaci">' + Object.keys(RACI).map(function (k) { return '<option value="' + k + '"' + (k === 'C' ? ' selected' : '') + '>' + k + ' – ' + RACI[k][0] + '</option>'; }).join('') + '</select><button type="button" class="btn btn-sm btn-gold" id="chSkAdd">＋ Add</button></div>' +
+      '<datalist id="chSkRoles">' + SK_ROLE.map(function (r) { return '<option value="' + esc(r[0]) + '">'; }).join('') + '</datalist>';
+    return sec(n, 'Stakeholders: identify them before the scope', '<p class="chf-h" style="margin:0 0 8px">Best practice: list everyone who affects or is affected by the project, and what they do (RACI), before you agree the scope. Their needs become the scope and acceptance criteria.</p>' +
+      body + (chips ? '<div class="ch-skchips"><span class="muted">Commonly involved:</span>' + (S.job && S.job.name && !cust ? '<button type="button" class="ch-skchip" data-skcust>＋ The customer (' + esc(S.job.name) + ')</button>' : '') + chips + '</div>' : '') + add,
+      '<span class="ch-key" title="PMBOK: Identify Stakeholders is done at the start, before Collect Requirements and Define Scope">Key step</span><span class="ch-skn' + (L.length ? '' : ' none') + '">' + (L.length ? pl(L.length, 'stakeholder') : 'none yet') + '</span><a class="btn btn-sm" href="#plan/' + esc(S.core) + '/stake">👥 Open the register</a>');
+  }
+  function chStakeWire(B) {
+    var p = S.plan; p.stakeholders = p.stakeholders || [];
+    var add = function (x) { p.stakeholders.push(Object.assign({ id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: '', role: '', raci: 'I', phone: '', email: '' }, x)); dirty('Stakeholder added: ' + x.name); var y = window.scrollY; scope(); window.scrollTo(0, y); };
+    B.querySelectorAll('[data-skrole]').forEach(function (b) { b.onclick = function () { var r = b.getAttribute('data-skrole'); add({ name: r, role: r, raci: b.getAttribute('data-skraci') }); toast('Added ' + r + ': put in the name and contact on the Stakeholders tab'); }; });
+    var c = B.querySelector('[data-skcust]'); if (c) c.onclick = function () { add({ name: S.job.name || 'Customer', role: 'Customer', raci: 'A', phone: S.job.phone || '', email: S.job.email || '' }); };
+    var go = function () { var n = $('#chSkName').value.trim(); if (!n) { $('#chSkName').focus(); return toast('Type a name first', true); } add({ name: n, role: $('#chSkRole').value.trim(), raci: $('#chSkRaci').value }); var i = $('#chSkName'); if (i) i.focus(); };
+    var b = $('#chSkAdd'); if (b) { b.onclick = go; ['#chSkName', '#chSkRole'].forEach(function (k) { $(k).onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); go(); } }; }); }
+  }
   var CH_LBL = { objective: 'Objective', background: 'Background', inScope: 'In scope', outScope: 'Out of scope', deliverables: 'Deliverables', acceptance: 'Acceptance criteria', assumptions: 'Assumptions and constraints', notes: 'Planning notes' };
   function chAiPopClose() { var o = document.getElementById('chPop'); if (o) o.remove(); document.removeEventListener('mousedown', chAiPopOut, true); document.removeEventListener('keydown', chAiPopKey, true); }
   function chAiPopOut(e) { var o = document.getElementById('chPop'); if (o && !o.contains(e.target)) chAiPopClose(); }
@@ -2316,6 +2352,14 @@
       { kind: 'text', title: '2. Purpose and objective', text: c.objective, always: true, empty: 'Not stated yet.' }];
     var n = 3, H = function (t) { return (n++) + '. ' + t; };
     if (o.background && (c.background || S.job.scope)) S2.push({ kind: 'text', title: H(c.background ? 'Background' : 'Background: the customer\'s request'), text: c.background || S.job.scope });
+    // v79: stakeholders are identified before the scope (PMBOK), so the register comes first
+    if (o.stake) {
+      var sh = (p.stakeholders || []).filter(function (x) { return x.name || x.role; });
+      S2.push({ kind: 'table', title: H('Stakeholder register'), head: o.contacts ? ['Name', 'Role', 'RACI', 'Phone', 'Email'] : ['Name', 'Role', 'RACI'], wordCols: o.contacts ? [3, 3, 1, 2, 4] : [4, 5, 1],
+        cols: o.contacts ? { 2: { cellWidth: 13, halign: 'center' }, 3: { cellWidth: 28 } } : { 2: { cellWidth: 16, halign: 'center' } },
+        rows: sh.map(function (x) { var r = [{ t: x.name || '', b: true }, x.role || '', x.raci || '']; if (o.contacts) r.push(x.phone || '', x.email || ''); return r; }), always: true, empty: 'No stakeholders identified yet: identify them before the scope is agreed.' },
+        { kind: 'text', text: 'RACI: R = Responsible (does the work) · A = Accountable (approves) · C = Consulted · I = Informed.', title: '' });
+    }
     S2.push({ kind: 'text', title: H('In scope'), text: c.inScope, always: true, empty: 'Not stated yet.' }, { kind: 'text', title: H('Out of scope'), text: c.outScope, always: true, empty: 'Nothing excluded yet: state what is not included.' },
       { kind: 'text', title: H('Deliverables'), text: c.deliverables, always: true, empty: 'Not stated yet.' }, { kind: 'text', title: H('Acceptance criteria'), text: c.acceptance, always: true, empty: 'Not stated yet.' },
       { kind: 'text', title: H('Assumptions and constraints'), text: c.assumptions, always: true, empty: 'None stated.' });
@@ -2327,13 +2371,6 @@
       S2.push({ kind: 'text', title: H('Critical path'), text: 'These ' + pl(cr.length, 'task') + ' set the finish date of ' + dmy(R.finish) + ': any delay to one of them delays completion. Tasks off the critical path have slack (float).' },
         { kind: 'table', head: ['#', 'Task', 'Start', 'Finish', 'Duration'], wordCols: [1, 7, 2, 2, 2], cols: { 0: { cellWidth: 10 }, 2: { cellWidth: 24 }, 3: { cellWidth: 24 }, 4: { cellWidth: 24 } },
           rows: cr.map(function (x) { return [String(x.n), { t: clean(x.t.name), b: true }, dmy(x.t.es), dmy(x.t.ef), x.t.dur ? pl(x.t.dur, unit) : 'Milestone']; }), always: true, empty: 'No critical path yet (add task links).' });
-    }
-    if (o.stake) {
-      var sh = (p.stakeholders || []).filter(function (x) { return x.name || x.role; });
-      S2.push({ kind: 'table', title: H('Stakeholder register'), head: o.contacts ? ['Name', 'Role', 'RACI', 'Phone', 'Email'] : ['Name', 'Role', 'RACI'], wordCols: o.contacts ? [3, 3, 1, 2, 4] : [4, 5, 1],
-        cols: o.contacts ? { 2: { cellWidth: 13, halign: 'center' }, 3: { cellWidth: 28 } } : { 2: { cellWidth: 16, halign: 'center' } },
-        rows: sh.map(function (x) { var r = [{ t: x.name || '', b: true }, x.role || '', x.raci || '']; if (o.contacts) r.push(x.phone || '', x.email || ''); return r; }), always: true, empty: 'No stakeholders listed yet.' },
-        { kind: 'text', text: 'RACI: R = Responsible (does the work) · A = Accountable (approves) · C = Consulted · I = Informed.', title: '' });
     }
     if (o.racimap) {   // v75: the RACI map: activities × people
       var ppl = raciPeople(p).filter(function (sh) { return raciActs(p).some(function (x) { return raciCell(p, x.t, sh).v; }); }).slice(0, 14), used = {};

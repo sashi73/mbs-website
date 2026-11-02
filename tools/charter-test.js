@@ -44,7 +44,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await p.goto(`${BASE}/admin/#projects`); await sleep(300);
     await p.goto(`${BASE}/admin/#plan/${core}/scope`); await p.waitForSelector('#chDoc');
     const geo = await p.evaluate(() => ({ main: Math.round(document.querySelector('.ch-main').getBoundingClientRect().width), view: Math.round(document.querySelector('#planBody').getBoundingClientRect().width), side: !!document.querySelector('.ch-side'), secs: document.querySelectorAll('.chs').length }));
-    ok('Editor', 'the charter editor uses the full width (sections side by side, a sign-off panel on the right)', geo.main > 800 && geo.main + 300 >= geo.view - 40 && geo.side && geo.secs === 6, JSON.stringify(geo));
+    ok('Editor', 'the charter editor uses the full width (sections side by side, a sign-off panel on the right)', geo.main > 800 && geo.main + 300 >= geo.view - 40 && geo.side && geo.secs === 7, JSON.stringify(geo));
     const grows = await p.evaluate(() => [...document.querySelectorAll('.chf textarea')].every((t) => t.scrollHeight <= t.clientHeight + 4));
     ok('Editor', 'text boxes grow with the text (no scrolling inside them)', grows);
     await p.focus('#ch_inScope'); await p.evaluate(() => { const t = document.querySelector('#ch_inScope'); t.selectionStart = t.selectionEnd = t.value.length; }); await p.keyboard.press('Enter'); await p.keyboard.type('Handover pack'); await sleep(200);

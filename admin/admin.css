@@ -1141,3 +1141,16 @@ input.est-in{background:#FFFBEB!important;border-color:#F3C969!important;border-
 .est-q{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:9px;padding:9px 12px;font-size:12.5px;line-height:1.5;color:#7F1D1D}.est-q label{display:flex;gap:8px;align-items:center;margin-top:6px;color:#7F1D1D}.est-q input{width:auto;margin:0}
 .est-tbl td{vertical-align:top}.est-tbl small{font-size:11.5px}
 .est-bench{display:grid!important;grid-template-columns:20px minmax(0,1fr);gap:8px;align-items:start;font-weight:500;margin-top:8px;padding:8px 10px;border:1px solid #EAD48A;background:#FDF6DD;border-radius:9px}.est-bench input{width:auto;margin:3px 0 0}.est-bench small{display:block;color:#6F6A5D}
+/* v79: stakeholders before the scope */
+.ch-key{background:#1F1D18;color:#F5D77A;border-radius:99px;padding:2px 10px;font-size:11.5px;font-weight:800;letter-spacing:.03em;white-space:nowrap}
+.ch-skn{font-size:12.5px;font-weight:700;color:#15803D;white-space:nowrap}.ch-skn.none{color:#B91C1C}
+.ch-skwarn{background:#FEF2F2;border:1px solid #FCA5A5;border-left:5px solid #DC2626;border-radius:10px;padding:10px 14px;font-size:13px;line-height:1.5;color:#7F1D1D;margin-bottom:10px}
+.ch-skwarn ul{margin:6px 0 0;padding-left:20px}.ch-skwarn li{margin:2px 0}
+.ch-skl{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.ch-sk{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:99px;padding:3px 10px 3px 4px;font-size:13px}.ch-sk small{color:#6F6A5D}
+.ch-skmsg{margin:4px 0;font-size:12.5px;color:#B45309;font-weight:600}
+.ch-skchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0;font-size:12.5px}
+.ch-skchip{border:1px dashed #D6CDB4;background:#FBF8EF;border-radius:99px;padding:3px 10px;font:inherit;font-size:12.5px;cursor:pointer;color:#4A473F}.ch-skchip:hover{border-color:#C9A227;background:#FDF6DD}
+.ch-skadd{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,2fr) minmax(0,1.3fr) auto;gap:8px;align-items:center;margin-top:6px}
+@media (max-width:700px){.ch-skadd{grid-template-columns:1fr 1fr}}
+.ch-skfirst{margin:-2px 0 10px;font-size:12.5px;color:#B45309;font-weight:600}

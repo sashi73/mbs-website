@@ -421,6 +421,7 @@ export async function charterEnhance({ core, fields, mode, note, texts }, by) {
     start: plan.start, finish_by: plan.finishBy || undefined, budget: c.budget ? '$' + Math.round(c.budget).toLocaleString('en-AU') : undefined,
     tasks: R.slice(0, 60).map((t) => scrubTask(t.name, job) + ' (' + t.dur + ' days)'), milestones: plan.tasks.filter((t) => !t.dur).slice(0, 20).map((t) => scrubTask(t.name, job)),
     risks: (plan.risks || []).filter((r) => r.title).slice(0, 12).map((r) => P(r.title, 120)),
+    stakeholders: (plan.stakeholders || []).filter((x) => x.name || x.role).slice(0, 30).map((x) => (P(x.role, 60) || 'stakeholder') + ' (' + x.raci + ')'),
     charter_now: Object.fromEntries(Object.keys(CH_AI).filter((k) => String(c[k] || '').trim()).map((k) => [k, P(c[k], CH_AI[k])])) };
   const how = m === 'grammar' ? 'Correct ONLY spelling, grammar, punctuation and list formatting. Keep the meaning, the items and the length. Do not add or remove content.'
     : m === 'expand' ? 'Expand it: keep everything correct that is there, fix the structure and grammar, and add the important items a professional charter would have that are missing (use the tasks, milestones, risks and request). Be specific to this project.'
