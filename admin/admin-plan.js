@@ -3553,13 +3553,32 @@
       '<div class="card"><h2>Slack (float) of every task</h2><div class="table-wrap"><table class="cp-table"><thead><tr><th>#</th><th>Task</th><th>Days</th><th>Start</th><th>Finish</th><th>Slack</th><th></th></tr></thead><tbody>' + table + '</tbody></table></div>' +
         '<p class="muted" style="font-size:12.5px;margin:8px 0 0">Slack is worked out from the plan as it is now (working days' + (all ? ', weekends included' : ', Monday to Friday') + ', the quote and cooling-off, “After #” links and start dates set by hand). Change the plan on the Schedule tab and this updates.</p></div>';
   }
+  /* ---------- v81: the order to set up a plan (PMBOK): stakeholders first, then scope, schedule and costs, risks, sign-off ---------- */
+  function setupSteps(p, R) {
+    var c = p.charter || {}, has = function (k) { return String(c[k] || '').trim().length > 2; }, sk = (p.stakeholders || []).filter(function (x) { return x.name; });
+    var nA = sk.filter(function (x) { return x.raci === 'A'; }).length, work = p.tasks.filter(function (t) { return t.dur > 0; }), est = estOf(p);
+    var go = function (tab) { return '#plan/' + esc(S.core) + '/' + tab; };
+    var steps = [
+      ['👥', 'Identify the stakeholders', 'stake', sk.length > 0 && nA === 1, sk.length ? pl(sk.length, 'stakeholder') + (nA === 1 ? ', one Accountable' : nA ? ', ' + nA + ' Accountable (should be one)' : ', nobody Accountable yet') : 'Who affects or is affected by the project, and their RACI. Without them the scope can miss requirements and sign-off stalls.'],
+      ['🎯', 'Agree the scope', 'scope', has('objective') && has('inScope') && has('outScope'), 'Objective, in scope and out of scope, shaped by the stakeholders\' needs' + (has('objective') && has('inScope') && !has('outScope') ? ': out of scope still empty' : '')],
+      ['▤', 'Plan the schedule and costs', 'schedule', work.length >= 2 && R.BAC > 0 && !est.n, work.length < 2 ? 'Tasks, dates and links' : !R.BAC ? pl(work.length, 'task') + ', no costs yet' : est.n ? pl(est.n, 'indicative cost') + ' still to review' : pl(work.length, 'task') + ', ' + money(R.BAC)],
+      ['⚠', 'Record the risks', 'risks', (p.risks || []).some(function (r) { return r.title && r.status !== 'Closed'; }), pl((p.risks || []).filter(function (r) { return r.title && r.status !== 'Closed'; }).length, 'open risk')],
+      ['✍', 'Sign off the project charter', 'scope', c.docStatus === 'Approved', c.docStatus === 'Approved' ? 'Approved' : 'Status: ' + (c.docStatus || 'Draft') + '. Make the charter, have it signed, upload the signed copy']];
+    var next = -1; steps.some(function (x, i) { if (!x[3]) { next = i; return true; } return false; });
+    if (next < 0) return '<div class="su-done">✓ Plan set-up complete: stakeholders, scope, schedule and costs, risks and a signed charter.</div>';
+    var done = steps.filter(function (x) { return x[3]; }).length;
+    return '<div class="card su"><div class="su-h"><h2>Plan set-up: do these in order</h2><span class="muted">' + done + ' of ' + steps.length + ' done</span></div><ol class="su-l">' + steps.map(function (x, i) {
+      var cls = x[3] ? 'ok' : i === next ? 'now' : '';
+      return '<li class="' + cls + '"><a href="' + go(x[2]) + '"><span class="su-n">' + (x[3] ? '✓' : i + 1) + '</span><span class="su-t"><b>' + x[0] + ' ' + esc(x[1]) + (i === 0 ? ' <em class="su-first">Start here</em>' : '') + (i === next && i ? ' <em class="su-next">Next</em>' : '') + '</b><small>' + esc(x[4]) + '</small></span></a></li>';
+    }).join('') + '</ol>' + (next === 0 ? '<p class="su-why"><b>Why stakeholders first?</b> Best practice (PMBOK) identifies the stakeholders before the scope: their needs become the requirements, the acceptance criteria and the sign-off. Skip it and the project risks late changes, rework, scope creep and stalled approvals.</p>' : '') + '</div>';
+  }
   function overview(R) {
     var p = S.plan, t0 = today(), soon = toS(new Date(toD(t0).getTime() + 14 * 864e5));
     var coming = ordered().filter(function (r) { return r.t.pct < 100 && r.t.es <= soon && r.t.ef >= t0; });
     var evm = [['Budget at completion (BAC)', money(R.BAC), 'Total planned cost'], ['Planned value (PV)', money(R.PV), 'Work that should be done by today'], ['Earned value (EV)', money(R.EV), 'Work actually done (cost × % complete)'],
       ['Actual cost (AC)', money(R.AC), 'Money spent so far (Actual $ column)'], ['Schedule performance (SPI = EV ÷ PV)', R.SPI == null ? '—' : R.SPI, R.SPI == null ? '' : R.SPI >= 1 ? 'on or ahead of schedule' : 'behind schedule'],
       ['Cost performance (CPI = EV ÷ AC)', R.CPI == null ? '—' : R.CPI, R.CPI == null ? '' : R.CPI >= 1 ? 'on or under budget' : 'over budget'], ['Forecast final cost (EAC = BAC ÷ CPI)', R.EAC == null ? '—' : money(R.EAC), '']];
-    $('#planBody').innerHTML = estBanner(p) + '<div class="grid two"><div class="grid" style="align-content:start">' +
+    $('#planBody').innerHTML = setupSteps(p, R) + estBanner(p) + '<div class="grid two"><div class="grid" style="align-content:start">' +
       '<div class="card"><h2>Time & cost (earned value)</h2><div class="table-wrap"><table><tbody>' + evm.map(function (e) { return '<tr><td>' + esc(e[0]) + '<br><small class="muted">' + esc(e[2]) + '</small></td><td class="num" style="font-weight:800;font-size:15px">' + esc(e[1]) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
         (S.expensesEx ? '<p class="muted" style="margin:10px 0 0">Expenses recorded for this job in Accounts: <b>' + money(S.expensesEx) + '</b> ex GST.</p>' : '') +
         (p.baseline ? '<p class="muted" style="margin:6px 0 0">Baseline set ' + esc(M.day(p.baseline.at)) + ': finish ' + esc(prettyY(p.baseline.finish)) + ', budget ' + money(p.baseline.BAC) + '. Now: finish ' + esc(prettyY(R.finish)) + ' (' + esc(varDays(p.baseline.finish, R.finish)) + ').</p>' : '<p class="muted" style="margin:6px 0 0">Tip: press “Set baseline” once the plan is agreed, so you can track slippage.</p>') + '</div>' +

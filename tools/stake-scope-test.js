@@ -39,6 +39,12 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     await p.goto(`${BASE}/admin/`, { waitUntil: 'networkidle' });
     await p.fill('[name=username]', 'sashi73'); await p.fill('[name=password]', 'sashi98'); await p.click('#loginForm button'); await p.waitForSelector('#app:not([hidden])');
     await p.goto(`${BASE}/admin/#plan/${core}`); await p.waitForSelector('#tplType'); await p.selectOption('#tplType', 'kitchen-reno'); await p.click('#tplCreate'); await p.waitForSelector('table.gt'); await sleep(1200);
+    await p.goto(`${BASE}/admin/#plan/${core}/overview`); await p.waitForSelector('.su');
+    const su = await p.$$eval('.su-l li', (l) => l.map((x) => [x.className, x.textContent]));
+    ok('Overview', 'the Overview shows "Plan set-up: do these in order", step 1 Identify the stakeholders, marked Start here and highlighted', su.length === 5 && /Identify the stakeholders/.test(su[0][1]) && /Start here/.test(su[0][1]) && su[0][0] === 'now' && /Agree the scope/.test(su[1][1]) && /Why stakeholders first\?/.test(await p.textContent('.su')), JSON.stringify(su.map((x) => x[1].slice(0, 40))));
+    await (await p.$('.su')).screenshot({ path: path.join(os.tmpdir(), 'overview-steps.png') });
+    await p.click('.su-l li.now a'); await p.waitForSelector('#addStake');
+    ok('Overview', 'clicking it opens the Stakeholders tab', /\/stake$/.test(p.url()));
     await p.goto(`${BASE}/admin/#plan/${core}/scope`); await p.waitForSelector('#chDoc');
     const heads = await p.$$eval('.chs-h h3', (h) => h.map((x) => x.textContent));
     const iS = heads.findIndex((x) => /^Stakeholders/.test(x)), iScope = heads.indexOf('Scope');
@@ -62,6 +68,9 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     const [d] = await Promise.all([p.waitForEvent('download'), p.click('#chDocx')]); const f = path.join(tmp, d.suggestedFilename()); await d.saveAs(f);
     const w = (await mammoth.extractRawText({ path: f })).value, body0 = w.slice(w.indexOf('1. Project at a glance'));
     ok('Charter', 'the charter lists the stakeholder register before In scope', body0.indexOf('Stakeholder register') > 0 && body0.indexOf('Stakeholder register') < body0.indexOf('In scope') && /Certifier/.test(w));
+    await p.goto(`${BASE}/admin/#plan/${core}/overview`); await p.waitForSelector('.su');
+    const su2 = await p.$$eval('.su-l li', (l) => l.map((x) => x.className));
+    ok('Overview', 'once stakeholders are in (one Accountable), step 1 ticks and the next step is highlighted', su2[0] === 'ok' && su2.indexOf('now') > 0 && !(await p.$('.su-why')), JSON.stringify(su2));
     const tabs = await p.$$eval('#planTabs .tab', (t) => t.map((x) => x.textContent.trim()));
     ok('Tabs', 'the 👥 Stakeholders tab comes just before 🎯 Scope', tabs.indexOf('👥 Stakeholders') >= 0 && tabs.indexOf('🎯 Scope') === tabs.indexOf('👥 Stakeholders') + 1, JSON.stringify(tabs));
     ok('Console', 'no JavaScript errors', errors.length === 0, errors.join(' | '));
