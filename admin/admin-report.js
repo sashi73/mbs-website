@@ -71,17 +71,17 @@
     var need = function (h) { if (y + h > 282) { doc.addPage(); y = 16; } };
     // header band
     doc.setFillColor.apply(doc, dark); doc.rect(0, 0, W, 30, 'F'); doc.setFillColor.apply(doc, gold); doc.rect(0, 30, W, 1.2, 'F');
-    doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.text('MODERN BUILDING SOLUTIONS', L, 9);
+    doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.text(s.brand || 'MODERN BUILDING SOLUTIONS', L, 9);
     doc.setFontSize(16); doc.text(s.title, L, 18);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(225, 220, 205); doc.text(doc.splitTextToSize(s.project.name, 120)[0], L, 25);
-    doc.setTextColor(255); doc.setFontSize(9); doc.text([s.type + ' report  #' + s.no, s.periodText, 'Issued ' + dmy(s.date) + (s.project.ref ? '  ·  ' + s.project.ref : '')], R, 10, { align: 'right' });
+    doc.setTextColor(255); doc.setFontSize(9); doc.text(s.headRight || [s.type + ' report  #' + s.no, s.periodText, 'Issued ' + dmy(s.date) + (s.project.ref ? '  ·  ' + s.project.ref : '')], R, 10, { align: 'right' });
     y = 37;
     // RAG
-    var rk = Object.keys(s.rag);
-    doc.autoTable({ startY: y, margin: { left: L, right: L }, theme: 'grid', styles: { fontSize: 8.5, cellPadding: 1.8, halign: 'center', valign: 'middle', lineColor: [230, 226, 214] },
+    var rk = Object.keys(s.rag || {});
+    if (rk.length) doc.autoTable({ startY: y, margin: { left: L, right: L }, theme: 'grid', styles: { fontSize: 8.5, cellPadding: 1.8, halign: 'center', valign: 'middle', lineColor: [230, 226, 214] },
       body: [rk.map(function (k) { return s.rag[k].label; }), rk.map(function (k) { return RAGN[s.rag[k].c]; }), rk.map(function (k) { return s.rag[k].note || ''; })],
       didParseCell: function (d) { var c = s.rag[rk[d.column.index]].c; if (d.row.index === 0) { d.cell.styles.fontStyle = 'bold'; d.cell.styles.fillColor = [246, 243, 234]; d.cell.styles.textColor = dark; } if (d.row.index === 1) { d.cell.styles.fillColor = RAGF[c]; d.cell.styles.textColor = 255; d.cell.styles.fontStyle = 'bold'; d.cell.styles.fontSize = 10; } if (d.row.index === 2) { d.cell.styles.fontSize = 7.5; d.cell.styles.textColor = muted; } } });
-    y = doc.lastAutoTable.finalY + 5;
+    if (rk.length) y = doc.lastAutoTable.finalY + 5;
     if (s.headline) { doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, dark); var hl = doc.splitTextToSize(s.headline, R - L - 6); doc.setFillColor(253, 251, 243); doc.setDrawColor.apply(doc, gold); doc.rect(L, y - 1, R - L, hl.length * 4.8 + 5, 'FD'); doc.text(hl, L + 3, y + 4); y += hl.length * 4.8 + 9; }
     if (s.kpis && s.kpis.length) {
       doc.autoTable({ startY: y, margin: { left: L, right: L }, theme: 'plain', styles: { fontSize: 8, cellPadding: 1.4, halign: 'center' }, body: [s.kpis.map(function (k) { return k.label.toUpperCase(); }), s.kpis.map(function (k) { return k.value; })],
@@ -104,25 +104,50 @@
       y = doc.lastAutoTable.finalY + (more ? 1 : 5);
       if (more) { doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor.apply(doc, muted); doc.text('... and ' + more + ' more (see the project plan)', L, y + 3); y += 10; }
     };
+    var para = function (txt) {   // v73: text with line breaks; lines starting - or • become bullets
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor.apply(doc, dark);
+      String(txt || '').split(/\n/).forEach(function (raw) {
+        var ln = raw.trim(); if (!ln) { y += 1.8; return; }
+        var bl = /^[-•*]\s+/.test(ln), body = ln.replace(/^[-•*]\s+/, ''), parts = doc.splitTextToSize(body, R - L - (bl ? 8 : 0));
+        parts.forEach(function (pt, i) { need(5); if (bl && !i) doc.text('•', L + 2, y); doc.text(pt, L + (bl ? 6 : 0), y); y += 4.5; });
+      }); y += 2.5;
+    };
+    var kv = function (rows) {
+      doc.autoTable({ startY: y, margin: { left: L, right: L, top: 16 }, body: rows, theme: 'grid', styles: { fontSize: 8.8, cellPadding: 1.9, overflow: 'linebreak', valign: 'top', lineColor: [226, 221, 208] },
+        columnStyles: { 0: { cellWidth: 46, fontStyle: 'bold', fillColor: [246, 243, 234], textColor: dark } } });
+      y = doc.lastAutoTable.finalY + 5;
+    };
+    var sign = function (sec) {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor.apply(doc, muted);
+      if (sec.intro) { var it = doc.splitTextToSize(sec.intro, R - L); need(it.length * 4.3 + 3); doc.text(it, L, y); y += it.length * 4.3 + 2; }
+      doc.autoTable({ startY: y, margin: { left: L, right: L, top: 16 }, head: [['Role', 'Name', 'Signature', 'Date']], body: sec.rows.map(function (r) { return [r.role, r.name || '', '', '']; }), theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 2.2, minCellHeight: 15, valign: 'middle', lineColor: [200, 194, 178] }, headStyles: { fillColor: dark, textColor: 255, fontSize: 8.5, minCellHeight: 7 },
+        columnStyles: { 0: { cellWidth: 46, fontStyle: 'bold' }, 1: { cellWidth: 48 }, 3: { cellWidth: 28 } }, rowPageBreak: 'avoid' });
+      y = doc.lastAutoTable.finalY + 5;
+    };
     s.sections.forEach(function (sec) {
+      if (sec.kind === 'text') { if (!String(sec.text || '').trim() && !sec.always) return; if (sec.title) H2(sec.title); if (!String(sec.text || '').trim()) { doc.setFont('helvetica', 'italic'); doc.setFontSize(9); doc.setTextColor.apply(doc, muted); doc.text(sec.empty || 'Not stated.', L, y); y += 6; return; } para(sec.text); return; }
+      if (sec.kind === 'kv') { if (!sec.rows.length) return; if (sec.title) H2(sec.title); kv(sec.rows); return; }
+      if (sec.kind === 'sign') { need(30); H2(sec.title); sign(sec); return; }
       if (sec.kind === 'gantt') {
         var g = gantt(s, lim.gantt); if (!g) return;
         var w = R - L, h = w * g.h / g.w, maxH = lim.ganttH; if (h > maxH) { w = w * maxH / h; h = maxH; }
         need(h + 12); H2(sec.title); doc.addImage(g.jpg, 'JPEG', L, y, w, h); y += h + 5; return;
       }
       if (sec.kind === 'bullets') { if (!sec.items.length && !sec.always) return; H2(sec.title); if (!sec.items.length) { doc.setFont('helvetica', 'italic'); doc.setFontSize(9); doc.setTextColor.apply(doc, muted); doc.text(sec.empty || 'None.', L, y); y += 6; return; } bullets(sec.items, sec.box); return; }
-      if (sec.kind === 'table') { if (!sec.rows.length && !sec.always) return; H2(sec.title); table(sec); }
+      if (sec.kind === 'table') { if (!sec.rows.length && !sec.always) return; if (sec.title) H2(sec.title); table(sec); }
     });
     var n = doc.getNumberOfPages();
-    for (var i = 1; i <= n; i++) { doc.setPage(i); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor.apply(doc, muted); doc.text(s.title + ' #' + s.no + '  ·  ' + s.project.name.slice(0, 70), L, 291); doc.text('Page ' + i + ' of ' + n, R, 291, { align: 'right' }); }
+    for (var i = 1; i <= n; i++) { doc.setPage(i); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor.apply(doc, muted); doc.text(s.footer || (s.title + ' #' + s.no + '  ·  ' + s.project.name.slice(0, 70)), L, 291); doc.text('Page ' + i + ' of ' + n, R, 291, { align: 'right' }); }
     return doc;
   }
+  var FULL = { rows: 999, pts: 99, gantt: 60, ganttH: 175 };
   var LIMITS = [{ rows: 14, pts: 7, gantt: 34, ganttH: 120 }, { rows: 10, pts: 6, gantt: 28, ganttH: 100 }, { rows: 7, pts: 5, gantt: 22, ganttH: 85 }, { rows: 5, pts: 4, gantt: 16, ganttH: 70 }, { rows: 3, pts: 3, gantt: 12, ganttH: 60 }];
   function pdf(s) {
     return libsPdf().then(function () {
       var doc, k = 0;
-      for (; k < LIMITS.length; k++) { doc = pdfOnce(s, LIMITS[k]); if (doc.getNumberOfPages() <= 4) break; }
-      s.lim = Math.min(k, LIMITS.length - 1);
+      if (s.full) { doc = pdfOnce(s, FULL); s.lim = -1; }   // v73: the charter: everything, as many pages as it takes
+      else { for (; k < LIMITS.length; k++) { doc = pdfOnce(s, LIMITS[k]); if (doc.getNumberOfPages() <= 4) break; } s.lim = Math.min(k, LIMITS.length - 1); }
       var blob = doc.output('blob'); return b64(blob).then(function (x) { return { blob: blob, base64: x, pages: doc.getNumberOfPages(), name: fname(s, 'pdf') }; });
     });
   }
@@ -130,7 +155,7 @@
   /* ---------- Word ---------- */
   function docx(s) {
     return libsDocx().then(function () {
-      var D = window.docx, lim = LIMITS[s.lim || 0], F = 'Arial', dark = '1F1D18', muted = '6B665A';
+      var D = window.docx, lim = s.lim === -1 || s.full ? FULL : LIMITS[s.lim || 0], F = 'Arial', dark = '1F1D18', muted = '6B665A';
       var T = function (t, o) { return new D.TextRun(Object.assign({ text: String(t == null ? '' : t), font: F, size: 19, color: dark }, o || {})); };
       var P = function (runs, o) { return new D.Paragraph(Object.assign({ spacing: { after: 60 }, children: Array.isArray(runs) ? runs : [runs] }, o || {})); };
       var B = { style: D.BorderStyle.SINGLE, size: 2, color: 'DDD8C8' }, BB = { top: B, bottom: B, left: B, right: B };
@@ -140,33 +165,41 @@
       var H2 = function (t) { return new D.Paragraph({ spacing: { before: 200, after: 80 }, border: { bottom: { style: D.BorderStyle.SINGLE, size: 8, color: 'C9A227', space: 2 } }, children: [T(t, { bold: true, size: 23 })] }); };
       var kids = [];
       kids.push(new D.Table({ width: { size: TW, type: D.WidthType.DXA }, columnWidths: [6466, 4000], rows: [new D.TableRow({ children: [
-        new D.TableCell({ width: { size: 6466, type: D.WidthType.DXA }, shading: { type: D.ShadingType.CLEAR, color: 'auto', fill: dark }, borders: BB, margins: { top: 120, bottom: 120, left: 160, right: 80 }, children: [P(T('MODERN BUILDING SOLUTIONS', { bold: true, color: 'C9A227', size: 16 })), P(T(s.title, { bold: true, color: 'FFFFFF', size: 32 })), P(T(s.project.name, { color: 'E1DCCD', size: 18 }), { spacing: { after: 0 } })] }),
-        new D.TableCell({ width: { size: 4000, type: D.WidthType.DXA }, shading: { type: D.ShadingType.CLEAR, color: 'auto', fill: dark }, borders: BB, margins: { top: 120, bottom: 120, left: 80, right: 160 }, children: [s.type + ' report  #' + s.no, s.periodText, 'Issued ' + dmy(s.date) + (s.project.ref ? '  ·  ' + s.project.ref : '')].map(function (t) { return P(T(t, { color: 'FFFFFF', size: 17 }), { alignment: D.AlignmentType.RIGHT, spacing: { after: 20 } }); }) })] })] }));
-      var rk = Object.keys(s.rag), cw = Math.floor(TW / rk.length), cws = rk.map(function (k, i) { return i === rk.length - 1 ? TW - cw * (rk.length - 1) : cw; });
+        new D.TableCell({ width: { size: 6466, type: D.WidthType.DXA }, shading: { type: D.ShadingType.CLEAR, color: 'auto', fill: dark }, borders: BB, margins: { top: 120, bottom: 120, left: 160, right: 80 }, children: [P(T(s.brand || 'MODERN BUILDING SOLUTIONS', { bold: true, color: 'C9A227', size: 16 })), P(T(s.title, { bold: true, color: 'FFFFFF', size: 32 })), P(T(s.project.name, { color: 'E1DCCD', size: 18 }), { spacing: { after: 0 } })] }),
+        new D.TableCell({ width: { size: 4000, type: D.WidthType.DXA }, shading: { type: D.ShadingType.CLEAR, color: 'auto', fill: dark }, borders: BB, margins: { top: 120, bottom: 120, left: 80, right: 160 }, children: (s.headRight || [s.type + ' report  #' + s.no, s.periodText, 'Issued ' + dmy(s.date) + (s.project.ref ? '  ·  ' + s.project.ref : '')]).map(function (t) { return P(T(t, { color: 'FFFFFF', size: 17 }), { alignment: D.AlignmentType.RIGHT, spacing: { after: 20 } }); }) })] })] }));
+      var rk = Object.keys(s.rag || {}), cw = Math.floor(TW / Math.max(1, rk.length)), cws = rk.map(function (k, i) { return i === rk.length - 1 ? TW - cw * (rk.length - 1) : cw; });
       kids.push(P(T(''), { spacing: { after: 80 } }));
-      kids.push(new D.Table({ width: { size: TW, type: D.WidthType.DXA }, columnWidths: cws, rows: [
+      if (rk.length) kids.push(new D.Table({ width: { size: TW, type: D.WidthType.DXA }, columnWidths: cws, rows: [
         new D.TableRow({ children: rk.map(function (k, i) { return cell(s.rag[k].label, cws[i], { bold: true, fill: 'F6F3EA', center: true }); }) }),
         new D.TableRow({ children: rk.map(function (k, i) { return cell(RAGN[s.rag[k].c], cws[i], { bold: true, fill: RAGH[s.rag[k].c], color: 'FFFFFF', center: true, size: 19 }); }) }),
         new D.TableRow({ children: rk.map(function (k, i) { return cell(s.rag[k].note || '', cws[i], { color: muted, center: true, size: 15 }); }) })] }));
       if (s.headline) kids.push(new D.Paragraph({ spacing: { before: 160, after: 100 }, shading: { type: D.ShadingType.CLEAR, color: 'auto', fill: 'FDFBF3' }, border: { left: { style: D.BorderStyle.SINGLE, size: 18, color: 'C9A227', space: 6 } }, children: [T(s.headline, { bold: true, size: 21 })] }));
       if (s.kpis && s.kpis.length) { var kw = Math.floor(TW / s.kpis.length), kws = s.kpis.map(function (k, i) { return i === s.kpis.length - 1 ? TW - kw * (s.kpis.length - 1) : kw; });
         kids.push(new D.Table({ width: { size: TW, type: D.WidthType.DXA }, columnWidths: kws, rows: [new D.TableRow({ children: s.kpis.map(function (k, i) { return new D.TableCell({ width: { size: kws[i], type: D.WidthType.DXA }, borders: BB, margins: { top: 60, bottom: 60, left: 60, right: 60 }, children: [P(T(k.label.toUpperCase(), { size: 13, color: muted }), { alignment: D.AlignmentType.CENTER, spacing: { after: 20 } }), P(T(k.value, { bold: true, size: 22 }), { alignment: D.AlignmentType.CENTER, spacing: { after: 0 } })] }); }) })] })); }
+      var wtext = function (txt) { String(txt || '').split(/\n/).forEach(function (raw) { var ln = raw.trim(); if (!ln) return; if (/^[-•*]\s+/.test(ln)) kids.push(new D.Paragraph({ numbering: { reference: 'dots', level: 0 }, spacing: { after: 40 }, children: [T(ln.replace(/^[-•*]\s+/, ''))] })); else kids.push(P(T(ln), { spacing: { after: 80 } })); }); };
       s.sections.forEach(function (sec) {
+        if (sec.kind === 'text') { if (!String(sec.text || '').trim() && !sec.always) return; if (sec.title) kids.push(H2(sec.title)); if (!String(sec.text || '').trim()) kids.push(P(T(sec.empty || 'Not stated.', { italics: true, color: muted }))); else wtext(sec.text); return; }
+        if (sec.kind === 'kv') { if (!sec.rows.length) return; if (sec.title) kids.push(H2(sec.title)); var c1 = 2900, c2 = TW - c1;
+          kids.push(new D.Table({ width: { size: TW, type: D.WidthType.DXA }, columnWidths: [c1, c2], rows: sec.rows.map(function (r) { return new D.TableRow({ children: [cell(r[0], c1, { bold: true, fill: 'F6F3EA' }), cell(r[1], c2)] }); }) })); return; }
+        if (sec.kind === 'sign') { kids.push(H2(sec.title)); if (sec.intro) kids.push(P(T(sec.intro, { color: muted, size: 17 }), { spacing: { after: 100 } }));
+          var sw = [2900, 2900, 3000, 1666], sc = function (t, w, o) { o = o || {}; return new D.TableCell({ width: { size: w, type: D.WidthType.DXA }, borders: BB, shading: o.fill ? { type: D.ShadingType.CLEAR, color: 'auto', fill: o.fill } : undefined, margins: { top: 60, bottom: 60, left: 80, right: 80 }, verticalAlign: D.VerticalAlign.CENTER, children: [P(T(t, { bold: !!o.bold, color: o.color || dark, size: 17 }), { spacing: { after: 0 } })] }); };
+          kids.push(new D.Table({ width: { size: TW, type: D.WidthType.DXA }, columnWidths: sw, rows: [new D.TableRow({ tableHeader: true, children: ['Role', 'Name', 'Signature', 'Date'].map(function (h, i) { return sc(h, sw[i], { bold: true, fill: dark, color: 'FFFFFF' }); }) })]
+            .concat(sec.rows.map(function (r) { return new D.TableRow({ height: { value: 820, rule: D.HeightRule.ATLEAST }, cantSplit: true, children: [sc(r.role, sw[0], { bold: true }), sc(r.name || '', sw[1]), sc('', sw[2]), sc('', sw[3])] }); })) })); return; }
         if (sec.kind === 'gantt') { var g = gantt(s, lim.gantt); if (!g) return; var bin = atob(g.url.split(',')[1]), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
           var w = 680, h = Math.round(w * g.h / g.w), maxH = Math.round(lim.ganttH * 3.78); if (h > maxH) { w = Math.round(w * maxH / h); h = maxH; }
           kids.push(H2(sec.title)); kids.push(P(new D.ImageRun({ type: 'png', data: u8, transformation: { width: w, height: h } }))); return; }
         if (sec.kind === 'bullets') { if (!sec.items.length && !sec.always) return; kids.push(H2(sec.title)); if (!sec.items.length) { kids.push(P(T(sec.empty || 'None.', { italics: true, color: muted }))); return; }
           sec.items.slice(0, lim.pts).forEach(function (t) { kids.push(new D.Paragraph({ numbering: { reference: 'dots', level: 0 }, spacing: { after: 40 }, shading: sec.box ? { type: D.ShadingType.CLEAR, color: 'auto', fill: 'FFF7ED' } : undefined, children: [T(t)] })); }); return; }
-        if (sec.kind === 'table') { if (!sec.rows.length && !sec.always) return; kids.push(H2(sec.title)); if (!sec.rows.length) { kids.push(P(T(sec.empty || 'Nothing to show.', { italics: true, color: muted }))); return; }
+        if (sec.kind === 'table') { if (!sec.rows.length && !sec.always) return; if (sec.title) kids.push(H2(sec.title)); if (!sec.rows.length) { kids.push(P(T(sec.empty || 'Nothing to show.', { italics: true, color: muted }))); return; }
           var rows = sec.rows.slice(0, lim.rows), more = sec.rows.length - rows.length, ws = sec.wordCols || sec.head.map(function () { return Math.floor(TW / sec.head.length); }), sum = ws.reduce(function (a, b) { return a + b; }, 0);
           ws = ws.map(function (x) { return Math.floor(x * TW / sum); }); ws[ws.length - 1] += TW - ws.reduce(function (a, b) { return a + b; }, 0);
           kids.push(new D.Table({ width: { size: TW, type: D.WidthType.DXA }, columnWidths: ws, rows: [new D.TableRow({ tableHeader: true, children: sec.head.map(function (h, i) { return cell(h, ws[i], { bold: true, fill: dark, color: 'FFFFFF', size: 16 }); }) })].concat(rows.map(function (r, ri) {
             return new D.TableRow({ children: r.map(function (c, i) { var o = c && c.rag ? { fill: RAGH[c.rag], color: 'FFFFFF', bold: true } : { fill: ri % 2 ? 'FAF8F2' : undefined, bold: !!(c && c.b) }; return cell(c && c.t != null ? c.t : c, ws[i], o); }) }); })) }));
           if (more) kids.push(P(T('... and ' + more + ' more (see the project plan)', { italics: true, color: muted, size: 16 }))); }
       });
-      var doc = new D.Document({ creator: 'Modern Building Solutions', title: s.title, numbering: { config: [{ reference: 'dots', levels: [{ level: 0, format: D.LevelFormat.BULLET, text: '•', alignment: D.AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 260 } } } }] }] },
+      var doc = new D.Document({ creator: s.brand ? s.brand.replace(/\b(\w)(\w*)/g, function (m, a, b) { return a + b.toLowerCase(); }) : 'Modern Building Solutions', title: s.title, numbering: { config: [{ reference: 'dots', levels: [{ level: 0, format: D.LevelFormat.BULLET, text: '•', alignment: D.AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 260 } } } }] }] },
         sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 720, bottom: 720, left: 720, right: 720 } } },
-          footers: { default: new D.Footer({ children: [new D.Paragraph({ alignment: D.AlignmentType.RIGHT, children: [T(s.title + ' #' + s.no + '  ·  page ', { size: 14, color: muted }), new D.TextRun({ children: [D.PageNumber.CURRENT], font: F, size: 14, color: muted }), T(' of ', { size: 14, color: muted }), new D.TextRun({ children: [D.PageNumber.TOTAL_PAGES], font: F, size: 14, color: muted })] })] }) },
+          footers: { default: new D.Footer({ children: [new D.Paragraph({ alignment: D.AlignmentType.RIGHT, children: [T((s.footer || (s.title + ' #' + s.no)) + '  ·  page ', { size: 14, color: muted }), new D.TextRun({ children: [D.PageNumber.CURRENT], font: F, size: 14, color: muted }), T(' of ', { size: 14, color: muted }), new D.TextRun({ children: [D.PageNumber.TOTAL_PAGES], font: F, size: 14, color: muted })] })] }) },
           children: kids }] });
       return D.Packer.toBlob(doc).then(function (blob) { return b64(blob).then(function (x) { return { blob: blob, base64: x, name: fname(s, 'docx') }; }); });
     });

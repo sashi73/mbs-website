@@ -2043,7 +2043,7 @@
   function scope() {
     var c = S.plan.charter, p = S.plan;
     var f = function (k, label, rows, ph) { return '<label class="full">' + label + '<textarea data-c="' + k + '" rows="' + rows + '" placeholder="' + esc(ph || '') + '">' + esc(c[k] || '') + '</textarea></label>'; };
-    $('#planBody').innerHTML = '<div class="card" style="max-width:980px"><h2>Project charter (scope)</h2><p class="muted" style="margin:-4px 0 12px">What is (and isn\'t) being delivered. Agree it with the customer before work starts.</p><div class="form">' +
+    $('#planBody').innerHTML = '<div class="card" style="max-width:980px"><div class="card-h"><h2>Project charter (scope)</h2><span class="sp"></span><span class="ch-ver">v' + esc(c.docVersion || '1.0') + ' · ' + esc(c.docStatus || 'Draft') + '</span><button class="btn btn-sm btn-gold" id="chDoc" type="button" title="The project charter as a professional PDF or Word document, with the Gantt chart, critical path, stakeholder register and a sign-off block">📄 Charter: PDF / Word</button></div><p class="muted" style="margin:-4px 0 12px">What is (and isn\'t) being delivered. Agree it with the customer before work starts, then have it signed off.</p><div class="form">' +
       '<label>Plan name<input data-p="name" value="' + esc(p.name) + '"></label><label>Customer (sponsor)<input data-c="customer" value="' + esc(c.customer) + '"></label>' +
       '<label>Project manager<input data-c="manager" value="' + esc(c.manager) + '"></label><label>Approved budget ($)<input data-c="budget" inputmode="decimal" value="' + esc(c.budget || '') + '"></label>' +
       f('objective', 'Objective (why we are doing this)', 2, 'e.g. Stop the leak into the unit below and give the customer a modern bathroom') +
@@ -2054,6 +2054,89 @@
       '</div>' + (c.budget ? '<p style="margin:12px 0 0">Planned cost <b>' + money(rollup(p, today()).BAC) + '</b> against an approved budget of <b>' + money(c.budget) + '</b>.</p>' : '') + '</div>';
     $('#planBody').querySelectorAll('[data-c]').forEach(function (el) { el.oninput = function () { var k = el.getAttribute('data-c'); c[k] = k === 'budget' ? r2(String(el.value).replace(/[$,]/g, '')) : el.value; dirty(); }; });
     $('#planBody').querySelector('[data-p=name]').oninput = function () { p.name = this.value; dirty(); };
+    $('#chDoc').onclick = charterDialog;
+  }
+
+  /* ---------- v73: 📄 the project charter as a document (PDF / Word): sign-off ready ---------- */
+  var CH_OPT = [['background', 'Background: the customer\'s request', true], ['milestones', 'Key milestones', true], ['gantt', 'Summary Gantt chart', true], ['critical', 'Critical path', true],
+    ['stake', 'Stakeholder register', true], ['contacts', '… with phone numbers and emails', true], ['risks', 'Key risks', true], ['issues', 'Open issues', false], ['budget', 'Budget ($ figures)', true],
+    ['governance', 'Governance and change control', true], ['notes', 'Planning notes', false]];
+  function chOpts() { var o = {}; try { o = JSON.parse(localStorage.getItem('mbsCharterOpt') || '{}') || {}; } catch (e) {} CH_OPT.forEach(function (x) { if (typeof o[x[0]] !== 'boolean') o[x[0]] = x[2]; }); return o; }
+  function charterSnapshot(o) {
+    var p = S.plan, c = p.charter || {}, t0 = today(), R = rollup(p, t0), C = cpm(p), all = !!(p.emergency || p.weekends); R = rollup(p, t0);
+    var crit = {}; Object.keys(C.tasks).forEach(function (id) { if (C.tasks[id].float === 0) crit[id] = 1; });
+    var rows = ordered(), v = c.docVersion || '1.0', st = c.docStatus || 'Draft', unit = all ? 'day' : 'working day';
+    var clean = function (n) { return String(n || '').replace(/^[✓◆\s]+/, ''); };
+    var dur = R.start && R.finish ? (all ? Math.round((Date.parse(R.finish) - Date.parse(R.start)) / 864e5) + 1 : workBetween(R.start, R.finish)) : 0;
+    var glance = [['Project', p.name], ['Job reference', S.job.ref || ''], ['Customer (sponsor)', c.customer || S.job.name || ''], ['Location', S.job.suburb || ''], ['Project manager', c.manager || 'To be confirmed'],
+      ['Planned start', dmy(R.start)], ['Planned finish', dmy(R.finish) + (p.finishBy ? '  (finish by ' + dmy(p.finishBy) + ')' : '')], ['Duration', pl(dur, unit) + (all ? ' (weekends worked)' : ' (Monday to Friday)')],
+      ['Scope', pl(rows.filter(function (x) { return x.t.dur > 0; }).length, 'task') + ', ' + pl(rows.filter(function (x) { return x.t.dur === 0; }).length, 'milestone')], ['Document', 'Version ' + v + ' · ' + st + ' · issued ' + dmy(t0)]];
+    var S2 = [{ kind: 'kv', title: '1. Project at a glance', rows: glance },
+      { kind: 'text', title: '2. Purpose and objective', text: c.objective, always: true, empty: 'Not stated yet.' }];
+    var n = 3, H = function (t) { return (n++) + '. ' + t; };
+    if (o.background && S.job.scope) S2.push({ kind: 'text', title: H('Background: the customer\'s request'), text: S.job.scope });
+    S2.push({ kind: 'text', title: H('In scope'), text: c.inScope, always: true, empty: 'Not stated yet.' }, { kind: 'text', title: H('Out of scope'), text: c.outScope, always: true, empty: 'Nothing excluded yet: state what is not included.' },
+      { kind: 'text', title: H('Deliverables'), text: c.deliverables, always: true, empty: 'Not stated yet.' }, { kind: 'text', title: H('Acceptance criteria'), text: c.acceptance, always: true, empty: 'Not stated yet.' },
+      { kind: 'text', title: H('Assumptions and constraints'), text: c.assumptions, always: true, empty: 'None stated.' });
+    if (o.milestones) S2.push({ kind: 'table', title: H('Key milestones'), head: ['#', 'Milestone', 'Date', 'Status'], wordCols: [1, 7, 2, 2], cols: { 0: { cellWidth: 10 }, 2: { cellWidth: 26 }, 3: { cellWidth: 24 } },
+      rows: rows.filter(function (x) { return x.t.dur === 0; }).map(function (x) { var late = x.t.pct < 100 && x.t.ef < t0; return [String(x.n), clean(x.t.name), dmy(x.t.es), { t: x.t.pct >= 100 ? 'Done' : late ? 'Late' : 'Planned', rag: x.t.pct >= 100 ? 'G' : late ? 'R' : undefined }]; }), always: true, empty: 'No milestones in the plan.' });
+    if (o.gantt) S2.push({ kind: 'gantt', title: H('Summary schedule (Gantt chart)') });
+    if (o.critical) {
+      var cr = rows.filter(function (x) { return crit[x.t.id] && x.t.es; }).sort(function (a, b) { return a.t.es < b.t.es ? -1 : a.t.es > b.t.es ? 1 : a.n - b.n; });
+      S2.push({ kind: 'text', title: H('Critical path'), text: 'These ' + pl(cr.length, 'task') + ' set the finish date of ' + dmy(R.finish) + ': any delay to one of them delays completion. Tasks off the critical path have slack (float).' },
+        { kind: 'table', head: ['#', 'Task', 'Start', 'Finish', 'Duration'], wordCols: [1, 7, 2, 2, 2], cols: { 0: { cellWidth: 10 }, 2: { cellWidth: 24 }, 3: { cellWidth: 24 }, 4: { cellWidth: 24 } },
+          rows: cr.map(function (x) { return [String(x.n), { t: clean(x.t.name), b: true }, dmy(x.t.es), dmy(x.t.ef), x.t.dur ? pl(x.t.dur, unit) : 'Milestone']; }), always: true, empty: 'No critical path yet (add task links).' });
+    }
+    if (o.stake) {
+      var sh = (p.stakeholders || []).filter(function (x) { return x.name || x.role; });
+      S2.push({ kind: 'table', title: H('Stakeholder register'), head: o.contacts ? ['Name', 'Role', 'RACI', 'Phone', 'Email'] : ['Name', 'Role', 'RACI'], wordCols: o.contacts ? [3, 3, 1, 2, 4] : [4, 5, 1],
+        cols: o.contacts ? { 2: { cellWidth: 13, halign: 'center' }, 3: { cellWidth: 28 } } : { 2: { cellWidth: 16, halign: 'center' } },
+        rows: sh.map(function (x) { var r = [{ t: x.name || '', b: true }, x.role || '', x.raci || '']; if (o.contacts) r.push(x.phone || '', x.email || ''); return r; }), always: true, empty: 'No stakeholders listed yet.' },
+        { kind: 'text', text: 'RACI: R = Responsible (does the work) · A = Accountable (approves) · C = Consulted · I = Informed.', title: '' });
+    }
+    if (o.risks) { var rk = (p.risks || []).filter(function (x) { return x.status !== 'Closed' && x.title; }).sort(function (a, b) { return b.p * b.i - a.p * a.i; });
+      S2.push({ kind: 'table', title: H('Key risks'), head: ['Risk', 'Score', 'Response and action', 'Owner'], wordCols: [4, 1, 5, 2], cols: { 1: { cellWidth: 14, halign: 'center' }, 3: { cellWidth: 28 } },
+        rows: rk.slice(0, 12).map(function (x) { var sc = x.p * x.i; return [x.title, { t: String(sc), rag: sc >= 15 ? 'R' : sc >= 12 ? 'A' : 'G' }, x.response + (x.action ? ': ' + x.action : ''), x.owner || '']; }), always: true, empty: 'No open risks recorded.' }); }
+    if (o.issues) { var is = (p.issues || []).filter(function (x) { return x.status !== 'Resolved' && x.title; });
+      S2.push({ kind: 'table', title: H('Open issues'), head: ['Issue', 'Priority', 'Owner', 'Due'], wordCols: [6, 2, 3, 2], cols: { 1: { cellWidth: 20 }, 3: { cellWidth: 24 } },
+        rows: is.map(function (x) { return [x.title, { t: x.priority, rag: x.priority === 'Critical' ? 'R' : x.priority === 'High' ? 'A' : undefined }, x.owner || '', dmy(x.due)]; }), always: true, empty: 'No open issues.' }); }
+    if (o.budget) S2.push({ kind: 'kv', title: H('Budget'), rows: [['Approved budget', c.budget ? money(c.budget) : 'Not set'], ['Planned cost (BAC)', money(R.BAC)]]
+      .concat(c.budget ? [['Contingency (budget less planned cost)', money(Math.round((c.budget - R.BAC) * 100) / 100)]] : []).concat(R.AC ? [['Spent to date', money(R.AC)]] : []) });
+    if (o.notes && c.notes) S2.push({ kind: 'text', title: H('Planning notes'), text: c.notes });
+    if (o.governance) S2.push({ kind: 'text', title: H('Governance and change control'), text: '- The project manager runs the project day to day and reports progress to the customer (sponsor) and stakeholders.\n- Any change to scope, time or cost is raised as a written variation and agreed by the customer (sponsor) and the project manager before the work goes ahead.\n- Risks and issues are reviewed at every progress meeting and recorded in the project registers.\n- The work is accepted when the acceptance criteria above are met and the customer signs off.' });
+    var signers = [{ role: 'Customer (sponsor)', name: c.customer || S.job.name || '' }, { role: 'Project manager', name: c.manager || '' }, { role: 'For Modern Building Solutions', name: '' }];
+    (p.stakeholders || []).filter(function (x) { return x.raci === 'A' && x.name && !signers.some(function (y) { return y.name && y.name.toLowerCase() === x.name.toLowerCase(); }); }).slice(0, 3).forEach(function (x) { signers.push({ role: x.role || 'Accountable stakeholder', name: x.name }); });
+    S2.push({ kind: 'sign', title: H('Approval and sign-off'), intro: 'By signing, the parties agree to the scope, schedule, budget and acceptance criteria in this project charter (version ' + v + ', ' + dmy(t0) + ').', rows: signers });
+    var topRows = rows.filter(function (x) { return x.t.es; });
+    return { id: 'ch' + Date.now().toString(36), full: true, no: 1, title: 'PROJECT CHARTER', date: t0, headRight: ['Version ' + v + '  ·  ' + st, 'Issued ' + dmy(t0), S.job.ref || ''], footer: 'Project charter v' + v + '  ·  ' + p.name.slice(0, 70),
+      project: { name: p.name, ref: S.job.ref }, sections: S2, fileBase: ((S.job.ref || 'Project') + '-Project-Charter-v' + v).replace(/[^\w.-]+/g, '-'),
+      gantt: { title: 'Task', from: addDays(R.start || t0, -2), to: addDays(R.finish || t0, 3), today: t0, rows: topRows.map(function (x) { var t = x.t; return { label: '#' + x.n + ' ' + clean(t.name), es: t.es, ef: t.ef, pct: t.pct, mile: t.dur === 0, crit: !!crit[t.id], late: t.pct < 100 && t.ef < t0, status: t.status, level: 1 }; }) } };
+  }
+  function charterDialog() {
+    var p = S.plan, c = p.charter, o = chOpts();
+    M.modal('<h2>📄 Project charter</h2><p class="muted" style="margin:4px 0 10px">A sign-off document from this plan: objective, scope, deliverables, acceptance criteria, milestones, the Gantt chart, critical path, stakeholder register, risks and budget, with signature lines. Download it as PDF, or as Word to change it.</p>' +
+      '<div class="form ch-form"><label>Version<input id="chV" maxlength="10" value="' + esc(c.docVersion || '1.0') + '"></label><label>Status<select id="chS">' + ['Draft', 'For approval', 'Approved'].map(function (x) { return '<option' + ((c.docStatus || 'Draft') === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label></div>' +
+      '<b style="font-size:13px;display:block;margin:10px 0 4px">Include</b><div class="ch-opts">' + CH_OPT.map(function (x) { return '<label class="qchk' + (x[0] === 'contacts' ? ' ch-sub' : '') + '"><input type="checkbox" data-cho="' + x[0] + '"' + (o[x[0]] ? ' checked' : '') + '> ' + esc(x[1]) + '</label>'; }).join('') + '</div>' +
+      '<p class="muted" style="font-size:12px;margin:8px 0 0">Always included: project at a glance, objective, scope in and out, deliverables, acceptance criteria, assumptions, and the approval and sign-off block.</p>' +
+      '<div class="row" style="gap:6px;margin-top:12px"><button class="btn" id="chPrev" type="button">👁 Preview</button><button class="btn btn-gold" id="chPdf" type="button">⬇ PDF</button><button class="btn" id="chDocx" type="button">⬇ Word (to edit)</button><span class="muted" id="chMsg" style="font-size:12.5px"></span></div>' +
+      '<div class="ch-signed"><b>📎 Signed copy</b> <span class="muted" style="font-size:12.5px">Upload the signed charter (PDF or Word) to keep it with the project; 🧠 Project Intelligence can read it.</span><label class="btn btn-sm" style="margin-left:auto">⬆ Upload signed charter<input type="file" id="chUp" hidden accept=".pdf,.docx"></label></div>' +
+      '<div class="actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Close</button></div>');
+    var label = function () { var e = document.querySelector('.ch-ver'); if (e) e.textContent = 'v' + (c.docVersion || '1.0') + ' · ' + (c.docStatus || 'Draft'); };
+    var keep = function () { var nv = $('#chV').value.trim() || '1.0', ns = $('#chS').value; if (nv !== c.docVersion || ns !== c.docStatus) { c.docVersion = nv; c.docStatus = ns; dirty('charter version ' + nv + ' ' + ns); } label();
+      document.querySelectorAll('[data-cho]').forEach(function (b) { o[b.getAttribute('data-cho')] = b.checked; }); try { localStorage.setItem('mbsCharterOpt', JSON.stringify(o)); } catch (e) {} };
+    var msg = function (t) { $('#chMsg').innerHTML = t ? '<span class="ask-think">' + esc(t) + '</span>' : ''; };
+    var busy = false, go = function (fmt, preview) { if (busy) return; busy = true; keep(); msg(fmt === 'pdf' ? 'Making the PDF…' : 'Making the Word file…'); var win = preview ? window.open('', '_blank') : null;
+      var s = charterSnapshot(o);
+      M.report[fmt](s).then(function (r) { if (preview) { var u = URL.createObjectURL(r.blob); if (win) win.location = u; else M.report.save(r.blob, r.name); } else M.report.save(r.blob, r.name); msg(''); toast((fmt === 'pdf' ? 'PDF' : 'Word') + ' ready' + (r.pages ? ': ' + pl(r.pages, 'page') : '')); })
+        .catch(function (e) { msg(''); fail(e); }).then(function () { busy = false; }); };
+    $('#chPrev').onclick = function () { go('pdf', true); }; $('#chPdf').onclick = function () { go('pdf'); }; $('#chDocx').onclick = function () { go('docx'); };
+    $('#chV').onchange = keep; $('#chS').onchange = keep;
+    $('#chUp').onchange = function () { var f = this.files[0]; this.value = ''; if (!f) return; msg('Reading “' + f.name + '”…'); var core = S.core;
+      piExtract(f).then(function (x) {
+        var send = function (b64) { return api('intelUpload', { core: core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text || ('Signed project charter ' + f.name), file: b64, kind: 'Project charter (signed)' }); };
+        return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).replace(/^data:[^,]*,/, '')); }; rd.readAsDataURL(f); }).then(send);
+      }).then(function (r) { if (S.intel && S.intel.core === core) S.intel.docs.push(r.doc); if (c.docStatus !== 'Approved') { c.docStatus = 'Approved'; $('#chS').value = 'Approved'; dirty('charter signed'); } label(); msg(''); toast('Signed charter kept with the project (status: Approved)'); })
+        .catch(function (e) { msg(''); toast(e.message, true); }); };
   }
 
   /* ---------- risks + issues ---------- */
@@ -2799,7 +2882,7 @@
     'Summarise the contract: price, payment stages, variations, defects period and delays', 'What could delay the finish date, and what should we do this week?',
     'Set up a 45-minute Google Meet with the stakeholders next Tuesday at 10am to review progress', 'Generate a SWMS for this project',
     'Analyse my last meeting: summarise the outcome and the impact on scope, time, cost, risks, issues and stakeholders'];
-  var PI_KIND = { Contract: '📜', Specification: '📐', Quote: '💲', Variation: '🔁', Drawings: '🗺', Invoice: '🧾', Certificate: '✅', 'Meeting notes': '🗒', 'Meeting transcript': '🎙', Correspondence: '✉', Document: '📄' };
+  var PI_KIND = { Contract: '📜', Specification: '📐', Quote: '💲', Variation: '🔁', Drawings: '🗺', Invoice: '🧾', Certificate: '✅', 'Meeting notes': '🗒', 'Meeting transcript': '🎙', 'Project charter (signed)': '✍', Correspondence: '✉', Document: '📄' };
   function piLoad(src, test) { return test() ? Promise.resolve() : new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = function () { rej(new Error('Could not load ' + src)); }; document.head.appendChild(s); }); }
   function piMd(s) {   // small, safe markdown: escaped first, then headings, bullets, tables, bold, code
     var L = esc(String(s || '')).split('\n'), out = [], list = null, tbl = null;
