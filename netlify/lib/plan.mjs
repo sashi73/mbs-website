@@ -282,19 +282,32 @@ export async function describe(core, b) {
   const name = str(b.name, 160) || (sub ? sub.name : t ? t.name : ''); if (!name) return { error: 'Give it a name first' };
   if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.', code: 503 };
   try { await checkLimit(); } catch (e) { return { error: e.message, code: 429 }; }
-  const system = 'You are an experienced construction project manager in NSW, Australia. Write a short, practical description of one ' + (sub ? 'user story (a piece of work inside a theme)' : 'theme (a task with its user stories)') +
-    ' on a project board: what the work is, what "done" looks like, and one key check or dependency. Plain Australian English, no jargon, no prices, no names of people. ' +
-    'At most 300 characters in total. JSON only: {"text":"..."}';
+  // v72: always two parts: what the work is, then its Definition of Done (DoD): the checks that say it is finished
+  const system = 'You are an experienced construction project manager in NSW, Australia (Agile and PMBOK). Describe one ' + (sub ? 'user story (a piece of work inside a theme)' : 'theme (a task with its user stories)') +
+    ' on a project board in two parts. "summary": what the work is and why, one or two short sentences, with one key check or dependency. ' +
+    '"dod": its Definition of Done: 2 to 4 short, testable conditions that must all be true before it is marked done (e.g. inspected and passed, signed off by whom (a role), document received, area clean). ' +
+    'Plain Australian English, no prices, no names of people (roles are fine). Summary plus all DoD items together at most 240 characters. JSON only: {"summary":"","dod":["",""]}';
   const user = { project: scrubTask(str(plan.name, 120), job), work: str(job.service, 120), [sub ? 'story' : 'theme']: scrubTask(name, job),
     theme: sub ? scrubTask(t.name, job) : undefined, stories: !sub && t ? (t.subs || []).map((x) => scrubTask(x.name, job)).slice(0, 12) : undefined,
     days: sub ? sub.dur : t ? t.dur : undefined, current_text: str(b.current, 300) || undefined };
   let o, used;
-  try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: 300, temperature: 0.4 })); }
+  try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: 400, temperature: 0.4 })); }
   catch (e) { return { error: e.message, code: 502 }; }
   const today = await usage(true, used);
-  let text = str(o.text, 600).replace(/\s+/g, ' ');
-  if (text.length > 300) { text = text.slice(0, 300); const cut = Math.max(text.lastIndexOf('. '), text.lastIndexOf('; ')); text = (cut > 180 ? text.slice(0, cut + 1) : text.slice(0, 299).replace(/\s+\S*$/, '') + '…'); }
-  if (!text) return { error: 'The AI did not write anything useful. Try again.' };
+  const MAX = 300, LABEL = 'Definition of Done: ';
+  let summary = str(o.summary || o.text, 600).replace(/\s+/g, ' ').replace(/\s*(Definition of Done|DoD)\s*:.*$/i, '').trim();
+  let dod = (Array.isArray(o.dod) ? o.dod : String(o.dod || '').split(/;|\n/)).map((x) => str(x, 160).replace(/\s+/g, ' ').replace(/[.;]+$/, '').trim()).filter(Boolean).slice(0, 4);
+  if (!dod.length) { const m = String(o.text || '').match(/(?:Definition of Done|DoD)\s*:\s*(.*)$/i); if (m) dod = m[1].split(/;\s*/).map((x) => x.replace(/[.;]+$/, '').trim()).filter(Boolean).slice(0, 4); }
+  if (!summary && !dod.length) return { error: 'The AI did not write anything useful. Try again.' };
+  if (!dod.length) dod = ['Work complete and checked against the plan', 'Signed off by the project manager'];
+  // keep the DoD whole: drop DoD items beyond what fits, then shorten the summary to a whole sentence
+  let dodTxt = () => LABEL + dod.join('; ') + '.';
+  while (dod.length > 2 && dodTxt().length > 190) dod.pop();
+  const room = MAX - dodTxt().length - 1;
+  if (summary.length > room) { let cut = summary.slice(0, room); const k = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('; ')); summary = k > 40 ? cut.slice(0, k + 1) : cut.slice(0, room - 1).replace(/\s+\S*$/, '') + '…'; }
+  if (summary && !/[.!?…]$/.test(summary)) summary += '.';
+  let text = (summary ? summary + '\n' : '') + dodTxt();
+  if (text.length > MAX) text = text.slice(0, MAX - 1) + '…';
   return { text, tokens: used, today };
 }
 

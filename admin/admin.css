@@ -1033,3 +1033,6 @@ body.gcr-drag,body.gcr-drag *{cursor:col-resize!important;user-select:none}
    before, with the menu folded, the whole page was squeezed into that 64 px strip */
 body.plan-wide .app,body.plan-wide.side-mini .app,body.board-full .app,body.board-full.side-mini .app{grid-template-columns:minmax(0,1fr)}
 body.plan-wide .side-fold,body.board-full .side-fold{display:none}
+.kd-warn{margin:2px 0 6px;font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:7px;padding:5px 9px}
+#kdTxt{white-space:pre-wrap}
+.kinfo{white-space:normal}

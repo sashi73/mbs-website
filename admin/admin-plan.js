@@ -1885,11 +1885,14 @@
   }
   function kDesc(it, after) {
     var o = it.o, max = 300;
-    M.modal('<h2 class="kd-h"><span class="kinfo has">i</span> ' + esc(o.name.replace(/^[✓◆\s]+/, '')) + '</h2><p class="muted" style="margin:2px 0 10px">' + (it.theme ? 'Theme' : 'User story in “' + esc(it.task.name) + '”') + ': what it is about and what “done” looks like.</p>' +
-      '<textarea id="kdTxt" rows="4" maxlength="' + max + '" placeholder="e.g. ' + (it.theme ? 'Site walkover, survey and services scan so design can start; done when the report is signed off.' : 'Walk the site with the surveyor, mark boundaries and levels; done when the survey file is received.') + '">' + esc(o.desc || '') + '</textarea>' +
-      '<div class="kd-foot"><button type="button" class="btn btn-sm btn-gold" id="kdAi">✨ Write it with AI</button><span class="muted" id="kdMsg"></span><span class="sp"></span><span class="kd-count" id="kdCnt"></span></div>' +
+    M.modal('<h2 class="kd-h"><span class="kinfo has">i</span> ' + esc(o.name.replace(/^[✓◆\s]+/, '')) + '</h2><p class="muted" style="margin:2px 0 10px">' + (it.theme ? 'Theme' : 'User story in “' + esc(it.task.name) + '”') + ': what it is about, then its <b>Definition of Done (DoD)</b>: the checks that must all be true before it is marked done.</p>' +
+      '<textarea id="kdTxt" rows="4" maxlength="' + max + '" placeholder="e.g. ' + (it.theme ? 'Site walkover, survey and services scan so design can start.&#10;Definition of Done: report signed off by the PM; services located and marked; survey file received.' : 'Walk the site with the surveyor and mark boundaries and levels.&#10;Definition of Done: survey file received; levels checked against the plans.') + '">' + esc(o.desc || '') + '</textarea>' +
+      '<div class="kd-foot"><button type="button" class="btn btn-sm btn-gold" id="kdAi">✨ Write it with AI</button><button type="button" class="btn btn-sm" id="kdDod" title="Add a Definition of Done line">＋ DoD</button><span class="muted" id="kdMsg"></span><span class="sp"></span><span class="kd-count" id="kdCnt"></span></div>' +
+      '<p class="kd-warn" id="kdWarn" hidden>No Definition of Done yet: add what must be true before this is marked done (press ＋ DoD).</p>' +
       '<div class="actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="kdSave" type="button">Save</button></div>');
-    var ta = $('#kdTxt'), cnt = function () { var n = ta.value.length; $('#kdCnt').textContent = n + ' / ' + max; $('#kdCnt').className = 'kd-count' + (n >= max ? ' full' : n > max - 20 ? ' near' : ''); };
+    var hasDod = function (v) { return /definition of done|\bdod\b/i.test(v); };
+    var ta = $('#kdTxt'), cnt = function () { var n = ta.value.length; $('#kdCnt').textContent = n + ' / ' + max; $('#kdCnt').className = 'kd-count' + (n >= max ? ' full' : n > max - 20 ? ' near' : ''); $('#kdWarn').hidden = !ta.value.trim() || hasDod(ta.value); };
+    $('#kdDod').onclick = function () { if (hasDod(ta.value)) { ta.focus(); return; } var v = ta.value.replace(/\s+$/, ''); ta.value = (v ? v + '\n' : '') + 'Definition of Done: '; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); cnt(); };
     ta.oninput = cnt; cnt(); setTimeout(function () { ta.focus(); }, 30);
     $('#kdAi').onclick = function () {
       var b = this; b.disabled = true; $('#kdMsg').innerHTML = '<span class="ask-think">Writing…</span>';
