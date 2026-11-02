@@ -1029,3 +1029,7 @@ body.gcr-drag,body.gcr-drag *{cursor:col-resize!important;user-select:none}
 #kdTxt{width:100%;font-size:14px}
 .kd-foot{display:flex;align-items:center;gap:8px;margin:6px 0 4px}
 .kd-count{font-size:12px;color:#8A8577;font-variant-numeric:tabular-nums}.kd-count.near{color:#B45309}.kd-count.full{color:#B91C1C;font-weight:700}
+/* v71: full-screen modes (plan Wide view, pipeline board full screen) win over the folded menu's 64 px column;
+   before, with the menu folded, the whole page was squeezed into that 64 px strip */
+body.plan-wide .app,body.plan-wide.side-mini .app,body.board-full .app,body.board-full.side-mini .app{grid-template-columns:minmax(0,1fr)}
+body.plan-wide .side-fold,body.board-full .side-fold{display:none}
