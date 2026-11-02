@@ -62,6 +62,8 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     const [d] = await Promise.all([p.waitForEvent('download'), p.click('#chDocx')]); const f = path.join(tmp, d.suggestedFilename()); await d.saveAs(f);
     const w = (await mammoth.extractRawText({ path: f })).value, body0 = w.slice(w.indexOf('1. Project at a glance'));
     ok('Charter', 'the charter lists the stakeholder register before In scope', body0.indexOf('Stakeholder register') > 0 && body0.indexOf('Stakeholder register') < body0.indexOf('In scope') && /Certifier/.test(w));
+    const tabs = await p.$$eval('#planTabs .tab', (t) => t.map((x) => x.textContent.trim()));
+    ok('Tabs', 'the 👥 Stakeholders tab comes just before 🎯 Scope', tabs.indexOf('👥 Stakeholders') >= 0 && tabs.indexOf('🎯 Scope') === tabs.indexOf('👥 Stakeholders') + 1, JSON.stringify(tabs));
     ok('Console', 'no JavaScript errors', errors.length === 0, errors.join(' | '));
     await br.close(); br = null;
   } catch (e) { try { if (br) await br.close(); } catch {} ok('Run', 'test run completed', false, e.stack.split('\n').slice(0, 4).join(' / ') + ' ERRORS: ' + errorsAll.join(' | ') + ' LOG: ' + log.slice(-400)); }
