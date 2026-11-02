@@ -1884,7 +1884,7 @@
     return '<button type="button" class="kinfo' + (desc ? ' has' : '') + '" data-ki="' + key + '" title="' + esc(desc || 'Add a description') + '" aria-label="Description">i</button>';
   }
   function kDesc(it, after) {
-    var o = it.o, max = 200;
+    var o = it.o, max = 300;
     M.modal('<h2 class="kd-h"><span class="kinfo has">i</span> ' + esc(o.name.replace(/^[✓◆\s]+/, '')) + '</h2><p class="muted" style="margin:2px 0 10px">' + (it.theme ? 'Theme' : 'User story in “' + esc(it.task.name) + '”') + ': what it is about and what “done” looks like.</p>' +
       '<textarea id="kdTxt" rows="4" maxlength="' + max + '" placeholder="e.g. ' + (it.theme ? 'Site walkover, survey and services scan so design can start; done when the report is signed off.' : 'Walk the site with the surveyor, mark boundaries and levels; done when the survey file is received.') + '">' + esc(o.desc || '') + '</textarea>' +
       '<div class="kd-foot"><button type="button" class="btn btn-sm btn-gold" id="kdAi">✨ Write it with AI</button><span class="muted" id="kdMsg"></span><span class="sp"></span><span class="kd-count" id="kdCnt"></span></div>' +

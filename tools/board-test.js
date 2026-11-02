@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
 const { spawn } = require('child_process');
 const http = require('http');
 const llmSeen = [];
-const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) => c.push(d)); req.on('end', () => { const b = JSON.parse(Buffer.concat(c).toString()); llmSeen.push(b); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ text: 'Walk the whole site with the surveyor and mark the boundaries, levels and services, so design can start. Done when the survey file is received and checked against the title plan. Extra words to go past two hundred characters.' }) }, finish_reason: 'stop' }], usage: { total_tokens: 120 } })); }); });
+const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) => c.push(d)); req.on('end', () => { const b = JSON.parse(Buffer.concat(c).toString()); llmSeen.push(b); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ text: 'Walk the whole site with the surveyor and mark the boundaries, levels and services, so design can start. Done when the survey file is received and checked against the title plan. Extra words to go past three hundred characters, so the trimming to a whole sentence is tested properly here as well. And more words.' }) }, finish_reason: 'stop' }], usage: { total_tokens: 120 } })); }); });
 const path = require('path'), fs = require('fs'), os = require('os');
 const SITE = path.resolve(process.argv[2]);
 const XL = path.resolve(process.argv[3] || path.join(__dirname, 'xl'));
@@ -99,15 +99,15 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     // (i) descriptions
     ok('Info', 'a small (i) next to the theme name and every story name', !!(await p.$(`${B} .kth .kinfo`)) && (await p.$$(`${B} .kst .kinfo`)).length === 3);
     await p.click(`${st(1)} .kinfo`); await p.waitForSelector('#kdTxt');
-    ok('Info', 'clicking it opens a box for the description, limited to 200 characters', (await p.getAttribute('#kdTxt', 'maxlength')) === '200' && /0 \/ 200/.test(await p.textContent('#kdCnt')));
+    ok('Info', 'clicking it opens a box for the description, limited to 300 characters', (await p.getAttribute('#kdTxt', 'maxlength')) === '300' && /0 \/ 300/.test(await p.textContent('#kdCnt')));
     await p.click('#kdAi'); await p.waitForFunction(() => document.querySelector('#kdTxt').value.length > 50, null, { timeout: 20000 });
     const aiTxt = await p.inputValue('#kdTxt'), lq = llmSeen[llmSeen.length - 1];
-    ok('Info', '✨ the AI writes it (kept to 200 characters), knowing the story and its theme', aiTxt.length <= 200 && /surveyor/.test(aiTxt) && lq && /Template/.test(lq.messages[1].content) && /Benchtop/.test(lq.messages[1].content) && /200 characters/.test(lq.messages[0].content), aiTxt.length + ': ' + aiTxt);
+    ok('Info', '✨ the AI writes it (kept to 300 characters), knowing the story and its theme', aiTxt.length <= 300 && /surveyor/.test(aiTxt) && lq && /Template/.test(lq.messages[1].content) && /Benchtop/.test(lq.messages[1].content) && /300 characters/.test(lq.messages[0].content), aiTxt.length + ': ' + aiTxt);
     await p.click('#kdSave'); await sleep(300);
     ok('Info', 'saved: the (i) turns dark and shows the description when you point at it', (await p.getAttribute(`${st(1)} .kinfo`, 'class')).includes('has') && /surveyor/.test(await p.getAttribute(`${st(1)} .kinfo`, 'title')));
     await p.click(`${B} .kth .kinfo`); await p.waitForSelector('#kdTxt'); await p.fill('#kdTxt', 'Make, template and install the stone benchtop. Done when it is level, sealed and signed off.'); await p.click('#kdSave'); await sleep(1300);
     const dsv = (await P.get(core)).tasks.find((t) => t.id === bench.id);
-    ok('Info', 'theme and story descriptions are saved with the plan', /stone benchtop/.test(dsv.desc) && /surveyor/.test(dsv.subs[0].desc) && dsv.subs[0].desc.length <= 200);
+    ok('Info', 'theme and story descriptions are saved with the plan', /stone benchtop/.test(dsv.desc) && /surveyor/.test(dsv.subs[0].desc) && dsv.subs[0].desc.length <= 300);
     // RAG colours
     const cards = await p.$$eval('.kcard', (a) => a.map((c) => ({ cls: c.className, due: (c.querySelector('.kdue') || {}).textContent || '' })));
     const consistent = cards.every((c) => (/kr-r/.test(c.cls) ? /late/.test(c.due) : /kr-a/.test(c.cls) ? /Due (today|in [123] day)/.test(c.due) : /kr-g/.test(c.cls)));

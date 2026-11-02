@@ -132,7 +132,7 @@ function cleanSubs(list, t, uid) {
   return list.slice(0, 40).map((x) => {
     const off = int(x.off, 0, D - 1, 0);
     const status = STAT.includes(x.status) ? x.status : 'todo';
-    return { id: uid(x.id, 's'), name: str(x.name, 160) || 'Sub-task', owner: str(x.owner, 80), off, dur: int(x.dur, 1, D - off, 1), status, pct: subPctOf(x, status), desc: str(x.desc, 200),
+    return { id: uid(x.id, 's'), name: str(x.name, 160) || 'Sub-task', owner: str(x.owner, 80), off, dur: int(x.dur, 1, D - off, 1), status, pct: subPctOf(x, status), desc: str(x.desc, 300),
       priority: ['High', 'Medium', 'Low'].includes(x.priority) ? x.priority : '', points: [1, 2, 3, 5, 8, 13].includes(Number(x.points)) ? Number(x.points) : 0 };   // v65: user stories on the Board
   });
 }
@@ -148,7 +148,7 @@ function clean(p, core) {
     dur: int(t.dur, 0, 365, 1), snet: ymdOk(t.snet), fixed: !!(t.fixed && ymdOk(t.snet)), pred: (Array.isArray(t.pred) ? t.pred : []).map((x) => str(x, 20)).slice(0, 10),
     item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000),
     // v64: the Board: owner (a stakeholder), priority and story points
-    desc: str(t.desc, 200), owner: str(t.owner, 80), priority: ['High', 'Medium', 'Low'].includes(t.priority) ? t.priority : '', points: int(t.points, 0, 100, 0)
+    desc: str(t.desc, 300), owner: str(t.owner, 80), priority: ['High', 'Medium', 'Low'].includes(t.priority) ? t.priority : '', points: int(t.points, 0, 100, 0)
     };
     // v56: materials from stock: any number of items, each with its own quantity (and the price at the time).
     // Older plans had one item on the task (the task's own qty and rate were that item): moved into the list, same cost.
@@ -274,7 +274,7 @@ export async function advise(core, kind, id, ask, draft) {
   return { kind, title: str(item.title, 200), options, watch: str(o.watch, 200), tokens: used, today };
 }
 
-// v69: ✨ a short description (max 200 characters) of a theme (task) or a user story (sub-task) on the Board
+// v69: ✨ a short description (max 300 characters) of a theme (task) or a user story (sub-task) on the Board
 export async function describe(core, b) {
   const job = await J.find(core); if (!job) return { error: 'Job not found', code: 404 };
   const plan = await get(job.core); if (!plan) return { error: 'This job has no plan', code: 404 };
@@ -284,16 +284,16 @@ export async function describe(core, b) {
   try { await checkLimit(); } catch (e) { return { error: e.message, code: 429 }; }
   const system = 'You are an experienced construction project manager in NSW, Australia. Write a short, practical description of one ' + (sub ? 'user story (a piece of work inside a theme)' : 'theme (a task with its user stories)') +
     ' on a project board: what the work is, what "done" looks like, and one key check or dependency. Plain Australian English, no jargon, no prices, no names of people. ' +
-    'At most 200 characters in total. JSON only: {"text":"..."}';
+    'At most 300 characters in total. JSON only: {"text":"..."}';
   const user = { project: scrubTask(str(plan.name, 120), job), work: str(job.service, 120), [sub ? 'story' : 'theme']: scrubTask(name, job),
     theme: sub ? scrubTask(t.name, job) : undefined, stories: !sub && t ? (t.subs || []).map((x) => scrubTask(x.name, job)).slice(0, 12) : undefined,
-    days: sub ? sub.dur : t ? t.dur : undefined, current_text: str(b.current, 200) || undefined };
+    days: sub ? sub.dur : t ? t.dur : undefined, current_text: str(b.current, 300) || undefined };
   let o, used;
-  try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: 200, temperature: 0.4 })); }
+  try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: 300, temperature: 0.4 })); }
   catch (e) { return { error: e.message, code: 502 }; }
   const today = await usage(true, used);
-  let text = str(o.text, 400).replace(/\s+/g, ' ');
-  if (text.length > 200) { text = text.slice(0, 200); const cut = Math.max(text.lastIndexOf('. '), text.lastIndexOf('; ')); text = (cut > 120 ? text.slice(0, cut + 1) : text.slice(0, 199).replace(/\s+\S*$/, '') + '…'); }
+  let text = str(o.text, 600).replace(/\s+/g, ' ');
+  if (text.length > 300) { text = text.slice(0, 300); const cut = Math.max(text.lastIndexOf('. '), text.lastIndexOf('; ')); text = (cut > 180 ? text.slice(0, cut + 1) : text.slice(0, 299).replace(/\s+\S*$/, '') + '…'); }
   if (!text) return { error: 'The AI did not write anything useful. Try again.' };
   return { text, tokens: used, today };
 }
