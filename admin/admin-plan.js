@@ -3542,6 +3542,19 @@
   function piIcs(m) { var L = piMeetLinks(m), url = URL.createObjectURL(new Blob([L.ics], { type: 'text/calendar' })), a = document.createElement('a'); a.href = url; a.download = (m.title || 'meeting').replace(/[^\w -]+/g, '').slice(0, 60) + '.ics'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 5000); }
   // newest 2 answers are open, older ones folded to one line (unless opened)
   function piFolded(i) { var st = S.intel.open[i]; return st && typeof st.fold === 'boolean' ? st.fold : i < S.intel.log.length - 2; }
+  function piCrRef(e, kind) { return 'pi' + (e.at || 0) + ':' + kind; }
+  function piCrFoot(e, kind, attr, label, what) {
+    var c = (S.plan.changes || []).filter(function (x) { return x.srcRef === piCrRef(e, kind); })[0];
+    if (c) return '<div class="cr-sent" style="margin-top:8px">🔁 Sent to change control as <b>' + crNo(c) + '</b> · <span class="cr-st ' + CR_CLS[c.status] + '">' + esc(c.status) + '</span> <button class="btn btn-sm" type="button" data-picropen="' + esc(c.id) + '">Open ' + crNo(c) + '</button></div>';
+    return '<div class="row" style="gap:8px;margin-top:8px;align-items:center"><button class="btn btn-sm btn-gold" type="button" ' + attr + '>' + label + '</button><span class="muted" style="font-size:12.5px">Nothing is added yet: the ticked ' + what + ' go to the register once the change request is approved and signed by the project manager or project director.</span></div>';
+  }
+  function piCrSend(e, kind, title, desc, impact, parts) {
+    var imp = {}; AREA_N.forEach(function (x) { imp[x[0]] = impact[x[0]] || { level: 'None', text: '' }; });
+    var items = Object.assign({ meeting: null, outcome: title, summary: [], decisions: [], actions: [], impact: imp, task_changes: [], new_tasks: [], scope_changes: [], risks: [], issues: [], stakeholders: [], quality: [], follow_ups: [] }, parts);
+    var c = crNew({ title: title, desc: desc, reason: 'Suggested by Project Intelligence in answer to: “' + String(e.q || '').slice(0, 300) + '”', source: 'intel', srcRef: piCrRef(e, kind), srcTitle: 'Project Intelligence answer', items: items, picks: {} });
+    dirty(crNo(c) + ' raised'); S.crView = c.id; toast(crNo(c) + ' raised in change control: approve and sign it to add them to the register');
+    location.hash = '#plan/' + S.core + '/change';
+  }
   function piAnswer(e, i) {
     var r = e.r || {}, p = S.plan, st = S.intel.open[i] = S.intel.open[i] || {}, fold = piFolded(i);
     var head = '<div class="pi-q"><button class="pi-tog" data-pitog title="' + (fold ? 'Open' : 'Fold') + ' this answer">' + (fold ? '▸' : '▾') + '</button><span class="pi-qt">“' + esc(e.q) + '”<small class="muted"> · ' + esc(new Date(e.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + (e.by ? ' · ' + esc(String(e.by).replace(/^Admin \((.*)\)$/, '$1')) : '') + '</small></span><button class="pi-x" data-pidel title="Clear this answer">✕</button></div>';
@@ -3552,12 +3565,12 @@
       var crit = r.risks.filter(function (x) { return x.critical; }).length;
       h += '<div class="pi-act"><h4>⚠ Suggested risks <small class="muted">(' + crit + ' critical, ' + (r.risks.length - crit) + ' non-critical)</small></h4><div class="table-wrap"><table class="pi-tbl"><thead><tr><th></th><th>Risk</th><th>Path</th><th>P</th><th>I</th><th>Score</th><th>Response</th><th>Action</th></tr></thead><tbody>' +
         r.risks.map(function (x, k) { var have = (p.risks || []).some(function (y) { return y.title.toLowerCase() === x.title.toLowerCase(); }); return '<tr><td><input type="checkbox" data-rk="' + k + '"' + (have ? ' disabled title="Already in the register"' : ' checked') + '></td><td><b>' + esc(x.title) + '</b><br><small class="muted">' + esc(x.cause) + '</small></td><td>' + (x.critical ? '<span class="pi-crit">⚡ Critical</span>' : '<span class="muted">Non-critical</span>') + '</td><td>' + x.p + '</td><td>' + x.i + '</td><td><b>' + (x.p * x.i) + '</b></td><td>' + esc(x.response) + '</td><td><small>' + esc(x.action) + '</small></td></tr>'; }).join('') +
-        '</tbody></table></div><button class="btn btn-sm btn-gold" data-addrisks>＋ Add ticked risks to the Risk register</button></div>';
+        '</tbody></table></div>' + piCrFoot(e, 'r', 'data-addrisks', '➜ Send ticked risks to change control', 'risks') + '</div>';
     }
     if (r.stakeholders && r.stakeholders.length) {
       h += '<div class="pi-act"><h4>👥 Stakeholder register</h4><div class="table-wrap"><table class="pi-tbl"><thead><tr><th></th><th>Name</th><th>Role</th><th>RACI</th><th>Interest</th><th>Influence</th><th>How to engage</th></tr></thead><tbody>' +
         r.stakeholders.map(function (x, k) { var have = !!x.id || (p.stakeholders || []).some(function (y) { return y.name && y.name.toLowerCase() === x.name.toLowerCase(); }); return '<tr><td><input type="checkbox" data-sk="' + k + '"' + (have ? ' disabled title="Already a stakeholder"' : ' checked') + '></td><td><b>' + esc(x.name) + '</b>' + (have ? ' <small class="muted">(listed)</small>' : '') + '</td><td>' + esc(x.role) + '</td><td><span class="raci raci-' + x.raci + '">' + x.raci + '</span></td><td>' + x.interest + '</td><td>' + x.influence + '</td><td><small>' + esc(x.engagement) + '</small></td></tr>'; }).join('') +
-        '</tbody></table></div><button class="btn btn-sm btn-gold" data-addsk>＋ Add ticked to Stakeholders</button></div>';
+        '</tbody></table></div>' + piCrFoot(e, 'k', 'data-addsk', '➜ Send ticked stakeholders to change control', 'stakeholders') + '</div>';
     }
     if (r.meeting) {
       var m = st.meeting || (st.meeting = Object.assign({ id: 'm' + Date.now().toString(36) + i }, r.meeting)), all = p.stakeholders || [];
@@ -3587,14 +3600,23 @@
         api('intelClear', { core: S.core, at: e.at }).then(function () { S.intel.log = S.intel.log.filter(function (x) { return x !== e; }); S.intel.open = {}; toast('Answer cleared'); intelTab(); }).catch(fail); }); };
       if (r.impact && box.querySelector('[data-imprev]')) impactWire(box, r.impact, (p.meetings || []).filter(function (x) { return x.id === r.impact.meeting.id; })[0] || null, intelTab);
       box.querySelectorAll('[data-swdl]').forEach(function (b) { b.onclick = function () { if (M.swms) M.swms.download(S.core, b.getAttribute('data-swdl')).catch(fail); }; });
+      // v83: AI-suggested risks and stakeholders go to change control first (a change request), not straight into the register
       var ar = box.querySelector('[data-addrisks]'); if (ar) ar.onclick = function () {
-        var n = 0; box.querySelectorAll('[data-rk]:checked:not(:disabled)').forEach(function (c) { var x = r.risks[+c.getAttribute('data-rk')]; n++;
-          p.risks.push({ id: 'r' + Date.now().toString(36) + n, title: x.title, cause: x.cause + (x.critical ? ' (affects the critical path)' : ''), p: x.p, i: x.i, response: x.response, action: x.action, owner: x.owner || (p.charter || {}).manager || '', review: '', status: 'Open', raised: today() }); });
-        if (!n) return toast('Tick the risks to add', true); dirty(); toast(pl(n, 'risk') + ' added to the Risk register'); intelTab(); };
+        var list = Array.prototype.map.call(box.querySelectorAll('[data-rk]:checked:not(:disabled)'), function (c) { return r.risks[+c.getAttribute('data-rk')]; });
+        if (!list.length) return toast('Tick the risks to send', true);
+        var crit = list.filter(function (x) { return x.critical; }).length;
+        piCrSend(e, 'r', 'Risks suggested by Project Intelligence: ' + pl(list.length, 'risk'), list.map(function (x) { return '- ' + x.title + (x.critical ? ' (critical path)' : '') + ': P' + x.p + ' × I' + x.i + ' = ' + x.p * x.i; }).join('\n'),
+          { risk: { level: crit ? 'High' : list.some(function (x) { return x.p * x.i >= 12; }) ? 'Medium' : 'Low', text: pl(list.length, 'new risk') + ' for the Risk register' + (crit ? ', ' + crit + ' on the critical path (they can delay the finish date)' : '') + '.' } },
+          { risks: list.map(function (x) { return { title: x.title, cause: x.cause || '', p: x.p, i: x.i, response: x.response, action: x.action || '', owner: x.owner || '', critical: !!x.critical }; }) });
+      };
       var as = box.querySelector('[data-addsk]'); if (as) as.onclick = function () {
-        var n = 0; p.stakeholders = p.stakeholders || [];
-        box.querySelectorAll('[data-sk]:checked:not(:disabled)').forEach(function (c) { var x = r.stakeholders[+c.getAttribute('data-sk')]; n++; p.stakeholders.push({ id: 's' + Date.now().toString(36) + n, name: x.name, role: x.role, raci: x.raci, phone: '', email: '' }); });
-        if (!n) return toast('Tick the stakeholders to add', true); dirty(); toast(pl(n, 'stakeholder') + ' added: add their phone and email on the Stakeholders tab'); intelTab(); };
+        var list = Array.prototype.map.call(box.querySelectorAll('[data-sk]:checked:not(:disabled)'), function (c) { return r.stakeholders[+c.getAttribute('data-sk')]; });
+        if (!list.length) return toast('Tick the stakeholders to send', true);
+        piCrSend(e, 'k', 'Stakeholders suggested by Project Intelligence: ' + pl(list.length, 'stakeholder'), list.map(function (x) { return '- ' + x.name + ', ' + x.role + ' (' + x.raci + ')'; }).join('\n'),
+          { stakeholders: { level: list.some(function (x) { return x.raci === 'A'; }) ? 'Medium' : 'Low', text: pl(list.length, 'stakeholder') + ' to add to the Stakeholder register' + (list.some(function (x) { return x.raci === 'A'; }) ? ', including someone Accountable (check there is only one)' : '') + '.' } },
+          { stakeholders: list.map(function (x) { return { name: x.name, role: x.role || '', raci: x.raci || 'I' }; }) });
+      };
+      box.querySelectorAll('[data-picropen]').forEach(function (b) { b.onclick = function () { S.crView = b.getAttribute('data-picropen'); location.hash = '#plan/' + S.core + '/change'; }; });
       if (!r.meeting || !st.meeting || !box.querySelector('[data-mgo]')) return;
       var m = st.meeting;
       var refresh = function () { var L = piMeetLinks(m); box.querySelector('[data-mgo]').href = L.gcal; box.querySelector('[data-mmail]').href = L.mail; };

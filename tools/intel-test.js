@@ -85,7 +85,7 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     await p.fill(`${r2} >> [data-s=name]`, 'Pete Plumber'); await p.fill(`${r2} >> [data-s=role]`, 'Plumber'); await p.fill(`${r2} >> [data-s=phone]`, '0411 555 666'); await p.fill(`${r2} >> [data-s=email]`, 'pete@plumbing.example.com'); await saved();
 
     const tabs = await p.$$eval('#planTabs .tab', (x) => x.map((a) => a.textContent.trim()));
-    ok('Tab', '"🧠 Project Intelligence" comes after Stakeholders, Contracts and SWMS', tabs.indexOf('🧠 Project Intelligence') === tabs.indexOf('🦺 SWMS') + 1 && tabs.indexOf('📜 Contracts') === tabs.indexOf('👥 Stakeholders') + 1, tabs.join(' | '));
+    ok('Tab', '"🧠 Project Intelligence" is last, after SWMS and 🔁 Change control', tabs.indexOf('🧠 Project Intelligence') === tabs.length - 1 && tabs.indexOf('🔁 Change control') === tabs.indexOf('🦺 SWMS') + 1 && tabs.indexOf('🧠 Project Intelligence') === tabs.indexOf('🔁 Change control') + 1, tabs.join(' | '));
     await p.click('#planTabs >> text=Project Intelligence'); await p.waitForSelector('#piQ');
     ok('Tab', 'opens at #plan/<job>/intel with example questions and an upload button', /\/intel$/.test(await p.evaluate(() => location.hash)) && (await p.$$eval('[data-piex]', (x) => x.length)) === 7 && await p.isVisible('label[for=piFile]'));
 
@@ -115,17 +115,27 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     ok('Answer', 'the answer shows with headings, a table and bullets, and the source document', await p.isVisible(`${first} >> .pi-md h4`) && await p.isVisible(`${first} >> .pi-md table`) && /Contract\.pdf/.test(await p.textContent(`${first} >> .pi-src`)));
     ok('Risks', 'suggested risks are split into critical and non-critical', /2 critical, 1 non-critical/.test(await p.textContent(`${first} >> .pi-act`)) && (await p.$$eval(`.pi-a:first-child .pi-crit`, (x) => x.length)) === 2);
     const before = ((await kv.get('plan:' + core)).risks || []).length;
-    await p.click(`${first} >> [data-addrisks]`); await saved();
+    ok('Risks', 'the button sends them to change control (it does not add them straight away)', /Send ticked risks to change control/.test(await p.textContent(`${first} >> [data-addrisks]`)));
+    await p.click(`${first} >> [data-addrisks]`); await p.waitForSelector('#crCard'); await saved();
+    let pv = await kv.get('plan:' + core);
+    ok('Risks', '"➜ Send ticked risks to change control" raises a change request with the 3 risks; the Risk register is unchanged', pv.risks.length === before && pv.changes.length === 1 && pv.changes[0].source === 'intel' && pv.changes[0].items.risks.length === 3 && /critical path/.test(pv.changes[0].items.impact.risk.text) && pv.changes[0].items.impact.risk.level === 'High', JSON.stringify(pv.changes[0] && pv.changes[0].items.impact.risk));
+    const sign = async () => { await p.click('#crCard [data-cra=Approved]'); await p.waitForSelector('#crSignF'); await p.fill('#crSignF [name=by]', 'Sashi Kumar'); await p.fill('#crSignF [name=sig]', 'Sashi Kumar'); await p.check('#crSignF [name=go]'); await p.click('#crSignF [type=submit]'); await saved(); };
+    await sign();
     const rk = (await kv.get('plan:' + core)).risks;
-    ok('Risks', '"Add ticked risks" puts them in the Risk register, critical ones marked', rk.length === before + 3 && rk.some((r) => r.title === 'Tiles delivered late' && /critical path/.test(r.cause) && r.p === 3 && r.i === 4), rk.length + ' vs ' + before);
-    ok('Risks', 'risks already in the register can\'t be added twice', (await p.$$eval(`.pi-a:first-child [data-rk]:disabled`, (x) => x.length)) === 3);
+    ok('Risks', 'once approved and signed, they are in the Risk register, critical ones marked and tagged with the CR', rk.length === before + 3 && rk.some((r) => r.title === 'Tiles delivered late' && /critical path/.test(r.cause) && /CR-001/.test(r.cause) && r.p === 3 && r.i === 4), rk.length + ' vs ' + before);
+    await p.goto(`${BASE}/admin/#plan/${core}/intel`); await p.waitForSelector('#piQ'); await sleep(500);
+    ok('Risks', 'the answer now says "Sent to change control as CR-001 · Implemented", and the risks can\'t be sent twice', /Sent to change control as CR-001/.test(await p.textContent(`${first} >> .pi-act`)) && /Implemented/.test(await p.textContent(`${first} >> .pi-act`)) && (await p.$$eval(`.pi-a:first-child [data-rk]:disabled`, (x) => x.length)) === 3);
     await p.screenshot({ path: path.join(__dirname, 'shot52-risks.png'), fullPage: true });
 
     // stakeholder register
     s = await ask('What would a stakeholder register look like for this project?');
-    await p.click('.pi-a >> nth=0 >> [data-addsk]'); await saved();
+    const listed = /listed/.test(await p.textContent('.pi-a >> nth=0 >> .pi-act'));
+    await p.click('.pi-a >> nth=0 >> [data-addsk]'); await p.waitForSelector('#crCard'); await saved();
+    ok('Stakeholders', 'suggested stakeholders also go to change control first (CR-002), not straight into the register', (await kv.get('plan:' + core)).stakeholders.length === 2 && (await kv.get('plan:' + core)).changes[1].items.stakeholders.length === 1);
+    await sign();
     const sk = (await kv.get('plan:' + core)).stakeholders;
-    ok('Stakeholders', 'the register is shown, existing people marked "listed", new ones added to Stakeholders', sk.length === 3 && sk[2].name === 'Hills Certifiers' && sk[2].raci === 'C' && /listed/.test(await p.textContent('.pi-a >> nth=0 >> .pi-act')), JSON.stringify(sk.map((x) => x.name)));
+    ok('Stakeholders', 'the register is shown, existing people marked "listed", and after sign-off the new one is added', sk.length === 3 && sk[2].name === 'Hills Certifiers' && sk[2].raci === 'C' && listed, JSON.stringify(sk.map((x) => x.name)));
+    await p.goto(`${BASE}/admin/#plan/${core}/intel`); await p.waitForSelector('#piQ'); await sleep(500);
 
     // meeting
     s = await ask('Set up a 45-minute Google Meet with the stakeholders next Tuesday at 10am to review progress');
