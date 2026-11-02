@@ -294,7 +294,14 @@
   var STATUS = [['todo', 'To do', 0], ['doing', 'In progress', 33], ['review', 'In review / QA', 67], ['done', 'Done', 100]];
   var stPct = { todo: 0, doing: 33, review: 67, done: 100 }, stName = { todo: 'To do', doing: 'In progress', review: 'In review / QA', done: 'Done' };
   function statusFromPct(n) { return n >= 100 ? 'done' : n <= 0 ? 'todo' : n >= 67 ? 'review' : 'doing'; }
-  function setStatus(t, k) { (t.subs || []).forEach(function (x) { x.status = k; x.pct = SUBP[k]; }); t.status = k; t.pct = stPct[k]; }
+  function setStatus(t, k) { (t.subs || []).forEach(function (x) { x.status = k; x.pct = SUBP[k]; if ((x.steps || []).length) { if (k === 'done' || k === 'todo') x.steps.forEach(function (q) { q.done = k === 'done'; }); x.pct = stepPct(x); x.status = x.steps.every(function (q) { return q.done; }) ? 'done' : subStatus(x.pct); } }); t.status = k; t.pct = stPct[k]; if ((t.subs || []).some(function (x) { return (x.steps || []).length; })) derive(t); }
+  // v85: dated steps inside a story: off / dur in working days from the story's start; ticked done or not; they drive the story's %
+  function stepPct(x) { var L = x.steps || [], w = L.reduce(function (a, q) { return a + q.dur; }, 0) || 1; return Math.round(L.reduce(function (a, q) { return a + (q.done ? q.dur : 0); }, 0) / w * 100); }
+  function fitSteps(x) {
+    var D = Math.max(1, x.dur); x.steps = x.steps || [];
+    x.steps.forEach(function (q) { q.off = Math.max(0, Math.min(D - 1, Math.round(+q.off || 0))); q.dur = Math.max(1, Math.min(D - q.off, Math.round(+q.dur || 1))); q.done = !!q.done; });
+  }
+  function stepDates(t, x, q) { var d = subDates(t, x); if (!d.es) return { es: '', ef: '' }; var es = q.off ? addWork(d.es, q.off) : d.es; return { es: es, ef: q.dur > 1 ? addWork(es, q.dur - 1) : es }; }
   /* sub-tasks: inside the task's dates, no costs of their own; the task's % comes from them (weighted by days) */
   function fitSubs(t) {
     var moved = false;
@@ -305,6 +312,7 @@
       var off = Math.max(0, Math.min(D - 1, Math.round(+x.off || 0))), dur = Math.max(1, Math.min(D - off, Math.round(+x.dur || 1)));
       if (off !== x.off || dur !== x.dur) moved = true;
       x.off = off; x.dur = dur; if (!stPct.hasOwnProperty(x.status)) x.status = 'todo';
+      fitSteps(x);
     });
     return moved;
   }
@@ -314,9 +322,9 @@
   // v67: Gantt colours by progress: 0 grey, 25 amber, 50 blue, 75 purple, 100 green (late stays red)
   function pband(p) { p = +p || 0; return p >= 100 ? 100 : p >= 63 ? 75 : p >= 38 ? 50 : p > 0 ? 25 : 0; }
   function subStatus(p) { return p >= 100 ? 'done' : p >= 75 ? 'review' : p > 0 ? 'doing' : 'todo'; }
-  function subPct(x) { var p = Math.round((+x.pct || 0) / 25) * 25; return x.pct != null && subStatus(p) === x.status ? p : SUBP[x.status] || 0; }
+  function subPct(x) { if ((x.steps || []).length) return stepPct(x); var p = Math.round((+x.pct || 0) / 25) * 25; return x.pct != null && subStatus(p) === x.status ? p : SUBP[x.status] || 0; }
   function derive(t) {
-    (t.subs || []).forEach(function (x) { x.pct = subPct(x); });
+    (t.subs || []).forEach(function (x) { x.pct = subPct(x); if ((x.steps || []).length) x.status = x.steps.every(function (q) { return q.done; }) ? 'done' : subStatus(x.pct); });
     if (!t.subs || !t.subs.length) return;
     var w = t.subs.reduce(function (a, x) { return a + x.dur; }, 0) || 1;
     t.pct = Math.round(t.subs.reduce(function (a, x) { return a + x.dur * subPct(x); }, 0) / w); t.status = statusFromPct(t.pct);
@@ -347,7 +355,7 @@
   /* ---------- state + saving ---------- */
   var S = { colW: (function () { try { return JSON.parse(localStorage.getItem('mbsPlanColW') || '{}') || {}; } catch (e) { return {}; } })(),
     freeze: (function () { try { var v = localStorage.getItem('mbsPlanFreeze'); return v == null ? 3 : +v || 0; } catch (e) { return 3; } })(),
-    split: (function () { try { return +localStorage.getItem('mbsPlanSplit') || 0; } catch (e) { return 0; } })(), closed: {}, cols: (function () { try { return localStorage.getItem('mbsPlanCols') || 's'; } catch (e) { return 's'; } })(), core: '', plan: null, rev: 0, job: null, tab: 'schedule', zoom: 'day', saving: false, timer: null, reminders: [], expensesEx: 0 };
+    split: (function () { try { return +localStorage.getItem('mbsPlanSplit') || 0; } catch (e) { return 0; } })(), closed: {}, stClosed: {}, kStOpen: {}, cols: (function () { try { return localStorage.getItem('mbsPlanCols') || 's'; } catch (e) { return 's'; } })(), core: '', plan: null, rev: 0, job: null, tab: 'schedule', zoom: 'day', saving: false, timer: null, reminders: [], expensesEx: 0 };
   function dirty(note) {
     $('#planSave').textContent = 'Saving…';
     clearTimeout(S.timer);
@@ -1211,6 +1219,20 @@
     t.subs = t.subs.filter(function (x) { return x !== sb; }); derive(t); if (!t.subs.length) setStatus(t, t.status); dirty('sub-task deleted: ' + nm); render();
     undoBar('Deleted “' + nm + '”', function () { var x = S.plan.tasks.filter(function (y) { return y.id === keep.id; })[0]; if (x) { x.subs = keep.subs; x.pct = keep.pct; x.status = keep.status; } dirty('sub-task restored: ' + nm); render(); });
   }
+  function stepAdd(t, sb) {
+    sb.steps = sb.steps || []; var D = Math.max(1, sb.dur), last = sb.steps[sb.steps.length - 1], off = last ? Math.min(D - 1, last.off + last.dur) : 0;
+    if (last && last.off + last.dur >= D) off = last.off;   // the story is full: start alongside the last one
+    var q = { id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4), name: 'New step', off: off, dur: 1, done: false };
+    sb.steps.push(q); fitSteps(sb); derive(t); S.stClosed[sb.id] = false; S.closed[t.id] = false; dirty('step added to ' + sb.name); render();
+    setTimeout(function () { var i = $('#planBody tr[data-qid="' + q.id + '"] [data-qk=name]'); if (i) { i.focus(); i.select(); } }, 30);
+    return q;
+  }
+  function stepDelete(t, sb, q) {
+    if (!t || !sb || !q) return;
+    var keep = JSON.parse(JSON.stringify(sb.steps)), nm = String(q.name || '').trim() || 'untitled step';
+    sb.steps = sb.steps.filter(function (x) { return x !== q; }); derive(t); dirty('step deleted: ' + nm); render();
+    undoBar('Deleted step “' + nm + '”', function () { var x = S.plan.tasks.filter(function (y) { return y.id === t.id; })[0], y = x && (x.subs || []).filter(function (z) { return z.id === sb.id; })[0]; if (y) { y.steps = keep; derive(x); } dirty('step restored: ' + nm); render(); });
+  }
   function undoBar(msg, fn) {   // v84: a few seconds to take a delete back
     var old = document.getElementById('undoBar'); if (old) old.remove(); clearTimeout(S.undoT);
     var d = document.createElement('div'); d.id = 'undoBar'; d.className = 'undo-bar'; d.innerHTML = '<span>' + esc(msg) + '</span><button type="button" class="btn btn-sm">↶ Undo</button>';
@@ -1285,19 +1307,32 @@
       if (open) subs.forEach(function (sb, j) {
         var d = subDates(t, sb), sl = sb.status !== 'done' && d.ef && d.ef < t0, maxDur = Math.max(1, t.dur) - sb.off;
         var left = d.es ? x(d.es) : 0, sw = d.es ? (daysBetween(d.es, d.ef) + 1) * dayW : 0;
-        html += '<tr class="tsub' + (sb.status === 'done' ? ' tdone' : '') + (sl ? ' tlate' : '') + '" data-sid="' + esc(sb.id) + '" data-ptid="' + esc(t.id) + '"><td class="muted nowrap subn"><span class="grip" data-grip title="Drag up or down to reorder (stays inside this task)">⠿</span>' + r.n + '.<input class="posin sub" data-spos inputmode="numeric" value="' + (j + 1) + '" title="Type a number to move this sub-task there (inside this task)"></td>' +
+        var stp = sb.steps || [], sOpen = stp.length && !S.stClosed[sb.id];
+        html += '<tr class="tsub' + (sb.status === 'done' ? ' tdone' : '') + (sl ? ' tlate' : '') + (stp.length ? ' tsubp' : '') + '" data-sid="' + esc(sb.id) + '" data-ptid="' + esc(t.id) + '"><td class="muted nowrap subn"><span class="grip" data-grip title="Drag up or down to reorder (stays inside this task)">⠿</span>' + (stp.length ? '<button class="subtog" type="button" data-stog title="' + (sOpen ? 'Hide' : 'Show') + ' its steps">' + (sOpen ? '▾' : '▸') + '</button>' : '') + r.n + '.<input class="posin sub" data-spos inputmode="numeric" value="' + (j + 1) + '" title="Type a number to move this sub-task there (inside this task)"></td>' +
           '<td><input type="checkbox" data-sk="done"' + (sb.status === 'done' ? ' checked' : '') + ' style="width:auto" title="Done"></td>' +
-          '<td><div class="subname"><span class="subarrow">↳</span><input data-sk="name" value="' + esc(sb.name) + '"><button class="tdel" type="button" data-sdel title="Delete this sub-task" aria-label="Delete sub-task">🗑</button></div></td>' +
+          '<td><div class="subname"><span class="subarrow">↳</span><input data-sk="name" value="' + esc(sb.name) + '"><button class="tdel" type="button" data-sdel title="Delete this sub-task' + (stp.length ? ' and its ' + pl(stp.length, 'step') : '') + '" aria-label="Delete sub-task">🗑</button></div>' +
+            '<button class="stepadd" type="button" data-addstep title="Break this story into dated steps (they stay inside its dates)">＋ step' + (stp.length ? ' · ' + stp.filter(function (q) { return q.done; }).length + '/' + stp.length + ' done' : '') + '</button></td>' +
           '<td><input data-sk="owner" list="resList" value="' + esc(sb.owner || '') + '" placeholder="Who" style="min-width:90px;width:110px"></td>' +
           '<td><input data-sk="dur" type="number" min="1" max="' + maxDur + '" value="' + sb.dur + '" style="width:50px" title="At most ' + maxDur + ' day' + (maxDur === 1 ? '' : 's') + ' (to stay inside the task)"></td>' +
           '<td><input data-sk="start" type="date" value="' + esc(d.es) + '" min="' + esc(t.es) + '" max="' + esc(t.ef) + '" title="Between ' + esc(dmy(t.es)) + ' and ' + esc(dmy(t.ef)) + ' (the task\'s dates)"></td>' +
           '<td class="nowrap">' + esc(dmy(d.ef)) + '</td><td class="muted" style="font-size:11.5px">in #' + r.n + '</td><td></td><td></td><td></td>' +
           '<td class="muted subcost" title="Costs stay on the task">–</td><td></td>' +
-          '<td><select data-sk="status" class="stsel st-' + sb.status + '">' + STATUS.map(function (o) { return '<option value="' + o[0] + '"' + (sb.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></td>' +
-          '<td class="muted">' + subPct(sb) + '</td>' +
+          '<td><select data-sk="status" class="stsel st-' + sb.status + '"' + (stp.length ? ' disabled title="Worked out from its steps: tick them"' : '') + '>' + STATUS.map(function (o) { return '<option value="' + o[0] + '"' + (sb.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></td>' +
+          '<td class="muted"' + (stp.length ? ' title="From its steps (weighted by days)"' : '') + '>' + subPct(sb) + '</td>' +
           '<td class="acts"><button class="btn btn-sm" data-sdel title="Delete sub-task">✕</button></td>' +
           '</tr>';
-        G += '<tr data-gsid="' + esc(sb.id) + '" data-gptid="' + esc(t.id) + '"><td class="gcol"><div class="gtrack gtrack-sub" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + (d.es ? '<span class="gsub st-' + sb.status + ' pb-' + subPct(sb) + (sl ? ' late' : '') + '" style="left:' + left + 'px;width:' + sw + 'px" title="' + esc(sb.name + ' · ' + pretty(d.es) + ' – ' + pretty(d.ef) + ' · ' + stName[sb.status]) + '"><span class="gfill" style="width:' + subPct(sb) + '%"></span></span><span class="glab" style="left:' + (left + sw + 4) + 'px">' + esc(sb.owner || '') + '</span>' : '') + '</div></td></tr>';
+        G += '<tr data-gsid="' + esc(sb.id) + '" data-gptid="' + esc(t.id) + '"><td class="gcol"><div class="gtrack gtrack-sub" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + (d.es ? '<span class="gsub st-' + sb.status + ' pb-' + pband(subPct(sb)) + (sl ? ' late' : '') + '" style="left:' + left + 'px;width:' + sw + 'px" title="' + esc(sb.name + ' · ' + pretty(d.es) + ' – ' + pretty(d.ef) + ' · ' + stName[sb.status]) + '"><span class="gfill" style="width:' + subPct(sb) + '%"></span></span><span class="glab" style="left:' + (left + sw + 4) + 'px">' + esc(sb.owner || '') + '</span>' : '') + '</div></td></tr>';
+        if (sOpen) stp.forEach(function (q, k) {
+          var qd = stepDates(t, sb, q), ql = !q.done && qd.ef && qd.ef < t0, qMax = Math.max(1, sb.dur) - q.off, ql2 = qd.es ? x(qd.es) : 0, qw = qd.es ? (daysBetween(qd.es, qd.ef) + 1) * dayW : 0;
+          html += '<tr class="tstep' + (q.done ? ' tdone' : '') + (ql ? ' tlate' : '') + '" data-qid="' + esc(q.id) + '" data-qsid="' + esc(sb.id) + '" data-qtid="' + esc(t.id) + '"><td class="muted nowrap stepn">' + r.n + '.' + (j + 1) + '.' + (k + 1) + '</td>' +
+            '<td><input type="checkbox" data-qk="done"' + (q.done ? ' checked' : '') + ' style="width:auto" title="Done"></td>' +
+            '<td><div class="stepname"><span class="subarrow">↳</span><input data-qk="name" value="' + esc(q.name) + '"><button class="tdel" type="button" data-qdel title="Delete this step" aria-label="Delete step">🗑</button></div></td><td></td>' +
+            '<td><input data-qk="dur" type="number" min="1" max="' + qMax + '" value="' + q.dur + '" style="width:50px" title="At most ' + pl(qMax, 'day') + ' (to stay inside the story)"></td>' +
+            '<td><input data-qk="start" type="date" value="' + esc(qd.es) + '" min="' + esc(d.es) + '" max="' + esc(d.ef) + '" title="Between ' + esc(dmy(d.es)) + ' and ' + esc(dmy(d.ef)) + ' (the story\'s dates)"></td>' +
+            '<td class="nowrap">' + esc(dmy(qd.ef)) + '</td><td class="muted" style="font-size:11px">in #' + r.n + '.' + (j + 1) + '</td><td></td><td></td><td></td><td class="muted subcost">–</td><td></td>' +
+            '<td class="muted" style="font-size:11.5px">' + (q.done ? '✓ Done' : ql ? 'Late' : 'To do') + '</td><td class="muted">' + (q.done ? 100 : 0) + '</td><td></td></tr>';
+          G += '<tr data-gqid="' + esc(q.id) + '"><td class="gcol"><div class="gtrack gtrack-step" style="width:' + W + 'px;' + weekendBg + '">' + todayLine + (qd.es ? '<span class="gstep' + (q.done ? ' done' : '') + (ql ? ' late' : '') + '" style="left:' + ql2 + 'px;width:' + qw + 'px" title="' + esc(q.name + ' · ' + pretty(qd.es) + (qd.ef !== qd.es ? ' – ' + pretty(qd.ef) : '') + (q.done ? ' · done' : '')) + '"></span>' + (q.done ? '<span class="glab gstep-l" style="left:' + (ql2 + qw + 3) + 'px">✓</span>' : '') : '') + '</div></td></tr>';
+        });
       });
     });
     if (!rows.length) { html += '<tr><td colspan="16"><div class="empty">No tasks yet. Press “＋ Task”.</div></td></tr>'; G += '<tr><td class="gcol"></td></tr>'; }
@@ -1420,7 +1455,7 @@
       el.addEventListener(live ? 'input' : 'change', function () {
         var o = subOf(el), t = o.t, sb = o.sb; if (!sb) return;
         if (k === 'name' || k === 'owner') { sb[k] = el.value; dirty(); return; }
-        if (k === 'done') sb.status = el.checked ? 'done' : 'todo';
+        if (k === 'done') { sb.status = el.checked ? 'done' : 'todo'; (sb.steps || []).forEach(function (q) { q.done = el.checked; }); }
         else if (k === 'status') sb.status = el.value;
         else if (k === 'dur') { var want = Math.max(1, Math.round(+el.value || 1)); sb.dur = want; fitSubs(t); if (sb.dur < want) toast('Kept inside the task: at most ' + sb.dur + ' day' + (sb.dur === 1 ? '' : 's') + ' from its start'); }
         else if (k === 'start') {
@@ -1433,6 +1468,28 @@
       });
     });
     B.querySelectorAll('[data-sdel]').forEach(function (b) { b.onclick = function () { var o = subOf(b); subDelete(o.t, o.sb); }; });
+    // v85: steps (the third level)
+    B.querySelectorAll('[data-stog]').forEach(function (b) { b.onclick = function () { var o = subOf(b); S.stClosed[o.sb.id] = !S.stClosed[o.sb.id]; render(); }; });
+    B.querySelectorAll('[data-addstep]').forEach(function (b) { b.onclick = function () { var o = subOf(b); stepAdd(o.t, o.sb); }; });
+    var stepOf = function (el) { var tr = el.closest('tr'), t = p.tasks.filter(function (x) { return x.id === tr.getAttribute('data-qtid'); })[0], sb = t && (t.subs || []).filter(function (x) { return x.id === tr.getAttribute('data-qsid'); })[0];
+      return { t: t, sb: sb, q: sb && (sb.steps || []).filter(function (x) { return x.id === tr.getAttribute('data-qid'); })[0] }; };
+    B.querySelectorAll('tr[data-qid] [data-qk]').forEach(function (el) {
+      var k = el.getAttribute('data-qk');
+      el.addEventListener(k === 'name' ? 'input' : 'change', function () {
+        var o = stepOf(el), t = o.t, sb = o.sb, q = o.q; if (!q) return;
+        if (k === 'name') { q.name = el.value; dirty(); return; }
+        if (k === 'done') q.done = el.checked;
+        else if (k === 'dur') { var want = Math.max(1, Math.round(+el.value || 1)); q.dur = want; fitSteps(sb); if (q.dur < want) toast('Kept inside the story: at most ' + pl(q.dur, 'day') + ' from its start'); }
+        else if (k === 'start') {
+          var d = subDates(t, sb), v = el.value || d.es;
+          if (v < d.es || v > d.ef) toast('Steps stay inside the story (' + pretty(d.es) + ' – ' + pretty(d.ef) + ')', true);
+          v = v < d.es ? d.es : v > d.ef ? d.ef : v; v = nextWork(v); if (v > d.ef) v = d.ef;
+          q.off = Math.max(0, workBetween(d.es, v) - 1); fitSteps(sb);
+        }
+        derive(t); dirty(k === 'done' ? (q.done ? 'Done: ' : 'To do: ') + q.name + ' (' + sb.name + ')' : ''); render();
+      });
+    });
+    B.querySelectorAll('[data-qdel]').forEach(function (b) { b.onclick = function () { var o = stepOf(b); stepDelete(o.t, o.sb, o.q); }; });
     B.querySelectorAll('[data-spos]').forEach(function (inp) {
       var keep = inp.value; posKeys(inp, keep);
       inp.addEventListener('change', function () {
@@ -1521,17 +1578,22 @@
     ['xlsx', 'Excel (.xlsx)', 'Smartsheet, Monday.com, Asana and Excel itself (real dates)'],
     ['ics', 'Calendar (.ics)', 'Google Calendar, Outlook, Apple Calendar: each task as an all-day event']];
   var CSV_DATES = [['dmy', 'DD/MM/YYYY (Australia: Microsoft Project, Excel set to Australia)'], ['ymd', 'YYYY-MM-DD (Smartsheet, Asana, Monday.com, Jira, most web tools)'], ['mdy', 'MM/DD/YYYY (US settings)']];
-  function ganttRows(p, subsOn) {   // the schedule as flat rows: tasks (level 1) with their sub-tasks (level 2) under them
+  function ganttRows(p, subsOn) {   // the schedule as flat rows: tasks (level 1), their sub-tasks (level 2) and (v85) the sub-tasks' steps (level 3)
     schedule(p);
     var rows = [], idOf = {}, n = 0;
-    p.tasks.forEach(function (t) { idOf[t.id] = ++n; if (subsOn) n += (t.subs || []).length; });
+    p.tasks.forEach(function (t) { idOf[t.id] = ++n; if (subsOn) (t.subs || []).forEach(function (sb) { n += 1 + (sb.steps || []).length; }); });
     p.tasks.forEach(function (t, i) {
       var subs = subsOn ? (t.subs || []) : [];
       rows.push({ uid: idOf[t.id], wbs: String(i + 1), lvl: 1, name: t.name, es: t.es, ef: t.dur === 0 ? t.es : t.ef, dur: t.dur, preds: (t.pred || []).map(function (x) { return idOf[x]; }).filter(Boolean),
         mile: t.dur === 0, pct: t.pct || 0, status: stName[t.status] || '', res: (t.res || []).slice(), resTxt: resText(t), lead: t.lead || '', summary: subs.length > 0, notes: t.notes || '' });
-      subs.forEach(function (sb, j) { var d = subDates(t, sb);
-        rows.push({ uid: idOf[t.id] + j + 1, wbs: (i + 1) + '.' + (j + 1), lvl: 2, name: sb.name, es: d.es, ef: d.ef, dur: sb.dur, preds: [], mile: false, pct: subPct(sb) || 0, status: stName[sb.status] || '',
-          res: sb.owner ? [sb.owner] : [], resTxt: sb.owner || '', lead: sb.owner || '', summary: false, parent: t.name, notes: '' }); });
+      var u = idOf[t.id];
+      subs.forEach(function (sb, j) { var d = subDates(t, sb), stp = sb.steps || [];
+        rows.push({ uid: ++u, wbs: (i + 1) + '.' + (j + 1), lvl: 2, name: sb.name, es: d.es, ef: d.ef, dur: sb.dur, preds: [], mile: false, pct: subPct(sb) || 0, status: stName[sb.status] || '',
+          res: sb.owner ? [sb.owner] : [], resTxt: sb.owner || '', lead: sb.owner || '', summary: stp.length > 0, parent: t.name, notes: '' });
+        stp.forEach(function (q, k) { var qd = stepDates(t, sb, q);
+          rows.push({ uid: ++u, wbs: (i + 1) + '.' + (j + 1) + '.' + (k + 1), lvl: 3, name: q.name, es: qd.es, ef: qd.ef, dur: q.dur, preds: [], mile: false, pct: q.done ? 100 : 0, status: q.done ? 'Done' : 'To do',
+            res: sb.owner ? [sb.owner] : [], resTxt: sb.owner || '', lead: sb.owner || '', summary: false, parent: sb.name, notes: '' }); });
+      });
     });
     return rows;
   }
@@ -1710,6 +1772,14 @@
         [6, 7].forEach(function (c) { s2.getCell(c).numFmt = dateF; }); s2.getCell(15).numFmt = '0%'; s2.getCell(14).fill = fill(STC[sb.status]);
         s2.eachCell({ includeEmpty: true }, function (c) { c.border = box; c.fill = c.col === 14 ? c.fill : fill('FFFCFBF8'); });
         row++;
+        (sb.steps || []).forEach(function (q, k) {   // v85: steps (outline level 2)
+          var qd = stepDates(t, sb, q), ql = !q.done && qd.ef && qd.ef < t0, s3 = sc.getRow(row);
+          s3.values = [(i + 1) + '.' + (j + 1) + '.' + (k + 1), '        ↳ ' + (q.done ? '☑ ' : '☐ ') + q.name, '', '', q.dur, D(qd.es), D(qd.ef), 'in #' + (i + 1) + '.' + (j + 1), null, null, null, null, null, q.done ? 'Done' : 'To do', q.done ? 1 : 0, ql ? 'Yes' : '', ''];
+          s3.outlineLevel = 2; s3.font = { size: 9, color: { argb: ql ? 'FFB42318' : 'FF6B665A' } };
+          [6, 7].forEach(function (c) { s3.getCell(c).numFmt = dateF; }); s3.getCell(15).numFmt = '0%';
+          s3.eachCell({ includeEmpty: true }, function (c) { c.border = box; c.fill = fill('FFFDFDFB'); });
+          row++;
+        });
       });
     });
     var tot = sc.getRow(row);
@@ -1751,7 +1821,13 @@
         var d = subDates(t, sb), s2 = gs.getRow(gr);
         s2.values = [(i + 1) + '.' + (j + 1), '    ↳ ' + sb.name, D(d.es), D(d.ef), subPct(sb) / 100];
         s2.getCell(3).numFmt = 'd mmm'; s2.getCell(4).numFmt = 'd mmm'; s2.getCell(5).numFmt = '0%'; s2.font = { size: 9, color: { argb: 'FF4A463D' } }; s2.outlineLevel = 1;
-        paint(s2, d.es, d.ef, subPct(sb), sb.status !== 'done' && d.ef < t0, true); gr++;
+        paint(s2, d.es, d.ef, pband(subPct(sb)), sb.status !== 'done' && d.ef < t0, true); gr++;
+        (sb.steps || []).forEach(function (q, k) {   // v85: steps
+          var qd = stepDates(t, sb, q), s3 = gs.getRow(gr);
+          s3.values = [(i + 1) + '.' + (j + 1) + '.' + (k + 1), '        ↳ ' + (q.done ? '☑ ' : '☐ ') + q.name, D(qd.es), D(qd.ef), q.done ? 1 : 0];
+          s3.getCell(3).numFmt = 'd mmm'; s3.getCell(4).numFmt = 'd mmm'; s3.getCell(5).numFmt = '0%'; s3.font = { size: 8, color: { argb: 'FF6B665A' } }; s3.outlineLevel = 2;
+          paint(s3, qd.es, qd.ef, q.done ? 100 : 0, !q.done && qd.ef < t0, true); gr++;
+        });
       });
     });
     var legend = gs.getRow(gr + 1);
@@ -2000,6 +2076,16 @@
     if (!a) return ''; var f = function (x) { return new Date(x + 'T00:00:00Z').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' }); };
     if (!b || a === b) return f(a); return a.slice(0, 7) === b.slice(0, 7) ? +a.slice(8) + '–' + f(b) : f(a) + ' – ' + f(b);
   }
+  // v85: a story's dated steps on the Board: a tick list inside the story card (no slider), folded to a "☑ 2/4 steps" chip
+  function kSteps(t, x) {
+    var L = x.steps || [];
+    if (!L.length) return kSlide(x) + '<button type="button" class="kstep-first" data-kstadd title="Break this story into dated steps with tick boxes">＋ steps</button><div class="kst-addrow" data-kstrow></div>';
+    var n = L.filter(function (q) { return q.done; }).length, open = !!S.kStOpen[x.id], v = stepPct(x);
+    return '<div class="ksteps' + (open ? ' open' : '') + '"><button type="button" class="kst-chip' + (n === L.length ? ' all' : '') + '" data-kstog aria-expanded="' + open + '"><span>' + (n === L.length ? '☑' : '☐') + ' ' + n + '/' + L.length + ' steps</span><span class="kst-bar"><i style="width:' + v + '%"></i></span><span class="kst-pc">' + v + '%</span><span>' + (open ? '▾' : '▸') + '</span></button>' +
+      (open ? '<ul class="kst-list">' + L.map(function (q) { var d = stepDates(t, x, q), late = !q.done && d.ef && d.ef < today();
+        return '<li class="' + (q.done ? 'done' : '') + (late ? ' late' : '') + '" data-kq="' + esc(q.id) + '"><label><input type="checkbox" data-kqdone' + (q.done ? ' checked' : '') + '><span>' + esc(q.name) + '</span></label><small title="' + esc(pretty(d.es) + (d.ef !== d.es ? ' – ' + pretty(d.ef) : '')) + '">' + esc(kShort(d.es, d.ef)) + '</small><button type="button" class="kdel-s" data-kqdel title="Delete this step" aria-label="Delete step">🗑</button></li>'; }).join('') +
+        '</ul><div class="kst-addrow" data-kstrow></div><button type="button" class="kstep-add" data-kstadd>＋ step</button>' : '') + '</div>';
+  }
   function kSlide(x) {   // 0 · 25 · 50 · 75 · 100 (done)
     var v = subPct(x);
     return '<div class="kslide kslide-' + v + '"><input type="range" min="0" max="100" step="25" value="' + v + '" data-sp="' + esc(x.id) + '" aria-label="Progress of ' + esc(x.name) + '" style="--v:' + v + '%">' +
@@ -2108,7 +2194,7 @@
             '<div class="kth-r"><div class="kdates">' + esc(pretty(t.es)) + (t.dur > 1 ? ' – ' + esc(pretty(t.ef)) : '') + '</div><div class="kdays">' + (t.dur ? pl(t.dur, 'day') : 'Milestone') + '</div>' + (rg.txt ? '<div class="kdue kdue-' + rg.c + '">' + esc(rg.txt) + '</div>' : '') + '</div></div>' +
           (subs.length ? '<div class="kstories">' + shown.map(function (x) { var d = subDates(t, x), sr = kRag(d.es, d.ef, x.status === 'done', t0);
               return '<div class="kst' + (x.status === 'done' ? ' done' : '') + '" data-sid="' + esc(x.id) + '"><div class="kst-h"><i class="kd kd-' + sr.c + '" title="' + esc(pretty(d.es) + (d.ef !== d.es ? ' – ' + pretty(d.ef) : '') + (sr.txt ? ' · ' + sr.txt : '')) + '"></i><span class="kst-n">' + esc(x.name) + kInfo('s:' + x.id, x.desc) + '</span>' +
-                '<span class="kst-d kst-d-' + sr.c + '">' + esc(kShort(d.es, d.ef)) + (sr.txt ? ' <b>(' + esc(sr.txt.charAt(0).toLowerCase() + sr.txt.slice(1)) + ')</b>' : '') + '</span><button type="button" class="kdel-s" data-kdels title="Delete this story" aria-label="Delete story">🗑</button></div>' + kSlide(x) + kCtl('s:' + x.id, x.owner, x.priority, x.points) + '</div>'; }).join('') +
+                '<span class="kst-d kst-d-' + sr.c + '">' + esc(kShort(d.es, d.ef)) + (sr.txt ? ' <b>(' + esc(sr.txt.charAt(0).toLowerCase() + sr.txt.slice(1)) + ')</b>' : '') + '</span><button type="button" class="kdel-s" data-kdels title="Delete this story" aria-label="Delete story">🗑</button></div>' + kSteps(t, x) + kCtl('s:' + x.id, x.owner, x.priority, x.points) + '</div>'; }).join('') +
             (filt && shown.length < subs.length ? '<div class="kmore">' + (subs.length - shown.length) + ' more ' + (subs.length - shown.length === 1 ? 'story' : 'stories') + ' hidden by the filter</div>' : '') + '</div>'
             : kCtl('t:' + t.id, ownerOf(t), t.priority, t.points)) +
           (t.dur > 0 ? '<div class="kaddrow" data-addrow></div><button type="button" class="kadd" data-kadd>＋ story</button>' : '') +
@@ -2156,6 +2242,22 @@
     }; });
     B.querySelectorAll('[data-step]').forEach(function (b) { b.onclick = function () { var t = find(b.closest('.kcard').getAttribute('data-tid')), i = STATUS.map(function (x) { return x[0]; }).indexOf(t.status) + (+b.getAttribute('data-step')); if (STATUS[i]) move(t, STATUS[i][0]); }; });
     B.querySelectorAll('[data-tick]').forEach(function (cb) { cb.onchange = function () { move(find(cb.closest('.kcard').getAttribute('data-tid')), cb.checked ? 'done' : 'todo'); }; });
+    // v85: steps on the story card
+    var kst = function (el) { var t = find(el.closest('.kcard').getAttribute('data-tid')), id = el.closest('.kst').getAttribute('data-sid'); return { t: t, sb: t && (t.subs || []).filter(function (x) { return x.id === id; })[0] }; };
+    B.querySelectorAll('[data-kstog]').forEach(function (b) { b.onclick = function () { var o = kst(b); S.kStOpen[o.sb.id] = !S.kStOpen[o.sb.id]; keep(); }; });
+    B.querySelectorAll('[data-kqdone]').forEach(function (cb) { cb.onchange = function () { var o = kst(cb), q = (o.sb.steps || []).filter(function (x) { return x.id === cb.closest('[data-kq]').getAttribute('data-kq'); })[0]; if (!q) return;
+      q.done = cb.checked; derive(o.t); dirty((q.done ? 'Done: ' : 'To do: ') + q.name + ' (' + o.sb.name + ')'); render(); }; });
+    B.querySelectorAll('[data-kqdel]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); var o = kst(b), q = (o.sb.steps || []).filter(function (x) { return x.id === b.closest('[data-kq]').getAttribute('data-kq'); })[0]; stepDelete(o.t, o.sb, q); }; });
+    B.querySelectorAll('[data-kstadd]').forEach(function (b) { b.onclick = function () {
+      var o = kst(b), row = b.closest('.kst').querySelector('[data-kstrow]'); if (!row) return;
+      row.innerHTML = '<input class="kadd-in" placeholder="New step, then Enter (Esc to stop)" maxlength="160">'; b.style.display = 'none';
+      var inp = row.querySelector('input'); inp.focus();
+      var once = false, add = function (again) { if (once) return; once = true; var v = inp.value.trim(); if (!v) { keep(); return; }
+        o.sb.steps = o.sb.steps || []; var D = Math.max(1, o.sb.dur), last = o.sb.steps[o.sb.steps.length - 1], off = last ? Math.min(D - 1, last.off + last.dur) : 0; if (last && last.off + last.dur >= D) off = last.off;
+        o.sb.steps.push({ id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4), name: v, off: off, dur: 1, done: false }); fitSteps(o.sb); derive(o.t); S.kStOpen[o.sb.id] = true; dirty('step added to ' + o.sb.name); keep();
+        if (again) setTimeout(function () { var c = $('#planBody .kst[data-sid="' + o.sb.id + '"] [data-kstadd]'); if (c) c.click(); }, 30); };
+      inp.onkeydown = function (e) { if (e.key === 'Enter') add(true); if (e.key === 'Escape') { once = true; keep(); } }; inp.onblur = function () { setTimeout(function () { add(false); }, 120); };
+    }; });
     B.querySelectorAll('[data-sp]').forEach(function (r) {
       var show = function () { var v = +r.value; r.style.setProperty('--v', v + '%'); r.parentNode.className = 'kslide kslide-' + v; r.parentNode.querySelector('.kslide-v').textContent = v >= 100 ? 'Done ✓' : v + '%'; };
       r.oninput = show;
@@ -3331,7 +3433,8 @@
       var win0 = addDays(r.to, -3), win1 = addDays(r.to, 21);
       g = { title: 'Task (3-week look-ahead)', from: win0, to: win1, today: today(), rows: [] };
       F.rows.forEach(function (x) { var t = x.t; if (!t.es || t.ef < win0 || t.es > win1) return; g.rows.push({ label: '#' + x.n + ' ' + t.name.replace(/^[✓◆\s]+/, '') + (t.resource ? ' · ' + t.resource : ''), es: t.es, ef: t.ef, pct: t.pct, mile: t.dur === 0, crit: !!F.crit[t.id], late: t.pct < 100 && t.ef < today(), status: t.status, level: 1 });
-        (t.subs || []).forEach(function (sb) { var d = subDates(t, sb); if (d.ef < win0 || d.es > win1) return; g.rows.push({ label: sb.name + (sb.owner ? ' · ' + sb.owner : ''), es: d.es, ef: d.ef, pct: subPct(sb), status: sb.status, level: 2 }); }); });
+        (t.subs || []).forEach(function (sb) { var d = subDates(t, sb); if (d.ef < win0 || d.es > win1) return; g.rows.push({ label: sb.name + (sb.owner ? ' · ' + sb.owner : ''), es: d.es, ef: d.ef, pct: subPct(sb), status: sb.status, level: 2 });
+          (sb.steps || []).forEach(function (q) { var qd = stepDates(t, sb, q); if (qd.ef < win0 || qd.es > win1) return; g.rows.push({ label: (q.done ? '✓ ' : '') + q.name, es: qd.es, ef: qd.ef, pct: q.done ? 100 : 0, status: q.done ? 'done' : 'todo', late: !q.done && qd.ef < today(), level: 3 }); }); }); });
       kpis = [pctRow, { label: 'Tasks next 2 weeks', value: String(plan.length) }, { label: 'Late tasks', value: String(F.late.length) }, { label: 'Critical next 2 weeks', value: String(plan.filter(function (x) { return F.crit[x.t.id]; }).length) }, { label: 'Open issues', value: String(F.issues.length) }];
       var sw = S.rep.swms, safety = sw ? ['SWMS version ' + sw.version + ' (' + sw.status + '): ' + sw.steps + ' job steps. Read and sign it before starting high-risk work.'] : ['No SWMS yet for this job: write it on the SWMS tab before high-risk work starts.'];
       if (sw && sw.hrcw.length) safety.push('High-risk work on this job: ' + sw.hrcw.join('; ') + '.');

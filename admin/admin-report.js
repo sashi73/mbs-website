@@ -37,15 +37,15 @@
       var y = top + k * rh;
       if (k % 2) { x.fillStyle = 'rgba(246,243,234,.45)'; x.fillRect(0, y, W, rh); }
       x.fillStyle = r.level > 1 ? '#6B665A' : '#1F1D18'; x.font = (r.level > 1 ? '' : r.mile ? 'italic ' : '600 ') + (r.level > 1 ? '15px' : '16px') + ' Arial';
-      var lab = r.label; while (x.measureText(lab).width > LW - 20 - (r.level > 1 ? 24 : 0) && lab.length > 4) lab = lab.slice(0, -2);
+      var ind = r.level > 2 ? 44 : r.level > 1 ? 24 : 0, lab = r.label; if (r.level > 2) x.font = '13px Arial'; while (x.measureText(lab).width > LW - 20 - ind && lab.length > 4) lab = lab.slice(0, -2);
       if (lab !== r.label) lab = lab.slice(0, -1) + '…';
-      x.fillText(lab, 10 + (r.level > 1 ? 24 : 0), y + rh / 2);
+      x.fillText(lab, 10 + ind, y + rh / 2);
       if (!r.es) return;
       var a = Math.max(LW, X(r.es)), b = Math.min(W - 16, X(r.ef) + dw);
       if (r.ef < g.from || r.es > g.to) return;
       var pp = +r.pct || 0, col = r.late ? '#DC2626' : pp >= 100 ? '#16A34A' : pp >= 63 ? '#7C3AED' : pp >= 38 ? '#2563EB' : pp > 0 ? '#F59E0B' : '#94A3B8';
       if (r.mile) { var mx = X(r.es) + dw / 2, my = y + rh / 2; x.fillStyle = r.status === 'done' ? '#16A34A' : '#1F1D18'; x.beginPath(); x.moveTo(mx, my - 9); x.lineTo(mx + 9, my); x.lineTo(mx, my + 9); x.lineTo(mx - 9, my); x.closePath(); x.fill(); return; }
-      var bh = r.level > 1 ? 10 : 15, by = y + (rh - bh) / 2;
+      var bh = r.level > 2 ? 6 : r.level > 1 ? 10 : 15, by = y + (rh - bh) / 2;
       x.fillStyle = col; x.globalAlpha = 0.28; x.fillRect(a, by, Math.max(3, b - a), bh); x.globalAlpha = 1;
       x.fillRect(a, by, Math.max(0, (b - a) * (r.pct || 0) / 100), bh);
       if (r.crit) { x.strokeStyle = '#EA580C'; x.lineWidth = 2.5; x.strokeRect(a, by, Math.max(3, b - a), bh); x.lineWidth = 1; }

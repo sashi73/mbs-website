@@ -1206,3 +1206,34 @@ tr:hover .tdel,.tdel:focus-visible{opacity:.85}.tdel:hover{opacity:1;filter:none
 .kst:hover .kdel-s{opacity:.85}.kdel-s:hover{opacity:1;filter:none;background:#FEF2F2;border-color:#FCA5A5}
 @media (hover:none){.kdel,.kdel-s{opacity:.7}}
 .kfoot{grid-template-columns:minmax(0,1fr);grid-auto-flow:column;grid-auto-columns:auto}.kfoot .kdel{margin-left:0}
+/* v85: dated steps (the third level) */
+tr.tstep td{background:#FDFDFB;font-size:12px}
+tr.tstep td.stepn{padding-left:26px;font-size:10.5px;color:#8A8577}
+tr.tstep input,tr.tstep select{font-size:12px}
+.stepname{display:flex;align-items:center;gap:4px;padding-left:28px}.stepname input{min-width:0}
+tr.tstep.tdone .stepname input{text-decoration:line-through;color:#8A8577}
+.stepadd{display:block;background:none;border:0;padding:0 6px 0 34px;margin-top:1px;font:inherit;font-size:10.5px;color:#9A947F;cursor:pointer;border-radius:6px;text-align:left}
+.stepadd:hover{color:#5A4400;text-decoration:underline}
+.gtrack-step{height:24px!important}
+.gstep{position:absolute;top:calc(50% - 3px);height:6px;background:#CBD5E1;border-radius:3px;z-index:2}
+.gstep.done{background:#16A34A}.gstep.late{background:#DC2626}
+.gstep-l{top:calc(50% - 8px)!important;font-size:10px;color:#16A34A;font-weight:800}
+@media (max-width:1100px){.gtrack-step{height:20px!important}}
+/* v85: steps on the Board's story card */
+.ksteps{margin:4px 0 2px}
+.kst-chip{display:flex;align-items:center;gap:6px;width:100%;background:#FBF8EF;border:1px solid #EEE7D2;border-radius:8px;padding:3px 8px;font:inherit;font-size:11.5px;font-weight:700;color:#4A473F;cursor:pointer}
+.kst-chip:hover{border-color:#C9A227}.kst-chip.all{background:#F0FDF4;border-color:#BBF7D0;color:#166534}
+.kst-bar{flex:1;height:5px;background:#E7E2D4;border-radius:3px;overflow:hidden}.kst-bar i{display:block;height:100%;background:#16A34A}
+.kst-pc{font-weight:600;color:#6F6A5D;min-width:30px;text-align:right}
+.kst-list{list-style:none;margin:4px 0 0;padding:0}
+.kst-list li{display:flex;align-items:center;gap:6px;padding:2px 2px 2px 4px;border-radius:6px;font-size:12px}
+.kst-list li:hover{background:#FBF8EF}
+.kst-list label{display:flex;align-items:center;gap:6px;flex:1;min-width:0;font-weight:500;cursor:pointer;margin:0}
+.kst-list label input{width:auto;margin:0;accent-color:#16A34A}
+.kst-list label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kst-list li.done label span{text-decoration:line-through;color:#8A8577}
+.kst-list small{flex:none;font-size:10.5px;color:#8A8577}.kst-list li.late small{color:#B91C1C;font-weight:700}
+.kst-list li:hover .kdel-s{opacity:.85}
+.kstep-add,.kstep-first{background:none;border:0;padding:1px 4px;font:inherit;font-size:11px;color:#9A947F;cursor:pointer}
+.kstep-add:hover,.kstep-first:hover{color:#5A4400;text-decoration:underline}
+.kst-addrow .kadd-in{margin-top:3px;font-size:12px;padding:4px 8px}

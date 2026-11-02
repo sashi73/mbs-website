@@ -130,10 +130,14 @@ function cleanSubs(list, t, uid) {
   if (!Array.isArray(list) || t.dur === 0) return [];
   const D = Math.max(1, t.dur);
   return list.slice(0, 40).map((x) => {
-    const off = int(x.off, 0, D - 1, 0);
-    const status = STAT.includes(x.status) ? x.status : 'todo';
-    return { id: uid(x.id, 's'), name: str(x.name, 160) || 'Sub-task', owner: str(x.owner, 80), off, dur: int(x.dur, 1, D - off, 1), status, pct: subPctOf(x, status), desc: str(x.desc, 300),
-      priority: ['High', 'Medium', 'Low'].includes(x.priority) ? x.priority : '', points: [1, 2, 3, 5, 8, 13].includes(Number(x.points)) ? Number(x.points) : 0 };   // v65: user stories on the Board
+    const off = int(x.off, 0, D - 1, 0), dur = int(x.dur, 1, D - off, 1);
+    let status = STAT.includes(x.status) ? x.status : 'todo';
+    // v85: dated steps inside a story (a third level): off / dur in working days from the story's start, done or not
+    const steps = (Array.isArray(x.steps) ? x.steps : []).slice(0, 40).map((st) => { const so = int(st && st.off, 0, dur - 1, 0); return { id: uid(st && st.id, 'p'), name: str(st && st.name, 160) || 'Step', off: so, dur: int(st && st.dur, 1, dur - so, 1), done: !!(st && st.done) }; });
+    let pct = subPctOf(x, status);
+    if (steps.length) { const w = steps.reduce((a, q) => a + q.dur, 0) || 1; pct = Math.round(steps.reduce((a, q) => a + (q.done ? q.dur : 0), 0) / w * 100); status = steps.every((q) => q.done) ? 'done' : subStat(pct); }
+    return { id: uid(x.id, 's'), name: str(x.name, 160) || 'Sub-task', owner: str(x.owner, 80), off, dur, status, pct, desc: str(x.desc, 300),
+      priority: ['High', 'Medium', 'Low'].includes(x.priority) ? x.priority : '', points: [1, 2, 3, 5, 8, 13].includes(Number(x.points)) ? Number(x.points) : 0, steps };   // v65: user stories on the Board
   });
 }
 function clean(p, core) {
