@@ -111,13 +111,19 @@ export async function analyse({ core, id, question }, by) {
   try { ({ data: o, used, cutOff } = await llmJson([{ role: 'system', content: SYSTEM }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: cap(), timeoutMs: 240000, temperature: 0.2 })); }
   catch (e) { return { error: e.message }; }
   const todayUse = await usage(true, used);
+  const a = shape(o, plan, { meeting: { id: m.id, title: m.title, date: m.date, start: m.start }, by, used, todayUse, cutOff, long });
+  a.report = report(a);
+  await kv.set(`pmeet:${job.core}:${m.id}`, a);
+  return a;
+}
+function shape(o, plan, { meeting, by, used, todayUse, cutOff, long }) {
   const tasks = plan.tasks, byN = (n) => tasks[int(n, 1, tasks.length, 0) - 1];
   const arr = (x, n) => (Array.isArray(x) ? x : []).slice(0, n);
   const lvl = (v) => (LEVELS.includes(v) ? v : 'Low');
   const impact = {}; for (const k of AREAS) { const v = (o.impact || {})[k] || {}; impact[k] = { level: str(v.text) ? lvl(v.level) : 'None', text: str(v.text, 600) }; }
   const seen = new Set();
   const a = {
-    meeting: { id: m.id, title: m.title, date: m.date, start: m.start }, at: Date.now(), by: str(by, 60),
+    meeting, at: Date.now(), by: str(by, 60),
     outcome: str(o.outcome, 400), summary: arr(o.summary, 10).map((s) => str(s, 400)).filter(Boolean), decisions: arr(o.decisions, 12).map((s) => str(s, 300)).filter(Boolean),
     actions: arr(o.actions, 15).map((x) => ({ action: str(x && x.action, 300), owner: str(x && x.owner, 80), due: ymd(x && x.due) })).filter((x) => x.action),
     impact,
@@ -134,11 +140,31 @@ export async function analyse({ core, id, question }, by) {
       .filter((x) => x.name && !(plan.stakeholders || []).some((y) => y.name && y.name.toLowerCase() === x.name.toLowerCase())),
     quality: arr(o.quality, 8).map((s) => str(s, 300)).filter(Boolean),
     follow_ups: arr(o.follow_ups, 3).map((s) => str(s, 160)).filter(Boolean),
-    tokens: used, today: todayUse, cutOff: !!cutOff, longTranscript: long, rev: plan.rev || 0
+    tokens: used, today: todayUse, cutOff: !!cutOff, longTranscript: !!long, rev: plan.rev || 0
   };
-  a.report = report(a);
-  await kv.set(`pmeet:${job.core}:${m.id}`, a);
   return a;
+}
+
+// v82: 🔁 change control: the impact of a proposed change (a change request), in the same shape as a meeting's impact
+const CR_SYSTEM = SYSTEM.replace('the TRANSCRIPT of one project meeting', 'a proposed CHANGE REQUEST (what someone wants changed, and why)')
+  .replace('Work out what the meeting means for the project, thoroughly and practically.', 'Work out what this change would mean for the project if it is approved, thoroughly and practically.')
+  .replace('Only use what was actually said in the meeting; do not invent.', 'Only use what the change request says and the plan; do not invent.')
+  .replace('stakeholders (people or organisations in the meeting who are NOT in the stakeholder list', 'stakeholders (people or organisations named in the request who are NOT in the stakeholder list')
+  .replace('5) decisions and actions (action, owner, due YYYY-MM-DD or "").', '5) decisions: the decisions the change control board must make; actions: what has to happen if it is approved (action, owner, due YYYY-MM-DD or "").');
+export async function assessChange({ core, title, text }, by) {
+  const job = await J.find(core); if (!job) return { error: 'Job not found' };
+  const plan = await P.get(job.core); if (!plan) return { error: 'This job has no plan yet.' };
+  const desc = str(text, 4000); if (desc.length < 8) return { error: 'Describe the change first.' };
+  if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.' };
+  try { await checkLimit(); } catch (e) { return { error: e.message }; }
+  const { ctx, stakeholders } = await INTEL.context(job, plan, desc);
+  delete ctx.document_extracts; delete ctx.extracts_are_partial; delete ctx.swms;
+  const user = { change_request: { title: INTEL.scrub(str(title, 200), job, stakeholders), description: INTEL.scrub(desc, job, stakeholders) }, ...ctx };
+  let o, used, cutOff;
+  try { ({ data: o, used, cutOff } = await llmJson([{ role: 'system', content: CR_SYSTEM }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: cap(), timeoutMs: 240000, temperature: 0.2 })); }
+  catch (e) { return { error: e.message }; }
+  const todayUse = await usage(true, used);
+  return shape(o, plan, { meeting: null, by, used, todayUse, cutOff, long: false });
 }
 const dLong = (s) => (s ? new Date(s + 'T00:00:00Z').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) : '');
 function report(a) {

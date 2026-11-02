@@ -189,7 +189,9 @@ function clean(p, core) {
       platform: ['google', 'teams', 'zoom'].includes(m.platform) ? m.platform : 'google', link: meetLink(m.link), extId: str(m.extId, 200), passcode: str(m.passcode, 20),
       guests: (Array.isArray(m.guests) ? m.guests : []).map((e) => str(e, 160)).filter((e) => /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(e)).slice(0, 30),
       status: ['Scheduled', 'Took place', 'Rescheduled', 'Cancelled'].includes(m.status) ? m.status : 'Scheduled', was: (Array.isArray(m.was) ? m.was : []).map((x) => str(x, 40)).slice(-10),
-      doc: str(m.doc, 30), analysed: Number(m.analysed) || 0, applied: Number(m.applied) || 0, notes: str(m.notes, 1000) })),
+      doc: str(m.doc, 30), analysed: Number(m.analysed) || 0, applied: Number(m.applied) || 0, notes: str(m.notes, 1000), cr: str(m.cr, 20) })),
+    // v82: 🔁 change control: change requests (CR-001 ...): raised, assessed, reviewed (change control meeting), approved / rejected / deferred, implemented
+    changes: (Array.isArray(p.changes) ? p.changes : []).slice(0, 200).map(crClean).filter(Boolean),
     baseline: p.baseline && typeof p.baseline === 'object' ? { at: Number(p.baseline.at) || Date.now(), finish: ymdOk(p.baseline.finish), BAC: r2(p.baseline.BAC),
       tasks: Object.fromEntries(Object.entries(p.baseline.tasks || {}).slice(0, 300).map(([k, v]) => [str(k, 20), { es: ymdOk(v.es), ef: ymdOk(v.ef), cost: r2(v.cost) }])) } : null
   };
@@ -209,6 +211,22 @@ function meetLink(u) { const s = str(u, 600); return /^https:\/\/([a-z0-9-]+\.)*
 
 // ---------- storage ----------
 export async function get(core) { return kv.get('plan:' + core); }
+// v82: one change request
+const CR_ST = ['Proposed', 'Under review', 'CCB meeting', 'Approved', 'Implemented', 'Rejected', 'Deferred'];
+function crClean(c) {
+  if (!c || typeof c !== 'object') return null;
+  let items = null;
+  if (c.items && typeof c.items === 'object') { const j = JSON.stringify(c.items); if (j.length < 80000) items = JSON.parse(j); }
+  const picks = {}; for (const [k, v] of Object.entries(c.picks && typeof c.picks === 'object' ? c.picks : {}).slice(0, 200)) if (/^[tnsrikq]:\d{1,3}$/.test(k)) picks[k] = v ? 1 : 0;
+  const d = c.decision && typeof c.decision === 'object' ? c.decision : null;
+  return { id: str(c.id, 20).replace(/[^\w-]/g, '') || 'cr' + Math.random().toString(36).slice(2, 8), num: int(c.num, 1, 9999, 1), title: str(c.title, 200) || 'Change request', desc: str(c.desc, 4000), reason: str(c.reason, 2000),
+    source: ['manual', 'meeting', 'intel'].includes(c.source) ? c.source : 'manual', srcRef: str(c.srcRef, 30), srcTitle: str(c.srcTitle, 200), raisedBy: str(c.raisedBy, 80), raisedAt: Number(c.raisedAt) || Date.now(),
+    priority: ['Low', 'Medium', 'High', 'Urgent'].includes(c.priority) ? c.priority : 'Medium', status: CR_ST.includes(c.status) ? c.status : 'Proposed',
+    estDays: int(c.estDays, -999, 999, 0), estCost: r2(c.estCost), items, picks, ccb: ymdOk(c.ccb),
+    decision: d ? { by: str(d.by, 80), role: str(d.role, 60), at: Number(d.at) || Date.now(), note: str(d.note, 1000), sig: str(d.sig, 80), outcome: ['Approved', 'Rejected', 'Deferred'].includes(d.outcome) ? d.outcome : 'Approved' } : null,
+    effect: c.effect && typeof c.effect === 'object' ? { days: int(c.effect.days, -9999, 9999, 0), cost: r2(c.effect.cost), f0: ymdOk(c.effect.f0), f1: ymdOk(c.effect.f1), b0: r2(c.effect.b0), b1: r2(c.effect.b1), est: !!c.effect.est } : null,
+    implementedAt: Number(c.implementedAt) || 0, log: (Array.isArray(c.log) ? c.log : []).slice(-40).map((x) => ({ at: Number(x && x.at) || Date.now(), what: str(x && x.what, 300) })).filter((x) => x.what) };
+}
 // what a task costs: its own quantity x rate (labour, hire ...) plus the stock materials on it
 export function matsOf(t) { return Array.isArray(t.mats) && t.mats.length ? t.mats : t.item ? [{ item: t.item, qty: Number(t.qty) || 0, price: Number(t.rate) || 0, legacy: true }] : []; }
 export function taskCost(t) {

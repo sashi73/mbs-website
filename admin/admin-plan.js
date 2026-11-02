@@ -967,7 +967,7 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['intel', '🧠 Project Intelligence']];
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Project Intelligence']];
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>' +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
       '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote" title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel" title="Delete this plan">🗑 Delete plan</button></div>' +
@@ -1004,7 +1004,7 @@
         p.baseline = { at: Date.now(), finish: R.finish, BAC: R.BAC, tasks: tasks }; saveNow('baseline set'); toast('Baseline set'); render();
       });
     };
-    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, intel: intelTab }[S.tab] || scheduleTab)(R);
+    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, change: changeTab, intel: intelTab }[S.tab] || scheduleTab)(R);
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
@@ -2392,7 +2392,7 @@
     if (o.budget) S2.push({ kind: 'kv', title: H('Budget'), rows: [['Approved budget', c.budget ? money(c.budget) : 'Not set'], ['Planned cost (BAC)', money(R.BAC) + (estOf(p).n ? '  (includes ' + money(estOf(p).sum) + ' of indicative benchmark costs on ' + pl(estOf(p).n, 'task') + ', not yet reviewed)' : '')]]
       .concat(c.budget ? [['Contingency (budget less planned cost)', money(Math.round((c.budget - R.BAC) * 100) / 100)]] : []).concat(R.AC ? [['Spent to date', money(R.AC)]] : []) });
     if (o.notes && c.notes) S2.push({ kind: 'text', title: H('Planning notes'), text: c.notes });
-    if (o.governance) S2.push({ kind: 'text', title: H('Governance and change control'), text: '- The project manager runs the project day to day and reports progress to the customer (sponsor) and stakeholders.\n- Any change to scope, time or cost is raised as a written variation and agreed by the customer (sponsor) and the project manager before the work goes ahead.\n- Risks and issues are reviewed at every progress meeting and recorded in the project registers.\n- The work is accepted when the acceptance criteria above are met and the customer signs off.' });
+    if (o.governance) S2.push({ kind: 'text', title: H('Governance and change control'), text: '- The project manager runs the project day to day and reports progress to the customer (sponsor) and stakeholders.\n- Any change to scope, time, cost, quality, risks or stakeholders is raised as a change request in change control: its impact is assessed, it is reviewed (at a change control meeting where needed) and it is approved and signed by the project manager or project director (and agreed with the customer where it changes the contract) before it is added to the plan and registers.\n- Risks and issues are reviewed at every progress meeting and recorded in the project registers.\n- The work is accepted when the acceptance criteria above are met and the customer signs off.' });
     var signers = [{ role: 'Customer (sponsor)', name: c.customer || S.job.name || '' }, { role: 'Project manager', name: c.manager || '' }, { role: 'For Modern Building Solutions', name: '' }];
     (p.stakeholders || []).filter(function (x) { return x.raci === 'A' && x.name && !signers.some(function (y) { return y.name && y.name.toLowerCase() === x.name.toLowerCase(); }); }).slice(0, 3).forEach(function (x) { signers.push({ role: x.role || 'Accountable stakeholder', name: x.name }); });
     S2.push({ kind: 'sign', title: H('Approval and sign-off'), intro: 'By signing, the parties agree to the scope, schedule, budget and acceptance criteria in this project charter (version ' + v + ', ' + dmy(t0) + ').', rows: signers });
@@ -2865,12 +2865,13 @@
   }
 
   // the impact block, used on the Comms tab and in Project Intelligence answers
-  function impactHtml(a, m) {
+  function impactHtml(a, m, cr) {
     var p = S.plan, num = {}; p.tasks.forEach(function (t, i) { num[t.id] = i + 1; });
-    var applied = m && m.applied && m.analysed && m.applied >= m.analysed;
+    var applied = !cr && m && m.applied && m.analysed && m.applied >= m.analysed, crLock = cr && CR_DONE[cr.status], hasPk = cr && cr.picks && Object.keys(cr.picks).length;
+    var sent = !cr && m && m.cr ? (p.changes || []).filter(function (c) { return c.id === m.cr; })[0] : null; if (sent) { cr = null; hasPk = sent.picks && Object.keys(sent.picks).length; if (hasPk) cr = { picks: sent.picks }; }
     var area = '<h4>Impact on the project</h4><div class="table-wrap"><table class="pi-tbl im-tbl"><thead><tr><th>Area</th><th>Impact</th><th>What it means</th></tr></thead><tbody>' +
       AREA_N.map(function (x) { var v = a.impact[x[0]] || { level: 'None', text: '' }; return '<tr><td class="nowrap"><b>' + x[1] + '</b></td><td><span class="lv ' + LVL_C[v.level] + '">' + v.level + '</span></td><td>' + (esc(v.text) || '<span class="muted">No change</span>') + '</td></tr>'; }).join('') + '</tbody></table></div>';
-    var item = function (k, i, on, html) { return '<label class="im-it"><input type="checkbox" data-im="' + k + ':' + i + '"' + (on ? ' checked' : '') + (applied ? ' disabled' : '') + '><span>' + html + '</span></label>'; };
+    var item = function (k, i, on, html) { if (hasPk) on = !!cr.picks[k + ':' + i]; return '<label class="im-it"><input type="checkbox" data-im="' + k + ':' + i + '"' + (on ? ' checked' : '') + (applied || crLock || sent ? ' disabled' : '') + '><span>' + html + '</span></label>'; };
     var g = [];
     var have = function (id) { return p.tasks.some(function (t) { return t.id === id; }); };
     if (a.task_changes.length) g.push(['⏱ Schedule and cost', a.task_changes.map(function (c, i) {
@@ -2879,11 +2880,15 @@
     })]);
     if (a.new_tasks.length) g.push(['＋ New tasks', a.new_tasks.map(function (t, i) { return item('n', i, true, '<b>' + esc(t.name) + '</b>: ' + pl(t.days, 'day') + (t.after.length ? ', after #' + t.after.map(function (x) { return num[x]; }).filter(Boolean).join(', #') : '') + (t.cost ? ', ' + money(t.cost) : '') + (t.why ? '<br><small class="muted">' + esc(t.why) + '</small>' : '')); })]);
     if (a.scope_changes.length) g.push(['🎯 Scope', a.scope_changes.map(function (x, i) { return item('s', i, true, '<b>' + x.type + ':</b> ' + esc(x.text) + (x.why ? '<br><small class="muted">' + esc(x.why) + '</small>' : '')); })]);
-    if (a.risks.length) g.push(['⚠ Risks for the register', a.risks.map(function (x, i) { var dup = (p.risks || []).some(function (y) { return y.title.toLowerCase() === x.title.toLowerCase(); }); return item('r', i, !dup, '<b>' + esc(x.title) + '</b> ' + (x.critical ? '<span class="pi-crit">⚡ Critical</span> ' : '') + '<small>P' + x.p + ' × I' + x.i + ' = <b>' + (x.p * x.i) + '</b> · ' + esc(x.response) + '</small><br><small class="muted">' + esc(x.cause) + (x.action ? ' → ' + esc(x.action) : '') + '</small>' + (dup ? ' <small class="muted">(already in the register)</small>' : '')); })]);
+    if (a.risks.length) g.push(['⚠ Risks for the register', a.risks.map(function (x, i) { var dup = (p.risks || []).some(function (y) { return y.title.toLowerCase() === x.title.toLowerCase(); }); if (crLock || sent) dup = false; return item('r', i, !dup, '<b>' + esc(x.title) + '</b> ' + (x.critical ? '<span class="pi-crit">⚡ Critical</span> ' : '') + '<small>P' + x.p + ' × I' + x.i + ' = <b>' + (x.p * x.i) + '</b> · ' + esc(x.response) + '</small><br><small class="muted">' + esc(x.cause) + (x.action ? ' → ' + esc(x.action) : '') + '</small>' + (dup ? ' <small class="muted">(already in the register)</small>' : '')); })]);
     if (a.issues.length) g.push(['❗ Issues for the log', a.issues.map(function (x, i) { return item('i', i, true, '<b>' + esc(x.title) + '</b> <small>' + esc(x.priority) + (x.owner ? ' · ' + esc(x.owner) : '') + (x.due ? ' · due ' + esc(dmy(x.due)) : '') + '</small>' + (x.detail ? '<br><small class="muted">' + esc(x.detail) + '</small>' : '')); })]);
-    if (a.stakeholders.length) g.push(['👥 New stakeholders', a.stakeholders.map(function (x, i) { var dup = (p.stakeholders || []).some(function (y) { return y.name && y.name.toLowerCase() === x.name.toLowerCase(); }); return item('k', i, !dup, '<b>' + esc(x.name) + '</b> · ' + esc(x.role) + ' <span class="raci raci-' + x.raci + '">' + x.raci + '</span>' + (dup ? ' <small class="muted">(listed)</small>' : '')); })]);
+    if (a.stakeholders.length) g.push(['👥 New stakeholders', a.stakeholders.map(function (x, i) { var dup = (p.stakeholders || []).some(function (y) { return y.name && y.name.toLowerCase() === x.name.toLowerCase(); }); if (crLock || sent) dup = false; return item('k', i, !dup, '<b>' + esc(x.name) + '</b> · ' + esc(x.role) + ' <span class="raci raci-' + x.raci + '">' + x.raci + '</span>' + (dup ? ' <small class="muted">(listed)</small>' : '')); })]);
     if (a.quality.length) g.push(['✅ Quality (added to the acceptance criteria)', a.quality.map(function (x, i) { return item('q', i, true, esc(x)); })]);
-    if (!g.length) return area + '<p class="muted">No changes to the plan came out of this meeting.</p>';
+    if (!g.length) return area + '<p class="muted">No changes to the plan came out of ' + (cr ? 'this change request' : 'this meeting') + '.</p>';
+    if (cr && !sent) return area + '<div class="im-box"><h4>' + (crLock ? 'The changes in this request' : 'Changes in this request: untick any that should not go ahead') + '</h4><div class="im-prev" data-imprev></div>' + g.map(function (x) { return '<div class="im-g"><b class="im-gh">' + x[0] + '</b>' + x[1].join('') + '</div>'; }).join('') + '</div>';
+    if (sent) return area + '<div class="im-box"><h4>Proposed changes (sent to change control)</h4>' + g.map(function (x) { return '<div class="im-g"><b class="im-gh">' + x[0] + '</b>' + x[1].join('') + '</div>'; }).join('') + '<div class="cr-sent" style="margin-top:10px">🔁 Sent to change control as <b>' + crNo(sent) + '</b> · <span class="cr-st ' + CR_CLS[sent.status] + '">' + esc(sent.status) + '</span> <button class="btn btn-sm" type="button" data-imcropen="' + esc(sent.id) + '">Open ' + crNo(sent) + '</button></div></div>';
+    if (!applied) return area + '<div class="im-box"><h4>Proposed changes to the plan</h4><div class="im-prev" data-imprev></div>' + g.map(function (x) { return '<div class="im-g"><b class="im-gh">' + x[0] + '</b>' + x[1].join('') + '</div>'; }).join('') +
+      '<div class="row" style="gap:8px;margin-top:10px;align-items:center"><button class="btn btn-gold" data-imcr type="button">➜ Send to change control</button><span class="muted" style="font-size:12.5px">Nothing changes yet. The ticked changes become a change request: reviewed (at a change control meeting if needed) and approved and signed by the project manager or project director before they go into the plan and registers.</span></div></div>';
     return area + '<div class="im-box"><h4>Changes to apply to the plan</h4><div class="im-prev" data-imprev></div>' + g.map(function (x) { return '<div class="im-g"><b class="im-gh">' + x[0] + '</b>' + x[1].join('') + '</div>'; }).join('') +
       '<div class="row" style="gap:6px;margin-top:8px">' + (applied ? '<span class="cm-ok">✓ Applied to the plan ' + esc(new Date(m.applied).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + '</span>' + (S.fitUndo && S.fitUndo.core === S.core && S.fitUndo.meet === m.id ? '<button class="btn btn-sm" data-imundo type="button">↶ Undo</button>' : '')
         : '<button class="btn btn-gold" data-imgo type="button">✓ Apply the ticked changes</button><span class="muted" style="font-size:12.5px">The Gantt chart, budget, scope and registers update; ↶ Undo puts it back.</span>') + '</div></div>';
@@ -2891,7 +2896,7 @@
   function impactPicks(box) { var o = {}; box.querySelectorAll('[data-im]:checked').forEach(function (c) { o[c.getAttribute('data-im')] = 1; }); return o; }
   function impactApply(p, a, picks, m) {   // works on any plan object (the real one, or a copy for the preview)
     var byId = {}; p.tasks.forEach(function (t) { byId[t.id] = t; });
-    var tag = m ? ' (meeting ' + dmy(m.date) + ')' : ' (meeting)', n = 0;
+    var tag = m && typeof m.tag === 'string' ? m.tag : m ? ' (meeting ' + dmy(m.date) + ')' : ' (meeting)', n = 0;
     a.task_changes.forEach(function (c, i) {
       var t = byId[c.id]; if (!picks['t:' + i] || !t) return; n++;
       if (c.durTo !== c.durFrom) { t.dur = c.durTo; fitSubs(t); derive(t); }
@@ -2919,18 +2924,30 @@
     a.stakeholders.forEach(function (x, i) { if (!picks['k:' + i]) return; n++; p.stakeholders.push({ id: 's' + Date.now().toString(36) + 'm' + i, name: x.name, role: x.role, raci: x.raci, phone: '', email: '', sub: '' }); });
     return n;
   }
-  function impactWire(box, a, m, after) {
+  function impactWire(box, a, m, after, cr) {
     var prev = box.querySelector('[data-imprev]');
     var show = function () {
       if (!prev) return;
+      if (cr && CR_DONE[cr.status] && cr.effect) { var e = cr.effect; prev.className = 'im-prev' + (e.days > 0 || e.cost > 0 ? ' worse' : '');
+        prev.innerHTML = '<b>Effect when ' + esc(cr.status === 'Implemented' ? 'approved' : cr.status.toLowerCase()) + ':</b> finish ' + esc(dmy(e.f0)) + ' → <b>' + esc(dmy(e.f1)) + '</b> (' + (e.days ? (e.days > 0 ? '+' : '') + pl(e.days, 'working day') : 'no change') + ') · budget ' + money(e.b0) + ' → <b>' + money(e.b1) + '</b> (' + (e.cost ? (e.cost > 0 ? '+' : '−') + money(Math.abs(e.cost)) : 'no change') + ')'; return; }
       var picks = impactPicks(box), R0 = rollup(S.plan, today()), copy = JSON.parse(JSON.stringify(S.plan)); impactApply(copy, a, picks, m); var R1 = rollup(copy, today());
       var dd = R0.finish && R1.finish ? (R1.finish > R0.finish ? workBetween(R0.finish, R1.finish) - 1 : R1.finish < R0.finish ? -(workBetween(R1.finish, R0.finish) - 1) : 0) : 0, dc = Math.round((R1.BAC - R0.BAC) * 100) / 100;
       prev.className = 'im-prev' + (dd > 0 || dc > 0 ? ' worse' : '');
       prev.innerHTML = '<b>With the ticked changes:</b> finish ' + esc(dmy(R0.finish)) + ' → <b>' + esc(dmy(R1.finish)) + '</b> (' + (dd ? (dd > 0 ? '+' : '') + pl(dd, 'working day') : 'no change') + ')' +
         ' · budget ' + money(R0.BAC) + ' → <b>' + money(R1.BAC) + '</b> (' + (dc ? (dc > 0 ? '+' : '−') + money(Math.abs(dc)) : 'no change') + ')' + (p0finishBy(R1) ? ' · <span class="bad">after the Finish by date ' + esc(dmy(S.plan.finishBy)) + '</span>' : '');
     };
-    box.querySelectorAll('[data-im]').forEach(function (c) { c.onchange = show; });
+    box.querySelectorAll('[data-im]').forEach(function (c) { c.onchange = function () { show(); if (cr && !CR_DONE[cr.status]) { cr.picks = {}; box.querySelectorAll('[data-im]').forEach(function (x) { cr.picks[x.getAttribute('data-im')] = x.checked ? 1 : 0; }); dirty(); } }; });
     show();
+    var op = box.querySelector('[data-imcropen]'); if (op) op.onclick = function () { S.crView = op.getAttribute('data-imcropen'); location.hash = '#plan/' + S.core + '/change'; };
+    var send = box.querySelector('[data-imcr]'); if (send) send.onclick = function () {
+      var picks = impactPicks(box); if (!Object.keys(picks).length) return toast('Tick the changes to send', true);
+      var items = JSON.parse(JSON.stringify(a)); delete items.report; delete items.tokens; delete items.today;
+      var c = crNew({ title: m ? 'Changes from the meeting: ' + m.title : 'Changes suggested by Project Intelligence', desc: a.outcome || (a.summary || []).join('\n'), reason: (a.decisions || []).map(function (x) { return '- ' + x; }).join('\n'),
+        source: m ? 'meeting' : 'intel', srcRef: m ? m.id : '', srcTitle: m ? m.title + ' (' + dmy(m.date) + ')' : 'Project Intelligence answer', items: items, picks: picks });
+      if (m) { var mm = (S.plan.meetings || []).filter(function (x) { return x.id === m.id; })[0]; if (mm) mm.cr = c.id; }
+      dirty(crNo(c) + ' raised'); S.crView = c.id; toast(crNo(c) + ' raised in change control: review it, then approve and sign to add it to the plan');
+      location.hash = '#plan/' + S.core + '/change';
+    };
     var go = box.querySelector('[data-imgo]'); if (go) go.onclick = function () {
       var picks = impactPicks(box); if (!Object.keys(picks).length) return toast('Tick the changes to apply', true);
       var R0 = rollup(S.plan, today());
@@ -2944,6 +2961,215 @@
     var un = box.querySelector('[data-imundo]'); if (un) un.onclick = function () { fitUndo(); after(); };
   }
   function p0finishBy(R) { return S.plan.finishBy && R.finish && R.finish > S.plan.finishBy; }
+
+  /* ---------- v82: 🔁 Change control: every proposed change is a change request (CR); reviewed, approved and signed by the PM / PD (or the
+     change control board) before it goes into the plan and the registers. Changes from meetings and Project Intelligence come here first. ---------- */
+  var CR_DONE = { Approved: 1, Implemented: 1, Rejected: 1, Deferred: 1 };
+  var CR_CLS = { Proposed: 'cr-p', 'Under review': 'cr-r', 'CCB meeting': 'cr-m', Approved: 'cr-a', Implemented: 'cr-i', Rejected: 'cr-x', Deferred: 'cr-d' };
+  var CR_ROLES = ['Project manager', 'Project director', 'Sponsor (customer)', 'Change control board (chair)'];
+  var CR_SRC = { manual: '✍ Raised by hand', meeting: '📞 From a meeting', intel: '🧠 From Project Intelligence' };
+  function crNo(c) { return 'CR-' + ('00' + c.num).slice(-3); }
+  function crNew(o) {
+    var p = S.plan; p.changes = p.changes || [];
+    var c = Object.assign({ id: 'cr' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), num: p.changes.reduce(function (a, x) { return Math.max(a, x.num || 0); }, 0) + 1, title: 'Change request', desc: '', reason: '',
+      source: 'manual', srcRef: '', srcTitle: '', raisedBy: (p.charter || {}).manager || '', raisedAt: Date.now(), priority: 'Medium', status: 'Proposed', estDays: 0, estCost: 0, items: null, picks: {}, ccb: '', decision: null, implementedAt: 0, log: [] }, o);
+    c.log = [{ at: Date.now(), what: 'Raised' + (c.srcTitle ? ' from ' + c.srcTitle : '') + (c.raisedBy ? ' by ' + c.raisedBy : '') }];
+    p.changes.push(c); return c;
+  }
+  function crLog(c, what) { c.log = (c.log || []).concat([{ at: Date.now(), what: what }]).slice(-40); }
+  function crPicks(c) {   // what goes ahead: the ticked items (all of them if never changed)
+    var a = c.items; if (!a) return {};
+    var all = {}; [['t', a.task_changes], ['n', a.new_tasks], ['s', a.scope_changes], ['r', a.risks], ['i', a.issues], ['k', a.stakeholders], ['q', a.quality]].forEach(function (x) { (x[1] || []).forEach(function (_, i) { all[x[0] + ':' + i] = 1; }); });
+    if (c.picks && Object.keys(c.picks).length) Object.keys(all).forEach(function (k) { all[k] = c.picks[k] ? 1 : 0; });
+    Object.keys(all).forEach(function (k) { if (!all[k]) delete all[k]; }); return all;
+  }
+  function crDelta(c) {
+    var e = c.effect; if (e && CR_DONE[c.status]) return { R0: { finish: e.f0, BAC: e.b0 }, R1: { finish: e.f1, BAC: e.b1 }, days: e.days, cost: e.cost, est: !!e.est };
+    var R0 = rollup(S.plan, today()); if (!c.items) return { R0: R0, R1: R0, days: c.estDays || 0, cost: c.estCost || 0, est: true };
+    var copy = JSON.parse(JSON.stringify(S.plan)); impactApply(copy, c.items, crPicks(c), { tag: '' }); var R1 = rollup(copy, today());
+    var dd = R0.finish && R1.finish ? (R1.finish > R0.finish ? workBetween(R0.finish, R1.finish) - 1 : R1.finish < R0.finish ? -(workBetween(R1.finish, R0.finish) - 1) : 0) : 0;
+    return { R0: R0, R1: R1, days: dd, cost: r2(R1.BAC - R0.BAC) };
+  }
+  function crImpTxt(d) { return (d.days ? (d.days > 0 ? '+' : '') + pl(d.days, 'day') : 'no change') + ' · ' + (d.cost ? (d.cost > 0 ? '+' : '−') + money(Math.abs(d.cost)) : 'no cost change'); }
+  function changeTab() {
+    var p = S.plan; p.changes = p.changes || []; var L = p.changes.slice().sort(function (a, b) { return b.num - a.num; }), B = $('#planBody');
+    var open = L.filter(function (c) { return !CR_DONE[c.status]; }), cnt = {}; L.forEach(function (c) { cnt[c.status] = (cnt[c.status] || 0) + 1; });
+    var cur = S.crView ? p.changes.filter(function (c) { return c.id === S.crView; })[0] : null;
+    var steps = [['📝', 'Raised', 'From a meeting, Project Intelligence or by hand'], ['🔍', 'Impact assessed', 'Scope, time, cost, quality, risks, issues, stakeholders'], ['👥', 'Reviewed', 'At a change control meeting where needed'],
+      ['✍', 'Approved and signed', 'By the project manager or project director (or the board)'], ['✅', 'Added to the plan', 'Schedule, scope, risk, issue and stakeholder registers']];
+    B.innerHTML = '<div class="card"><div class="card-h"><h2>🔁 Change control</h2><span class="sp"></span><button class="btn btn-sm" id="crMeet" type="button"' + (open.length ? '' : ' disabled') + ' title="Call a change control meeting to review the open change requests">📞 Call a change control meeting</button>' +
+        '<button class="btn btn-sm" id="crReg" type="button"' + (L.length ? '' : ' disabled') + ' title="The change register as a PDF or Word document">📄 Change register</button><button class="btn btn-sm btn-gold" id="crAdd" type="button">＋ New change request</button></div>' +
+      '<p class="muted" style="margin:-4px 0 10px">Every proposed change to scope, time, cost, quality, risks, issues or stakeholders comes here first. <b>Nothing goes into the plan or the registers until it is approved and signed</b> by the project manager or project director (or the change control board).</p>' +
+      '<ol class="cr-flow">' + steps.map(function (x, i) { return '<li><span>' + x[0] + '</span><b>' + (i + 1) + '. ' + x[1] + '</b><small>' + x[2] + '</small></li>'; }).join('') + '</ol>' +
+      (L.length ? '<div class="cr-cnt">' + Object.keys(CR_CLS).filter(function (k) { return cnt[k]; }).map(function (k) { return '<span class="cr-st ' + CR_CLS[k] + '">' + k + ': ' + cnt[k] + '</span>'; }).join('') + '</div>' +
+        '<div class="table-wrap"><table class="rt cr-tbl"><thead><tr><th>CR</th><th>Change</th><th>Raised</th><th>Time</th><th>Cost</th><th>Priority</th><th>Status</th><th>Decision</th></tr></thead><tbody>' +
+        L.map(function (c) { var d = crDelta(c); return '<tr data-crid="' + esc(c.id) + '" class="' + (cur && cur.id === c.id ? 'on' : '') + '"><td class="nowrap"><b>' + crNo(c) + '</b></td><td>' + esc(c.title) + '<br><small class="muted">' + esc(CR_SRC[c.source] || '') + '</small></td><td class="nowrap">' + esc(dmy(new Date(c.raisedAt).toISOString().slice(0, 10))) + '</td>' +
+          '<td class="nowrap ' + (d.days > 0 ? 'bad' : '') + '">' + (d.days ? (d.days > 0 ? '+' : '') + d.days + ' d' : '–') + (d.est && d.days ? '*' : '') + '</td><td class="nowrap num ' + (d.cost > 0 ? 'bad' : '') + '">' + (d.cost ? (d.cost > 0 ? '+' : '−') + money(Math.abs(d.cost)) : '–') + (d.est && d.cost ? '*' : '') + '</td>' +
+          '<td>' + esc(c.priority) + '</td><td><span class="cr-st ' + CR_CLS[c.status] + '">' + esc(c.status) + '</span>' + (c.ccb && !CR_DONE[c.status] ? '<br><small class="muted">meeting ' + esc(dmy(c.ccb)) + '</small>' : '') + '</td>' +
+          '<td>' + (c.decision ? esc(c.decision.outcome) + ' by ' + esc(c.decision.by) + '<br><small class="muted">' + esc(c.decision.role) + ', ' + esc(dmy(new Date(c.decision.at).toISOString().slice(0, 10))) + '</small>' : '<span class="muted">Waiting</span>') + '</td></tr>'; }).join('') + '</tbody></table></div>'
+        : '<div class="empty">No change requests yet. Changes from meetings (📞 Comms) and Project Intelligence come here when you press <b>➜ Send to change control</b>, or raise one with <b>＋ New change request</b>.</div>') + '</div>' +
+      (cur ? crCard(cur) : '');
+    B.querySelectorAll('tr[data-crid]').forEach(function (tr) { tr.onclick = function () { S.crView = S.crView === tr.getAttribute('data-crid') ? '' : tr.getAttribute('data-crid'); changeTab(); var k = $('#crCard'); if (k) k.scrollIntoView({ block: 'start', behavior: 'smooth' }); }; });
+    $('#crAdd').onclick = crAddDialog; $('#crMeet').onclick = function () { crMeetDialog(); }; $('#crReg').onclick = function () { crDocDialog(null); };
+    if (cur) crWire(cur);
+  }
+  function crCard(c) {
+    var lock = CR_DONE[c.status], d = crDelta(c), dec = c.decision;
+    var info = [['Raised', dmy(new Date(c.raisedAt).toISOString().slice(0, 10)) + (c.raisedBy ? ' by ' + c.raisedBy : '')], ['Source', (CR_SRC[c.source] || '') + (c.srcTitle ? ': ' + c.srcTitle : '')],
+      ['Effect on the plan', d.est ? (d.days || d.cost ? crImpTxt(d) + ' (estimate)' : 'Not assessed yet') : 'Finish ' + dmy(d.R0.finish) + ' → ' + dmy(d.R1.finish) + ' · budget ' + money(d.R0.BAC) + ' → ' + money(d.R1.BAC) + ' (' + crImpTxt(d) + ')']];
+    var acts = lock ? '' : '<div class="cr-acts">' + (c.status === 'Proposed' ? '<button class="btn" type="button" data-cra="review">🔍 Start the review</button>' : '') +
+      '<button class="btn" type="button" data-cra="meet">📞 Take it to a change control meeting</button><span class="sp"></span><button class="btn" type="button" data-cra="Deferred">⏸ Defer</button><button class="btn" type="button" data-cra="Rejected">✕ Reject</button>' +
+      '<button class="btn btn-gold" type="button" data-cra="Approved">✍ Approve and sign</button></div>';
+    var decision = dec ? '<div class="cr-dec cr-dec-' + dec.outcome.toLowerCase() + '"><div><b>' + esc(dec.outcome) + '</b> by <b>' + esc(dec.by) + '</b>, ' + esc(dec.role) + ' · ' + esc(new Date(dec.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) +
+      (dec.sig ? '<span class="cr-sig">' + esc(dec.sig) + '</span>' : '') + (dec.note ? '<br><small>' + esc(dec.note) + '</small>' : '') +
+      (c.status === 'Implemented' ? '<br><small class="good">✓ Added to the plan and registers ' + esc(dmy(new Date(c.implementedAt).toISOString().slice(0, 10))) + '</small>' : '') + '</div>' +
+      (S.crUndo && S.crUndo.core === S.core && S.crUndo.id === c.id ? '<button class="btn btn-sm" type="button" data-cra="undo">↶ Undo</button>' : '') + '</div>' : '';
+    return '<div class="card cr-card" id="crCard"><div class="card-h"><h2>' + crNo(c) + ' · ' + esc(c.title) + '</h2><span class="cr-st ' + CR_CLS[c.status] + '">' + esc(c.status) + '</span><span class="sp"></span>' +
+      '<button class="btn btn-sm" type="button" data-crdoc>📄 PDF / Word</button><button class="btn btn-sm" type="button" data-cra="close" title="Close">✕</button></div>' +
+      '<div class="cr-info">' + info.map(function (x) { return '<div><small>' + esc(x[0]) + '</small><b>' + esc(x[1]) + '</b></div>'; }).join('') +
+        '<div><small>Priority</small>' + (lock ? '<b>' + esc(c.priority) + '</b>' : '<select data-crf="priority" style="width:auto">' + ['Low', 'Medium', 'High', 'Urgent'].map(function (x) { return '<option' + (c.priority === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>') + '</div></div>' +
+      '<div class="cr-tx"><label>What is the change?<textarea data-crf="desc" rows="2" maxlength="4000"' + (lock ? ' readonly' : '') + '>' + esc(c.desc) + '</textarea></label><label>Why is it needed? (justification)<textarea data-crf="reason" rows="2" maxlength="2000"' + (lock ? ' readonly' : '') + '>' + esc(c.reason) + '</textarea></label></div>' +
+      (c.items ? impactHtml(c.items, null, c) + (lock ? '' : '<p style="margin:6px 0 0"><button class="btn btn-sm" type="button" data-cra="assess">↻ Assess the impact again with AI</button></p>')
+        : '<div class="cr-noimp"><b>No impact assessment yet.</b> ' + (lock ? '' : 'Let the AI work out what this change means for the plan (tasks, dates, costs, scope, risks, issues, stakeholders, quality), or put in your own estimate.') +
+          (lock ? '' : '<div class="row" style="gap:8px;margin-top:8px;align-items:center"><button class="btn btn-gold btn-sm" type="button" data-cra="assess">✨ Assess the impact with AI</button><label class="cr-est">Time (days)<input data-crf="estDays" type="number" value="' + (c.estDays || 0) + '"></label><label class="cr-est">Cost ($)<input data-crf="estCost" inputmode="decimal" value="' + (c.estCost || 0) + '"></label></div>') + '</div>') +
+      decision + acts +
+      '<details class="cr-log"><summary>History (' + (c.log || []).length + ')</summary><ul>' + (c.log || []).slice().reverse().map(function (x) { return '<li><small>' + esc(new Date(x.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + '</small> ' + esc(x.what) + '</li>'; }).join('') + '</ul></details></div>';
+  }
+  function crWire(c) {
+    var box = $('#crCard'); if (!box) return;
+    if (c.items) impactWire(box, c.items, null, changeTab, c);
+    box.querySelectorAll('[data-crf]').forEach(function (el) { var k = el.getAttribute('data-crf');
+      el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', function () { c[k] = k === 'estDays' ? Math.round(+el.value || 0) : k === 'estCost' ? r2(String(el.value).replace(/[$,]/g, '')) : el.value; dirty(); }); });
+    box.querySelector('[data-crdoc]').onclick = function () { crDocDialog(c); };
+    box.querySelectorAll('[data-cra]').forEach(function (b) { b.onclick = function () { var a = b.getAttribute('data-cra');
+      if (a === 'close') { S.crView = ''; return changeTab(); }
+      if (a === 'review') { c.status = 'Under review'; crLog(c, 'Review started'); dirty(crNo(c) + ' under review'); return changeTab(); }
+      if (a === 'meet') return crMeetDialog([c.id]);
+      if (a === 'assess') return crAssess(c);
+      if (a === 'undo') { var u = S.crUndo; if (!u || u.id !== c.id) return; var keepRev = S.plan.rev; S.plan = normalise(u.plan); S.plan.rev = keepRev; S.crUndo = null; dirty('Undid ' + crNo(c)); changeTab(); return toast(crNo(c) + ' undone: the plan is back as it was and the request is open again'); }
+      crSign(c, a);
+    }; });
+  }
+  function crAddDialog() {
+    var p = S.plan;
+    M.modal('<h2>＋ New change request</h2><p class="muted" style="margin:-4px 0 10px">Raise any change to the scope, schedule, cost, quality, risks or stakeholders. It is reviewed and signed off here before anything in the plan changes.</p>' +
+      '<form class="form" id="crForm"><label class="full">Title<input name="title" required maxlength="200" placeholder="e.g. Add a second substation feed"></label>' +
+      '<label class="full">What is the change?<textarea name="desc" rows="4" required maxlength="4000" placeholder="What should be added, removed or done differently. Name the tasks, dates and amounts if you know them."></textarea></label>' +
+      '<label class="full">Why is it needed? (justification)<textarea name="reason" rows="2" maxlength="2000" placeholder="e.g. Required by the network operator; customer request; design clash"></textarea></label>' +
+      '<label>Raised by<input name="raisedBy" maxlength="80" value="' + esc((p.charter || {}).manager || '') + '"></label><label>Priority<select name="priority"><option>Low</option><option selected>Medium</option><option>High</option><option>Urgent</option></select></label>' +
+      '<label class="full cr-chk"><input type="checkbox" name="ai" checked> <span>✨ Assess the impact with AI now <small class="muted">(tasks, dates, costs, scope, risks, issues, stakeholders, quality)</small></span></label>' +
+      '<div class="full actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" type="submit">Raise the change request</button></div></form>');
+    $('#crForm').onsubmit = function (e) { e.preventDefault(); var f = e.target;
+      var c = crNew({ title: f.title.value.trim(), desc: f.desc.value.trim(), reason: f.reason.value.trim(), raisedBy: f.raisedBy.value.trim(), priority: f.priority.value });
+      M.closeModal(); dirty(crNo(c) + ' raised'); S.crView = c.id; S.tab = 'change'; render(); toast(crNo(c) + ' raised');
+      if (f.ai.checked) crAssess(c);
+    };
+  }
+  function crAssess(c) {
+    if (!String(c.desc || '').trim()) return toast('Describe the change first', true);
+    var core = S.core, id = rid(), t0 = Date.now(); S.crAi = id;
+    M.modal('<h2>✨ ' + crNo(c) + ': assessing the impact</h2><p class="ask-think">The AI is working out what this change means for the tasks, dates, costs, scope, risks, issues, stakeholders and quality… this usually takes 20–60 seconds.</p><div class="actions"><button class="btn" data-close type="button">Cancel</button></div>');
+    var poll = function () { return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
+      if (S.crAi !== id) return;
+      if (d.status === 'done' && d.cr) { S.crAi = null; M.closeModal(); if (S.core !== core) return; var it = d.cr; delete it.tokens; delete it.today; c.items = it; c.picks = {}; crLog(c, 'Impact assessed by AI'); dirty(crNo(c) + ' impact assessed'); S.crView = c.id; if (S.tab === 'change') changeTab(); toast(crNo(c) + ': impact assessed. Untick anything that should not go ahead, then approve and sign.'); return; }
+      if (d.status === 'error') throw new Error(d.error || 'The AI could not assess it');
+      if (Date.now() - t0 > 250000) throw new Error('The AI is taking too long. Try again in a minute.');
+      return poll(); }); };
+    (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () { return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ id: id, mode: 'cr', core: core, title: c.title, text: c.desc + (c.reason ? '\nWhy: ' + c.reason : '') }) }); })
+      .then(function (r) { if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); }).catch(function (e) { if (S.crAi !== id) return; S.crAi = null; M.closeModal(); fail(e); });
+  }
+  function crSign(c, outcome) {
+    var p = S.plan, pk = crPicks(c), n = Object.keys(pk).length, d = crDelta(c), ok = outcome === 'Approved';
+    M.modal('<h2>' + (ok ? '✍ Approve and sign ' : outcome === 'Rejected' ? '✕ Reject ' : '⏸ Defer ') + crNo(c) + '</h2>' +
+      '<p class="muted" style="margin:-4px 0 10px">' + esc(c.title) + (ok && c.items ? '<br>Effect: finish ' + esc(dmy(d.R0.finish)) + ' → <b>' + esc(dmy(d.R1.finish)) + '</b>, budget ' + money(d.R0.BAC) + ' → <b>' + money(d.R1.BAC) + '</b> (' + esc(crImpTxt(d)) + ')' : '') + '</p>' +
+      '<form class="form" id="crSignF"><label>Name<input name="by" required maxlength="80" value="' + esc((p.charter || {}).manager || '') + '"></label><label>Role<select name="role">' + CR_ROLES.map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></label>' +
+      (ok ? '<label class="full">Signature <small class="muted">(type your full name)</small><input name="sig" required maxlength="80" class="cr-sigin" autocomplete="off"></label>' : '') +
+      '<label class="full">' + (ok ? 'Conditions or notes (optional)' : 'Reason (required)') + '<textarea name="note" rows="2" maxlength="1000"' + (ok ? '' : ' required') + '></textarea></label>' +
+      (ok ? '<label class="full cr-chk"><input type="checkbox" name="go" required> <span><b>I approve ' + crNo(c) + '.</b> ' + (n ? 'The ' + pl(n, 'ticked change') + ' will be added to the plan and registers now (schedule, scope, risks, issues, stakeholders, quality).' : 'There are no plan changes to add; the decision is recorded.') + '</span></label>' : '') +
+      '<div class="full actions"><button class="btn" data-close type="button">Cancel</button><button class="btn ' + (ok ? 'btn-gold' : '') + '" type="submit">' + (ok ? '✍ Approve and add to the plan' : outcome === 'Rejected' ? '✕ Reject' : '⏸ Defer') + '</button></div></form>');
+    $('#crSignF').onsubmit = function (e) { e.preventDefault(); var f = e.target, by = f.by.value.trim();
+      if (ok && f.sig.value.trim().toLowerCase() !== by.toLowerCase()) return toast('The signature must be your full name, as typed in Name', true);
+      var snap = JSON.parse(JSON.stringify(S.plan)), d0 = crDelta(c);
+      c.effect = { days: d0.days, cost: d0.cost, f0: d0.R0.finish || '', f1: d0.R1.finish || '', b0: d0.R0.BAC || 0, b1: d0.R1.BAC || 0, est: !!d0.est };
+      c.decision = { by: by, role: f.role.value, at: Date.now(), note: f.note.value.trim(), sig: ok ? f.sig.value.trim() : '', outcome: outcome };
+      c.status = outcome; crLog(c, outcome + ' by ' + by + ' (' + f.role.value + ')' + (c.decision.note ? ': ' + c.decision.note : ''));
+      var msg = crNo(c) + ' ' + outcome.toLowerCase();
+      if (ok && c.items && n) {
+        var R0 = rollup(S.plan, today()), k = impactApply(S.plan, c.items, pk, { tag: ' (' + crNo(c) + ')' }), R1 = rollup(S.plan, today());
+        c.status = 'Implemented'; c.implementedAt = Date.now(); crLog(c, 'Added to the plan and registers: ' + pl(k, 'change') + '. Finish ' + dmy(R0.finish) + ' → ' + dmy(R1.finish) + ', budget ' + money(R0.BAC) + ' → ' + money(R1.BAC));
+        if (c.source === 'meeting' && c.srcRef) { var mm = (S.plan.meetings || []).filter(function (x) { return x.id === c.srcRef; })[0]; if (mm) mm.applied = Date.now(); }
+        msg = crNo(c) + ' approved and added to the plan: ' + pl(k, 'change') + '. Finish ' + dmy(R1.finish) + ', budget ' + money(R1.BAC);
+      }
+      S.crUndo = { core: S.core, id: c.id, plan: snap };
+      M.closeModal(); dirty(msg); changeTab(); toast(msg);
+    };
+  }
+  function crMeetDialog(ids) {
+    var p = S.plan, open = (p.changes || []).filter(function (c) { return !CR_DONE[c.status]; }).sort(function (a, b) { return a.num - b.num; });
+    if (!open.length) return toast('No open change requests');
+    var pre = ids || open.map(function (c) { return c.id; });
+    M.modal('<h2>📞 Call a change control meeting</h2><p class="muted" style="margin:-4px 0 10px">Pick the change requests for the board to review. The meeting is set up on the 📞 Comms tab with the agenda filled in and the accountable and responsible stakeholders invited; choose the platform there and create it.</p>' +
+      '<div class="cr-pick">' + open.map(function (c) { var d = crDelta(c); return '<label><input type="checkbox" value="' + esc(c.id) + '"' + (pre.indexOf(c.id) >= 0 ? ' checked' : '') + '> <span><b>' + crNo(c) + ' ' + esc(c.title) + '</b><small>' + esc(c.status) + ' · ' + esc(crImpTxt(d)) + '</small></span></label>'; }).join('') + '</div>' +
+      '<div class="form" style="margin-top:10px"><label>Date<input type="date" id="crMDate" value="' + esc(addWork(nextWork(today()), 1)) + '"></label><label>Start<input type="time" id="crMTime" value="10:00"></label></div>' +
+      '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="crMGo" type="button">📞 Set up the meeting</button></div>');
+    $('#crMGo').onclick = function () {
+      var pick = Array.prototype.map.call(document.querySelectorAll('.cr-pick input:checked'), function (x) { return x.value; }); if (!pick.length) return toast('Pick at least one change request', true);
+      var crs = open.filter(function (c) { return pick.indexOf(c.id) >= 0; }), date = $('#crMDate').value || addWork(nextWork(today()), 1);
+      crs.forEach(function (c) { c.status = 'CCB meeting'; c.ccb = date; crLog(c, 'Taken to the change control meeting on ' + dmy(date)); });
+      var C = cmState(); C.view = '';
+      C.d.title = 'Change control meeting: ' + crs.map(crNo).join(', ') + ' (' + p.name + ')'; C.d.date = date; C.d.start = $('#crMTime').value || '10:00'; C.d.minutes = crs.length > 3 ? 60 : 45;
+      C.d.agenda = ['Purpose: review the change requests and decide: approve, reject or defer'].concat(crs.map(function (c) { return crNo(c) + ': ' + c.title + ' (' + crImpTxt(crDelta(c)) + ')'; })).concat(['Decisions and sign-off (project manager / project director)', 'Actions and who updates the plan']).join('\n');
+      var who = (p.stakeholders || []).filter(function (x) { return /@/.test(x.email || '') && (x.raci === 'A' || x.raci === 'R'); }); if (!who.length) who = (p.stakeholders || []).filter(function (x) { return /@/.test(x.email || ''); });
+      C.d.attendees = who.map(function (x) { return x.id; });
+      M.closeModal(); dirty('Change control meeting set up for ' + crs.map(crNo).join(', ')); location.hash = '#plan/' + S.core + '/comms';
+      toast('Change control meeting filled in: pick the platform and create it');
+    };
+  }
+  function crDocDialog(c) {
+    M.modal('<h2>📄 ' + (c ? crNo(c) + ': change request' : 'Change register') + '</h2><p class="muted">' + (c ? 'The change request with its impact, the changes, the effect on the finish date and budget, the decision and signature (or a sign-off block if it is still open), and its history.' : 'Every change request with its impact, status and decision.') + '</p>' +
+      '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn" id="crDocx" type="button">⬇ Word</button><button class="btn btn-gold" id="crPdf" type="button">⬇ PDF</button></div>');
+    var go = function (fmt) { var s0 = c ? crSnapshot(c) : crRegSnapshot(); M.report[fmt](s0).then(function (r) { M.report.save(r.blob, r.name); M.closeModal(); toast((fmt === 'pdf' ? 'PDF' : 'Word') + ' ready'); }).catch(fail); };
+    $('#crPdf').onclick = function () { go('pdf'); }; $('#crDocx').onclick = function () { go('docx'); };
+  }
+  function crSnapshot(c) {
+    var p = S.plan, t0 = today(), d = crDelta(c), a = c.items, pk = crPicks(c), dec = c.decision, L = [];
+    var RG = { High: 'R', Medium: 'A', Low: 'G' };
+    L.push({ kind: 'kv', title: '1. Change request', rows: [['Number', crNo(c)], ['Title', c.title], ['Project', p.name + (S.job.ref ? ' (' + S.job.ref + ')' : '')], ['Raised', dmy(new Date(c.raisedAt).toISOString().slice(0, 10)) + (c.raisedBy ? ' by ' + c.raisedBy : '')],
+      ['Source', (CR_SRC[c.source] || '').replace(/^\S+\s/, '') + (c.srcTitle ? ': ' + c.srcTitle : '')], ['Priority', c.priority], ['Status', c.status]] });
+    L.push({ kind: 'text', title: '2. The change', text: c.desc, always: true, empty: 'Not described.' }, { kind: 'text', title: '3. Justification', text: c.reason, always: true, empty: 'Not stated.' });
+    L.push({ kind: 'kv', title: '4. Effect on the plan', rows: d.est ? [['Time', d.days ? pl(d.days, 'day') + ' (estimate)' : 'Not assessed'], ['Cost', d.cost ? money(d.cost) + ' (estimate)' : 'Not assessed']]
+      : [['Finish date', dmy(d.R0.finish) + '  →  ' + dmy(d.R1.finish) + (d.days ? '  (' + (d.days > 0 ? '+' : '') + pl(d.days, 'working day') + ')' : '  (no change)')], ['Budget (planned cost)', money(d.R0.BAC) + '  →  ' + money(d.R1.BAC) + (d.cost ? '  (' + (d.cost > 0 ? '+' : '−') + money(Math.abs(d.cost)) + ')' : '  (no change)')]] });
+    if (a) {
+      L.push({ kind: 'table', title: '5. Impact assessment', head: ['Area', 'Impact', 'What it means'], wordCols: [2, 1, 7], cols: { 0: { cellWidth: 28 }, 1: { cellWidth: 20 } },
+        rows: AREA_N.map(function (x) { var v = (a.impact || {})[x[0]] || { level: 'None', text: '' }; return [x[1].replace(/^\S+\s/, ''), { t: v.level, rag: RG[v.level] }, v.text || 'No change']; }) });
+      var rows = [], num = {}; p.tasks.forEach(function (t, i) { num[t.id] = i + 1; });
+      var add = function (k, i, type, txt) { rows.push([type, txt, pk[k + ':' + i] ? 'Yes' : 'No']); };
+      (a.task_changes || []).forEach(function (x, i) { add('t', i, 'Schedule / cost', '#' + (num[x.id] || x.n) + ' ' + x.name + ': ' + [x.durTo !== x.durFrom ? 'days ' + x.durFrom + ' → ' + x.durTo : '', x.notBefore ? 'not before ' + dmy(x.notBefore) : '', x.extra ? '+' + money(x.extra) : ''].filter(Boolean).join(', ') + (x.why ? '. ' + x.why : '')); });
+      (a.new_tasks || []).forEach(function (x, i) { add('n', i, 'New task', x.name + ': ' + pl(x.days, 'day') + (x.cost ? ', ' + money(x.cost) : '') + (x.why ? '. ' + x.why : '')); });
+      (a.scope_changes || []).forEach(function (x, i) { add('s', i, 'Scope (' + x.type + ')', x.text + (x.why ? '. ' + x.why : '')); });
+      (a.risks || []).forEach(function (x, i) { add('r', i, 'Risk', x.title + ' (P' + x.p + ' × I' + x.i + ' = ' + x.p * x.i + ', ' + x.response + ')'); });
+      (a.issues || []).forEach(function (x, i) { add('i', i, 'Issue', x.title + ' (' + x.priority + ')'); });
+      (a.stakeholders || []).forEach(function (x, i) { add('k', i, 'Stakeholder', x.name + ', ' + x.role + ' (' + x.raci + ')'); });
+      (a.quality || []).forEach(function (x, i) { add('q', i, 'Quality', x); });
+      L.push({ kind: 'table', title: '6. The changes', head: ['Type', 'Change', 'Goes ahead'], wordCols: [2, 7, 1], cols: { 0: { cellWidth: 30 }, 2: { cellWidth: 20, halign: 'center' } }, rows: rows, always: true, empty: 'No plan changes.' });
+    }
+    var n = a ? 7 : 5;
+    if (dec) L.push({ kind: 'kv', title: n + '. Decision', rows: [['Decision', dec.outcome], ['By', dec.by + ', ' + dec.role], ['Date', new Date(dec.at).toLocaleString('en-AU', { day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })]]
+      .concat(dec.sig ? [['Signed', dec.sig + ' (typed signature)']] : []).concat(dec.note ? [['Notes', dec.note]] : []).concat(c.implementedAt ? [['Added to the plan', dmy(new Date(c.implementedAt).toISOString().slice(0, 10))]] : []) });
+    else L.push({ kind: 'sign', title: n + '. Decision and sign-off', intro: 'Decision:  ☐ Approved   ☐ Rejected   ☐ Deferred.  Once approved and signed, the changes are added to the plan and registers.', rows: [{ role: 'Project manager', name: (p.charter || {}).manager || '' }, { role: 'Project director', name: '' }, { role: 'Sponsor (customer), where it changes the contract', name: (p.charter || {}).customer || S.job.name || '' }] });
+    if ((c.log || []).length) L.push({ kind: 'table', title: (n + 1) + '. History', head: ['When', 'What'], wordCols: [2, 7], cols: { 0: { cellWidth: 34 } }, rows: c.log.map(function (x) { return [new Date(x.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' }), x.what]; }) });
+    return { id: 'cr' + Date.now().toString(36), full: true, no: 1, title: 'CHANGE REQUEST ' + crNo(c), date: t0, headRight: [crNo(c) + '  ·  ' + c.status, 'Issued ' + dmy(t0), S.job.ref || ''], footer: crNo(c) + '  ·  ' + p.name.slice(0, 70),
+      project: { name: p.name, ref: S.job.ref }, sections: L, fileBase: ((S.job.ref || 'Project') + '-' + crNo(c)).replace(/[^\w.-]+/g, '-') };
+  }
+  function crRegSnapshot() {
+    var p = S.plan, t0 = today(), L = (p.changes || []).slice().sort(function (a, b) { return a.num - b.num; }), cnt = {}; L.forEach(function (c) { cnt[c.status] = (cnt[c.status] || 0) + 1; });
+    var RS = { Implemented: 'G', Approved: 'G', Rejected: 'R', Deferred: 'A' };
+    return { id: 'crr' + Date.now().toString(36), full: true, no: 1, title: 'CHANGE REGISTER', date: t0, headRight: [pl(L.length, 'change request'), 'Issued ' + dmy(t0), S.job.ref || ''], footer: 'Change register  ·  ' + p.name.slice(0, 70), project: { name: p.name, ref: S.job.ref }, fileBase: ((S.job.ref || 'Project') + '-Change-register').replace(/[^\w.-]+/g, '-'),
+      sections: [{ kind: 'kv', title: '1. Summary', rows: [['Project', p.name], ['Change requests', String(L.length)]].concat(Object.keys(CR_CLS).filter(function (k) { return cnt[k]; }).map(function (k) { return [k, String(cnt[k])]; })) },
+        { kind: 'table', title: '2. Change requests', head: ['CR', 'Change', 'Raised', 'Time', 'Cost', 'Status', 'Decision'], wordCols: [1, 5, 2, 1, 2, 2, 3], cols: { 0: { cellWidth: 16 }, 2: { cellWidth: 20 }, 3: { cellWidth: 14 }, 4: { cellWidth: 22 }, 5: { cellWidth: 22 } },
+          rows: L.map(function (c) { var d = crDelta(c); return [{ t: crNo(c), b: true }, c.title, dmy(new Date(c.raisedAt).toISOString().slice(0, 10)), d.days ? (d.days > 0 ? '+' : '') + d.days + ' d' : '–', d.cost ? (d.cost > 0 ? '+' : '−') + money(Math.abs(d.cost)) : '–', { t: c.status, rag: RS[c.status] }, c.decision ? c.decision.by + ', ' + c.decision.role + ', ' + dmy(new Date(c.decision.at).toISOString().slice(0, 10)) : 'Waiting']; }) },
+        { kind: 'text', title: '3. How changes are controlled', text: '- Every proposed change is raised as a change request, from a meeting, Project Intelligence or by hand.\n- Its impact on scope, time, cost, quality, risks, issues and stakeholders is assessed.\n- It is reviewed, at a change control meeting where needed.\n- It is approved and signed (or rejected or deferred) by the project manager or project director.\n- Only then are the changes added to the plan and registers.' }] };
+  }
 
   /* ---------- v62: 📊 Reports: customer, team and all stakeholders; weekly or ad hoc; RAG; Gantt; Word/PDF; email; log ---------- */
   var RAUD = {

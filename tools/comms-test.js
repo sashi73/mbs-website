@@ -148,17 +148,24 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     const prev2 = await p.textContent('.cm-an [data-imprev]');
     ok('Preview', 'unticking a change updates the preview (no extra power point: +$800 only)', /\(\+\$800/.test(prev2), prev2);
     await p.check('.cm-an [data-im="n:0"]');
-    await p.click('.cm-an [data-imgo]'); await sleep(1500);
+    await p.click('.cm-an [data-imcr]'); await p.waitForSelector('#crCard'); await sleep(500);
+    const cr1 = await p.evaluate(() => window.MBS.planState.plan.changes[0]);
+    ok('Change control', '➜ Send to change control raises CR-001 from the meeting and opens it; nothing in the plan changes yet', cr1 && cr1.num === 1 && cr1.source === 'meeting' && cr1.status === 'Proposed' && /\/change$/.test(p.url()) && (await p.evaluate(() => window.MBS.planState.plan.tasks.find((t) => /benchtop/i.test(t.name)).dur)) === before.bench.dur, JSON.stringify(cr1 && { s: cr1.status, src: cr1.source }));
+    ok('Change control', 'CR-001 shows the impact, the changes as ticked and the effect on the finish date and budget', (await p.$$('#crCard .im-tbl tbody tr')).length === 7 && (await p.$$('#crCard [data-im]:checked')).length === (await p.$$('#crCard [data-im]')).length && /finish .* → /.test(await p.textContent('#crCard [data-imprev]')));
+    await p.click('#crCard [data-cra=Approved]'); await p.waitForSelector('#crSignF');
+    await p.fill('#crSignF [name=by]', 'Sashi Kumar'); await p.selectOption('#crSignF [name=role]', 'Project manager'); await p.fill('#crSignF [name=sig]', 'Someone Else'); await p.check('#crSignF [name=go]'); await p.click('#crSignF [type=submit]'); await sleep(400);
+    ok('Sign', 'the typed signature must match the name', !!(await p.$('#crSignF')));
+    await p.fill('#crSignF [name=sig]', 'Sashi Kumar'); await p.click('#crSignF [type=submit]'); await sleep(1500);
     const after = await p.evaluate(() => { const P = window.MBS.planState.plan; return { n: P.tasks.length, bench: P.tasks.find((t) => /benchtop/i.test(t.name)), np: P.tasks.find((t) => /power point/i.test(t.name)), risks: P.risks.map((r) => r.title), issues: P.issues.map((i) => i.title), sk: P.stakeholders.map((s) => s.name), inScope: P.charter.inScope, acc: P.charter.acceptance, m: P.meetings.find((m) => m.platform === 'zoom') }; });
     const benchCost = (t) => (t.qty || 0) * (t.rate || 0);
-    ok('Apply', 'the benchtop task is 18 days, with +$800 on its cost and a note why', after.bench.dur === 18 && Math.abs(benchCost(after.bench) - benchCost(before.bench) - 800) < 0.02 && /Stone lead time now 3 weeks \(meeting/.test(after.bench.notes), JSON.stringify(after.bench));
+    ok('Apply', 'the benchtop task is 18 days, with +$800 on its cost and a note why', after.bench.dur === 18 && Math.abs(benchCost(after.bench) - benchCost(before.bench) - 800) < 0.02 && /Stone lead time now 3 weeks \(CR-001\)/.test(after.bench.notes), JSON.stringify(after.bench));
     ok('Apply', 'the new task is added after the right task with its cost', after.n === before.n + 1 && after.np && after.np.dur === 1 && after.np.pred.length === 1 && after.np.qty * after.np.rate === 350);
     ok('Apply', 'scope, acceptance (quality), risk, issue and the new stakeholder are added', /Extra double power point/.test(after.inScope) && /Inspect the slab/.test(after.acc) && after.risks.includes('Stone supplier delays again') && after.issues.includes('Stone not yet ordered') && after.sk.includes('Stone Co'));
-    ok('Apply', 'the meeting shows "✓ applied to the plan" and the changes can\'t be applied twice', after.m.applied > 0 && /applied to the plan/.test(await p.textContent(`tr[data-mid="${zm.id}"]`)) && !(await p.$('.cm-an [data-imgo]')) && !!(await p.$('.cm-an [data-imundo]')));
+    ok('Apply', 'once approved and signed by the PM, CR-001 is Implemented (decision and signature recorded) and the meeting is marked applied', after.m.applied > 0 && await p.evaluate(() => { const c = window.MBS.planState.plan.changes[0]; return c.status === 'Implemented' && c.decision.by === 'Sashi Kumar' && c.decision.role === 'Project manager' && c.decision.sig === 'Sashi Kumar' && c.implementedAt > 0; }) && /Implemented/.test(await p.textContent('#crCard')) && !(await p.$('#crCard [data-cra=Approved]')));
     await sleep(1200);
     const sv = await P.get(core);
     ok('Saved', 'the changed plan is saved (the Gantt chart uses the new days)', sv.tasks.find((t) => /benchtop/i.test(t.name)).dur === 18 && sv.meetings.find((m) => m.platform === 'zoom').applied > 0 && sv.meetings.find((m) => m.platform === 'zoom').analysed > 0);
-    await p.click('.cm-an [data-imundo]'); await sleep(800);
+    await p.click('#crCard [data-cra=undo]'); await sleep(800);
     const und = await p.evaluate(() => { const P = window.MBS.planState.plan; return { n: P.tasks.length, dur: P.tasks.find((t) => /benchtop/i.test(t.name)).dur, risks: P.risks.length }; });
     ok('Undo', '↶ Undo puts the plan back as it was', und.n === before.n && und.dur === before.bench.dur, JSON.stringify(und));
     // Project Intelligence: ask about the meeting by its date
@@ -170,7 +177,7 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     const pia = await p.textContent('#piLog .pi-a');
     ok('Project Intelligence', 'asking about the meeting by date reads that meeting\'s transcript and gives the outcome and the impact', seen.length === nAsk + 1 && /TRANSCRIPT/.test(seen[nAsk].sys) && /Zoom: benchtop and lead times/.test(pia) && /Outcome/.test(pia) && (await p.$$('#piLog .pi-a .im-tbl tbody tr')).length === 7, pia.slice(0, 200));
     { const L2 = await lay('#piLog .pi-a'); ok('Layout', 'the same tidy rows in the Project Intelligence answer', layOk(L2), JSON.stringify(L2.slice(0, 3))); }
-    ok('Project Intelligence', 'the changes can be applied from the answer too (with the finish / budget preview)', !!(await p.$('#piLog .pi-a [data-imgo]')) && /working day/.test(await p.textContent('#piLog .pi-a [data-imprev]')));
+    ok('Project Intelligence', 'the answer shows the changes were sent to change control as CR-001 (not applied directly)', /Sent to change control as CR-001/.test(await p.textContent('#piLog .pi-a .pi-imp')) && !(await p.$('#piLog .pi-a [data-imgo]')));
     await p.fill('#piQ', 'Analyse the meeting on 2/1/2025 and summarise the outcome'); await p.click('#piGo');
     await p.waitForFunction(() => /No meeting on/.test(document.querySelector('#piLog').textContent), null, { timeout: 30000 });
     ok('Project Intelligence', 'a date with no meeting gets a plain answer (no AI call)', seen.length === nAsk + 1);

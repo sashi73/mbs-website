@@ -44,6 +44,12 @@ export default async (req) => {
       if (!r.error) await A.audit(session.u, `Project Intelligence question on ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
       return ok();
     }
+    if (body.mode === 'cr') {   // v82: 🔁 the impact of a change request
+      const r = await COMMS.assessChange({ core: body.core, title: body.title, text: body.text }, `Admin (${session.u})`);
+      await kv.set('aiplan:' + id, { cr: r.error ? null : r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
+      if (!r.error) await A.audit(session.u, `AI assessed a change request on ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
+      return ok();
+    }
     if (body.mode === 'cost') {   // v78: ✨ indicative costs (benchmarks) for tasks
       const r = await costEstimate({ core: body.core, ids: body.ids, note: body.note, target: body.target }, `Admin (${session.u})`);
       await kv.set('aiplan:' + id, { cost: r.error ? null : r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
