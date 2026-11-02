@@ -435,9 +435,9 @@
       S.plan = null;
       S.core = d.job.core; S.job = d.job; S.reminders = d.reminders; S.expensesEx = d.expensesEx; S.tab = tab;
       if (!d.plan) return chooser();
-      S.plan = normalise(d.plan); S.rev = d.plan.rev; S.chain = null; S.away = false;
+      S.plan = normalise(d.plan); S.rev = d.plan.rev; S.chain = null; S.away = false; S.bench = d.bench || null; S.isTest = !!d.test;
       loadChain();
-      return loadInv().then(render);
+      return loadInv().then(render).then(estAuto);
     });
   }
   // dates written in plain words: "starts tomorrow and ends in one day", "start Monday, takes 3 days", "start 5/11, finish by 12/11", "done by Friday"
@@ -485,7 +485,7 @@
   function draftFacts(p) { var q = JSON.parse(JSON.stringify(p)), R = rollup(q, today()); return { tasks: q.tasks.length, days: R.start ? workBetween(R.start, R.finish) : 0, budget: R.BAC, risks: (q.risks || []).length, start: R.start, finish: R.finish }; }
   function newPlan(t, job, start, scope, extra) {   // plan object from template-style rows
     var ids = {}, n = 0;
-    var tasks = t.rows.map(function (r) { var id = 't' + (++n); ids[r[1]] = id; return { id: id, phase: 'ph1', name: r[2], dur: r[3], res: [], lead: '', resource: '', qty: r[5], unit: r[6], rate: r[7], pred: r[8], actual: 0, pct: 0, status: 'todo', snet: '', notes: '',
+    var tasks = t.rows.map(function (r) { var id = 't' + (++n); ids[r[1]] = id; return { id: id, phase: 'ph1', name: r[2], dur: r[3], res: [], lead: '', resource: '', qty: r[5], unit: r[6], rate: r[7], est: !!(r[10] && (+r[5] || 0) * (+r[7] || 0) > 0), basis: r[10] || '', pred: r[8], actual: 0, pct: 0, status: 'todo', snet: '', notes: '',
       subs: (r[9] || []).map(function (x, i) { return { id: 's' + n + '_' + (i + 1), name: x[0], off: x[1], dur: x[2], owner: '', status: 'todo' }; }) }; });
     tasks.forEach(function (x) { x.pred = x.pred.map(function (k) { return ids[k]; }).filter(Boolean); fitSubs(x); });
     extra = extra || {};
@@ -498,7 +498,7 @@
       issues: [], baseline: null };
   }
   function fromAi(d, job, start, scope) {   // the AI draft -> the same row format as the templates
-    var rows = d.tasks.map(function (x, i) { return [0, 'a' + (i + 1), x.n, x.d, '', x.q, x.u, x.r, (x.after || []).map(function (a) { return 'a' + a; }), x.s]; });
+    var rows = d.tasks.map(function (x, i) { return [0, 'a' + (i + 1), x.n, x.d, '', x.q, x.u, x.r, (x.after || []).map(function (a) { return 'a' + a; }), x.s, x.b || (x.q * x.r > 0 ? 'AI benchmark' : '')]; });
     // v56: big plans come in phases: mark the end of each phase with a milestone that waits for the phase's last tasks
     var phases = []; d.tasks.forEach(function (x) { var ph = String(x.ph || '').trim(); if (ph && phases.indexOf(ph) < 0) phases.push(ph); });
     if (phases.length > 1) {
@@ -755,6 +755,8 @@
         '<label class="full">Quote title<input name="title" value="' + esc(p.name) + '" maxlength="160"></label>' +
         '<div class="full qmode"><b>Lines on the quote</b><label><input type="radio" name="mode" value="tasks"' + (mode !== 'lump' ? ' checked' : '') + '> One line per task with a cost (sub-steps listed)</label><label><input type="radio" name="mode" value="lump"' + (mode === 'lump' ? ' checked' : '') + '> One total line (the plan pages show the detail)</label></div>' +
         '<label>Margin on the plan\'s unit costs (%)<input name="margin" type="number" min="0" max="200" step="0.5" value="' + margin + '"></label>' +
+        (estOf(p).n ? '<div class="full est-q"><b>⚠ ' + pl(estOf(p).n, 'task') + ' (' + money(estOf(p).sum) + ') still have indicative AI benchmark costs.</b> They are a reference only, not a price. Review and change them on the Schedule before quoting: using them unchanged will lead to complications with the customer.' +
+          '<label><input type="checkbox" id="qEstOk"> I have reviewed these costs and accept them for this quote</label></div>' : '') +
         '<div class="qprev" id="qPrev"></div>' +
         (S.chain && !updating && liveQuote(S.chain) ? '<p class="full muted" style="font-size:12.5px;margin:0">A new quote is made (a revision of ' + esc(liveQuote(S.chain).id) + '). The old one stays in Quotes: void or decline it there if it is replaced.</p>' : '') +
         '<div class="full actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="qGo">' + (updating ? '↻ Update ' + esc(updating.id) : '📄 Make the quote') + '</button></div></form>');
@@ -764,7 +766,7 @@
       var ex = r2(lines.reduce(function (a, l) { return a + r2(l.qty * l.price); }, 0)), gst = r2(ex * 0.1);
       $('#qPrev').innerHTML = lines.length ? '<b>' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + '</b> · ex GST ' + money(ex) + ' · GST ' + money(gst) + ' · <b>total ' + money(ex + gst) + '</b><br><small class="muted">Plan cost ' + money(R.BAC) + (+f.margin.value ? ' + ' + f.margin.value + '% margin' : '') + ' · planned ' + esc(prettyY(R.start)) + ' to ' + esc(prettyY(R.finish)) + '</small>'
         : '<b class="bad">No task has a cost yet.</b> Fill in Qty and Unit $ on the Schedule first (the "$ Costs" view).';
-      $('#qGo').disabled = !lines.length;
+      $('#qGo').disabled = !lines.length || !!($('#qEstOk') && !$('#qEstOk').checked);
     };
     f.oninput = prev; prev();
     f.onsubmit = function (e) {
@@ -1093,6 +1095,105 @@
   }
 
   /* ---------- schedule grid + Gantt ---------- */
+  /* ---------- v78: ✨ indicative costs: AI benchmarks, clearly marked until the consultant reviews them ---------- */
+  function isEst(t) { return !!t.est && cost(t) > 0; }
+  function estAttr(t) { return isEst(t) ? ' class="est-in" title="' + esc('Indicative benchmark: ' + (t.basis || 'AI estimate') + '. Change it to mark it reviewed.') + '"' : ''; }
+  function estOf(p) { var n = 0, sum = 0; (p.tasks || []).forEach(function (t) { if (isEst(t)) { n++; sum += cost(t); } }); return { n: n, sum: r2(sum) }; }
+  function estBanner(p) {
+    var e = estOf(p), u = S.estUndo && S.estUndo.core === S.core;
+    if (!e.n && !u) return '';
+    return '<div class="est-warn"><div class="est-ic">⚠</div><div class="est-tx"><b>Indicative costs: a reference benchmark only, not a price.</b> ' +
+      (e.n ? pl(e.n, 'task') + ' (' + money(e.sum) + ' of the budget) have costs worked out by AI from Australian and international benchmarks. ' : '') +
+      'Real hours, rates and quantities differ on every job: an 8-day feasibility study may be 5 hours a day, not 8. <b>The consultant must review and change every one before quoting, setting the budget or reporting costs. Using them unchanged will lead to complications.</b> ' +
+      'Changing a task\'s Qty, Unit or Unit $ marks it reviewed; the ≈ est tag shows which are left.' +
+      '<div class="est-b">' + (e.n && S.cols !== 'c' && S.tab === 'schedule' ? '<button class="btn btn-sm" type="button" data-estshow>$ Show the costs</button>' : '') + (u ? '<button class="btn btn-sm" type="button" data-estundo>↶ Undo the indicative costs</button>' : '') +
+      (e.n ? '<button class="btn btn-sm" type="button" data-estok>✓ I have reviewed them all</button>' : '') + '</div></div></div>';
+  }
+  function estWire(B) {
+    var a = B.querySelector('#estAi'); if (a) a.onclick = estDialog;
+    var sh = B.querySelector('[data-estshow]'); if (sh) sh.onclick = function () { S.cols = 'c'; try { localStorage.setItem('mbsPlanCols', 'c'); } catch (e) {} render(); };
+    var un = B.querySelector('[data-estundo]'); if (un) un.onclick = function () {
+      var u = S.estUndo; if (!u || u.core !== S.core) return;
+      S.plan.tasks.forEach(function (t) { var o = u.prev[t.id]; if (o) { t.qty = o.qty; t.unit = o.unit; t.rate = o.rate; t.est = o.est; t.basis = o.basis; } });
+      S.estUndo = null; dirty('Indicative costs undone'); render(); toast('Indicative costs removed: back to what you had');
+    };
+    var ok = B.querySelector('[data-estok]'); if (ok) ok.onclick = function () {
+      var e = estOf(S.plan);
+      M.confirmBox('Mark all indicative costs as reviewed?', 'Only do this if you have checked all ' + pl(e.n, 'task') + ' (' + money(e.sum) + '): the hours actually worked per day, the rates and the quantities for this job. The ≈ est tags and these warnings will go, and the costs will be treated as yours on quotes, the charter and reports.', 'Yes, I have reviewed them').then(function (y) {
+        if (!y) return; S.plan.tasks.forEach(function (t) { if (t.est) t.est = false; }); S.estUndo = null; dirty('Indicative costs reviewed'); render(); toast('Costs marked as reviewed');
+      });
+    };
+  }
+  // v78: on the test site, sample plans get indicative costs the first time they are opened (once per plan; marked ≈ est until reviewed)
+  function estAuto() {
+    var p = S.plan; if (!p || !S.isTest || p.estAuto || S.estId) return;
+    var work = p.tasks.filter(function (t) { return t.dur > 0; }); if (!work.length) return;
+    var R = rollup(p, today()), zero = work.filter(function (t) { return cost(t) <= 0; });
+    var low = S.bench && R.BAC < S.bench.total * 0.5;
+    if (!low && zero.length < work.length * 0.4) return;
+    var ids = (low ? work : zero).map(function (t) { return t.id; });
+    p.estAuto = today(); dirty('');
+    estRun(ids, '', { auto: true, target: S.bench ? S.bench.total : 0 });
+  }
+  function estDialog() {
+    var p = S.plan, work = p.tasks.filter(function (t) { return t.dur > 0; }), none = work.filter(function (t) { return cost(t) <= 0; }), open = work.filter(function (t) { return cost(t) <= 0 || t.est; });
+    if (!work.length) return toast('Add some tasks first');
+    M.modal('<h2>✨ Indicative costs</h2>' +
+      '<div class="est-warn est-in-dlg"><div class="est-ic">⚠</div><div class="est-tx"><b>A reference benchmark only.</b> The AI estimates each task from Australian and international benchmarks: hours actually worked per day × people × a typical rate, or a lump sum for materials, equipment and fees. ' +
+      'It cannot know your job: an 8-day feasibility study may be 5 hours a day, not 8, and rates vary. <b>You must review and change every cost before you quote or set the budget.</b> Using them unchanged will lead to complications.</div></div>' +
+      '<div class="est-opts"><label><input type="radio" name="estW" value="none" checked> <span><b>Tasks with no cost yet</b> <small>' + pl(none.length, 'task') + '</small></span></label>' +
+      '<label><input type="radio" name="estW" value="open"> <span><b>Also re-estimate the AI costs you have not reviewed</b> <small>' + pl(open.length, 'task') + '; costs you entered or reviewed are never changed</small></span></label></div>' +
+      (S.bench ? '<label class="est-bench"><input type="checkbox" id="estTgt" checked> <span><b>Size it to the benchmark: about ' + money(S.bench.total) + '</b><small>' + esc(S.bench.basis) + '. Lump sums are scaled to reach it; hourly labour stays as estimated.</small></span></label>' : '') +
+      '<label style="margin-top:10px">Anything the AI should know? <small class="muted">(optional)</small><input id="estNote" maxlength="300" placeholder="e.g. Tier IV fit-out; consultant rate $250/h; crews of 4"></label>' +
+      '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="estGo" type="button"' + (open.length ? '' : ' disabled') + '>✨ Work out the costs</button></div>');
+    var sel = function () { return document.querySelector('[name=estW]:checked').value === 'open' ? open : none; };
+    var upd = function () { $('#estGo').disabled = !sel().length; }; document.querySelectorAll('[name=estW]').forEach(function (r) { r.onchange = upd; }); upd();
+    $('#estGo').onclick = function () { estRun(sel().map(function (t) { return t.id; }), $('#estNote').value.trim(), { target: S.bench && $('#estTgt') && $('#estTgt').checked ? S.bench.total : 0 }); };
+  }
+  function estRun(ids, note, o) {
+    o = o || {}; var core = S.core, id = rid(), t0 = Date.now(); S.estId = id;
+    if (o.auto) toast('Adding sample indicative costs to this plan (benchmarks)…'); else M.modal('<h2>✨ Indicative costs</h2><p class="ask-think">The AI is benchmarking ' + pl(ids.length, 'task') + ': hours per day, people, rates and lump sums… this usually takes 20–90 seconds.</p><div class="actions"><button class="btn" data-close type="button">Cancel</button></div>');
+    var poll = function () {
+      return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
+        if (S.estId !== id) return;
+        if (d.status === 'done' && d.cost) { if (S.core !== core) return; S.estId = null; return o.auto ? estApply(d.cost, true) : estShow(d.cost); }
+        if (d.status === 'error') throw new Error(d.error || 'The AI could not work out the costs');
+        if (Date.now() - t0 > 290000) throw new Error('The AI is taking too long. Try again in a minute.');
+        return poll();
+      });
+    };
+    (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () {
+      return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ id: id, mode: 'cost', core: core, ids: ids, note: note, target: o.target || 0 }) });
+    }).then(function (r) { if (r.status === 401 || r.status === 403) throw new Error('Your session has ended. Sign in again.'); if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); })
+      .catch(function (e) { if (S.estId !== id) return; S.estId = null; if (!o.auto) M.closeModal(); fail(e); });
+  }
+  function estRows(r) {
+    var by = {}; S.plan.tasks.forEach(function (t) { by[t.id] = t; });
+    return r.costs.filter(function (c) { var t = by[c.id]; return t && (cost(t) <= 0 || t.est || r.target); });
+  }
+  function estApply(r, auto) {
+    var by = {}, rows = estRows(r), prev = {}; S.plan.tasks.forEach(function (t) { by[t.id] = t; });
+    rows.forEach(function (c) { var t = by[c.id]; prev[t.id] = { qty: t.qty, unit: t.unit, rate: t.rate, est: !!t.est, basis: t.basis || '' }; t.qty = c.qty; t.unit = c.unit; t.rate = c.rate; t.est = true; t.basis = c.basis || 'AI benchmark'; });
+    S.estUndo = { core: S.core, prev: prev }; M.closeModal(); dirty('Indicative costs added (' + rows.length + ' tasks)'); render();
+    var R = rollup(S.plan, today());
+    toast((auto ? 'Sample indicative costs added: ' : 'Indicative costs added: ') + pl(rows.length, 'task') + ', plan budget now ' + money(R.BAC) + '. Review and change each one (marked ≈ est).');
+  }
+  function estShow(r) {
+    var p = S.plan, num = {}, by = {}; ordered().forEach(function (x) { num[x.t.id] = x.n; }); p.tasks.forEach(function (t) { by[t.id] = t; });
+    var rows = estRows(r).sort(function (a, b) { return (num[a.id] || 0) - (num[b.id] || 0); });
+    var tot = r2(rows.reduce(function (a, c) { return a + c.qty * c.rate; }, 0)), R0 = rollup(p, today());
+    M.modal('<h2>✨ Indicative costs: ' + pl(rows.length, 'task') + ', ' + money(tot) + '</h2>' +
+      '<div class="est-warn est-in-dlg"><div class="est-ic">⚠</div><div class="est-tx"><b>Reference benchmarks only, based on our research of Australian and international benchmarks.</b> Check the basis of each one: the hours actually worked per day, the people, the rate and the quantity. ' +
+      '<b>Change them for accuracy before you quote or set the budget.</b> They stay marked <span class="est-tag">≈ est</span> until you change them.' + (r.scaled ? '<br><b>' + esc(r.scaled) + '</b>' : '') + (r.builtIn ? '<br><i>The AI was not available' + (r.why ? ' (' + esc(r.why) + ')' : '') + ', so these come from the console\'s built-in benchmarks: rougher still.</i>' : '') + (r.caveat ? '<br><i>Biggest uncertainty: ' + esc(r.caveat) + '</i>' : '') + '</div></div>' +
+      '<div class="table-wrap" style="max-height:44vh;overflow:auto"><table class="mini est-tbl"><thead><tr><th>#</th><th>Task</th><th>Basis</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit $</th><th class="num">Cost</th></tr></thead><tbody>' +
+      rows.map(function (c) { var t = by[c.id]; return '<tr><td>' + (num[c.id] || '') + '</td><td>' + esc(t.name) + '<br><small class="muted">' + pl(t.dur, 'day') + '</small></td><td class="muted">' + esc(c.basis || '–') + '</td><td class="num">' + c.qty + '</td><td>' + esc(c.unit) + '</td><td class="num">' + money(c.rate) + '</td><td class="num"><b>' + money(r2(c.qty * c.rate)) + '</b></td></tr>'; }).join('') +
+      '</tbody><tfoot><tr><td></td><td colspan="5"><b>Total indicative</b> <small class="muted">(plan budget now ' + money(R0.BAC) + ')</small></td><td class="num"><b>' + money(tot) + '</b></td></tr></tfoot></table></div>' +
+      '<label class="est-ack"><input type="checkbox" id="estAck"> I understand these are indicative benchmarks only, and I will review and change them before quoting or setting the budget.</label>' +
+      '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="estApply" type="button" disabled>Add them as indicative costs</button></div>');
+    $('#estAck').onchange = function () { $('#estApply').disabled = !this.checked || !rows.length; };
+    $('#estApply').onclick = function () { estApply(r, false); };
+  }
+
   function scheduleTab(R) {
     var p = S.plan, rows = ordered(), num = {}, idOf = {};
     rows.forEach(function (r) { num[r.t.id] = r.n; idOf[r.n] = r.t.id; });
@@ -1120,11 +1221,11 @@
       if (t.dur === 0) return b + '<span class="gmile' + (t.pct >= 100 ? ' done' : '') + '" style="left:' + (left + dayW / 2 - 7) + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' · ' + stName[t.status]) + '"></span>' + lab;
       return b + '<span class="gbar st-' + t.status + ' pb-' + pband(t.pct) + (late ? ' late' : '') + '" style="left:' + left + 'px;width:' + w + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' – ' + pretty(t.ef) + ' · ' + stName[t.status] + ' ' + t.pct + '%') + '"><span class="gfill" style="width:' + t.pct + '%"></span></span>' + lab;
     };
-    var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button>' +
+    var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button><button class="btn btn-sm est-ai" id="estAi" type="button" title="AI fills in indicative costs from Australian and international benchmarks: a reference only, to review and change">✨ Indicative costs</button>' +
       '<div class="qgate' + (p.emergency ? ' emerg' : p.gate && p.gate.accepted ? ' ok' : '') + '"><div class="qrow"><label class="qchk" title="Emergency work (burst pipe, storm damage, a leak that is doing damage): no cooling-off, the work can start straight away, the same day as the site inspection"><input type="checkbox" id="pEmerg"' + (p.emergency ? ' checked' : '') + '> 🚨 Emergency</label>' +
         '<label class="qchk" title="' + (p.emergency ? 'Emergency jobs already work Saturday and Sunday' : 'Tick if the crew can work Saturday and Sunday on this job: the schedule then counts every day and finishes sooner') + '"><input type="checkbox" id="pWeek"' + (p.emergency || p.weekends ? ' checked' : '') + (p.emergency ? ' disabled' : '') + '> 📅 Weekends (Sat, Sun) allowed</label>' +
         '<label class="qchk" title="Days after the quote is accepted before the work can start. The full cooling-off period is 5 business days; most customers agree to start after 3.">Cooling-off <select id="pCool"' + (p.emergency ? ' disabled' : '') + '>' + [0, 1, 2, 3, 4, 5].map(function (n) { return '<option value="' + n + '"' + (coolOf(p) === n ? ' selected' : '') + '>' + n + (n === 3 ? ' (usual)' : n === 5 ? ' (full period)' : '') + '</option>'; }).join('') + '</select> business days</label></div><div>' + gateText(p) + '</div></div>' +
-      fitBar(p, R) +
+      fitBar(p, R) + estBanner(p) +
       '<span class="muted phint" style="font-size:12.5px">To move a task, type its new number in <b>#</b> (1 = first) or drag <b>⠿</b>. Sub-tasks move inside their own task. Days are working days (' + (p.emergency ? 'emergency: every day, Saturday and Sunday included' : p.weekends ? 'weekends allowed: every day, Saturday and Sunday included' : 'Mon–Fri') + '). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span>' +
       '<div class="pdline" title="Project start, Work starts and Finish by: the plan\'s dates follow them">' +
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700">Project start<input type="date" id="pStart" value="' + esc(p.start) + '"' + (p.finishBy ? ' max="' + esc(p.finishBy) + '"' : '') + ' style="width:auto"></label>' +
@@ -1147,10 +1248,10 @@
         '<td><input data-k="snet" type="date" value="' + esc(t.es) + '" min="' + esc(nextWork(p.start)) + '" class="' + (t.snet ? 'pinned' : '') + '" title="' + (t.fixed && t.snet ? 'Start set by hand: ' + dmy(t.snet) + '. It runs in parallel (the After # link is not used). Clear the date to follow After # again.' : t.snet ? 'Starts no earlier than ' + dmy(t.snet) + ' (clear the date box to remove)' : 'Worked out from the tasks before it. Type or pick a date to start it earlier (in parallel) or later: between the project start and finish.') + '"></td>' +
         '<td class="nowrap">' + esc(dmy(t.ef)) + (base && base.ef && base.ef !== t.ef ? '<br><small class="' + (t.ef > base.ef ? 'bad' : 'good') + '">base ' + esc(dmy(base.ef)) + '</small>' : '') + '</td>' +
         '<td><input data-k="pred" value="' + esc((t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', ')) + '" placeholder="e.g. 2,3" style="width:58px"' + (t.fixed && t.snet ? ' class="predoff" title="Not used while the start date is set by hand (runs in parallel)"' : '') + '></td>' +
-        '<td><input data-k="qty" inputmode="decimal" value="' + esc(t.qty || '') + '" style="width:60px"></td>' +
-        '<td><input data-k="unit" value="' + esc(t.unit || '') + '" placeholder="h, m², lot" style="width:56px"></td>' +
-        '<td><input data-k="rate" inputmode="decimal" value="' + esc(t.rate || '') + '" style="width:74px"></td>' +
-        '<td class="num">' + money(cost(t)) + '</td>' +
+        '<td><input data-k="qty" inputmode="decimal" value="' + esc(t.qty || '') + '" style="width:60px"' + estAttr(t) + '></td>' +
+        '<td><input data-k="unit" value="' + esc(t.unit || '') + '" placeholder="h, m², lot" style="width:56px"' + estAttr(t) + '></td>' +
+        '<td><input data-k="rate" inputmode="decimal" value="' + esc(t.rate || '') + '" style="width:74px"' + estAttr(t) + '></td>' +
+        '<td class="num' + (isEst(t) ? ' est-c' : '') + '"' + (isEst(t) ? ' title="' + esc('≈ Indicative benchmark, not reviewed: ' + (t.basis || 'AI estimate') + '. Check the hours actually worked per day, the rate and the quantity, then change it.') + '"' : '') + '>' + (isEst(t) ? '<span class="est-tag">≈ est</span> ' : '') + money(cost(t)) + '</td>' +
         '<td><input data-k="actual" inputmode="decimal" value="' + esc(t.actual || '') + '" style="width:80px"></td>' +
         '<td><select data-k="status" class="stsel st-' + t.status + '"' + (subs.length ? ' title="Setting this moves all its sub-tasks too"' : '') + '>' + STATUS.map(function (x) { return '<option value="' + x[0] + '"' + (t.status === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></td>' +
         '<td><input data-k="pct" type="number" min="0" max="100" step="1" value="' + t.pct + '" style="width:54px"' + (subs.length ? ' disabled title="Worked out from the sub-tasks"' : '') + '></td>' +
@@ -1182,7 +1283,7 @@
       '<div class="res-tip" id="resTip" hidden><b>Tip:</b> you can add more than one person or trade. Press <kbd>Enter</kbd> or type a comma after each name. <b>★</b> = the lead: the first one added is the lead; click another name to make them the lead.</div>' +
       '<datalist id="resList">' + Array.from(new Set([].concat.apply([], p.tasks.map(function (t) { return t.res || []; })).concat(['Labourer', 'Tiler', 'Plumber', 'Electrician', 'Painter', 'Carpenter', 'Waterproofer', 'Supplier', 'Customer']))).filter(Boolean).map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist></div>';
     $('#planBody').innerHTML = html;
-    var B = $('#planBody');
+    var B = $('#planBody'); estWire(B);
     dateBoxes(B);   // before the rows are lined up with the Gantt chart
     splitPanes(x(t0));
     $('#gFreezeBtn').onclick = function (e) { e.stopPropagation(); gFreezeMenu(this); };
@@ -1225,8 +1326,8 @@
           }
         }
         else if (k === 'pred') { t.pred = el.value.split(/[,\s]+/).map(function (s) { return idOf[+s]; }).filter(function (id) { return id && id !== t.id; }); }
-        else if (['qty', 'rate', 'actual'].indexOf(k) >= 0) { t[k] = r2(String(el.value).replace(/[$,]/g, '')); }
-        else t[k] = el.value;
+        else if (['qty', 'rate', 'actual'].indexOf(k) >= 0) { t[k] = r2(String(el.value).replace(/[$,]/g, '')); if (k !== 'actual' && t.est) t.est = false; }
+        else { t[k] = el.value; if (k === 'unit' && t.est) { t.est = false; var tr = el.closest('tr'); tr.querySelectorAll('.est-in').forEach(function (i) { i.classList.remove('est-in'); i.removeAttribute('title'); }); var tg = tr.querySelector('.est-tag'); if (tg) { tg.parentNode.classList.remove('est-c'); tg.parentNode.removeAttribute('title'); tg.remove(); } } }
         dirty(k === 'done' || k === 'status' ? stName[t.status] + ': ' + t.name : '');
         if (!live) setTimeout(render, 0);
       });
@@ -2251,7 +2352,7 @@
     if (o.issues) { var is = (p.issues || []).filter(function (x) { return x.status !== 'Resolved' && x.title; });
       S2.push({ kind: 'table', title: H('Open issues'), head: ['Issue', 'Priority', 'Owner', 'Due'], wordCols: [6, 2, 3, 2], cols: { 1: { cellWidth: 20 }, 3: { cellWidth: 24 } },
         rows: is.map(function (x) { return [x.title, { t: x.priority, rag: x.priority === 'Critical' ? 'R' : x.priority === 'High' ? 'A' : undefined }, x.owner || '', dmy(x.due)]; }), always: true, empty: 'No open issues.' }); }
-    if (o.budget) S2.push({ kind: 'kv', title: H('Budget'), rows: [['Approved budget', c.budget ? money(c.budget) : 'Not set'], ['Planned cost (BAC)', money(R.BAC)]]
+    if (o.budget) S2.push({ kind: 'kv', title: H('Budget'), rows: [['Approved budget', c.budget ? money(c.budget) : 'Not set'], ['Planned cost (BAC)', money(R.BAC) + (estOf(p).n ? '  (includes ' + money(estOf(p).sum) + ' of indicative benchmark costs on ' + pl(estOf(p).n, 'task') + ', not yet reviewed)' : '')]]
       .concat(c.budget ? [['Contingency (budget less planned cost)', money(Math.round((c.budget - R.BAC) * 100) / 100)]] : []).concat(R.AC ? [['Spent to date', money(R.AC)]] : []) });
     if (o.notes && c.notes) S2.push({ kind: 'text', title: H('Planning notes'), text: c.notes });
     if (o.governance) S2.push({ kind: 'text', title: H('Governance and change control'), text: '- The project manager runs the project day to day and reports progress to the customer (sponsor) and stakeholders.\n- Any change to scope, time or cost is raised as a written variation and agreed by the customer (sponsor) and the project manager before the work goes ahead.\n- Risks and issues are reviewed at every progress meeting and recorded in the project registers.\n- The work is accepted when the acceptance criteria above are met and the customer signs off.' });
@@ -3421,7 +3522,7 @@
     var evm = [['Budget at completion (BAC)', money(R.BAC), 'Total planned cost'], ['Planned value (PV)', money(R.PV), 'Work that should be done by today'], ['Earned value (EV)', money(R.EV), 'Work actually done (cost × % complete)'],
       ['Actual cost (AC)', money(R.AC), 'Money spent so far (Actual $ column)'], ['Schedule performance (SPI = EV ÷ PV)', R.SPI == null ? '—' : R.SPI, R.SPI == null ? '' : R.SPI >= 1 ? 'on or ahead of schedule' : 'behind schedule'],
       ['Cost performance (CPI = EV ÷ AC)', R.CPI == null ? '—' : R.CPI, R.CPI == null ? '' : R.CPI >= 1 ? 'on or under budget' : 'over budget'], ['Forecast final cost (EAC = BAC ÷ CPI)', R.EAC == null ? '—' : money(R.EAC), '']];
-    $('#planBody').innerHTML = '<div class="grid two"><div class="grid" style="align-content:start">' +
+    $('#planBody').innerHTML = estBanner(p) + '<div class="grid two"><div class="grid" style="align-content:start">' +
       '<div class="card"><h2>Time & cost (earned value)</h2><div class="table-wrap"><table><tbody>' + evm.map(function (e) { return '<tr><td>' + esc(e[0]) + '<br><small class="muted">' + esc(e[2]) + '</small></td><td class="num" style="font-weight:800;font-size:15px">' + esc(e[1]) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
         (S.expensesEx ? '<p class="muted" style="margin:10px 0 0">Expenses recorded for this job in Accounts: <b>' + money(S.expensesEx) + '</b> ex GST.</p>' : '') +
         (p.baseline ? '<p class="muted" style="margin:6px 0 0">Baseline set ' + esc(M.day(p.baseline.at)) + ': finish ' + esc(prettyY(p.baseline.finish)) + ', budget ' + money(p.baseline.BAC) + '. Now: finish ' + esc(prettyY(R.finish)) + ' (' + esc(varDays(p.baseline.finish, R.finish)) + ').</p>' : '<p class="muted" style="margin:6px 0 0">Tip: press “Set baseline” once the plan is agreed, so you can track slippage.</p>') + '</div>' +
@@ -3434,6 +3535,7 @@
       (S.reminders.length ? '<div class="card"><h2>Reminders for this job</h2><div class="list">' + S.reminders.map(function (r) { return '<div class="item"><div><b>' + esc(r.when) + '</b><br><small>' + esc(r.text) + '</small></div></div>'; }).join('') + '</div></div>' : '') +
       '</div></div>';
     $('#planBody').querySelectorAll('[data-invro]').forEach(function (b) { b.onclick = function () { M.inv.reorder(b.getAttribute('data-invro')); }; });
+    estWire($('#planBody'));
   }
 
   function materialsCard() {

@@ -4,7 +4,7 @@
 import * as kv from './kv.mjs';
 import * as J from './jobs.mjs';
 import { parseWhen, whenText, sydneyTime } from './calendar.mjs';
-import { env } from './shared.mjs';
+import { env, isTestSite } from './shared.mjs';
 import { llmJson, usage, checkLimit, llmSetup, sydToday } from './ai.mjs';
 import * as INV from './inventory.mjs';
 import * as ACC from './accounts.mjs';
@@ -148,7 +148,9 @@ function clean(p, core) {
     dur: int(t.dur, 0, 365, 1), snet: ymdOk(t.snet), fixed: !!(t.fixed && ymdOk(t.snet)), pred: (Array.isArray(t.pred) ? t.pred : []).map((x) => str(x, 20)).slice(0, 10),
     item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000),
     // v64: the Board: owner (a stakeholder), priority and story points
-    desc: str(t.desc, 300), owner: str(t.owner, 80), priority: ['High', 'Medium', 'Low'].includes(t.priority) ? t.priority : '', points: int(t.points, 0, 100, 0)
+    desc: str(t.desc, 300), owner: str(t.owner, 80),
+    // v78: an indicative (AI benchmark) cost not yet reviewed by the consultant, and how it was worked out
+    est: !!t.est, basis: str(t.basis, 200), priority: ['High', 'Medium', 'Low'].includes(t.priority) ? t.priority : '', points: int(t.points, 0, 100, 0)
     };
     // v56: materials from stock: any number of items, each with its own quantity (and the price at the time).
     // Older plans had one item on the task (the task's own qty and rate were that item): moved into the list, same cost.
@@ -163,7 +165,7 @@ function clean(p, core) {
   for (const t of tasks) t.pred = t.pred.filter((x) => tIds.has(x) && x !== t.id);
   const c = p.charter || {};
   const res = {
-    core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart), finishBy: ymdOk(p.finishBy), emergency: !!p.emergency, weekends: !!p.weekends, coolOff: int(p.coolOff, 0, 10, 3),
+    core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart), finishBy: ymdOk(p.finishBy), emergency: !!p.emergency, weekends: !!p.weekends, coolOff: int(p.coolOff, 0, 10, 3), estAuto: str(p.estAuto, 30),
     charter: { objective: str(c.objective, 1500), inScope: str(c.inScope, 3000), outScope: str(c.outScope, 2000), deliverables: str(c.deliverables, 2000),
       acceptance: str(c.acceptance, 2000), assumptions: str(c.assumptions, 2000), notes: str(c.notes, 3000), background: str(c.background, 3000), budget: r2(c.budget), customer: str(c.customer, 120), manager: str(c.manager, 80),
       // v73: the charter document: its version and status
@@ -322,6 +324,77 @@ export async function describe(core, b) {
   return { text, tokens: used, today };
 }
 
+// ---------- v78: ✨ indicative costs: benchmark estimates for tasks, to be reviewed by the consultant ----------
+// a benchmark total for the whole project, where there is a recognised one: data centres per MW of IT load (A$12.1M per MW all-in, an international benchmark)
+export function benchTarget(plan, job = {}) {
+  const txt = [plan.name, (plan.charter || {}).objective, (plan.charter || {}).inScope, (plan.charter || {}).background, job.service, job.summary, job.details].map((x) => String(x || '')).join(' ');
+  const m = txt.match(/(\d{1,4}(?:\.\d+)?)\s*(MW|megawatts?)\b/i);
+  if (!m || !/data\s*cent(re|er)|\bDC\b|hyperscale|colocation|co-location/i.test(txt)) return null;
+  const mw = Number(m[1]), per = Number(env('DC_COST_PER_MW', '12100000')) || 12100000;
+  if (!(mw > 0 && mw <= 2000)) return null;
+  return { total: Math.round(mw * per), mw, per, basis: mw + ' MW x $' + (per / 1e6).toLocaleString('en-AU', { maximumFractionDigits: 2 }) + 'M per MW (international data centre benchmark)' };
+}
+// built in, when the AI isn't available: hours a day by kind of work, typical rates, a lump sum for supply and packages
+const PRO = /feasib|study|design|concept|drawing|report|review|survey|engineer|consult|brief|specif|tender|plan(ning)?\b|model|assess|audit/i, WAIT = /approv|permit|authorit|council|\bDA\b|\bCDC\b|lodg|certif|connection (application|offer)|grid|utility|network/i, BUY = /order|procure|supply|deliver|lead[- ]time|purchase|equipment|fabricat/i;
+function builtInCost(t) {
+  const n = t.name || '', d = Math.max(1, t.dur || 1), ppl = Math.max(1, (t.res || []).length);
+  if (BUY.test(n)) return { qty: 1, unit: 'lot', rate: Math.round(4000 * d), basis: 'benchmark supply package, ' + d + ' d lead time (lot)', lot: true };
+  if (WAIT.test(n)) return { qty: r2(d * 1 * ppl), unit: 'h', rate: 180, basis: d + ' d x 1 h/d follow-up x ' + ppl + ' @ $180/h, plus fees by lot', lot: false, fee: Math.round(1500 + d * 150) };
+  if (PRO.test(n)) return { qty: r2(d * 5 * ppl), unit: 'h', rate: 220, basis: d + ' d x 5 h/d x ' + ppl + ' consultant @ $220/h', lot: false };
+  const crew = Math.max(2, ppl);
+  return { qty: r2(d * 7.5 * crew), unit: 'h', rate: 95, basis: d + ' d x 7.5 h/d x ' + crew + ' crew @ $95/h', lot: false };
+}
+export async function costEstimate({ core, ids, note, target: tgt }, by) {
+  const job = await J.find(core); if (!job) return { error: 'Job not found' };
+  const plan = await get(job.core); if (!plan) return { error: 'This job has no plan' };
+  const want = new Set((Array.isArray(ids) ? ids : []).map((x) => str(x, 20)));
+  const list = plan.tasks.filter((t) => t.dur > 0 && want.has(t.id)).slice(0, 150);
+  if (!list.length) return { error: 'No tasks to cost' };
+  const bench = benchTarget(plan, job), target = Number(tgt) > 0 ? Math.round(Number(tgt)) : bench ? bench.total : 0;
+  const known = r2(plan.tasks.filter((t) => !want.has(t.id)).reduce((a, t) => a + taskCost(t), 0));
+  const all = !!(plan.emergency || plan.weekends);
+  const system = 'You are a quantity surveyor and cost planner for construction and building services projects in NSW, Australia. Give an INDICATIVE cost for each task: a reference benchmark from Australian and international benchmarks, AUD ex GST. ' +
+    'Labour and professional services in hours: q = days x the hours ACTUALLY worked on it per day x people. Do not assume 8 hours a day: desk work (feasibility, design, reviews, reports) is often 2 to 6 hours a day, waiting for approvals or lead times 0.5 to 1 hour a day of follow-up, site crews 7 to 8. u "h", r = a typical hourly rate for the role. ' +
+    'Materials, equipment, fees and subcontract packages: q 1, u "lot" (or a real quantity and unit), r = a benchmark price scaled to the size of this project (use the project description). Milestones cost 0. ' +
+    '"b": the basis in a few words, e.g. "8 d x 5 h/d x 1 consultant @ $220/h". Plain words, no em dashes. ' +
+    (note ? 'The consultant also says: ' + str(note, 300) + '. ' : '') +
+    (target ? 'Benchmark for the whole project: about $' + Math.round(target).toLocaleString('en-AU') + (bench ? ' (' + bench.basis + ')' : '') + '; other tasks already cost $' + Math.round(known).toLocaleString('en-AU') + '. Size the lump sums so the total is close to it. ' : '') +
+    'JSON only: {"costs":[{"id":"","q":0,"u":"h","r":0,"b":""}],"caveat":"one sentence: the biggest uncertainty in these numbers"}';
+  const user = { project: privateOut(str(plan.name, 120), job), work: privateOut(str(job.service, 120), job), location: str(job.suburb, 60), description: privateOut(jobScope(job), 1500),
+    objective: privateOut(str((plan.charter || {}).objective, 600), job), days_are: all ? 'calendar days' : 'working days (Mon to Fri)',
+    tasks: list.map((t) => ({ id: t.id, name: scrubTask(t.name, job), days: t.dur, people: (t.res || []).length || undefined, trades: (t.res || []).slice(0, 4).map((x) => scrubTask(x, job)), steps: (t.subs || []).slice(0, 8).map((x) => scrubTask(x.name, job)) })) };
+  let o = null, used = 0, today, why = '';
+  if (llmSetup()) {
+    try { await checkLimit(); ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: Math.min(14000, 800 + list.length * 90), timeoutMs: 300000, temperature: 0.2 })); today = await usage(true, used); }
+    catch (e) { why = e.message; o = null; }
+  } else why = 'AI is not set up';
+  const ok = new Set(list.map((t) => t.id));
+  let costs = o ? (Array.isArray(o.costs) ? o.costs : []).map((c) => ({ id: str(c.id, 20), qty: Math.max(0, Math.min(1e7, r2(c.q ?? c.qty))), unit: str(c.u ?? c.unit, 12) || 'lot', rate: Math.max(0, Math.min(1e10, r2(c.r ?? c.rate))),
+    basis: str(c.b ?? c.basis, 160).replace(/\s*[—–]\s*/g, ', ') })).filter((c) => ok.has(c.id) && c.qty * c.rate > 0) : [];
+  let builtIn = false;
+  if (!costs.length) {   // the built-in benchmark: always gives a starting point
+    builtIn = true;
+    costs = list.map((t) => { const b = builtInCost(t); const out = { id: t.id, qty: b.qty, unit: b.unit, rate: b.rate, basis: b.basis }; if (b.fee) { out.rate = r2((b.qty * b.rate + b.fee) / b.qty); out.basis += ' $' + b.fee.toLocaleString('en-AU'); } return out; });
+  }
+  // scale to the benchmark: lump sums (lot, each, m² ...) take up the difference, so hourly rates stay realistic
+  let scaled = '';
+  if (target) {
+    const sum = (f) => costs.filter(f).reduce((a, c) => a + c.qty * c.rate, 0);
+    const isH = (c) => /^(h|hr|hrs|hours?)$/i.test(c.unit);
+    let lots = costs.filter((c) => !isH(c)), need = target - known - sum(isH);
+    if (!lots.length || need <= sum((c) => !isH(c)) * 0.05) {   // no lump sums to scale (or labour alone overshoots): add a package line to the biggest task
+      const big = list.slice().sort((a, b) => b.dur - a.dur)[0], c = costs.find((x) => x.id === big.id);
+      if (c && !lots.length) { c.unit = 'lot'; c.rate = r2(c.qty * c.rate); c.qty = 1; c.basis = 'package incl. labour (' + c.basis + ')'; lots = [c]; need = target - known - sum(isH); }
+    }
+    const lotSum = sum((c) => !isH(c));
+    if (lotSum > 0 && need > 0) {
+      const k = need / lotSum;
+      if (Math.abs(k - 1) > 0.02) { lots.forEach((c) => { c.rate = r2(c.rate * k); c.basis = (c.basis ? c.basis + '; ' : '') + 'scaled to the project benchmark'; }); scaled = 'Lump sums scaled so the plan totals about $' + Math.round(target).toLocaleString('en-AU') + (bench ? ' (' + bench.basis + ')' : '') + '.'; }
+    }
+  }
+  return { costs, caveat: str(o && o.caveat, 300), target: target || 0, bench, scaled, builtIn, why: builtIn ? why : '', tokens: used, today };
+}
+
 // ---------- v76: ✨ the charter's words (sections 2 to 6): improve, expand or just correct, from the plan ----------
 export const CH_AI = { objective: 1500, background: 3000, inScope: 3000, outScope: 2000, deliverables: 2000, acceptance: 2000, assumptions: 2000, notes: 3000 };
 const CH_AI_WHAT = { objective: 'Objective: why we are doing this. 1 to 3 sentences: the outcome, the standard, the time frame. Prose, not a list.',
@@ -453,13 +526,14 @@ export async function buildAiPlan({ core, describe, scope, type, start, finish, 
     'Give every task "ph": the phase name (short, e.g. "Design & approvals"); tasks of a phase are listed together, phases in order. For big projects use weeks of working days realistically and keep sub-steps to the most useful ones. ' +
     'Include: site inspection, quote accepted (milestone, 0 days), any approvals needed (council, strata, engineer), ordering materials with realistic lead times, the trade work in the right order (with sub-steps where useful), inspections/tests (e.g. flood test), clean-up, handover and invoice (milestone). For big projects add the stage milestones, long-lead equipment, utility connections, testing and commissioning. ' +
     'Days are working days (Monday to Friday; if emergency or weekends_allowed is true, every day counts, Saturday and Sunday included). "after" lists the task numbers (1-based) that must finish first. Sub-tasks must fit inside their task: [name, start offset in days from the task start, days]. ' +
-    'Costs: qty, unit (h, m², L, lot, each) and a typical Sydney rate ex GST for labour or materials; use 0 if unsure. Do not invent council rules; say "check with council" where relevant. ' +
+    'COSTS (indicative benchmarks): give EVERY task with work a cost (0 only for milestones). Labour and professional services in hours: q = days x the hours ACTUALLY worked on it per day x people (desk work such as feasibility, design, reviews and approvals is often 2 to 6 hours a day, waiting for approvals 0.5 to 1; site crews 7 to 8), u "h", r = a typical hourly rate in AUD ex GST from Australian and international benchmarks for that role. Materials, equipment, fees and subcontract packages: q 1, u "lot" (or a real quantity and unit), r = a benchmark price for the size of this project. "b": the basis in a few words, e.g. "8 d x 5 h/d x 1 consultant @ $220/h" or "benchmark ~$1.2M/MW fit-out, lot". ' +
+    'Do not invent council rules; say "check with council" where relevant. ' +
     'Also work out the SCOPE for this job: in_scope (the work included, as short "- " lines), out_of_scope (what is NOT included, to avoid arguments later), deliverables (e.g. certificates, photos, finished work), acceptance (how the customer knows it is done) and assumptions/constraints. ' +
     'And the RISKS specific to this job (4-6; 8-12 for a large project): [title, cause, probability 1-5, impact 1-5, response Avoid|Mitigate|Transfer|Accept, action]. Plus 3-8 short planning tips (lead times, permits, weather, inspections, access, safety). Keep every text short so the WHOLE plan fits. ' +
     'Dates: start_date is when the plan starts (site inspection). Unless emergency is true, the work after "quote accepted" waits cooling_off_days business days; if emergency is true, the work starts the same day as the site inspection. ' +
     'If finish_by is given, the whole plan must finish by then: everything has to fit in working_days_available (order long-lead items first, run tasks in parallel only where it is safe and give those tasks the same "after"). If it truly cannot fit, say so in the FIRST tip with the realistic number of working days. ' +
     'Set "emergency": true only if the description says it is an emergency or urgent (e.g. burst pipe, active leak doing damage, storm damage, "ASAP"). ' +
-    'JSON only: {"emergency":false,"name":"short plan name","objective":"one sentence","in_scope":"","out_of_scope":"","deliverables":"","acceptance":"","assumptions":"","tips":[""],"tasks":[{"ph":"","n":"","d":1,"after":[],"q":0,"u":"h","r":0,"s":[["",0,1]]}],"risks":[["","",3,3,"Mitigate",""]]}';
+    'JSON only: {"emergency":false,"name":"short plan name","objective":"one sentence","in_scope":"","out_of_scope":"","deliverables":"","acceptance":"","assumptions":"","tips":[""],"tasks":[{"ph":"","n":"","d":1,"after":[],"q":0,"u":"h","r":0,"b":"","s":[["",0,1]]}],"risks":[["","",3,3,"Mitigate",""]]}';
   const st = ymdOk(start) || new Date().toISOString().slice(0, 10), fin = ymdOk(finish);
   const user = { job_type: str(type, 120), work: str(job.service, 120), suburb: str(job.suburb, 60), start_date: st, emergency: !!emergency, weekends_allowed: !!weekends, cooling_off_days: emergency ? 0 : 3, description: text };
   if (fin && fin >= st) { user.finish_by = fin; user.working_days_available = workBetween(nextWork(st, !!(emergency || weekends)), fin, !!(emergency || weekends)); }
@@ -469,7 +543,7 @@ export async function buildAiPlan({ core, describe, scope, type, start, finish, 
   const today = await usage(true, used);
   const tasks = (Array.isArray(o.tasks) ? o.tasks : []).slice(0, 150).map((t) => ({
     ph: str(t.ph || t.phase, 60), n: str(t.n || t.name, 160), d: int(t.d ?? t.days, 0, 365, 1), after: (Array.isArray(t.after) ? t.after : []).map((x) => int(x, 1, 150, 0)).filter(Boolean).slice(0, 10),
-    q: Math.max(0, r2(t.q)), u: str(t.u, 12), r: Math.max(0, r2(t.r)), s: (Array.isArray(t.s) ? t.s : []).slice(0, 12).map((x) => Array.isArray(x) ? [str(x[0], 120), int(x[1], 0, 120, 0), int(x[2], 1, 120, 1)] : null).filter((x) => x && x[0])
+    q: Math.max(0, r2(t.q)), u: str(t.u, 12), r: Math.max(0, r2(t.r)), b: str(t.b || t.basis, 160), s: (Array.isArray(t.s) ? t.s : []).slice(0, 12).map((x) => Array.isArray(x) ? [str(x[0], 120), int(x[1], 0, 120, 0), int(x[2], 1, 120, 1)] : null).filter((x) => x && x[0])
   })).filter((t) => t.n);
   if (tasks.length < 2) return { error: 'The AI did not return a usable plan. Add a bit more detail and try again.', tokens: used, today };
   tasks.forEach((t, i) => { t.after = t.after.filter((a) => a <= tasks.length && a !== i + 1); });
@@ -641,7 +715,7 @@ export async function planPost(action, body, { who, by, audit }) {
     const rems = remsAll.filter((r) => r.core === job.core).map((r) => ({ ...r, when: whenText(r.at) }));
     let costs = 0;
     try { costs = r2(Object.values((idx && idx.expenses) || {}).filter((e) => e.core === job.core).reduce((a, e) => a + (e.inc - e.gst), 0)); } catch {}
-    return out(200, { plan, job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), phone: job.phone || '', email: job.email || '', scope: jobScope(job), urgency: job.urgency || '', emergency: isEmergency(job) }, reminders: rems, expensesEx: costs });
+    return out(200, { plan, job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), phone: job.phone || '', email: job.email || '', scope: jobScope(job), urgency: job.urgency || '', emergency: isEmergency(job) }, reminders: rems, expensesEx: costs, test: isTestSite(), bench: plan ? benchTarget(plan, job) : null });
   }
   if (action === 'planSave') {
     if (!core || !(await J.find(core))) return out(404, { error: 'Job not found' });

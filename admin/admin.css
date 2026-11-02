@@ -1127,3 +1127,17 @@ textarea.ch-flash{animation:chFlash 1.6s ease}
 .im-box label.im-it>span{min-width:0;text-align:left;line-height:1.45}.im-box label.im-it>span small{font-size:12px}
 .im-box label.im-it:has(input:not(:checked))>span{opacity:.55}
 .im-box label.im-it:has(input:disabled){cursor:default}
+/* v78: indicative (AI benchmark) costs */
+.est-warn{display:flex;gap:12px;align-items:flex-start;background:#FFF7E6;border:1px solid #F3C969;border-left:5px solid #D97706;border-radius:10px;padding:10px 14px;margin:0 0 12px;font-size:13px;line-height:1.5;color:#4A3A12}
+.est-ic{font-size:20px;line-height:1;color:#B45309}.est-tx{flex:1;min-width:0}.est-b{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.est-in-dlg{margin:4px 0 12px}
+.est-tag{display:inline-block;background:#FDE68A;color:#78350F;border-radius:5px;padding:0 5px;font-size:10.5px;font-weight:800;letter-spacing:.02em;vertical-align:1px}
+td.est-c{color:#92400E;background:#FFFBEB}
+input.est-in{background:#FFFBEB!important;border-color:#F3C969!important;border-style:dashed!important}
+.est-ai{background:linear-gradient(135deg,#FFF8E1,#FDF0C4);border-color:#E6C760;color:#6B5310;font-weight:700}
+.est-opts{display:grid;gap:6px}.est-opts label{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px;align-items:start;font-weight:500;padding:8px 10px;border:1px solid var(--line);border-radius:9px;cursor:pointer}
+.est-opts label:has(input:checked){background:#FDF6DD;border-color:#EAD48A}.est-opts input{width:auto;margin:3px 0 0}.est-opts small{display:block;color:#6F6A5D;font-weight:500}
+.est-ack{display:grid!important;grid-template-columns:20px minmax(0,1fr);gap:8px;align-items:start;font-weight:600;margin:12px 0 0;padding:9px 11px;background:#FFF7E6;border:1px solid #F3C969;border-radius:9px}.est-ack input{width:auto;margin:3px 0 0}
+.est-q{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:9px;padding:9px 12px;font-size:12.5px;line-height:1.5;color:#7F1D1D}.est-q label{display:flex;gap:8px;align-items:center;margin-top:6px;color:#7F1D1D}.est-q input{width:auto;margin:0}
+.est-tbl td{vertical-align:top}.est-tbl small{font-size:11.5px}
+.est-bench{display:grid!important;grid-template-columns:20px minmax(0,1fr);gap:8px;align-items:start;font-weight:500;margin-top:8px;padding:8px 10px;border:1px solid #EAD48A;background:#FDF6DD;border-radius:9px}.est-bench input{width:auto;margin:3px 0 0}.est-bench small{display:block;color:#6F6A5D}
