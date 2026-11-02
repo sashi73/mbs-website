@@ -2108,7 +2108,7 @@
 
   /* ---------- v73: 📄 the project charter as a document (PDF / Word): sign-off ready ---------- */
   var CH_OPT = [['background', 'Background: the customer\'s request', true], ['milestones', 'Key milestones', true], ['gantt', 'Summary Gantt chart', true], ['critical', 'Critical path', true],
-    ['stake', 'Stakeholder register', true], ['contacts', '… with phone numbers and emails', true], ['risks', 'Key risks', true], ['issues', 'Open issues', false], ['budget', 'Budget ($ figures)', true],
+    ['stake', 'Stakeholder register', true], ['contacts', '… with phone numbers and emails', true], ['racimap', 'RACI map (activities × people)', true], ['risks', 'Key risks', true], ['issues', 'Open issues', false], ['budget', 'Budget ($ figures)', true],
     ['governance', 'Governance and change control', true], ['notes', 'Planning notes', false]];
   function chOpts() { var o = {}; try { o = JSON.parse(localStorage.getItem('mbsCharterOpt') || '{}') || {}; } catch (e) {} CH_OPT.forEach(function (x) { if (typeof o[x[0]] !== 'boolean') o[x[0]] = x[2]; }); return o; }
   function charterSnapshot(o) {
@@ -2142,6 +2142,17 @@
         cols: o.contacts ? { 2: { cellWidth: 13, halign: 'center' }, 3: { cellWidth: 28 } } : { 2: { cellWidth: 16, halign: 'center' } },
         rows: sh.map(function (x) { var r = [{ t: x.name || '', b: true }, x.role || '', x.raci || '']; if (o.contacts) r.push(x.phone || '', x.email || ''); return r; }), always: true, empty: 'No stakeholders listed yet.' },
         { kind: 'text', text: 'RACI: R = Responsible (does the work) · A = Accountable (approves) · C = Consulted · I = Informed.', title: '' });
+    }
+    if (o.racimap) {   // v75: the RACI map: activities × people
+      var ppl = raciPeople(p).filter(function (sh) { return raciActs(p).some(function (x) { return raciCell(p, x.t, sh).v; }); }).slice(0, 14), used = {};
+      var ini = ppl.map(function (sh) { var w = String(sh.name || sh.role).replace(/\(.*?\)/g, '').split(/[\s/]+/).filter(Boolean), k = (w.length > 1 ? w[0][0] + w[1][0] : (w[0] || '?').slice(0, 2)).toUpperCase(), k2 = k, i = 2; while (used[k2]) k2 = k + i++; used[k2] = 1; return k2; });
+      var FILL = { R: { fill: [219, 234, 254], hex: 'DBEAFE' }, A: { fill: [253, 230, 138], hex: 'FDE68A' }, C: { fill: [220, 252, 231], hex: 'DCFCE7' }, I: { fill: [241, 238, 230], hex: 'F1EEE6' } };
+      if (ppl.length) {
+        var wc = [6].concat(ppl.map(function () { return 1; })), cols = { 0: { cellWidth: Math.max(48, 182 - ppl.length * 10.5) } }; ppl.forEach(function (x, i) { cols[i + 1] = { halign: 'center', cellWidth: Math.min(14, (182 - 48) / ppl.length) }; });
+        S2.push({ kind: 'table', title: H('RACI map'), head: ['Activity'].concat(ini), wordCols: wc, cols: cols,
+          rows: raciActs(p).map(function (x) { return [('#' + x.n + ' ' + clean(x.t.name))].concat(ppl.map(function (sh) { var v = raciCell(p, x.t, sh).v; return v ? { t: v, fill: FILL[v].fill, hex: FILL[v].hex, b: true, center: true } : ''; })); }) },
+          { kind: 'text', title: '', text: 'Key: ' + ppl.map(function (sh, i) { return ini[i] + ' = ' + (sh.name || sh.role) + (sh.role && sh.name ? ' (' + sh.role + ')' : ''); }).join(' · ') + '. Each activity has one A (accountable) and at least one R (responsible).' });
+      }
     }
     if (o.risks) { var rk = (p.risks || []).filter(function (x) { return x.status !== 'Closed' && x.title; }).sort(function (a, b) { return b.p * b.i - a.p * a.i; });
       S2.push({ kind: 'table', title: H('Key risks'), head: ['Risk', 'Score', 'Response and action', 'Owner'], wordCols: [4, 1, 5, 2], cols: { 1: { cellWidth: 14, halign: 'center' }, 3: { cellWidth: 28 } },
@@ -2242,6 +2253,53 @@
     var by = {}; M.subs.list().filter(function (s) { return !s.archived && s.status !== 'Do not use'; }).forEach(function (s) { var t = M.subs.tradeName(s.trade); (by[t] = by[t] || []).push(s); });
     return Object.keys(by).sort().map(function (t) { return '<optgroup label="' + esc(t) + '">' + by[t].map(function (s) { return '<option value="' + esc(s.id) + '">' + esc(s.business) + (s.comp && s.comp.worst === 'expired' ? ' ⚠ papers expired' : '') + '</option>'; }).join('') + '</optgroup>'; }).join('');
   }
+
+  /* ---------- v75: 🧭 RACI map: activities × stakeholders, in a panel that slides in from the right; also in the charter ---------- */
+  var RACI_ORDER = ['', 'R', 'A', 'C', 'I'];
+  function raciActs(p) { return ordered().filter(function (x) { return x.t.dur > 0; }); }
+  function raciPeople(p) { return (p.stakeholders || []).filter(function (x) { return x.name || x.role; }); }
+  function raciCell(p, t, sh) {   // { v: 'R'|'A'|'C'|'I'|'', sug: true when it is only a suggestion }
+    var row = (p.raciMap || {})[t.id] || {}, e = row[sh.id];
+    if (e) return { v: e === '-' ? '' : e, sug: false };
+    var nm = String(sh.name || '').toLowerCase().trim(), on = nm && ((t.res || []).some(function (r) { return String(r).toLowerCase() === nm; }) || (t.subs || []).some(function (x) { return String(x.owner || '').toLowerCase() === nm; }) || ownerOf(t).toLowerCase() === nm);
+    if (on) return { v: 'R', sug: true };
+    return { v: sh.raci === 'R' ? '' : sh.raci, sug: true };
+  }
+  function raciCheck(p, t) { var ppl = raciPeople(p), a = 0, r = 0; ppl.forEach(function (sh) { var c = raciCell(p, t, sh).v; if (c === 'A') a++; if (c === 'R') r++; }); return !ppl.length ? '' : a === 0 ? 'No A' : a > 1 ? a + ' × A' : r === 0 ? 'No R' : ''; }
+  function raciStrip() {
+    var p = S.plan, acts = raciActs(p), ppl = raciPeople(p); if (!acts.length || !ppl.length) return '';
+    var bad = acts.filter(function (x) { return raciCheck(p, x.t); }).length;
+    return '<button type="button" class="rc-strip" id="raciStrip" title="Open the RACI map"><b>🧭 RACI map</b> ' + acts.length + ' activities × ' + ppl.length + ' people · ' + (bad ? '<span class="rc-bad">' + pl(bad, 'activity', 'activities').replace('activitys', 'activities') + ' to check</span>' : '<span class="rc-ok">all set</span>') + ' ›</button>';
+  }
+  function raciDrawer() {
+    var p = S.plan; p.raciMap = p.raciMap || {};
+    var old = document.getElementById('rcDrawer'); if (old) old.remove();
+    var d = document.createElement('div'); d.id = 'rcDrawer'; d.className = 'rc-wrap'; document.body.appendChild(d);
+    var close = function () { d.classList.remove('open'); setTimeout(function () { d.remove(); if (S.tab === 'stake') render(); }, 200); document.removeEventListener('keydown', esc1); };
+    var esc1 = function (e) { if (e.key === 'Escape') close(); }; document.addEventListener('keydown', esc1);
+    var draw = function () {
+      var acts = raciActs(p), ppl = raciPeople(p);
+      var head = '<tr><th class="rc-act">Activity</th>' + ppl.map(function (sh) { return '<th class="rc-p" title="' + esc((sh.name || '') + ' · ' + (sh.role || '') + ' · overall ' + sh.raci) + '"><span>' + esc(sh.name || sh.role) + '</span></th>'; }).join('') + '<th class="rc-chk">Check</th></tr>';
+      var body = acts.map(function (x) { var t = x.t, chk = raciCheck(p, t);
+        return '<tr data-rt="' + esc(t.id) + '"><th class="rc-act"><b>#' + x.n + '</b> ' + esc(t.name.replace(/^[✓◆\s]+/, '')) + '<small>' + esc(dmy(t.es)) + (t.dur > 1 ? ' – ' + esc(dmy(t.ef)) : '') + '</small></th>' +
+          ppl.map(function (sh) { var c = raciCell(p, t, sh); return '<td><button type="button" class="rc-c rc-' + (c.v || 'x') + (c.sug ? ' sug' : '') + '" data-rs="' + esc(sh.id) + '" title="' + esc((sh.name || sh.role) + ': ' + (c.v ? RACI[c.v][0] : 'no part') + (c.sug ? ' (suggested)' : '')) + '">' + (c.v || '·') + '</button></td>'; }).join('') +
+          '<td class="rc-chk">' + (chk ? '<span class="rc-bad" title="Each activity needs exactly one A and at least one R">⚠ ' + chk + '</span>' : '<span class="rc-ok">✓</span>') + '</td></tr>'; }).join('');
+      var sug = acts.some(function (x) { return ppl.some(function (sh) { return raciCell(p, x.t, sh).sug && raciCell(p, x.t, sh).v; }); });
+      d.innerHTML = '<div class="rc-back"></div><aside class="rc-panel" role="dialog" aria-label="RACI map"><div class="rc-top"><h2>🧭 RACI map</h2><span class="sp"></span>' +
+        (sug ? '<button class="btn btn-sm btn-gold" id="rcAccept" type="button" title="Keep every suggested letter">✓ Accept the suggestions</button>' : '') + '<button class="btn btn-sm" id="rcClear" type="button">Clear</button><button class="btn btn-sm" id="rcClose" type="button" aria-label="Close">✕</button></div>' +
+        '<p class="muted rc-help">Who does what on each activity. <b>Click a cell</b> to change it: R → A → C → I → none. Faint letters are suggestions from the stakeholder list and who is on the task. Each activity needs <b>one A</b> and at least <b>one R</b>. It goes into the project charter.</p>' +
+        '<div class="rc-leg">' + Object.keys(RACI).map(function (k) { return '<span><span class="rc-c rc-' + k + '">' + k + '</span> ' + RACI[k][0] + ' (' + RACI[k][1] + ')</span>'; }).join('') + '</div>' +
+        (acts.length && ppl.length ? '<div class="rc-scroll"><table class="rc-tbl"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>' : '<div class="empty">Add stakeholders and tasks first.</div>') + '</aside>';
+      requestAnimationFrame(function () { d.classList.add('open'); });
+      d.querySelector('.rc-back').onclick = close; d.querySelector('#rcClose').onclick = close;
+      var acc = d.querySelector('#rcAccept'); if (acc) acc.onclick = function () { acts.forEach(function (x) { ppl.forEach(function (sh) { var c = raciCell(p, x.t, sh); if (c.sug && c.v) { (p.raciMap[x.t.id] = p.raciMap[x.t.id] || {})[sh.id] = c.v; } }); }); dirty('RACI map: suggestions accepted'); draw(); };
+      d.querySelector('#rcClear').onclick = function () { M.confirmBox('Clear the RACI map?', 'Every letter you set goes back to the suggestions.', 'Clear', true).then(function (y) { if (!y) return; p.raciMap = {}; dirty('RACI map cleared'); draw(); }); };
+      d.querySelectorAll('tr[data-rt]').forEach(function (tr) { var tid = tr.getAttribute('data-rt'), t = p.tasks.filter(function (x) { return x.id === tid; })[0];
+        tr.querySelectorAll('[data-rs]').forEach(function (b) { b.onclick = function () { var sh = ppl.filter(function (x) { return x.id === b.getAttribute('data-rs'); })[0], cur = raciCell(p, t, sh).v, nx = RACI_ORDER[(RACI_ORDER.indexOf(cur) + 1) % RACI_ORDER.length];
+          (p.raciMap[tid] = p.raciMap[tid] || {})[sh.id] = nx || '-'; dirty('RACI: ' + (sh.name || sh.role) + ' ' + (nx || 'none') + ' on ' + t.name); var sc = d.querySelector('.rc-scroll'), top = sc.scrollTop, left = sc.scrollLeft; draw(); var s2 = d.querySelector('.rc-scroll'); s2.scrollTop = top; s2.scrollLeft = left; }; }); });
+    };
+    draw();
+  }
   function stakeholders() {
     var p = S.plan; p.stakeholders = p.stakeholders || [];
     var L = p.stakeholders, n = { R: 0, A: 0, C: 0, I: 0 }; L.forEach(function (x) { n[x.raci] = (n[x.raci] || 0) + 1; });
@@ -2252,10 +2310,10 @@
     $('#planBody').innerHTML = '<div class="card"><div class="card-h"><h2>Stakeholder list</h2><span class="sp"></span>' +
         (S.job && !haveCust ? '<button class="btn btn-sm" id="skCust">＋ Add the customer</button> ' : '') + (!haveMgr ? '<button class="btn btn-sm" id="skMgr">＋ Add the project manager</button> ' : '') +
         (M.subs ? '<select id="skSub" style="width:auto;max-width:240px"><option value="">👷 Add a subbie…</option>' + subOpts() + '</select> ' : '') +
-        '<button class="btn btn-sm btn-gold" id="addStake">＋ Add stakeholder</button></div>' +
+        '<button class="btn btn-sm" id="raciOpen" title="Who is R, A, C or I for each activity: a grid of activities and people">🧭 RACI map</button> <button class="btn btn-sm btn-gold" id="addStake">＋ Add stakeholder</button></div>' +
       '<p class="muted" style="margin:-4px 0 10px">Everyone with a part in this job and what they do, using <b>RACI</b>: ' +
         Object.keys(RACI).map(function (k) { return '<span class="raci raci-' + k + '">' + k + '</span> ' + RACI[k][0] + ' (' + RACI[k][1] + ')'; }).join(' · ') + '.</p>' +
-      (L.length ? '<div class="sk-sum">' + Object.keys(RACI).map(function (k) { return '<span><span class="raci raci-' + k + '">' + k + '</span> ' + RACI[k][0] + ': <b>' + n[k] + '</b></span>'; }).join('') + '</div>' + warn +
+      (L.length ? '<div class="sk-sum">' + Object.keys(RACI).map(function (k) { return '<span><span class="raci raci-' + k + '">' + k + '</span> ' + RACI[k][0] + ': <b>' + n[k] + '</b></span>'; }).join('') + raciStrip() + '</div>' + warn +
         '<div class="table-wrap"><table class="rt sk"><thead><tr><th>#</th><th>Name</th><th>Role</th><th>RACI</th><th>Contact number</th><th>Email</th><th></th></tr></thead><tbody>' +
         L.map(function (x, i) {
           var tel = String(x.phone || '').replace(/[^\d+]/g, '');
@@ -2282,6 +2340,7 @@
     B.querySelectorAll('[data-sdel]').forEach(function (b) { b.onclick = function () { var x = find(b); p.stakeholders = L.filter(function (y) { return y !== x; }); dirty(); render(); }; });
     B.querySelectorAll('[data-sup]').forEach(function (b) { b.onclick = function () { var i = L.indexOf(find(b)); if (i > 0) { L.splice(i - 1, 0, L.splice(i, 1)[0]); dirty(); render(); } }; });
     var add = function (x) { L.push(Object.assign({ id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: '', role: '', raci: 'I', phone: '', email: '' }, x)); dirty(); render(); };
+    $('#raciOpen').onclick = raciDrawer; var rs = $('#raciStrip'); if (rs) rs.onclick = raciDrawer;
     $('#addStake').onclick = function () { add({ raci: 'R' }); var i = document.querySelectorAll('#planBody [data-s=name]'); if (i.length) i[i.length - 1].focus(); };
     if ($('#skCust')) $('#skCust').onclick = function () { add({ name: S.job.name || '', role: 'Customer', raci: 'C', phone: S.job.phone || '', email: S.job.email || '' }); };
     if ($('#skSub')) $('#skSub').onchange = function () {

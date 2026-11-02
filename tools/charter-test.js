@@ -61,7 +61,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Saved', 'what you type is saved with the plan', /Handover pack/.test((await P.get(core)).charter.inScope) && (await P.get(core)).charter.budget === 30000);
     ok('Button', 'the Scope tab has "📄 Charter: PDF / Word" and shows the version and status', /Charter/.test(await p.textContent('#chDoc')) && /v1\.0 · Draft/.test(await p.textContent('.ch-ver')));
     await p.click('#chDoc'); await p.waitForSelector('#chPdf');
-    ok('Options', 'options: version, status and which parts to include', (await p.$$('[data-cho]')).length === 11 && (await p.inputValue('#chV')) === '1.0');
+    ok('Options', 'options: version, status and which parts to include', (await p.$$('[data-cho]')).length === 12 && (await p.inputValue('#chV')) === '1.0');
     const dl = async (sel) => { const [d] = await Promise.all([p.waitForEvent('download'), p.click(sel)]); const f = path.join(tmp, d.suggestedFilename()); await d.saveAs(f); return { name: d.suggestedFilename(), buf: fs.readFileSync(f) }; };
     let f = await dl('#chPdf'); const pdf = await PDFDocument.load(f.buf);
     fs.copyFileSync(path.join(tmp, f.name), path.join(os.tmpdir(), 'charter-sample.pdf'));

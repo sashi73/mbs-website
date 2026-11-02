@@ -162,7 +162,7 @@ function clean(p, core) {
   const tIds = new Set(tasks.map((t) => t.id));
   for (const t of tasks) t.pred = t.pred.filter((x) => tIds.has(x) && x !== t.id);
   const c = p.charter || {};
-  return {
+  const res = {
     core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart), finishBy: ymdOk(p.finishBy), emergency: !!p.emergency, weekends: !!p.weekends, coolOff: int(p.coolOff, 0, 10, 3),
     charter: { objective: str(c.objective, 1500), inScope: str(c.inScope, 3000), outScope: str(c.outScope, 2000), deliverables: str(c.deliverables, 2000),
       acceptance: str(c.acceptance, 2000), assumptions: str(c.assumptions, 2000), notes: str(c.notes, 3000), budget: r2(c.budget), customer: str(c.customer, 120), manager: str(c.manager, 80),
@@ -191,6 +191,15 @@ function clean(p, core) {
     baseline: p.baseline && typeof p.baseline === 'object' ? { at: Number(p.baseline.at) || Date.now(), finish: ymdOk(p.baseline.finish), BAC: r2(p.baseline.BAC),
       tasks: Object.fromEntries(Object.entries(p.baseline.tasks || {}).slice(0, 300).map(([k, v]) => [str(k, 20), { es: ymdOk(v.es), ef: ymdOk(v.ef), cost: r2(v.cost) }])) } : null
   };
+  // v75: the RACI map: for each activity (task), each stakeholder's R / A / C / I
+  const tSet = new Set(res.tasks.map((t) => t.id)), sSet = new Set(res.stakeholders.map((x) => x.id)), rm = p.raciMap && typeof p.raciMap === 'object' ? p.raciMap : {};
+  res.raciMap = {};
+  for (const [tid, row] of Object.entries(rm).slice(0, 400)) {
+    if (!tSet.has(tid) || !row || typeof row !== 'object') continue;
+    const o = {}; for (const [sid, v] of Object.entries(row)) if (sSet.has(sid) && ['R', 'A', 'C', 'I', '-'].includes(v)) o[sid] = v;
+    if (Object.keys(o).length) res.raciMap[tid] = o;
+  }
+  return res;
 }
 
 // a meeting's join link: only https links to Google Meet, Microsoft Teams or Zoom

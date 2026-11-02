@@ -1071,3 +1071,31 @@ body.plan-wide .side-fold,body.board-full .side-fold{display:none}
 .ch-list{list-style:none;margin:0;padding:0;display:grid;gap:3px;font-size:13px;color:#8A8577}.ch-list li.ok{color:#166534;font-weight:600}
 @media (max-width:1100px){.ch-wrap{grid-template-columns:minmax(0,1fr)}.ch-side{position:static;order:-1}.chg-4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:700px){.chg-2,.chg-4{grid-template-columns:minmax(0,1fr)}}
+
+/* v75: 🧭 RACI map: a panel that slides in from the right */
+.rc-strip{border:1px solid #E7E2D4;background:#FBF8EF;border-radius:99px;padding:3px 12px;font:inherit;font-size:12.5px;cursor:pointer;margin-left:auto}
+.rc-strip:hover{border-color:#C9A227}.rc-bad{color:#B45309;font-weight:700}.rc-ok{color:#15803D;font-weight:700}
+.rc-wrap{position:fixed;inset:0;z-index:80;pointer-events:none}
+.rc-back{position:absolute;inset:0;background:rgba(15,13,10,.35);opacity:0;transition:opacity .2s}
+.rc-panel{position:absolute;top:0;right:0;bottom:0;width:min(1180px,94vw);background:#FDFCF8;box-shadow:-12px 0 40px rgba(0,0,0,.25);transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column;padding:16px 18px 12px;box-sizing:border-box}
+.rc-wrap.open{pointer-events:auto}.rc-wrap.open .rc-back{opacity:1}.rc-wrap.open .rc-panel{transform:none}
+.rc-top{display:flex;align-items:center;gap:8px}.rc-top h2{margin:0}
+.rc-help{margin:6px 0 8px;font-size:13px}
+.rc-leg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;margin-bottom:10px}.rc-leg .rc-c{width:22px;height:22px;cursor:default;font-size:11.5px}
+.rc-scroll{flex:1;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
+.rc-tbl{border-collapse:separate;border-spacing:0;font-size:13px}
+.rc-tbl th,.rc-tbl td{border-bottom:1px solid #F0EDE5;padding:3px;text-align:center}
+.rc-tbl thead th{position:sticky;top:0;background:#F7F5EF;z-index:2;vertical-align:bottom}
+.rc-tbl .rc-act{position:sticky;left:0;background:#fff;text-align:left;min-width:240px;max-width:300px;padding:5px 10px;font-weight:500;z-index:1;border-right:1px solid var(--line)}
+.rc-tbl thead .rc-act{z-index:3;background:#F7F5EF}
+.rc-tbl .rc-act small{display:block;color:#8A8577;font-size:11px}
+.rc-tbl th.rc-p{height:132px;width:40px;min-width:40px}
+.rc-tbl th.rc-p span{writing-mode:vertical-rl;transform:rotate(180deg);display:inline-block;max-height:124px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:700;color:#4A473F}
+.rc-chk{min-width:70px;font-size:12px}
+.rc-c{width:32px;height:28px;border-radius:7px;border:1px solid transparent;font:inherit;font-weight:800;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.rc-x{background:#fff;color:#CFC9BA;border-color:#EEEAE0}.rc-x:hover{border-color:#C9A227;color:#8A8577}
+.rc-R{background:#DBEAFE;color:#1E40AF}.rc-A{background:#FDE68A;color:#854D0E}.rc-C{background:#DCFCE7;color:#166534}.rc-I{background:#F1EEE6;color:#57534E}
+.rc-c.sug{opacity:.5;border-style:dashed;border-color:currentColor}
+.rc-c:not(.rc-x):hover{box-shadow:0 0 0 2px #C9A227}
+.rc-tbl{width:auto!important}.rc-tbl tbody .rc-act{text-transform:none;letter-spacing:normal;font-size:13.5px;color:#1F1D18}
+.rc-tbl .rc-act{min-width:320px;max-width:420px}.rc-tbl td.rc-chk,.rc-tbl th.rc-chk{min-width:90px;text-align:left;padding-left:12px}

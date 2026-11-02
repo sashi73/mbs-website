@@ -100,7 +100,7 @@
       var rows = t.rows.slice(0, lim.rows), more = t.rows.length - rows.length;
       doc.autoTable({ startY: y, margin: { left: L, right: L, top: 16 }, head: [t.head], body: rows.map(function (r) { return r.map(function (c) { return c && c.t != null ? c.t : c; }); }), theme: 'striped',
         styles: { fontSize: 8.2, cellPadding: 1.5, overflow: 'linebreak', valign: 'top' }, headStyles: { fillColor: dark, textColor: 255, fontSize: 8 }, alternateRowStyles: { fillColor: [250, 248, 242] }, columnStyles: t.cols || {},
-        didParseCell: function (d) { if (d.section !== 'body') return; var c = rows[d.row.index][d.column.index]; if (c && c.rag) { d.cell.styles.fillColor = RAGF[c.rag]; d.cell.styles.textColor = 255; d.cell.styles.fontStyle = 'bold'; } if (c && c.b) d.cell.styles.fontStyle = 'bold'; } });
+        didParseCell: function (d) { if (d.section !== 'body') return; var c = rows[d.row.index][d.column.index]; if (c && c.rag) { d.cell.styles.fillColor = RAGF[c.rag]; d.cell.styles.textColor = 255; d.cell.styles.fontStyle = 'bold'; } if (c && c.fill) { d.cell.styles.fillColor = c.fill; d.cell.styles.textColor = dark; } if (c && c.center) d.cell.styles.halign = 'center'; if (c && c.b) d.cell.styles.fontStyle = 'bold'; } });
       y = doc.lastAutoTable.finalY + (more ? 1 : 5);
       if (more) { doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor.apply(doc, muted); doc.text('... and ' + more + ' more (see the project plan)', L, y + 3); y += 10; }
     };
@@ -194,7 +194,7 @@
           var rows = sec.rows.slice(0, lim.rows), more = sec.rows.length - rows.length, ws = sec.wordCols || sec.head.map(function () { return Math.floor(TW / sec.head.length); }), sum = ws.reduce(function (a, b) { return a + b; }, 0);
           ws = ws.map(function (x) { return Math.floor(x * TW / sum); }); ws[ws.length - 1] += TW - ws.reduce(function (a, b) { return a + b; }, 0);
           kids.push(new D.Table({ width: { size: TW, type: D.WidthType.DXA }, columnWidths: ws, rows: [new D.TableRow({ tableHeader: true, children: sec.head.map(function (h, i) { return cell(h, ws[i], { bold: true, fill: dark, color: 'FFFFFF', size: 16 }); }) })].concat(rows.map(function (r, ri) {
-            return new D.TableRow({ children: r.map(function (c, i) { var o = c && c.rag ? { fill: RAGH[c.rag], color: 'FFFFFF', bold: true } : { fill: ri % 2 ? 'FAF8F2' : undefined, bold: !!(c && c.b) }; return cell(c && c.t != null ? c.t : c, ws[i], o); }) }); })) }));
+            return new D.TableRow({ children: r.map(function (c, i) { var o = c && c.rag ? { fill: RAGH[c.rag], color: 'FFFFFF', bold: true } : c && c.hex ? { fill: c.hex, bold: true, center: !!c.center } : { fill: ri % 2 ? 'FAF8F2' : undefined, bold: !!(c && c.b) }; return cell(c && c.t != null ? c.t : c, ws[i], o); }) }); })) }));
           if (more) kids.push(P(T('... and ' + more + ' more (see the project plan)', { italics: true, color: muted, size: 16 }))); }
       });
       var doc = new D.Document({ creator: s.brand ? s.brand.replace(/\b(\w)(\w*)/g, function (m, a, b) { return a + b.toLowerCase(); }) : 'Modern Building Solutions', title: s.title, numbering: { config: [{ reference: 'dots', levels: [{ level: 0, format: D.LevelFormat.BULLET, text: '•', alignment: D.AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 260 } } } }] }] },
