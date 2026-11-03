@@ -42,27 +42,31 @@ function workSpan(p) {
 const datesLine = (snap) => (snap.workStart || snap.start) ? `Work planned to start ${ACC.prettyDate(snap.workStart || snap.start)} and finish ${ACC.prettyDate(snap.workFinish || snap.finish)} (about ${PLAN.workBetween(snap.workStart || snap.start, snap.workFinish || snap.finish, !!(snap.emergency || snap.weekends))} ${snap.emergency || snap.weekends ? 'days, weekends included' : 'working days'}), subject to acceptance, access and weather.` : '';
 // what the price depends on: if this changes after a quote was made, the quote is out of date
 export function fingerprint(plan) {
-  return JSON.stringify([(plan.tasks || []).map((t) => [t.name, r2(t.qty), t.unit || '', r2(t.rate), t.dur, (t.mats || []).map((m) => [m.item, m.qty, m.price])]), str((plan.charter || {}).inScope, 1500)]);
+  return JSON.stringify([(plan.tasks || []).map((t) => [t.name, r2(t.qty), t.unit || '', r2(t.rate), t.dur, (t.mats || []).map((m) => [m.item, m.qty, m.price]), r2(t.bomx)]), str((plan.charter || {}).inScope, 1500), r2(plan.bomLoose)]);
 }
 // quote lines from the plan: one per task that has a cost (sub-step names listed), or one total line
 export function linesFromPlan(plan, { mode = 'tasks', margin = 0 } = {}) {
   const k = 1 + Math.max(0, Math.min(200, Number(margin) || 0)) / 100;
   const costed = plan.tasks.filter((t) => PLAN.taskCost(t) > 0);
+  const bomL = ((plan.bom && plan.bom.lines) || []), loose = r2(Number(plan.bomLoose) || 0);   // v93: the BOM, all of it
+  const matsTxt = (t) => { const L = bomL.filter((l) => l.task === t.id); if (L.length) return L.map((l) => `${r2(l.qty)} ${l.unit && l.unit !== 'each' ? l.unit + ' ' : 'x '}${l.name}`).join(', ');
+    return (t.mats || []).map((m) => `${r2(m.qty)} x ${(plan.matNames && plan.matNames[m.item]) || 'stock item ' + m.item}`).join(', '); };
+  const looseLine = loose > 0 ? [{ desc: ('Materials (Bill of Materials): ' + bomL.filter((l) => !l.task).map((l) => `${r2(l.qty)} ${l.unit && l.unit !== 'each' ? l.unit + ' ' : 'x '}${l.name}`).join(', ')).slice(0, 400), qty: 1, price: r2(loose * k), gst: true, mats: true, bom: true }] : [];
   if (mode === 'lump') {
-    const total = r2(costed.reduce((a, t) => a + PLAN.taskCost(t), 0) * k);
+    const total = r2((costed.reduce((a, t) => a + PLAN.taskCost(t), 0) + loose) * k);
     const what = costed.map((t) => t.name).slice(0, 12).join('; ');
     return total > 0 ? [{ desc: `${plan.name}: supply and install as per the project plan (${what})`.slice(0, 400), qty: 1, price: total, gst: true }] : [];
   }
   return costed.map((t) => {
     const subs = (t.subs || []).map((s) => s.name).filter(Boolean);
-    if ((t.mats || []).length) {   // v56: a task with stock materials is one line at its total (labour + materials)
+    if ((t.mats || []).length || Number(t.bomx) > 0) {   // v56: a task with materials is one line at its total (labour + materials, v93: all its BOM lines)
       const own = r2(t.qty) * r2(t.rate) > 0 ? `${r2(t.qty)} ${t.unit || ''} labour, `.replace(' ,', ',') : '';
-      const mat = t.mats.map((m) => `${r2(m.qty)} x ${(plan.matNames && plan.matNames[m.item]) || 'stock item ' + m.item}`).join(', ');
+      const mat = matsTxt(t);
       return { desc: (t.name + ' (' + own + 'materials: ' + mat + ')' + (subs.length ? ': ' + subs.join(', ') : '')).slice(0, 400), qty: 1, price: r2(PLAN.taskCost(t) * k), gst: true, tid: t.id, mats: true };
     }
     const unit = t.unit && !/^lot$/i.test(t.unit) ? ` (${r2(t.qty)} ${t.unit})` : '';
     return { desc: (t.name + unit + (subs.length ? ': ' + subs.join(', ') : '')).slice(0, 400), qty: r2(t.qty), price: r2(r2(t.rate) * k), gst: true, tid: t.id };
-  });
+  }).concat(looseLine);
 }
 // v87: the quote is the source of truth for what was agreed: when a quote made from the plan is saved, each line's quantity and
 // unit price go back to its task (the margin taken off, so the plan holds the cost). Lines know their task (tid); older quotes
@@ -77,7 +81,7 @@ export async function syncBack(doc, by) {
     let t = it.tid ? plan.tasks.find((x) => x.id === it.tid) : null;
     if (!t && !it.tid) t = plan.tasks.filter((x) => x.name && !used.has(x.id) && String(it.desc || '').startsWith(x.name)).sort((a, b) => b.name.length - a.name.length)[0];
     if (!t || used.has(t.id)) continue; used.add(t.id);
-    if ((t.mats || []).length || it.mats) continue;
+    if ((t.mats || []).length || Number(t.bomx) > 0 || it.mats) continue;
     const ex = doc.pricesInc && it.gst !== false ? it.price / 1.1 : it.price, rate = r2(ex / k), qty = r2(it.qty);
     if (qty === r2(t.qty) && Math.abs(rate - r2(t.rate)) < 0.01) continue;
     changes.push(`${t.name}: ${r2(t.qty)} ${t.unit || ''} x $${r2(t.rate)} to ${qty} ${t.unit || ''} x $${rate}`.replace(/\s+x/g, ' x'));
@@ -122,7 +126,7 @@ export async function planQuotePost(action, body, { who, by, audit }) {
   }
   // planQuote: make a new quote, or refresh a draft quote that came from this plan
   const mode = body.mode === 'lump' ? 'lump' : 'tasks', margin = Math.max(0, Math.min(200, Number(body.margin) || 0));
-  if (plan.tasks.some((t) => (t.mats || []).length)) {   // v56: names of the stock materials for the quote lines
+  if (plan.tasks.some((t) => (t.mats || []).length)) {   // v56: names of the stock materials for the quote lines (v93: the BOM's own names first)
     try { const ix = await kv.get('inv-index'); plan.matNames = Object.fromEntries(Object.values((ix && ix.items) || {}).map((i) => [i.id, i.name])); } catch {}
   }
   const items = linesFromPlan(plan, { mode, margin });

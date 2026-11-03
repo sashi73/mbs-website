@@ -108,7 +108,7 @@
   // v56: a task's cost = its own qty x rate (labour, hire ...) + its stock materials (each item x its quantity)
   var matsOf = function (t) { return Array.isArray(t.mats) ? t.mats : []; };
   var matCost = function (t) { return r2(matsOf(t).reduce(function (a, m) { return a + (Number(m.qty) || 0) * (Number(m.price) || 0); }, 0)); };
-  var cost = function (t) { return r2((Number(t.qty) || 0) * (Number(t.rate) || 0) + matCost(t)); };
+  var cost = function (t) { return r2((Number(t.qty) || 0) * (Number(t.rate) || 0) + matCost(t) + (Number(t.bomx) || 0)); };   // v93: + BOM materials not in stock
   function rollup(p, day) {
     schedule(p);
     var T = p.tasks, frac = function (t) { return !t.es ? 0 : day < t.es ? 0 : day >= t.ef ? 1 : workBetween(t.es, day) / Math.max(1, workBetween(t.es, t.ef)); };
@@ -3179,6 +3179,9 @@
     var by = {};
     b.lines.forEach(function (l) { if (!l.task || !l.item) return; var g = by[l.task] = by[l.task] || {}, x = g[l.item] = g[l.item] || { qty: 0, val: 0 }; x.qty += Number(l.qty) || 0; x.val += (Number(l.qty) || 0) * (Number(l.price) || 0); });
     p.tasks.forEach(function (t) { var g = by[t.id] || {}; t.mats = Object.keys(g).map(function (id) { var x = g[id]; return { item: id, qty: q3c(x.qty), price: x.qty ? r2(x.val / x.qty) : 0 }; }); });
+    // v93: lines not in Inventory still cost money: in the task's cost (bomx); lines with no task: bomLoose (their own quote line)
+    var bx = {}, loose = 0; b.lines.forEach(function (l) { var v = (Number(l.qty) || 0) * (Number(l.price) || 0); if (!l.task) loose += v; else if (!l.item) bx[l.task] = (bx[l.task] || 0) + v; });
+    p.tasks.forEach(function (t) { if (bx[t.id]) t.bomx = r2(bx[t.id]); else delete t.bomx; }); p.bomLoose = r2(loose);
   }
   function bomSave(what) { bomSync(); dirty(what); bomTab(); }
   function bomLoadStock() {   // stock levels, and what this plan itself has set aside (so it is not counted twice)
@@ -3196,7 +3199,7 @@
     return r;
   }
   function bomTotals(b) {
-    var v = 0, inPlan = 0; b.lines.forEach(function (l) { var x = (Number(l.qty) || 0) * (Number(l.price) || 0); v += x; if (l.task && l.item) inPlan += x; });
+    var v = 0, inPlan = 0; b.lines.forEach(function (l) { var x = (Number(l.qty) || 0) * (Number(l.price) || 0); v += x; if (l.task) inPlan += x; });
     return { value: r2(v), inPlan: r2(inPlan), checked: b.lines.filter(function (l) { return l.checked; }).length, est: b.lines.filter(function (l) { return l.est; }).length, noItem: b.lines.filter(function (l) { return !l.item; }).length, noTask: b.lines.filter(function (l) { return !l.task; }).length };
   }
   function bomMatch(l) {   // an Inventory item with the same name, to link an unmatched line to
@@ -3238,7 +3241,7 @@
     };
     var rows = bomGroups(b).map(function (g) {
       var sub = r2(g.rows.reduce(function (a, x) { return a + (Number(x.l.qty) || 0) * (Number(x.l.price) || 0); }, 0));
-      return '<tr class="bom-g"><td colspan="10">' + (g.t ? '<b>#' + g.n + ' ' + esc(g.t.name) + '</b>' + (g.t.status === 'done' ? ' <small class="muted">(done: stock used)</small>' : '') : '<b>Not linked to a task</b> <small class="muted">(not in the plan cost until linked)</small>') + '<span class="sp"></span><b>' + money(sub) + '</b></td></tr>' +
+      return '<tr class="bom-g"><td colspan="10">' + (g.t ? '<b>#' + g.n + ' ' + esc(g.t.name) + '</b>' + (g.t.status === 'done' ? ' <small class="muted">(done: stock used)</small>' : '') : '<b>Not linked to a task</b> <small class="bad">(on the quote as a separate materials line, but not in the plan budget: link each one to its task)</small>') + '<span class="sp"></span><b>' + money(sub) + '</b></td></tr>' +
         g.rows.map(function (x) { var l = x.l, tot = r2((Number(l.qty) || 0) * (Number(l.price) || 0));
           return '<tr data-bk="' + x.k + '" class="' + (l.checked ? 'ok' : '') + '"><td class="c"><label class="bom-ck" title="' + (l.checked ? 'Checked' + (l.checkedBy ? ' by ' + esc(l.checkedBy) : '') : 'Tick when you have checked the quantity and price') + '"><input type="checkbox" data-bf="checked"' + (l.checked ? ' checked' : '') + dis + '></label></td>' +
             '<td><input data-bf="name" value="' + esc(l.name) + '"' + dis + '><div class="bom-tags"><span class="bom-src">' + (BOM_SRC[l.source] || '') + '</span>' + (l.est ? '<span class="est-tag" title="An estimate (AI or template): check it">≈ est</span>' : '') + (l.note ? '<small class="muted">' + esc(l.note) + '</small>' : '') + '</div></td>' +
@@ -3263,12 +3266,12 @@
     B.innerHTML = '<div class="card"><div class="card-h"><h2>🧱 Bill of Materials</h2><span class="bom-pill ' + (lock ? 'ok' : '') + '">' + (lock ? '✓ Signed off' : 'Draft') + '</span><span class="sp"></span>' +
         (lock ? '' : '<button class="btn btn-sm" id="bomAi" type="button">✨ Draft with AI</button><button class="btn btn-sm" id="bomAdd" type="button">＋ Line</button>') +
         '<button class="btn btn-sm" id="bomTpl" type="button">📋 Templates</button><button class="btn btn-sm" id="bomDoc" type="button">📄 Document</button><button class="btn btn-sm" id="bomXls" type="button">⬇ Excel</button>' +
-        (lock ? '<button class="btn btn-sm" id="bomOpen" type="button">🔓 Reopen</button>' : '<button class="btn btn-sm btn-gold" id="bomSign" type="button"' + (b.lines.length && T.checked === b.lines.length ? '' : ' disabled title="Tick every line as checked first"') + '>✍ Sign off</button>') + '</div>' +
-      '<div class="bom-kpi"><span><b>' + pl(b.lines.length, 'line') + '</b></span><span>Value <b>' + money(T.value) + '</b> ex GST</span><span>In the plan cost <b>' + money(T.inPlan) + '</b></span><span>Checked <b>' + T.checked + ' / ' + b.lines.length + '</b></span>' +
+        (lock ? '<button class="btn btn-sm" id="bomOpen" type="button">🔓 Reopen</button>' : '<button class="btn btn-sm btn-gold" id="bomSign" type="button"' + (b.lines.length && T.checked === b.lines.length && !T.noTask ? '' : ' disabled title="' + (T.noTask ? 'Link every line to a task first (so its cost is in the plan)' : 'Tick every line as checked first') + '"') + '>✍ Sign off</button>') + '</div>' +
+      '<div class="bom-kpi"><span><b>' + pl(b.lines.length, 'line') + '</b></span><span>Value <b>' + money(T.value) + '</b> ex GST</span><span>In the plan cost <b>' + money(T.inPlan) + '</b></span>' + (T.value - T.inPlan > 0.005 ? '<span class="bad" title="Lines not linked to a task: the quote adds them as a separate line, but the plan budget does not have them">Not in the budget <b>' + money(r2(T.value - T.inPlan)) + '</b></span>' : '') + '<span>Checked <b>' + T.checked + ' / ' + b.lines.length + '</b></span>' +
         (shorts.length ? (toOrder.length ? '<span class="bad">To order: <b>' + toOrder.length + '</b></span>' : '<span class="ok">✓ Shortfall ordered</span>') : '') + (T.noItem ? '<span>Not in stock: <b>' + T.noItem + '</b></span>' : '') + '</div>' +
       (lock ? '<p class="bom-signed">✍ Signed off by <b>' + esc(b.signedBy) + '</b>' + (b.signedRole ? ', ' + esc(b.signedRole) : '') + ' on ' + esc(dmy(new Date(b.signedAt).toISOString().slice(0, 10))) + (b.sig ? ' · signature: <i>' + esc(b.sig) + '</i>' : '') + '. The BOM is locked: to change it, reopen it with a reason' + ' (raise a 🔁 change request where it changes the contract or budget).</p>' : '') +
       (T.est && !lock ? '<div class="est-warn"><div class="est-ic">⚠</div><div class="est-tx"><b>' + pl(T.est, 'line') + ' marked ≈ est</b> came from the AI or a template: check the quantity and price of each (and the waste allowance) against the drawings and supplier quotes, then tick it as checked.</div></div>' : '') +
-      (T.noItem && !lock ? '<p class="muted" style="font-size:12.5px;margin:6px 0">Lines that are not in Inventory are not set aside or in the plan cost. Press <b>＋ Add to Inventory</b> (or 🔗 to link an existing item)' + (T.noItem > 1 ? ', or <button class="btn btn-sm" id="bomInvAll" type="button">＋ Add all ' + T.noItem + ' to Inventory</button>' : '') + '.</p>' : '') +
+      (T.noItem && !lock ? '<p class="muted" style="font-size:12.5px;margin:6px 0">Every line is costed: its task\'s cost and the quote include it. Lines that are not in Inventory are not set aside or tracked in stock: press <b>＋ Add to Inventory</b> (or 🔗 to link an existing item)' + (T.noItem > 1 ? ', or <button class="btn btn-sm" id="bomInvAll" type="button">＋ Add all ' + T.noItem + ' to Inventory</button>' : '') + '.</p>' : '') +
       (b.lines.length ? '<div class="table-wrap"><table class="rt bom-tbl"><thead><tr><th title="Checked">✓</th><th>Material</th><th>Task</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit $</th><th class="num">Total</th><th class="num" title="Lead time (working days)">Lead</th><th>Stock</th><th></th></tr></thead><tbody>' + rows +
         '</tbody><tfoot><tr><td></td><td colspan="5"><b>Total materials</b> <small class="muted">ex GST</small></td><td class="num"><b>' + money(T.value) + '</b></td><td colspan="3"></td></tr></tfoot></table></div>'
         : '<div class="empty">No lines yet. ✨ Draft with AI, apply a 📋 template, or ＋ add a line.</div>') + '</div>' + shortHtml +

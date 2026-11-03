@@ -121,6 +121,19 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     const q = line('Porcelain tile 600x600').locator('[data-bf=qty]'); await q.fill('30'); await q.press('Tab'); await sleep(1800);
     pl = await P.get(core);
     ok('Edit', 'changing a quantity in the BOM changes the task\'s materials (the BOM is the source of truth)', pl.tasks.find((t) => t.mats.some((m) => m.item === tile.id)).mats.find((m) => m.item === tile.id).qty === 30);
+    // v93: every BOM line is costed: in its task's cost, the plan budget and the quote (none left out)
+    const PQ = await import(path.join(SITE, 'netlify/lib/plan-quote.mjs'));
+    const sumQ = (L) => L.reduce((a, x) => a + x.qty * x.price, 0), lab = (pl) => pl.tasks.reduce((a, t) => a + (t.qty || 0) * (t.rate || 0), 0), bomV = (pl) => pl.bom.lines.reduce((a, l) => a + l.qty * l.price, 0);
+    pl = await P.get(core);
+    const memb = pl.bom.lines.find((l) => /membrane/i.test(l.name)), mt = pl.tasks.find((t) => t.id === memb.task);
+    ok('Cost', 'a BOM line not in Inventory (waterproofing membrane) is still in its task\'s cost', !memb.item && mt.bomx === memb.qty * memb.price && P.taskCost(mt) >= mt.bomx, JSON.stringify([mt.bomx, memb]));
+    let ql = PQ.linesFromPlan(pl, { margin: 0 });
+    ok('Cost', 'the quote from the plan = labour + the whole BOM (stock and non-stock), to the cent', Math.abs(sumQ(ql) - (lab(pl) + bomV(pl))) < 0.05 && ql.some((x) => x.tid === mt.id && /Waterproofing membrane/.test(x.desc)), sumQ(ql) + ' vs ' + (lab(pl) + bomV(pl)));
+    ok('Cost', 'with a 15% margin, the materials get the margin too', Math.abs(sumQ(PQ.linesFromPlan(pl, { margin: 15 })) - (lab(pl) + bomV(pl)) * 1.15) < 0.5);
+    await line('Waterproofing membrane').locator('[data-bf=task]').selectOption(''); await sleep(1800);
+    pl = await P.get(core); ql = PQ.linesFromPlan(pl, { margin: 0 });
+    ok('Cost', 'a line not linked to a task still goes on the quote, as its own materials line (and the BOM warns it is not in the budget)', pl.bomLoose === memb.qty * memb.price && ql.some((x) => x.bom && /Waterproofing membrane/.test(x.desc)) && Math.abs(sumQ(ql) - (lab(pl) + bomV(pl))) < 0.05 && /Not in the budget/.test(await p.textContent('.bom-kpi')), JSON.stringify(ql.slice(-1)));
+    await line('Waterproofing membrane').locator('[data-bf=task]').selectOption(memb.task); await sleep(1800);
     await p.goto(`${BASE}/admin/#plan/${core}/schedule`); await p.waitForSelector('table.gt'); await p.click('tr[data-tid] [data-pick]'); await sleep(800);
     ok('📦 button', 'with a BOM, 📦 on a task opens the BOM tab instead of a separate picker', /\/bom$/.test(p.url()) && !(await p.$('#mtSave')));
     await p.waitForSelector('.bom-tbl');

@@ -203,6 +203,13 @@ function clean(p, core) {
   // v75: the RACI map: for each activity (task), each stakeholder's R / A / C / I
   const tSet = new Set(res.tasks.map((t) => t.id)), sSet = new Set(res.stakeholders.map((x) => x.id)), rm = p.raciMap && typeof p.raciMap === 'object' ? p.raciMap : {};
   res.bom = p.bom ? cleanBom(p.bom, tSet) : null;   // v89: the Bill of Materials
+  // v93: every BOM line is costed. Stock lines are already the task's materials (mats); the others (not in Inventory: services,
+  // special orders) go into the task's cost as bomx, so the plan, the budget and the quote include them. Lines not linked to a
+  // task are bomLoose: the quote adds them as their own line, so nothing is left out of the price.
+  const bx = {}; let loose = 0;
+  for (const l of (res.bom && res.bom.lines) || []) { const v = (Number(l.qty) || 0) * (Number(l.price) || 0); if (!l.task) loose += v; else if (!l.item) bx[l.task] = (bx[l.task] || 0) + v; }
+  for (const t of res.tasks) { if (bx[t.id]) t.bomx = r2(bx[t.id]); else delete t.bomx; }
+  res.bomLoose = r2(loose);
   res.raciMap = {};
   for (const [tid, row] of Object.entries(rm).slice(0, 400)) {
     if (!tSet.has(tid) || !row || typeof row !== 'object') continue;
@@ -237,7 +244,7 @@ function crClean(c) {
 export function matsOf(t) { return Array.isArray(t.mats) && t.mats.length ? t.mats : t.item ? [{ item: t.item, qty: Number(t.qty) || 0, price: Number(t.rate) || 0, legacy: true }] : []; }
 export function taskCost(t) {
   const m = matsOf(t), own = m.length && m[0].legacy ? 0 : (Number(t.qty) || 0) * (Number(t.rate) || 0);
-  return r2(own + m.reduce((a, x) => a + (Number(x.qty) || 0) * (Number(x.price) || 0), 0));
+  return r2(own + m.reduce((a, x) => a + (Number(x.qty) || 0) * (Number(x.price) || 0), 0) + (Number(t.bomx) || 0));   // v93: + BOM materials not in stock
 }
 export async function save(core, plan, rev, by) {
   const c = clean(plan, core);

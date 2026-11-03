@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-11-03 v92 (BOM: re-orders marked as ordered by phone, email or other)';
+const VERSION = '2026-11-03 v93 (every BOM line is costed: task cost, budget and quote)';
 const NEEDS = [
   ['netlify/lib/shared.mjs', 'isTestSite'],
   ['netlify/lib/plan.mjs', 'gateOf'],
