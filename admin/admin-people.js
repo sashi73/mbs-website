@@ -7,7 +7,7 @@
   var M = window.MBS; if (!M) return;
   var api = M.api, esc = M.esc, toast = M.toast, fail = M.fail, $ = M.$;
   var V = function () { return M.view(); };
-  var S = { tab: 'list', q: '', type: '', role: '', status: '', showArchived: false, data: null, assign: null, users: null };
+  var S = { tab: 'list', q: '', type: '', role: '', status: '', showArchived: false, data: null, assign: null, users: null, sel: {} };
   var money = function (n) { return n ? '$' + (Math.round(n * 100) / 100).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : ''; };
   var dmy = function (d) { return d ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) : ''; };
   var CW = { ok: ['✓ Up to date', 'ok'], due: ['Due soon', 'due'], expired: ['Expired', 'bad'], missing: ['Missing', 'miss'] };
@@ -49,9 +49,11 @@
         '<button class="tab' + (S.tab === 'work' ? ' on' : '') + '" data-ptab="work">📅 Workload</button></div>' +
         '<span class="muted" style="font-size:13px">' + emp + ' employee' + (emp === 1 ? '' : 's') + ' · ' + (act.length - emp) + ' contractor' + (act.length - emp === 1 ? '' : 's') + '</span>' +
         '<span class="sp"></span>' + ((M.me || {}).test && can('edit') ? '<button class="btn btn-sm" id="ppSample" title="Test site only: 10 made-up employees and contractors to try things out with">🧪 Load 10 sample people</button>' : '') +
+        '<button class="btn btn-sm" id="ppExp" type="button" title="Download People as CSV or Excel">⬇ Export</button>' + (can('edit') ? '<button class="btn btn-sm" id="ppImp" type="button" title="Update or add people from a CSV or Excel file">⬆ Import</button>' : '') +
         (can('edit') ? '<button class="btn btn-gold" id="ppNew">＋ Person</button>' : '<span class="muted" style="font-size:12.5px">View only</span>') + '</div><div id="ppBody"></div>';
     V().querySelectorAll('[data-ptab]').forEach(function (b) { b.onclick = function () { S.tab = b.getAttribute('data-ptab'); history.replaceState(null, '', { list: '#people', compliance: '#people/compliance', work: '#people/workload' }[S.tab]); draw(); }; });
     var nb = $('#ppNew'); if (nb) nb.onclick = function () { edit(''); };
+    $('#ppExp').onclick = function () { exportDialog(null); }; var ib = $('#ppImp'); if (ib) ib.onclick = importDialog;   // v90
     var sb = $('#ppSample'); if (sb) sb.onclick = function () {   // v88: test site only
       sb.disabled = true; api('pplSampleLoad').then(function (r) { toast(r.ids.length ? r.ids.length + ' sample people added' + (r.skipped ? ' (' + r.skipped + ' were already there)' : '') + '. Give them Guest logins in Users & access.' : 'The sample people are already there'); return load(); }).then(draw).catch(function (e) { sb.disabled = false; fail(e); });
     };
@@ -65,6 +67,7 @@
       return !q || [p.name, p.role, p.phone, p.email, p.suburb, p.business, tradeName(p.trade), p.id].join(' ').toLowerCase().indexOf(q) >= 0;
     });
     var roles = {}; all.forEach(function (p) { if (p.role) roles[p.role] = (roles[p.role] || 0) + 1; });
+    Object.keys(S.sel).forEach(function (k) { if (!all.some(function (p) { return p.id === k; })) delete S.sel[k]; }); var nSel = Object.keys(S.sel).length;
     $('#ppBody').innerHTML = '<div class="card"><div class="row" style="margin-bottom:10px;gap:8px">' +
         '<input id="ppQ" type="search" placeholder="Search name, role, phone, suburb…" value="' + esc(S.q) + '" style="max-width:280px">' +
         '<select id="ppType" style="width:auto"><option value="">Employees and contractors</option>' + d.types.map(function (t) { return '<option' + (S.type === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select>' +
@@ -72,10 +75,12 @@
         '<label class="muted" style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="ppArch" style="width:auto"' + (S.showArchived ? ' checked' : '') + '>Show archived</label>' +
         '<span class="sp"></span><span class="muted" style="font-size:13px">' + L.length + ' shown</span></div>' +
         '<div class="sc-chips">' + Object.keys(roles).sort().map(function (r) { return '<button class="sc-tchip' + (S.role === r ? ' on' : '') + '" data-role="' + esc(r) + '">' + esc(r) + ' <b>' + roles[r] + '</b></button>'; }).join('') + '</div>' +
-      (L.length ? '<div class="table-wrap"><table class="sc-table pp-table"><thead><tr><th>Person</th><th>Role</th><th>Phone</th><th class="hide-sm">Email</th><th class="num">Cost / charge-out</th><th>Tickets &amp; licences</th><th>Status</th>' + (S.users ? '<th>Login</th>' : '') + '</tr></thead><tbody>' +
+      (can('edit') && L.length ? '<div class="pp-bulk' + (nSel ? ' on' : '') + '" id="ppBulk"><b>' + nSel + ' selected</b>' + BULK.map(function (b) { return '<button class="btn btn-sm" data-bulk="' + b[0] + '" type="button"' + (nSel ? '' : ' disabled') + '>' + b[1] + '</button>'; }).join('') +
+        '<button class="btn btn-sm" data-bulk="export" type="button"' + (nSel ? '' : ' disabled') + '>⬇ Export</button><button class="btn btn-sm" data-bulk="none" type="button"' + (nSel ? '' : ' disabled') + '>Clear</button></div>' : '') +
+      (L.length ? '<div class="table-wrap"><table class="sc-table pp-table"><thead><tr>' + (can('edit') ? '<th class="pp-sel"><input type="checkbox" id="ppAll" title="Select all shown"' + (L.length && L.every(function (p) { return S.sel[p.id]; }) ? ' checked' : '') + '></th>' : '') + '<th>Person</th><th>Role</th><th>Phone</th><th class="hide-sm">Email</th><th class="num">Cost / charge-out</th><th>Tickets &amp; licences</th><th>Status</th>' + (S.users ? '<th>Login</th>' : '') + '</tr></thead><tbody>' +
         L.map(function (p) {
           var tel = String(p.phone || '').replace(/[^\d+]/g, ''), lg = loginOf(p.id);
-          return '<tr data-ppid="' + esc(p.id) + '" class="click' + (p.archived ? ' tdone' : '') + '"><td><span class="pp-av pp-' + (p.type === 'Contractor' ? 'c' : 'e') + '">' + esc(ini(p.name)) + '</span><b>' + esc(p.name) + '</b><br><small class="muted">' + esc([p.type === 'Contractor' ? 'Contractor' + (p.business ? ' · ' + p.business : '') : p.employment, p.suburb].filter(Boolean).join(' · ')) + '</small></td>' +
+          return '<tr data-ppid="' + esc(p.id) + '" class="click' + (p.archived ? ' tdone' : '') + (S.sel[p.id] ? ' pp-on' : '') + '">' + (can('edit') ? '<td class="pp-sel"><input type="checkbox" data-sel="' + esc(p.id) + '"' + (S.sel[p.id] ? ' checked' : '') + ' aria-label="Select"></td>' : '') + '<td><span class="pp-av pp-' + (p.type === 'Contractor' ? 'c' : 'e') + '">' + esc(ini(p.name)) + '</span><b>' + esc(p.name) + '</b><br><small class="muted">' + esc([p.type === 'Contractor' ? 'Contractor' + (p.business ? ' · ' + p.business : '') : p.employment, p.suburb].filter(Boolean).join(' · ')) + '</small></td>' +
             '<td>' + esc(p.role || '') + (p.trade ? '<br><small class="muted">' + esc(tradeName(p.trade)) + '</small>' : '') + '</td>' +
             '<td class="nowrap">' + (tel ? '<a href="tel:' + esc(tel) + '">' + esc(p.phone) + '</a>' : '') + '</td><td class="hide-sm">' + (p.email ? '<a href="mailto:' + esc(p.email) + '">' + esc(p.email) + '</a>' : '') + '</td>' +
             '<td class="num nowrap">' + (p.costRate ? money(p.costRate) + '<small class="muted">/hr</small>' : '') + (p.chargeRate ? '<br><small class="muted">charge ' + money(p.chargeRate) + '/hr</small>' : '') + '</td>' +
@@ -89,7 +94,10 @@
     $('#ppStatus').onchange = function () { S.status = this.value; listTab(); };
     $('#ppArch').onchange = function () { S.showArchived = this.checked; listTab(); };
     B.querySelectorAll('[data-role]').forEach(function (b) { b.onclick = function () { var k = b.getAttribute('data-role'); S.role = S.role === k ? '' : k; listTab(); }; });
-    B.querySelectorAll('tr[data-ppid]').forEach(function (tr) { tr.onclick = function (e) { if (e.target.closest('a')) return; location.hash = '#people/' + tr.getAttribute('data-ppid'); }; });
+    B.querySelectorAll('tr[data-ppid]').forEach(function (tr) { tr.onclick = function (e) { if (e.target.closest('a') || e.target.closest('.pp-sel')) return; location.hash = '#people/' + tr.getAttribute('data-ppid'); }; });
+    B.querySelectorAll('[data-sel]').forEach(function (x) { x.onchange = function () { var k = x.getAttribute('data-sel'); if (x.checked) S.sel[k] = 1; else delete S.sel[k]; listTab(); }; });   // v90: bulk changes
+    var all2 = $('#ppAll'); if (all2) all2.onchange = function () { var on = this.checked; L.forEach(function (p) { if (on) S.sel[p.id] = 1; else delete S.sel[p.id]; }); listTab(); };
+    B.querySelectorAll('[data-bulk]').forEach(function (b) { b.onclick = function () { var op = b.getAttribute('data-bulk'); if (op === 'none') { S.sel = {}; return listTab(); } if (op === 'export') return exportDialog(Object.keys(S.sel)); bulkDialog(op); }; });
   }
 
   function compTab() {
@@ -105,9 +113,11 @@
         var tel = String(r.p.phone || '').replace(/[^\d+]/g, ''), subj = encodeURIComponent(r.doc + ': renewal needed');
         return '<tr data-ppid="' + esc(r.p.id) + '" class="click"><td><b>' + esc(r.p.name) + '</b><br><small class="muted">' + esc(r.p.role || r.p.type) + '</small></td><td>' + esc(r.doc) + '</td>' +
           '<td><span class="scdoc scdoc-' + r.st + '">' + DOC[r.st] + '</span></td><td class="nowrap">' + (r.exp ? dmy(r.exp) : '–') + '</td>' +
-          '<td class="nowrap">' + (tel ? '<a class="btn btn-sm" href="tel:' + esc(tel) + '" title="Call">📞</a> ' : '') + (r.p.email ? '<a class="btn btn-sm" href="mailto:' + esc(r.p.email) + '?subject=' + subj + '" title="Email">✉</a>' : '') + '</td></tr>';
+          '<td class="nowrap">' + (tel ? '<a class="btn btn-sm" href="tel:' + esc(tel) + '" title="Call">📞</a> ' : '') + (r.p.email ? '<a class="btn btn-sm" href="mailto:' + esc(r.p.email) + '?subject=' + subj + '" title="Email">✉</a>' : '') +
+            (can('edit') ? ' <button class="btn btn-sm btn-gold" data-renew="' + esc(r.doc) + '" type="button" title="Record the renewed ticket, licence or policy">↻ Update</button>' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>' : '<div class="empty">Everyone\'s tickets and licences are in order. 👍</div>') + '</div>';
-    $('#ppBody').querySelectorAll('tr[data-ppid]').forEach(function (tr) { tr.onclick = function (e) { if (e.target.closest('a')) return; location.hash = '#people/' + tr.getAttribute('data-ppid'); }; });
+    $('#ppBody').querySelectorAll('tr[data-ppid]').forEach(function (tr) { tr.onclick = function (e) { if (e.target.closest('a') || e.target.closest('[data-renew]')) return; location.hash = '#people/' + tr.getAttribute('data-ppid'); }; });
+    $('#ppBody').querySelectorAll('[data-renew]').forEach(function (b) { b.onclick = function () { renewDialog(b.closest('tr').getAttribute('data-ppid'), b.getAttribute('data-renew')); }; });   // v90
   }
   function expiryOf(p, docName) {
     var t = p.tickets || {}, k = { 'Trade licence': 'licence', 'First aid': 'firstAid', 'Working at heights': 'heights', 'Confined spaces': 'confined', 'EWP': 'ewp', 'Forklift': 'forklift', 'Asbestos awareness': 'asbestos', 'Driver\'s licence': 'driver' }[docName];
@@ -137,7 +147,9 @@
       var T = S.data.tickets, row = function (k, v) { return v ? '<tr><td class="muted">' + k + '</td><td>' + v + '</td></tr>' : ''; };
       var proj = {}; a.list.forEach(function (x) { (proj[x.core] = proj[x.core] || { plan: x.plan, rows: [] }).rows.push(x); });
       V().innerHTML = '<div class="row" style="margin-bottom:12px"><a class="btn btn-sm" href="#people">← People</a><span class="sp"></span>' +
-          (can('edit') ? '<button class="btn btn-gold" id="ppEdit">✎ Edit</button>' : '') + '</div>' +
+          (can('edit') ? (p.archived ? '<button class="btn btn-sm btn-danger" id="ppDel" type="button">🗑 Delete permanently</button><button class="btn" id="ppArc" type="button">↩ Restore</button>'
+            : '<label class="pp-qs" title="Change the status">Status <select id="ppSt">' + S.data.statuses.map(function (x) { return '<option' + (x === p.status ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label><button class="btn" id="ppArc" type="button">🗄 Archive</button>') + '<button class="btn btn-gold" id="ppEdit">✎ Edit</button>' : '') + '</div>' +
+        (p.archived ? '<div class="pp-archived">🗄 <b>Archived</b>' + (p.archivedAt ? ' on ' + esc(new Date(p.archivedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })) : '') + (p.archivedWhy ? ': ' + esc(p.archivedWhy) : '') + '. Not in the lists or pickers, and cannot log in. Restore them to use them again.</div>' : '') +
         '<div class="grid two"><div class="grid" style="align-content:start">' +
           '<div class="card pp-head"><span class="pp-av big pp-' + (p.type === 'Contractor' ? 'c' : 'e') + '">' + esc(ini(p.name)) + '</span><div><h2 style="margin:0">' + esc(p.name) + ' <small class="muted">' + esc(p.id) + '</small></h2>' +
             '<div class="muted">' + esc([p.role, p.type === 'Contractor' ? 'Contractor' + (p.business ? ', ' + p.business : '') : p.employment + ' employee', tradeName(p.trade)].filter(Boolean).join(' · ')) + '</div>' +
@@ -158,8 +170,14 @@
           (Object.keys(proj).length ? '<p class="muted" style="margin:-4px 0 8px;font-size:13px">' + Object.keys(proj).length + ' project' + (Object.keys(proj).length === 1 ? '' : 's') + ' · ' + a.now + ' task' + (a.now === 1 ? '' : 's') + ' now · ' + a.next + ' in the next 14 days' + (a.late ? ' · <b class="bad">' + a.late + ' late</b>' : '') + '</p>' +
             Object.keys(proj).map(function (core) { var g = proj[core]; return '<div class="pp-proj"><a href="#plan/' + esc(core) + '/schedule"><b>' + esc(g.plan) + '</b></a><table class="pp-asg"><tbody>' +
               g.rows.map(function (x) { var late = x.es && !x.done && x.ef < (S.data.today || ''); return '<tr><td><span class="pp-kind">' + esc(x.kind) + '</span></td><td>' + esc(x.what || '') + '</td><td class="nowrap muted">' + (x.es ? esc(dmy(x.es)) + (x.ef && x.ef !== x.es ? ' – ' + esc(dmy(x.ef)) : '') : '') + '</td><td class="num">' + (x.es ? (x.done ? '✓' : late ? '<b class="bad">late</b>' : (x.pct || 0) + '%') : '') + '</td></tr>'; }).join('') + '</tbody></table></div>'; }).join('')
-            : '<div class="empty">Not on any project plan yet. Put their name in a task\'s Resources, as a story owner or a stakeholder, or as the project manager.</div>') + '</div></div></div>';
+            : '<div class="empty">Not on any project plan yet. Put their name in a task\'s Resources, as a story owner or a stakeholder, or as the project manager.</div>') + '</div>' +
+          '<div class="card pp-hist"><h2>🕘 History</h2>' + ((p.history || []).length ? '<ul>' + p.history.slice().reverse().map(function (h) { return '<li><small class="muted">' + esc(new Date(h.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + (h.by ? ' · ' + esc(String(h.by).replace(/^Admin \((.*)\)$/, '$1')) : '') + '</small><br>' + esc(h.what) + '</li>'; }).join('') + '</ul>'
+            : '<p class="muted" style="margin:0">No changes recorded yet. From now on every change (who, when, what) is kept here.</p>') + '</div></div></div>';
       var e = $('#ppEdit'); if (e) e.onclick = function () { edit(p.id, p); };
+      var back = function () { profile(p.id); };   // v90
+      var ar = $('#ppArc'); if (ar) ar.onclick = function () { archiveDialog(p, back); };
+      var dl = $('#ppDel'); if (dl) dl.onclick = function () { deleteDialog(p); };
+      var st = $('#ppSt'); if (st) st.onchange = function () { var v = st.value; api('pplSave', { person: Object.assign({}, p, { status: v }) }).then(function () { toast(p.name + ': ' + v); return load(); }).then(back).catch(fail); };
     }).catch(fail);
   }
 
@@ -189,6 +207,7 @@
         '<h3 class="full">Other</h3>' + f('em.name', 'Emergency contact', E.name, 'name and relationship') + f('em.phone', 'Emergency phone', E.phone, '', 'tel') +
         sel('status', 'Status', p.status || 'Active', d.statuses) + '<label>Rating<select data-k="rating">' + [0, 1, 2, 3, 4, 5].map(function (x) { return '<option value="' + x + '"' + (+p.rating === x ? ' selected' : '') + '>' + (x ? '★★★★★'.slice(0, x) : 'Not rated') + '</option>'; }).join('') + '</select></label>' +
         '<label class="full">Notes<textarea data-k="notes" rows="3" placeholder="Strengths, what they\'re working towards…">' + esc(p.notes || '') + '</textarea></label>' +
+        (id ? '<label class="sc-cb full pp-ren" hidden><input type="checkbox" id="ppRen" checked style="width:auto"> Also change the name on the project plans (project manager, stakeholders, resources, story owners)</label>' : '') +
         '<p class="full muted" style="font-size:12px;margin:0">Payroll details (tax file number, bank, super, date of birth) are not kept here: they stay in your payroll system.</p></div>' +
         '<div class="actions" style="justify-content:space-between;margin-top:14px">' + (id ? '<button class="btn" id="ppArchB" type="button">' + (p.archived ? 'Restore' : 'Archive') + '</button>' : '<span></span>') +
         '<span><button class="btn" data-close type="button">Cancel</button> <button class="btn btn-gold" id="ppSave" type="button">Save</button></span></div>');
@@ -203,13 +222,143 @@
         });
         return o;
       };
-      var save = function (o, msg) { return api('pplSave', { person: o }).then(function (r) { M.closeModal(); toast(msg); return load().then(function () { if (location.hash.indexOf('#people/P-') === 0 || !id) location.hash = '#people/' + r.person.id; else draw(); if (location.hash === '#people/' + r.person.id) profile(r.person.id); }); }).catch(fail); };
+      var nm = document.querySelector('#modal [data-k=name]'), rn = document.querySelector('#modal .pp-ren');
+      if (nm && rn) nm.oninput = function () { rn.hidden = nm.value.trim() === (p.name || ''); };
+      var save = function (o, msg) { var ren = !!(rn && !rn.hidden && $('#ppRen').checked); return api('pplSave', { person: o, renamePlans: ren }).then(function (r) { M.closeModal(); toast(r.same ? 'No changes' : msg + (r.plans ? ': name changed on ' + r.plans + ' project plan' + (r.plans === 1 ? '' : 's') : '')); return load().then(function () { if (location.hash.indexOf('#people/P-') === 0 || !id) location.hash = '#people/' + r.person.id; else draw(); if (location.hash === '#people/' + r.person.id) profile(r.person.id); }); }).catch(fail); };
       $('#ppSave').onclick = function () { save(Object.assign({}, p, collect()), 'Saved'); };
-      var ar = $('#ppArchB'); if (ar) ar.onclick = function () { var o = Object.assign({}, p, collect()); o.archived = !p.archived; save(o, o.archived ? 'Archived' : 'Restored'); };
+      var ar = $('#ppArchB'); if (ar) ar.onclick = function () { archiveDialog(p, function () { if (location.hash.indexOf('#people/P-') === 0) profile(p.id); else draw(); }); };
     };
     if (given) go(given); else if (id) api('pplGet', { id: id }).then(function (r) { go(r.person); }).catch(fail); else go(null);
   }
 
+  /* ---------- v90: looking after the register: archive / restore (with a reason), bulk changes, renew a ticket, history,
+     delete permanently (archived only), export (CSV / Excel) and import (update or add from a spreadsheet) ---------- */
+  var XCOLS = [['ID', function (p) { return p.id; }], ['Name', 'name'], ['Type', 'type'], ['Role', 'role'], ['Trade', function (p) { return tradeName(p.trade); }], ['Employment', 'employment'], ['Trading name', 'business'], ['ABN', 'abn'],
+    ['GST', function (p) { return p.type === 'Contractor' ? (p.gst ? 'Yes' : 'No') : ''; }], ['Mobile', 'phone'], ['Email', 'email'], ['Address', 'address'], ['Suburb', 'suburb'], ['Started', 'start'], ['Status', 'status'], ['Hours a week', 'hours'],
+    ['Availability', 'availability'], ['Cost rate ($/hr)', 'costRate'], ['Charge-out rate ($/hr)', 'chargeRate'], ['Rating', 'rating'],
+    ['White card', function (p) { return ((p.tickets || {}).whiteCard || {}).number || ''; }], ['Trade licence', function (p) { return ((p.tickets || {}).licence || {}).number || ''; }], ['Trade licence expiry', function (p) { return ((p.tickets || {}).licence || {}).expiry || ''; }],
+    ['Driver licence', function (p) { return ((p.tickets || {}).driver || {}).number || ''; }], ['Driver licence expiry', function (p) { return ((p.tickets || {}).driver || {}).expiry || ''; }], ['First aid expiry', function (p) { return ((p.tickets || {}).firstAid || {}).expiry || ''; }],
+    ['Working at heights expiry', function (p) { return ((p.tickets || {}).heights || {}).expiry || ''; }], ['Public liability expiry', function (p) { return (p.insurance || {}).expiry || ''; }], ['Workers comp expiry', function (p) { return (p.workersComp || {}).expiry || ''; }],
+    ['Emergency contact', function (p) { return (p.emergency || {}).name || ''; }], ['Emergency phone', function (p) { return (p.emergency || {}).phone || ''; }], ['Skills', 'skills'], ['Notes', 'notes'], ['Archived', function (p) { return p.archived ? 'Yes' : ''; }]];
+  var cellOf = function (c, p) { var v = typeof c[1] === 'function' ? c[1](p) : p[c[1]]; return v == null || (v === 0 && /rate|Hours|Rating/i.test(c[0])) ? '' : v; };
+  function saveBlob(blob, name) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }
+  var xlsLib = null;
+  function loadXls() {
+    if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+    if (!xlsLib) xlsLib = new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = 'vendor/exceljs.min.js?v=440'; sc.onload = function () { res(window.ExcelJS); }; sc.onerror = function () { xlsLib = null; rej(new Error('Could not load the Excel tool. Check your connection and try again.')); }; document.head.appendChild(sc); });
+    return xlsLib;
+  }
+  var csvCell = function (v) { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  function csvParse(s) {
+    var rows = [], row = [], cur = '', q = false; s = String(s || '').replace(/^﻿/, '');
+    for (var i = 0; i < s.length; i++) { var c = s[i];
+      if (q) { if (c === '"' && s[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+      else if (c === '"') q = true; else if (c === ',') { row.push(cur); cur = ''; } else if (c === '\n' || c === '\r') { if (c === '\r' && s[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; } else cur += c; }
+    if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+    return rows.filter(function (r) { return r.some(function (x) { return String(x).trim(); }); });
+  }
+  var toObjs = function (rows) { var h = (rows[0] || []).map(function (x) { return String(x || '').trim(); }); return rows.slice(1).map(function (r) { var o = {}; h.forEach(function (k, i) { if (k) o[k] = r[i] == null ? '' : r[i]; }); return o; }); };
+  function exportDialog(ids) {
+    M.modal('<h2>⬇ Export people</h2><p class="muted" style="margin:-4px 0 10px">' + (ids ? ids.length + ' selected' : 'Everyone in People') + ': contact details, roles, rates, tickets and licences. The same columns can be imported back (⬆ Import) to update or add people. Payroll details are not kept, so they are not in it.</p>' +
+      (ids ? '' : '<label class="sc-cb"><input type="checkbox" id="exArch" style="width:auto"> Include archived people</label>') +
+      '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn" id="exCsv" type="button">⬇ CSV</button><button class="btn btn-gold" id="exXls" type="button">⬇ Excel</button></div>');
+    var get = function () { return api('pplExport', { archived: ids ? true : !!($('#exArch') || {}).checked }).then(function (r) { return r.people.filter(function (p) { return !ids || ids.indexOf(p.id) >= 0; }); }); };
+    var stamp = new Date().toISOString().slice(0, 10);
+    $('#exCsv').onclick = function () { get().then(function (L) {
+      var t = '﻿' + [XCOLS.map(function (c) { return csvCell(c[0]); }).join(',')].concat(L.map(function (p) { return XCOLS.map(function (c) { return csvCell(cellOf(c, p)); }).join(','); })).join('\r\n');
+      saveBlob(new Blob([t], { type: 'text/csv;charset=utf-8' }), 'MBS-people-' + stamp + '.csv'); M.closeModal(); toast(L.length + ' people exported');
+    }).catch(fail); };
+    $('#exXls').onclick = function () { Promise.all([get(), loadXls()]).then(function (x) {
+      var L = x[0], wb = new x[1].Workbook(), ws = wb.addWorksheet('People');
+      ws.columns = XCOLS.map(function (c) { return { header: c[0], width: Math.max(10, Math.min(36, c[0].length + 4)) }; });
+      L.forEach(function (p) { ws.addRow(XCOLS.map(function (c) { return cellOf(c, p); })); });
+      ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }; ws.getRow(1).eachCell(function (c) { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2A44' } }; });
+      ws.views = [{ state: 'frozen', ySplit: 1, xSplit: 2 }]; ws.autoFilter = { from: 'A1', to: { row: 1, column: XCOLS.length } };
+      return wb.xlsx.writeBuffer().then(function (buf) { saveBlob(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'MBS-people-' + stamp + '.xlsx'); M.closeModal(); toast(L.length + ' people exported'); });
+    }).catch(fail); };
+  }
+  function importDialog() {
+    M.modal('<h2>⬆ Import people</h2><p class="muted" style="margin:-4px 0 10px">A CSV or Excel file with one person per row and a header row (the same columns as ⬇ Export). People are matched by <b>ID</b>, then <b>email</b>, then <b>exact name</b>: a match is <b>updated</b> (only the columns in the file, blanks are left alone); anyone else is <b>added</b>. You see what will change before anything is saved.</p>' +
+      '<input type="file" id="imF" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"><div id="imOut" style="margin-top:12px"></div>' +
+      '<div class="actions" style="justify-content:space-between"><button class="btn btn-sm" id="imTpl" type="button">⬇ Blank template (CSV)</button><span><button class="btn" data-close type="button">Cancel</button> <button class="btn btn-gold" id="imGo" type="button" disabled>Import</button></span></div>');
+    var rows = null;
+    $('#imTpl').onclick = function () { saveBlob(new Blob(['﻿' + XCOLS.filter(function (c) { return c[0] !== 'Archived'; }).map(function (c) { return csvCell(c[0]); }).join(',') + '\r\n'], { type: 'text/csv;charset=utf-8' }), 'MBS-people-template.csv'); };
+    var read = function (file) {
+      if (/\.xlsx$/i.test(file.name)) return Promise.all([file.arrayBuffer(), loadXls()]).then(function (x) { var wb = new x[1].Workbook(); return wb.xlsx.load(x[0]).then(function () {
+        var ws = wb.worksheets[0], out = []; if (!ws) return [];
+        ws.eachRow({ includeEmpty: false }, function (r) { var a = []; for (var i = 1; i <= ws.columnCount; i++) { var v = r.getCell(i).value; if (v && v instanceof Date) v = v.toISOString().slice(0, 10); else if (v && typeof v === 'object') v = v.text != null ? v.text : v.result != null ? v.result : v.richText ? v.richText.map(function (t) { return t.text; }).join('') : ''; a.push(v == null ? '' : v); } out.push(a); });
+        return toObjs(out); }); });
+      return file.text().then(function (t) { return toObjs(csvParse(t)); });
+    };
+    $('#imF').onchange = function () {
+      var file = this.files[0]; rows = null; $('#imGo').disabled = true; if (!file) return;
+      $('#imOut').innerHTML = '<p class="ask-think">Reading ' + esc(file.name) + '…</p>';
+      read(file).then(function (r) { rows = r; if (!r.length) throw new Error('No rows found under the header row'); return api('pplImport', { rows: r, dry: true }); }).then(function (d) {
+        var li = function (a) { return a.slice(0, 40).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + (a.length > 40 ? '<li class="muted">… and ' + (a.length - 40) + ' more</li>' : ''); };
+        $('#imOut').innerHTML = '<div class="im-sum"><span class="ok">＋ ' + d.added.length + ' new</span><span>✎ ' + d.updated.length + ' to update</span><span class="muted">' + d.same + ' unchanged</span>' + (d.errors.length ? '<span class="bad">' + d.errors.length + ' with problems</span>' : '') + '</div>' +
+          '<div style="max-height:40vh;overflow:auto">' + (d.added.length ? '<h3 class="im-h">New</h3><ul class="im-l">' + li(d.added) + '</ul>' : '') + (d.updated.length ? '<h3 class="im-h">Updates</h3><ul class="im-l">' + li(d.updated) + '</ul>' : '') +
+          (d.errors.length ? '<h3 class="im-h">Problems (skipped)</h3><ul class="im-l bad">' + li(d.errors.map(function (e) { return 'Row ' + e.row + (e.name ? ' ' + e.name : '') + ': ' + e.error; })) + '</ul>' : '') + '</div>';
+        $('#imGo').disabled = !(d.added.length || d.updated.length); $('#imGo').textContent = 'Import: ' + d.added.length + ' new, ' + d.updated.length + ' updates';
+      }).catch(function (e) { $('#imOut').innerHTML = '<p class="bad">' + esc(e.message) + '</p>'; });
+    };
+    $('#imGo').onclick = function () { var b = this; b.disabled = true; api('pplImport', { rows: rows }).then(function (d) {
+      M.closeModal(); toast('Imported: ' + d.added.length + ' added, ' + d.updated.length + ' updated' + (d.errors.length ? ', ' + d.errors.length + ' skipped' : '')); return load().then(draw);
+    }).catch(function (e) { b.disabled = false; fail(e); }); };
+  }
+  function archiveDialog(p, then) {
+    var arch = !p.archived;
+    M.modal('<h2>' + (arch ? '🗄 Archive ' : '↩ Restore ') + esc(p.name) + '</h2><p class="muted" style="margin:-4px 0 10px">' + (arch ? 'They leave the lists, pickers and workload, and their login (if any) stops working straight away. Their record, tickets and history are kept, and their name stays on past project plans. You can restore them at any time.' : 'They come back into the lists and pickers. A login they had works again if it is still active in Users &amp; access.') + '</p>' +
+      '<form class="form" id="arF"><label class="full">' + (arch ? 'Reason <small class="muted">(e.g. left the company, contract ended)</small>' : 'Reason <small class="muted">(optional)</small>') + '<input name="why" maxlength="200"' + (arch ? ' required' : '') + '></label>' +
+      (arch ? '<label class="full">Finished on<input name="end" type="date" value="' + esc(p.end || new Date(Date.now() + 11 * 3600000).toISOString().slice(0, 10)) + '"></label>' : '') +
+      '<div class="actions full"><button class="btn" data-close type="button">Cancel</button><button class="btn ' + (arch ? 'btn-danger' : 'btn-gold') + '" type="submit">' + (arch ? '🗄 Archive' : '↩ Restore') + '</button></div></form>');
+    $('#arF').onsubmit = function (e) {
+      e.preventDefault(); var f = this, o = Object.assign({}, p, { archived: arch }); if (arch && f.end) o.end = f.end.value;
+      api('pplSave', { person: o, reason: f.why.value.trim() }).then(function () { M.closeModal(); toast(arch ? p.name + ' archived' : p.name + ' restored'); return load(); }).then(then || function () {}).catch(fail);
+    };
+  }
+  function deleteDialog(p) {
+    M.modal('<h2>🗑 Delete ' + esc(p.name) + ' permanently?</h2><p>This removes their record, tickets and history from People for good' + (loginOf(p.id) ? ', and their login' : '') + '. Their name stays on past project plans as text. <b>It cannot be undone.</b> Keeping them archived is usually better (for records and audits).</p>' +
+      '<form class="form" id="dlF"><label class="full">Type their full name to confirm<input name="c" autocomplete="off" required></label><div class="actions full"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-danger" type="submit" id="dlGo" disabled>Delete permanently</button></div></form>');
+    $('#dlF').c.oninput = function () { $('#dlGo').disabled = this.value.trim().toLowerCase() !== p.name.toLowerCase(); };
+    $('#dlF').onsubmit = function (e) { e.preventDefault(); api('pplDelete', { id: p.id, confirm: this.c.value.trim() }).then(function (r) { M.closeModal(); toast(r.name + ' deleted' + (r.logins ? ' (and their login)' : '')); return load(); }).then(function () { location.hash = '#people'; }).catch(fail); };
+  }
+  var BULK = [['status', '◐ Set status'], ['role', '🏷 Set role'], ['cost', '$ Cost rate'], ['charge', '$ Charge-out rate'], ['archive', '🗄 Archive'], ['restore', '↩ Restore']];
+  function bulkDialog(op) {
+    var ids = Object.keys(S.sel), d = S.data, names = d.people.filter(function (p) { return S.sel[p.id]; }).map(function (p) { return p.name; });
+    var body = op === 'status' ? '<label class="full">New status<select name="v">' + d.statuses.map(function (s) { return '<option>' + s + '</option>'; }).join('') + '</select></label>'
+      : op === 'role' ? '<label class="full">New role<input name="v" list="ppRoles2" required maxlength="60"></label><datalist id="ppRoles2">' + d.roles.map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist>'
+      : op === 'cost' || op === 'charge' ? '<div class="full est-opts"><label><input type="radio" name="m" value="pct" checked> <span><b>Change by a percentage</b> <small>e.g. 4 for a 4% pay rise, −10 to lower; people without a rate are skipped</small></span></label><label><input type="radio" name="m" value="set"> <span><b>Set to an amount</b> <small>the same $/hr for everyone selected</small></span></label></div><label class="full">' + (op === 'cost' ? 'Cost rate' : 'Charge-out rate') + ': % or $/hr<input name="v" type="number" step="any" required></label>'
+      : '';
+    var title = { status: 'Set the status', role: 'Set the role', cost: 'Change the cost rate', charge: 'Change the charge-out rate', archive: 'Archive', restore: 'Restore' }[op];
+    M.modal('<h2>' + title + ' for ' + ids.length + ' ' + (ids.length === 1 ? 'person' : 'people') + '</h2><p class="muted" style="margin:-4px 0 10px">' + esc(names.slice(0, 12).join(', ') + (names.length > 12 ? ' and ' + (names.length - 12) + ' more' : '')) + '</p>' +
+      (op === 'archive' ? '<p class="muted">Their logins stop working straight away. Records and history are kept.</p>' : '') +
+      '<form class="form" id="bkF">' + body + '<label class="full">Reason <small class="muted">' + (op === 'archive' ? '' : '(optional) ') + 'kept in each person\'s history</small><input name="why" maxlength="200"' + (op === 'archive' ? ' required' : '') + '></label>' +
+      '<div class="actions full"><button class="btn" data-close type="button">Cancel</button><button class="btn ' + (op === 'archive' ? 'btn-danger' : 'btn-gold') + '" type="submit">Apply to ' + ids.length + '</button></div></form>');
+    $('#bkF').onsubmit = function (e) {
+      e.preventDefault(); var f = this, val = f.v ? f.v.value : '';
+      if (op === 'cost' || op === 'charge') val = { kind: op, mode: (f.querySelector('[name=m]:checked') || {}).value, n: parseFloat(val) };
+      api('pplBulk', { ids: ids, op: op === 'cost' || op === 'charge' ? 'rate' : op, value: val, reason: f.why.value.trim() }).then(function (r) {
+        M.closeModal(); S.sel = {}; toast(r.done.length + ' updated' + (r.skipped.length ? ', ' + r.skipped.length + ' unchanged or skipped' : '')); return load().then(draw);
+      }).catch(fail);
+    };
+  }
+  var TKEY = { 'White card': 'whiteCard', 'Trade licence': 'licence', 'First aid': 'firstAid', 'Working at heights': 'heights', 'Confined spaces': 'confined', 'EWP': 'ewp', 'Forklift': 'forklift', 'Asbestos awareness': 'asbestos', 'Driver\'s licence': 'driver' };
+  function renewDialog(id, docName) {
+    api('pplGet', { id: id }).then(function (r) {
+      var p = r.person, k = TKEY[docName], ins = docName === 'Public liability', wc = docName === 'Workers comp', cur = k ? (p.tickets || {})[k] || {} : ins ? p.insurance || {} : p.workersComp || {};
+      M.modal('<h2>↻ ' + esc(docName) + ': ' + esc(p.name) + '</h2><p class="muted" style="margin:-4px 0 10px">Record the renewed ' + esc(docName.toLowerCase()) + '. The old expiry goes into their history.</p>' +
+        '<form class="form" id="rnF">' + (ins ? '<label>Insurer<input name="insurer" value="' + esc(cur.insurer || '') + '"></label>' : '') + '<label>' + (ins || wc ? 'Policy number' : 'Number') + '<input name="num" value="' + esc((ins || wc ? cur.policy : cur.number) || '') + '"></label>' +
+        (k === 'whiteCard' ? '' : '<label>New expiry<input name="exp" type="date" required value="' + esc(cur.expiry || '') + '"></label>') +
+        '<div class="actions full"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" type="submit">Save</button></div></form>');
+      $('#rnF').onsubmit = function (e) {
+        e.preventDefault(); var f = this, o = JSON.parse(JSON.stringify(p)), exp = f.exp ? f.exp.value : '';
+        if (k) { o.tickets = o.tickets || {}; o.tickets[k] = Object.assign({}, o.tickets[k] || {}, { number: f.num.value.trim(), expiry: exp }); }
+        else if (ins) o.insurance = Object.assign({}, o.insurance || {}, { insurer: f.insurer.value.trim(), policy: f.num.value.trim(), expiry: exp });
+        else o.workersComp = Object.assign({}, o.workersComp || {}, { policy: f.num.value.trim(), expiry: exp });
+        api('pplSave', { person: o, reason: 'renewed' }).then(function () { M.closeModal(); toast(docName + ' updated for ' + p.name); return load(); }).then(draw).catch(fail);
+      };
+    }).catch(fail);
+  }
   new MutationObserver(function () { if ($('#modal').hidden) $('#modal .modal-card').classList.remove('sc-wide'); }).observe($('#modal'), { attributes: true, attributeFilter: ['hidden'] });
   // for the plans: names, roles and rates of the active people (resources, stakeholders, project manager, story owners)
   M.people = { load: load, list: function () { return S.data ? S.data.people.filter(function (p) { return !p.archived && p.status !== 'Inactive'; }) : []; } };

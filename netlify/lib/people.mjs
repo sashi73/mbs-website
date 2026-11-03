@@ -64,19 +64,40 @@ function clean(f, old = {}) {
     rating: Math.max(0, Math.min(5, Math.round(Number(f.rating) || 0))), notes: str(f.notes, 2000), archived: !!f.archived };
 }
 const summary = (p) => ({ id: p.id, type: p.type, name: p.name, role: p.role, trade: p.trade, employment: p.employment, business: p.business, phone: p.phone, email: p.email, suburb: p.suburb,
-  status: p.status, costRate: p.costRate, chargeRate: p.chargeRate, hours: p.hours, rating: p.rating, archived: !!p.archived, start: p.start,
+  status: p.status, costRate: p.costRate, chargeRate: p.chargeRate, hours: p.hours, rating: p.rating, archived: !!p.archived, archivedAt: p.archivedAt || 0, start: p.start, updated: p.updated || 0,
   tickets: Object.fromEntries(Object.entries(p.tickets || {}).map(([k, v]) => [k, { expiry: v.expiry, has: !!(v.number || v.has), class: v.class }])),
   insurance: { expiry: (p.insurance || {}).expiry || '' }, workersComp: { expiry: (p.workersComp || {}).expiry || '', soleTrader: !!(p.workersComp || {}).soleTrader } });
 
 async function index() { return (await kv.get('ppl-index')) || { people: {} }; }
 export async function get(id) { return /^P-\d{3,5}$/.test(id || '') ? kv.get('ppl:' + id) : null; }
-export async function save(f, by) {
+// v90: what changed, in words, for the person's history
+const FIELDS = [['name', 'Name'], ['type', 'Type'], ['role', 'Role'], ['trade', 'Trade'], ['employment', 'Employment'], ['business', 'Trading name'], ['abn', 'ABN'], ['phone', 'Mobile'], ['email', 'Email'],
+  ['address', 'Address'], ['suburb', 'Suburb'], ['start', 'Started'], ['end', 'Finished'], ['status', 'Status'], ['hours', 'Hours a week'], ['availability', 'Availability'], ['costRate', 'Cost rate'], ['chargeRate', 'Charge-out rate'],
+  ['rating', 'Rating'], ['skills', 'Skills'], ['notes', 'Notes']];
+function diff(a, b) {
+  const ch = [], v = (x) => (x === '' || x == null || x === 0 ? '–' : String(x));
+  for (const [k, n] of FIELDS) if (String(a[k] ?? '') !== String(b[k] ?? '') && !(!a[k] && !b[k])) ch.push(k === 'notes' || k === 'skills' ? n + ' changed' : `${n} ${v(a[k])} → ${v(b[k])}`);
+  for (const [k, n] of TICKETS) { const x = (a.tickets || {})[k] || {}, y = (b.tickets || {})[k] || {}; if ((x.expiry || '') !== (y.expiry || '') || (x.number || '') !== (y.number || '')) ch.push(n.replace(/ \(.*\)$/, '') + (y.expiry ? ' expiry ' + (x.expiry || '–') + ' → ' + y.expiry : ' updated')); }
+  if (JSON.stringify(a.insurance || {}) !== JSON.stringify(b.insurance || {})) ch.push('Public liability updated');
+  if (JSON.stringify(a.workersComp || {}) !== JSON.stringify(b.workersComp || {})) ch.push('Workers comp updated');
+  if (JSON.stringify(a.emergency || {}) !== JSON.stringify(b.emergency || {})) ch.push('Emergency contact updated');
+  if (!!a.archived !== !!b.archived) ch.push(b.archived ? 'Archived' : 'Restored');
+  return ch;
+}
+export async function save(f, by, o = {}) {
   if (!str(f.name, 100)) return { error: 'Give the person a name' };
   if (f.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(str(f.email, 160))) return { error: 'That email address does not look right' };
   let id = /^P-\d{3,5}$/.test(f.id || '') ? f.id : '';
   const old = id ? (await kv.get('ppl:' + id)) || {} : {};
+  if (id && !old.id) return { error: 'Person not found' };
+  const em = str(f.email, 160).toLowerCase();   // v90: one person per email (the email is also their login)
+  if (em && !f.archived) { const dup = Object.values((await index()).people || {}).find((x) => x.id !== id && !x.archived && (x.email || '').toLowerCase() === em); if (dup) return { error: `${dup.name} (${dup.id}) already has the email ${em}. Open that person instead, or use another email.`, dup: dup.id }; }
   if (!id) { const n = await kv.update('ppl-seq', (x) => ({ n: ((x && x.n) || 0) + 1 }), () => ({ n: 0 })); id = 'P-' + String(n.n).padStart(3, '0'); }
   const p = { ...clean(f, old), id, created: old.created || Date.now(), updated: Date.now(), by: str(by, 60) };
+  if (p.archived && !old.archived) { p.archivedAt = Date.now(); p.archivedWhy = str(o.reason, 200); } else if (!p.archived) { delete p.archivedAt; delete p.archivedWhy; }
+  const ch = old.id ? diff(old, p) : ['Added' + (o.via ? ' (' + o.via + ')' : '')];
+  if (old.id && !ch.length) return { person: old, same: true };
+  p.history = (Array.isArray(old.history) ? old.history : []).concat([{ at: Date.now(), by: str(by, 60), what: (o.via && old.id ? o.via + ': ' : '') + ch.join('; ').slice(0, 600) + (o.reason ? ' (' + str(o.reason, 200) + ')' : '') }]).slice(-100);
   await kv.set('ppl:' + id, p);
   await kv.update('ppl-index', (x) => { x.people = x.people || {}; x.people[id] = summary(p); return x; }, () => ({ people: {} }));
   return { person: p };
@@ -122,6 +143,103 @@ export async function assignments(onlyId) {
   return res;
 }
 
+// ---------- v90: looking after the register: bulk changes, renaming on the plans, delete, import, export ----------
+// a new name on the project plans too (the plans name people as text: project manager, stakeholders, resources, leads, owners)
+export async function renameOnPlans(from, to, by) {
+  const a = norm(from), keys = await kv.keys('plan:'); let n = 0;
+  if (!a || !str(to, 100) || a === norm(to)) return 0;
+  const fix = (x) => (norm(x) === a ? to : x);
+  for (const plan of await kv.getMany(keys)) {
+    if (!plan || !Array.isArray(plan.tasks)) continue;
+    const before = JSON.stringify(plan);
+    if (plan.charter && plan.charter.manager) plan.charter.manager = fix(plan.charter.manager);
+    (plan.stakeholders || []).forEach((x) => { x.name = fix(x.name); });
+    plan.tasks.forEach((t) => { t.res = (t.res || []).map(fix); if (t.lead) t.lead = fix(t.lead); if (t.owner) t.owner = fix(t.owner); (t.subs || []).forEach((sb) => { if (sb.owner) sb.owner = fix(sb.owner); }); });
+    if (JSON.stringify(plan) === before) continue;
+    const r = await P.save(plan.core, plan, plan.rev, by); if (r.plan) n++;
+  }
+  return n;
+}
+async function bulk(body, by) {
+  const ids = (Array.isArray(body.ids) ? body.ids : []).map((x) => str(x, 10)).filter((x) => /^P-\d{3,5}$/.test(x)).slice(0, 300), op = str(body.op, 20), val = body.value;
+  if (!ids.length) return { error: 'Pick at least one person' };
+  if (!['archive', 'restore', 'status', 'role', 'rate'].includes(op)) return { error: 'Unknown change' };
+  if (op === 'status' && !STATUS.includes(val)) return { error: 'Pick a status' };
+  if (op === 'role' && !str(val, 60)) return { error: 'Give the role' };
+  const rk = op === 'rate' ? (val && val.kind === 'charge' ? 'chargeRate' : 'costRate') : '', mode = op === 'rate' ? (val && val.mode === 'pct' ? 'pct' : 'set') : '', num = op === 'rate' ? Number(val && val.n) : 0;
+  if (op === 'rate' && (!Number.isFinite(num) || (mode === 'set' && num < 0) || (mode === 'pct' && (num < -90 || num > 500)))) return { error: 'That rate change does not look right' };
+  const done = [], skipped = [];
+  for (const id of ids) {
+    const p = await get(id); if (!p) { skipped.push(id); continue; }
+    const f = { ...p };
+    if (op === 'archive') { if (p.archived) { skipped.push(id); continue; } f.archived = true; }
+    if (op === 'restore') { if (!p.archived) { skipped.push(id); continue; } f.archived = false; }
+    if (op === 'status') f.status = val;
+    if (op === 'role') f.role = str(val, 60);
+    if (op === 'rate') { if (mode === 'pct' && !p[rk]) { skipped.push(id); continue; } f[rk] = mode === 'set' ? r2(num) : r2(p[rk] * (1 + num / 100)); }
+    const r = await save(f, by, { via: 'Bulk change', reason: str(body.reason, 200) });
+    if (r.error) skipped.push(id); else if (!r.same) done.push(id); else skipped.push(id);
+  }
+  return { done, skipped };
+}
+// import: rows from a spreadsheet (one person per row). Matched by ID, then email, then exact name: those are updated
+// (only the columns given), the rest are added. dry = just say what would happen.
+const COLS = { id: 'id', 'person id': 'id', name: 'name', 'full name': 'name', type: 'type', role: 'role', trade: 'trade', employment: 'employment', 'trading name': 'business', business: 'business', abn: 'abn', gst: 'gst',
+  phone: 'phone', mobile: 'phone', email: 'email', address: 'address', suburb: 'suburb', started: 'start', start: 'start', status: 'status', 'hours a week': 'hours', hours: 'hours', availability: 'availability',
+  'cost rate': 'costRate', 'cost rate ($/hr)': 'costRate', 'charge-out rate': 'chargeRate', 'charge rate': 'chargeRate', 'charge-out rate ($/hr)': 'chargeRate', rating: 'rating', skills: 'skills', notes: 'notes',
+  'white card': 'tk.whiteCard.number', 'trade licence': 'tk.licence.number', 'trade licence expiry': 'tk.licence.expiry', 'driver licence': 'tk.driver.number', "driver's licence": 'tk.driver.number', 'driver licence expiry': 'tk.driver.expiry', "driver's licence expiry": 'tk.driver.expiry',
+  'first aid expiry': 'tk.firstAid.expiry', 'working at heights expiry': 'tk.heights.expiry', 'public liability expiry': 'ins.expiry', 'workers comp expiry': 'wc.expiry', 'emergency contact': 'em.name', 'emergency phone': 'em.phone' };
+const dateIn = (v) => { const x = String(v ?? '').trim(); if (/^\d{4}-\d{2}-\d{2}/.test(x)) return x.slice(0, 10); const m = x.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/); if (m) return (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0'); return ''; };
+async function importRows(body, by) {
+  const rows = (Array.isArray(body.rows) ? body.rows : []).slice(0, 500), idx = Object.values((await index()).people || {});
+  const res = { added: [], updated: [], same: 0, errors: [] };
+  const typeOf = (v) => (/contract/i.test(String(v || '')) ? 'Contractor' : /employ|staff/i.test(String(v || '')) ? 'Employee' : '');
+  for (let i = 0; i < rows.length; i++) {
+    const raw = rows[i] || {}, g = {};
+    for (const [k, v] of Object.entries(raw)) { const c = COLS[String(k).trim().toLowerCase()]; if (c && v !== null && v !== undefined && String(v).trim() !== '') g[c] = String(v).trim(); }
+    if (!g.name && !g.id && !g.email) continue;
+    const hit = (g.id && idx.find((x) => x.id === g.id)) || (g.email && idx.find((x) => (x.email || '').toLowerCase() === g.email.toLowerCase())) || (g.name && idx.find((x) => x.name.toLowerCase() === g.name.toLowerCase()));
+    const base = hit ? await get(hit.id) : { type: 'Employee', status: 'Active', tickets: {} };
+    const f = JSON.parse(JSON.stringify(base)); f.tickets = f.tickets || {}; f.insurance = f.insurance || {}; f.workersComp = f.workersComp || {}; f.emergency = f.emergency || {};
+    for (const [c, v] of Object.entries(g)) {
+      if (c === 'id') continue;
+      const q = c.split('.');
+      if (q[0] === 'tk') { (f.tickets[q[1]] = f.tickets[q[1]] || {})[q[2]] = q[2] === 'expiry' ? dateIn(v) : v; continue; }
+      if (q.length === 2) { f[{ ins: 'insurance', wc: 'workersComp', em: 'emergency' }[q[0]]][q[1]] = q[1] === 'expiry' ? dateIn(v) : v; continue; }
+      if (c === 'type') { const t = typeOf(v); if (t) f.type = t; continue; }
+      if (c === 'trade') { const t = TRADES.find((x) => x[0] === v.toLowerCase() || x[1].toLowerCase() === v.toLowerCase()); f.trade = t ? t[0] : ''; continue; }
+      if (c === 'status') { const st = STATUS.find((x) => x.toLowerCase() === v.toLowerCase()); if (st) f.status = st; continue; }
+      if (c === 'employment') { const e = EMPLOYMENT.find((x) => x.toLowerCase() === v.toLowerCase()); if (e) f.employment = e; continue; }
+      if (c === 'gst') { f.gst = /^(y|yes|true|1|registered)$/i.test(v); continue; }
+      if (c === 'costRate' || c === 'chargeRate' || c === 'hours' || c === 'rating') { f[c] = Number(String(v).replace(/[$,\s]/g, '')) || 0; continue; }
+      if (c === 'start') { f.start = dateIn(v); continue; }
+      f[c] = v;
+    }
+    if (!f.name) { res.errors.push({ row: i + 2, error: 'No name' }); continue; }
+    if (body.dry) {
+      const em = String(f.email || '').toLowerCase(), dup = em && idx.find((x) => x.id !== (hit && hit.id) && !x.archived && (x.email || '').toLowerCase() === em);
+      if (em && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { res.errors.push({ row: i + 2, name: f.name, error: 'That email address does not look right' }); continue; }
+      if (dup) { res.errors.push({ row: i + 2, name: f.name, error: `${dup.name} (${dup.id}) already has the email ${em}` }); continue; }
+      if (!hit) res.added.push(f.name);
+      else { const cl = clean(f, base); const ch = diff(base, { ...cl, archived: base.archived }); if (ch.length) res.updated.push(f.name + ': ' + ch.join('; ')); else res.same++; }
+      continue;
+    }
+    const r = await save(f, by, { via: 'Import' });
+    if (r.error) res.errors.push({ row: i + 2, name: f.name, error: r.error });
+    else if (r.same) res.same++;
+    else { (hit ? res.updated : res.added).push(r.person.id + ' ' + r.person.name); if (!hit) idx.push(summary(r.person)); }
+  }
+  return res;
+}
+async function remove(body) {
+  const p = await get(str(body.id, 10)); if (!p) return { error: 'Person not found', code: 404 };
+  if (!p.archived) return { error: 'Archive the person first. Only archived people can be deleted.' };
+  if (str(body.confirm, 100).toLowerCase() !== p.name.toLowerCase()) return { error: 'Type their full name to confirm' };
+  await kv.del('ppl:' + p.id);
+  await kv.update('ppl-index', (x) => { if (x.people) delete x.people[p.id]; return x; }, () => ({ people: {} }));
+  return { id: p.id, name: p.name };
+}
+
 // ---------- v88: 10 sample people for trying things out (test site only). Made-up names, @example.com emails. ----------
 export const SAMPLE = [
   { type: 'Employee', name: 'Olivia Bennett', role: 'Project director', employment: 'Full-time', phone: '0400 100 101', email: 'olivia.bennett@example.com', suburb: 'Bella Vista', costRate: 120, chargeRate: 190, hours: 38, rating: 5, startDays: -900, tickets: { whiteCard: { number: 'WC10101' }, driver: { class: 'C', expiryDays: 700 }, firstAid: { number: 'FA1', expiryDays: 200 } } },
@@ -154,7 +272,7 @@ async function testLoad(body, by) {
   return { ids };
 }
 
-export async function pplPost(action, body, { who, by, audit }) {
+export async function pplPost(action, body, { who, by, audit, unlogin }) {
   const log = (t) => (audit ? audit(who, t) : null);
   switch (action) {
     case 'pplList': return out(200, await list());
@@ -165,10 +283,17 @@ export async function pplPost(action, body, { who, by, audit }) {
     }
     case 'pplAssign': return out(200, { assign: await assignments() });
     case 'pplSave': {
-      const r = await save(body.person || {}, by); if (r.error) return out(400, r);
-      await log(`Person saved: ${r.person.id} ${r.person.name} (${r.person.type})`);
-      return out(200, { person: r.person, comp: compliance(r.person) });
+      const prev = /^P-\d{3,5}$/.test((body.person || {}).id || '') ? await get(body.person.id) : null;
+      const r = await save(body.person || {}, by, { reason: body.reason }); if (r.error) return out(400, r);
+      let plans = 0;   // v90: a new name on the project plans too
+      if (body.renamePlans && prev && prev.name !== r.person.name) plans = await renameOnPlans(prev.name, r.person.name, by);
+      await log(`Person saved: ${r.person.id} ${r.person.name} (${r.person.type})${r.same ? ' (no changes)' : ''}${plans ? `, renamed on ${plans} plan(s)` : ''}`);
+      return out(200, { person: r.person, comp: compliance(r.person), same: !!r.same, plans });
     }
+    case 'pplBulk': { const r = await bulk(body, by); if (r.error) return out(400, r); if (r.done.length) await log(`People bulk change (${str(body.op, 20)}): ${r.done.join(', ')}`); return out(200, r); }
+    case 'pplImport': { const r = await importRows(body, by); if (!body.dry) await log(`People imported: ${r.added.length} added, ${r.updated.length} updated, ${r.errors.length} errors`); return out(200, r); }
+    case 'pplExport': return out(200, { people: (await kv.getMany(Object.keys((await index()).people || {}).map((id) => 'ppl:' + id))).filter(Boolean).filter((p) => body.archived || !p.archived).map((p) => { const { history, ...x } = p; return x; }) });
+    case 'pplDelete': { const r = await remove(body); if (r.error) return out(r.code || 400, r); r.logins = unlogin ? (await unlogin(r.id)).length : 0; await log(`Person deleted permanently: ${r.id} ${r.name}${r.logins ? ' (and their login)' : ''}`); return out(200, r); }
     case 'pplSampleLoad': { const r = await sampleLoad(by); if (r.error) return out(r.code || 400, r); await log(`Sample people loaded: ${r.ids.length}`); return out(200, r); }
     case 'pplTestLoad': { const r = await testLoad(body, by); if (r.error) return out(r.code || 400, r); await log(`Test data loaded: ${r.ids.length} people`); return out(200, r); }
     default: return null;

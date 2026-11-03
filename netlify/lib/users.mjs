@@ -9,6 +9,7 @@ import { store, ADMIN } from './admin-lib.mjs';
 const kv = {
   async get(k) { const s = await store(ADMIN); return s.get(k, { type: 'json' }); },
   async set(k, v) { const s = await store(ADMIN); await s.setJSON(k, v); },
+  async del(k) { const s = await store(ADMIN); await s.delete(k); },
   async update(k, fn, fallback) { const cur = (await this.get(k)) || (fallback ? fallback() : null); const next = fn(cur); await this.set(k, next); return next; } };
 
 const str = (s, max = 300) => String(s ?? '').replace(/[\u0000-\u001F]/g, '').trim().slice(0, max);
@@ -114,6 +115,13 @@ export async function context(session, ownerName, personOk) {
   if (!u || !u.active || (u.ver || 0) !== (session.v || 0)) return null;
   if (personOk && !(await personOk(u.personId))) return null;
   return { owner: false, who: u.username, uid: u.id, role: u.role, mods: cleanMods(u.mods, u.role), name: u.name, mustChange: !!u.mustChange, personId: u.personId };
+}
+// v90: a person deleted from People: their login goes too
+export async function removeForPerson(personId) {
+  const gone = (await list()).filter((u) => u.personId === personId).map((u) => u.id);
+  for (const id of gone) await kv.del('user:' + id);
+  if (gone.length) await kv.update('user-index', (x) => { gone.forEach((id) => { if (x.users) delete x.users[id]; }); return x; }, () => ({ users: {} }));
+  return gone;
 }
 export async function login(username, password, personOk) {
   const name = str(username, 160).toLowerCase(); if (!name) return null;
