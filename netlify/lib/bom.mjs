@@ -37,10 +37,11 @@ function cleanOrders(o) {
 }
 export function cleanBom(b, taskIds) {
   if (!b || typeof b !== 'object') return null;
-  const lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 400).map((x) => cleanLine(x, taskIds)).filter(Boolean);
+  const ms = taskIds && taskIds.has(b.milestone) ? b.milestone : '';   // v99: the "🧱 Bill of Materials" milestone holds every line
+  const lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 400).map((x) => cleanLine(ms ? { ...x, task: ms } : x, taskIds)).filter(Boolean);
   const signed = b.status === 'Signed off' && lines.length && lines.every((x) => x.checked);
   return { status: signed ? 'Signed off' : 'Draft', lines, signedBy: signed ? str(b.signedBy, 80) : '', signedRole: signed ? str(b.signedRole, 60) : '', signedAt: signed ? Number(b.signedAt) || Date.now() : 0,
-    sig: signed ? str(b.sig, 80) : '', template: str(b.template, 20), orders: cleanOrders(b.orders), log: (Array.isArray(b.log) ? b.log : []).slice(-60).map((x) => ({ at: Number(x && x.at) || Date.now(), what: str(x && x.what, 300) })).filter((x) => x.what) };
+    sig: signed ? str(b.sig, 80) : '', template: str(b.template, 20), orders: cleanOrders(b.orders), milestone: ms, buildStart: taskIds && taskIds.has(b.buildStart) ? b.buildStart : '', log: (Array.isArray(b.log) ? b.log : []).slice(-60).map((x) => ({ at: Number(x && x.at) || Date.now(), what: str(x && x.what, 300) })).filter((x) => x.what) };
 }
 
 // ---------- ✨ the AI drafts the BOM ----------
@@ -52,26 +53,30 @@ export async function draft({ core, note, only }, by) {
   const ix = (await kv.get('inv-index')) || { items: {} };
   const cat = Object.values(ix.items || {}).filter((i) => !i.archived).slice(0, 200).map((i) => ({ id: i.id, name: i.name, unit: i.unit, price: i.price || 0, in_stock: i.available }));
   const work = plan.tasks.filter((t) => t.dur > 0), want = new Set((Array.isArray(only) ? only : []).map(String));
-  const tasks = work.map((t) => ({ n: plan.tasks.indexOf(t) + 1, task: P.scrubTask(t.name, job), days: t.dur, steps: (t.subs || []).slice(0, 8).map((s) => P.scrubTask(s.name, job)) })).filter((t) => !want.size || want.has(String(t.n)));
-  const system = 'You are an experienced estimator for a building and maintenance company in Sydney, NSW. Write a Bill of Materials (BOM) for this job: the materials, fixings and consumables each task needs, ' +
-    'with realistic quantities for the size of the job (from the description and scope), units and a typical Sydney trade price per unit in AUD ex GST. Add a sensible waste allowance where it applies (e.g. 10% tiles, 5% timber) and say so in the note. ' +
-    'Use an item from the stock catalogue (its id) whenever it is the same thing, so existing stock is used first; otherwise leave item empty. Labour, hire and subcontract prices are NOT materials: leave them out. ' +
-    'For items that usually take time to arrive (stone benchtops, custom joinery, windows, switchboards, special orders), give lead_days (working days). Plain words, no em dashes. ' +
-    (note ? 'The estimator also says: ' + str(note, 300) + '. ' : '') +
-    'JSON only: {"lines":[{"n":1,"name":"","qty":0,"unit":"each","item":"","price":0,"lead_days":0,"note":""}],"caveat":"one sentence: what to double-check"}';
+  const tasks = plan.tasks.filter((t) => !/^🧱 Bill of Materials/.test(t.name)).map((t) => ({ n: plan.tasks.indexOf(t) + 1, task: P.scrubTask(t.name, job), days: t.dur, steps: (t.subs || []).slice(0, 8).map((s) => P.scrubTask(s.name, job)) })).filter((t) => !want.size || want.has(String(t.n)));
+  const system = 'You are an experienced estimator for a building and maintenance company in Sydney, NSW. Write ONE Bill of Materials (BOM) for the whole job: only the PHYSICAL materials, fixings and consumables that must be bought to build it ' +
+    '(timber, concrete, fixings, sealants, paint, tiles, membranes, hardware and so on), with realistic quantities for the size of the job (from the description and scope), units and a typical Sydney trade price per unit in AUD ex GST. ' +
+    'Do NOT list services, fees, approvals, permits, reports, inspections, surveys, design, labour, plant or equipment hire, subcontract work, or anything for planning, quoting or admin tasks: those are not materials. ' +
+    'Add a sensible waste allowance where it applies (e.g. 10% tiles, 5% timber) and say so in the note. Use an item from the stock catalogue (its id) whenever it is the same thing, so existing stock is used first; otherwise leave item empty. ' +
+    'For items that usually take time to arrive (hardwood, stone benchtops, custom joinery, windows, switchboards, special orders), give lead_days (working days). ' +
+    'Also say where the build (the physical work on site) starts: build_starts is the number n of the first task where work on site begins, e.g. site set-out and excavation, demolition or strip-out (not quoting, design, approvals or ordering). ' +
+    'Plain words, no em dashes. ' + (note ? 'The estimator also says: ' + str(note, 300) + '. ' : '') +
+    'JSON only: {"build_starts":1,"lines":[{"name":"","qty":0,"unit":"each","item":"","price":0,"lead_days":0,"note":""}],"caveat":"one sentence: what to double-check"}';
   const user = { project: P.privateOut(str(plan.name, 120), job), work: P.privateOut(str(job.service, 120), job), description: P.privateOut(P.jobScope(job), 1500),
     in_scope: P.privateOut(str((plan.charter || {}).inScope, 2000), job), tasks, stock_catalogue: cat };
   let o, used;
   try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: 6000, timeoutMs: 300000, temperature: 0.2 })); }
   catch (e) { return { error: e.message }; }
   const today = await usage(true, used), catIds = new Set(cat.map((c) => c.id)), byN = (n) => plan.tasks[int(n, 1, plan.tasks.length, 0) - 1];
-  const lines = (Array.isArray(o.lines) ? o.lines : []).slice(0, 150).map((x) => {
-    const t = byN(x && x.n), item = catIds.has(x && x.item) ? x.item : '', c = item ? cat.find((y) => y.id === item) : null;
+  const NOT_MAT = /\b(report|approval|enquiry|permit|certificat|inspection|survey|consult|design|drawing|fee|labour|labor|hire|subcontract|engineer'?s|council|insurance|levy)\b/i;   // v99: services are not materials
+  const lines = (Array.isArray(o.lines) ? o.lines : []).slice(0, 150).filter((x) => x && !NOT_MAT.test(String(x.name || ''))).map((x) => {
+    const t = null, item = catIds.has(x && x.item) ? x.item : '', c = item ? cat.find((y) => y.id === item) : null;
     return cleanLine({ task: t ? t.id : '', name: c ? c.name : x && x.name, qty: x && x.qty, unit: c ? c.unit : x && x.unit, item, price: c && c.price ? c.price : x && x.price,
       lead: x && x.lead_days, note: String((x && x.note) || '').replace(/\s*[—–]\s*/g, ', '), source: 'ai', est: true }, new Set(plan.tasks.map((y) => y.id)));
   }).filter((x) => x && x.qty > 0);
   if (!lines.length) return { error: 'The AI did not return any materials. Add a bit more to the scope and try again.' };
-  return { lines, caveat: str(o.caveat, 300), tokens: used, today };
+  const bs = byN(o.build_starts);
+  return { lines, buildStart: bs ? bs.id : '', caveat: str(o.caveat, 300), tokens: used, today };
 }
 
 // ---------- reusable BOM templates ----------

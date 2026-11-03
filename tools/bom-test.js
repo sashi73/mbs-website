@@ -22,7 +22,8 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     const b = JSON.parse(Buffer.concat(c).toString() || '{}'), sys = b.messages[0].content, user = JSON.parse(b.messages[1].content); seen.push({ sys, user });
     let out;
     if (/Bill of Materials/.test(sys)) { const T = user.tasks || [], tile = (user.stock_catalogue || []).find((c) => /tile/i.test(c.name));
-      out = { lines: [{ n: T[0].n, name: 'Porcelain tile', qty: 25, unit: 'm2', item: tile ? tile.id : '', price: 60, lead_days: 0, note: 'includes 10% waste' },
+      const so = T.find((t) => /Strip-out/.test(t.task));
+      out = { build_starts: so ? so.n : 1, lines: [{ name: 'Council approval enquiry', qty: 1, unit: 'each', price: 300 }, { n: T[0].n, name: 'Porcelain tile', qty: 25, unit: 'm2', item: tile ? tile.id : '', price: 60, lead_days: 0, note: 'includes 10% waste' },
         { n: T[1].n, name: 'Waterproofing membrane', qty: 2, unit: 'each', item: '', price: 180, lead_days: 0, note: '' },
         { n: T[2].n, name: 'Stone benchtop', qty: 1, unit: 'each', item: '', price: 2400, lead_days: 15, note: 'templated after cabinets — order early' }], caveat: 'Check the tile area against the drawings.' }; }
     else out = { costs: (user.tasks || []).map((t) => ({ id: t.id, q: 1, u: 'lot', r: 1000, b: 'lot' })), caveat: '' };
@@ -72,19 +73,24 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     ok('Start', 'before it starts, it explains the steps and that the 1 material on the tasks becomes the first line', /Stock first/.test(await p.textContent('#planBody')) && /1 material already on the tasks/.test(await p.textContent('#planBody')));
     await p.click('#bomGo'); await p.waitForSelector('.bom-tbl'); await sleep(1500);
     let pl = await P.get(core);
-    ok('Start', '"Start the BOM" imports the 📦 materials already on the tasks (4 bags of tile adhesive)', pl.bom && pl.bom.lines.length === 1 && pl.bom.lines[0].item === glue.id && pl.bom.lines[0].qty === 4 && pl.bom.lines[0].source === 'plan' && pl.bom.lines[0].task === pl.tasks[1].id, JSON.stringify(pl.bom));
+    const msT = () => pl.tasks.find((t) => t.id === pl.bom.milestone), soT = () => pl.tasks.find((t) => /Strip-out/.test(t.name));
+    ok('Start', '"Start the BOM" imports the 📦 materials already on the tasks (4 bags of tile adhesive)', pl.bom && pl.bom.lines.length === 1 && pl.bom.lines[0].item === glue.id && pl.bom.lines[0].qty === 4 && pl.bom.lines[0].source === 'plan', JSON.stringify(pl.bom));
+    ok('Milestone', 'one "🧱 Bill of Materials" milestone in the Gantt chart, just before the build starts (the strip-out), linked before it', msT() && msT().dur === 0 && /Bill of Materials/.test(msT().name) && pl.tasks.indexOf(msT()) === pl.tasks.indexOf(soT()) - 1 && soT().pred.includes(msT().id) && pl.bom.buildStart === soT().id, JSON.stringify(pl.tasks.map((t) => t.name)));
+    ok('Milestone', 'all the materials are on it (not on the planning tasks)', pl.bom.lines.every((l) => l.task === msT().id) && msT().mats.some((m) => m.item === glue.id && m.qty === 4) && pl.tasks.filter((t) => t.id !== msT().id).every((t) => !(t.mats || []).length));
+    ok('Page', 'the BOM is titled with the project, shows a small picture of the key phases, and where the milestone sits', /Bill of Materials: /.test(await p.textContent('#planBody h2')) && (await p.$$('.bom-phr')).length >= 10 && !!(await p.$('.bom-phr.ms')) && (await p.$eval('#bomBefore', (x) => x.selectedOptions[0].textContent)).includes('Strip-out') && !(await p.$('.bom-g')) && !(await p.$('[data-bf=task]')));
 
     // 2. ✨ AI draft
     await p.click('#bomAi'); await p.waitForSelector('#bomGo');
     await p.fill('#bomNote', '3 m kitchen run'); await p.click('#bomGo'); await p.waitForSelector('#baGo', { timeout: 30000 });
     const sent = seen[seen.length - 1];
-    ok('AI', 'the AI gets the tasks still without materials, the scope, the note and our stock catalogue (to use stock first)', /Bill of Materials/.test(sent.sys) && /3 m kitchen run/.test(sent.sys) && sent.user.stock_catalogue.some((c) => c.id === tile.id && c.in_stock === 10) && !sent.user.tasks.some((t) => t.n === 2) && /Kitchen/.test(sent.user.description), JSON.stringify(sent.user.tasks.map((t) => t.n)));
+    ok('AI', 'the AI drafts ONE BOM for the whole job: physical materials only (no services, fees or approvals), says where the build starts, and gets the scope, the note and our stock', /Bill of Materials/.test(sent.sys) && /PHYSICAL materials/.test(sent.sys) && /Do NOT list services/.test(sent.sys) && /build_starts/.test(sent.sys) && /3 m kitchen run/.test(sent.sys) && sent.user.stock_catalogue.some((c) => c.id === tile.id && c.in_stock === 10) && !sent.user.tasks.some((t) => /Bill of Materials/.test(t.task)) && /Kitchen/.test(sent.user.description), JSON.stringify(sent.user.tasks.map((t) => t.n)));
+    ok('AI', 'a service the AI listed anyway ("Council approval enquiry") is dropped', !/Council approval/.test(await p.textContent('#modal')));
     ok('AI', 'the preview shows each line with its task, total and whether it is in stock, and a warning', (await p.$$('#modal .est-tbl tbody tr')).length === 3 && /Porcelain tile 600x600/.test(await p.textContent('#modal')) && /Estimates only/.test(await p.textContent('#modal')) && /not in stock/.test(await p.textContent('#modal')));
     await p.click('#baGo'); await sleep(2500);
     pl = await P.get(core);
     const tl = pl.bom.lines.find((l) => l.item === tile.id), bench = pl.bom.lines.find((l) => /benchtop/.test(l.name));
     ok('AI', 'the lines are added marked ≈ est, matched to our stock item where it is the same thing (no em dashes)', pl.bom.lines.length === 4 && pl.bom.lines.filter((l) => l.est && l.source === 'ai').length === 3 && tl && tl.name === 'Porcelain tile 600x600' && bench.lead === 15 && !/—/.test(bench.note), JSON.stringify(pl.bom.lines));
-    ok('Plan', 'stock lines go onto their tasks automatically (set aside and in the task cost)', pl.tasks.find((t) => t.id === tl.task).mats.some((m) => m.item === tile.id && m.qty === 25 && m.price === 60) && pl.tasks[1].mats.length === 1);
+    ok('Plan', 'stock lines are set aside and costed on the 🧱 milestone; the others are in its cost too', msT().mats.some((m) => m.item === tile.id && m.qty === 25 && m.price === 60) && msT().mats.length === 2 && msT().bomx === 2 * 180 + 2400);
     await p.waitForSelector('.bom-short'); await sleep(500);
     ok('Stock', 'the shortfall: 25 m2 of tile needed, 10 in stock, short 15 (not counting this job twice)', /Short 15 m2/.test(await line('Porcelain tile 600x600').textContent()) && /Shortfall: 3 items/.test(await p.textContent('.bom-short')), await p.textContent('.bom-short'));
     const sht = await p.textContent('.bom-short');
@@ -92,16 +98,16 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     ok('Stock', 'the adhesive is covered by stock', /✓ 50 bag free/.test(await line('Tile adhesive 20kg').textContent()), await line('Tile adhesive 20kg').textContent());
     ok('Warning', 'a warning to check the ≈ est lines', /3 lines marked ≈ est/.test(await p.textContent('#planBody .est-warn')));
     // v94: add a line anywhere, pick from stock, no $0 lines
-    ok('Add', 'each task in the BOM has "＋ Line" and "📦 From stock", and there is "＋ Add a line / 📦 Add from Inventory" at the bottom; stock is picked with 📦 (not 🔗)', (await p.$$('[data-gadd]')).length >= 3 && !!(await p.$('#bomAdd2')) && !!(await p.$('#bomStock2')) && !/🔗/.test(await p.textContent('.bom-tbl')) && /📦/.test(await p.textContent('.bom-tbl .bom-stk')));
-    await p.click('#bomStock2'); await p.waitForSelector('#bsTask'); await p.selectOption('#bsTask', pl.tasks[1].id);
+    ok('Add', '"＋ Add a line / 📦 Add from Inventory" at the top and bottom; stock is picked with 📦 (not 🔗)', !!(await p.$('#bomStock')) && !!(await p.$('#bomAdd2')) && !!(await p.$('#bomStock2')) && !/🔗/.test(await p.textContent('.bom-tbl')) && /📦/.test(await p.textContent('.bom-tbl .bom-stk')));
+    await p.click('#bomStock2'); await p.waitForSelector('#bsQ');
     await p.click(`[data-sadd="${glue.id}"]`); await sleep(100); await p.fill('[data-sk="0"] [data-sq]', '3'); await p.press('[data-sk="0"] [data-sq]', 'Tab'); await sleep(100); await p.fill('[data-sk="0"] [data-sp]', '30'); await p.press('[data-sk="0"] [data-sp]', 'Tab'); await sleep(100);
     await p.click('#bsSave'); await sleep(2000);
     pl = await P.get(core);
-    ok('Add', '📦 Add from Inventory: pick a stock item, its quantity and the task; already on that task, so the quantity adds up (4 + 3 bags)', pl.bom.lines.filter((l) => l.item === glue.id).length === 1 && pl.bom.lines.find((l) => l.item === glue.id).qty === 7 && pl.tasks[1].mats.find((m) => m.item === glue.id).qty === 7);
-    const gt = pl.bom.lines.find((l) => /membrane/i.test(l.name)).task;
-    await p.click(`[data-gadd="${gt}"]`); await sleep(1500);
+    ok('Add', '📦 Add from Inventory: pick a stock item and its quantity; already in the BOM, so the quantity adds up (4 + 3 bags)', pl.bom.lines.filter((l) => l.item === glue.id).length === 1 && pl.bom.lines.find((l) => l.item === glue.id).qty === 7 && msT().mats.find((m) => m.item === glue.id).qty === 7);
+    const gt = pl.bom.milestone;
+    await p.click('#bomAdd2'); await sleep(1500);
     pl = await P.get(core);
-    ok('Add', '"＋ Line" on a task adds a new line to that task, ready to type', pl.bom.lines.some((l) => l.name === 'New material' && l.task === gt) && await p.evaluate(() => document.activeElement && document.activeElement.value === 'New material'));
+    ok('Add', '"＋ Add a line" adds a new line, ready to type', pl.bom.lines.some((l) => l.name === 'New material' && l.task === gt) && await p.evaluate(() => document.activeElement && document.activeElement.value === 'New material'));
     ok('No $0', 'a line with no price is highlighted and warned about (it would add $0 to the quote)', !!(await p.$('input.bom-zero')) && /1 line with no price/.test(await p.textContent('.bom-zwarn')));
     await line('New material').locator('[data-blink]').click(); await p.waitForSelector(`[data-pk="${meter.id}"]`); await p.click(`[data-pk="${meter.id}"]`); await sleep(1500);
     pl = await P.get(core);
@@ -150,14 +156,14 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     const sumQ = (L) => L.reduce((a, x) => a + x.qty * x.price, 0), lab = (pl) => pl.tasks.reduce((a, t) => a + (t.qty || 0) * (t.rate || 0), 0), bomV = (pl) => pl.bom.lines.reduce((a, l) => a + l.qty * l.price, 0);
     pl = await P.get(core);
     const memb = pl.bom.lines.find((l) => /membrane/i.test(l.name)), mt = pl.tasks.find((t) => t.id === memb.task);
-    ok('Cost', 'a BOM line not in Inventory (waterproofing membrane) is still in its task\'s cost', !memb.item && mt.bomx === memb.qty * memb.price && P.taskCost(mt) >= mt.bomx, JSON.stringify([mt.bomx, memb]));
+    ok('Cost', 'a BOM line not in Inventory (waterproofing membrane) is still costed on the milestone', !memb.item && mt.id === pl.bom.milestone && mt.bomx >= memb.qty * memb.price && P.taskCost(mt) >= mt.bomx, JSON.stringify([mt.bomx, memb]));
     let ql = PQ.linesFromPlan(pl, { margin: 0 });
-    ok('Cost', 'the quote from the plan = labour + the whole BOM (stock and non-stock), to the cent', Math.abs(sumQ(ql) - (lab(pl) + bomV(pl))) < 0.05 && ql.some((x) => x.tid === mt.id && /Waterproofing membrane/.test(x.desc)), sumQ(ql) + ' vs ' + (lab(pl) + bomV(pl)));
+    ok('Cost', 'the quote from the plan = labour + the whole BOM (stock and non-stock), to the cent', Math.abs(sumQ(ql) - (lab(pl) + bomV(pl))) < 0.05 && ql.some((x) => x.tid === mt.id && /^Materials \(Bill of Materials, \d+ items\): .*Waterproofing membrane/.test(x.desc)), sumQ(ql) + ' vs ' + (lab(pl) + bomV(pl)));
     ok('Cost', 'with a 15% margin, the materials get the margin too', Math.abs(sumQ(PQ.linesFromPlan(pl, { margin: 15 })) - (lab(pl) + bomV(pl)) * 1.15) < 0.5);
-    await line('Waterproofing membrane').locator('[data-bf=task]').selectOption(''); await sleep(1800);
-    pl = await P.get(core); ql = PQ.linesFromPlan(pl, { margin: 0 });
-    ok('Cost', 'a line not linked to a task still goes on the quote, as its own materials line (and the BOM warns it is not in the budget)', pl.bomLoose === memb.qty * memb.price && ql.some((x) => x.bom && /Waterproofing membrane/.test(x.desc)) && Math.abs(sumQ(ql) - (lab(pl) + bomV(pl))) < 0.05 && /Not in the budget/.test(await p.textContent('.bom-kpi')), JSON.stringify(ql.slice(-1)));
-    await line('Waterproofing membrane').locator('[data-bf=task]').selectOption(memb.task); await sleep(1800);
+    ok('Cost', 'the quote has ONE materials line for the whole BOM (not materials spread over the planning tasks)', ql.filter((x) => x.mats).length === 1);
+    const so0 = soT(); await p.selectOption('#bomBefore', pl.tasks[0].id); await sleep(1800); pl = await P.get(core);
+    ok('Milestone', 'the milestone can be moved (it goes before the task picked) and keeps every material', pl.tasks.indexOf(msT()) === 0 && pl.bom.lines.every((l) => l.task === msT().id) && !soT().pred.includes(pl.bom.milestone) && pl.tasks[1].pred.includes(pl.bom.milestone));
+    await p.selectOption('#bomBefore', soT().id); await sleep(1800); pl = await P.get(core);
     await p.goto(`${BASE}/admin/#plan/${core}/schedule`); await p.waitForSelector('table.gt'); await p.click('tr[data-tid] [data-pick]'); await sleep(800);
     ok('📦 button', 'with a BOM, 📦 on a task opens the BOM tab instead of a separate picker', /\/bom$/.test(p.url()) && !(await p.$('#mtSave')));
     await p.waitForSelector('.bom-tbl');
@@ -196,9 +202,8 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     await p.goto(`${BASE}/admin/#plan/${core2}/bom`); await p.waitForSelector('#bomGo'); await p.click('#bomGo'); await p.waitForSelector('#bomTpl'); await sleep(800);
     await p.click('#bomTpl'); await p.waitForSelector('[data-tapply]'); await p.click('[data-tapply]'); await p.waitForSelector('#taF'); await p.fill('#taF [name=k]', '2'); await p.click('#taF button[type=submit]'); await sleep(2500);
     const p1 = await P.get(core), p2 = await P.get(core2), nm = (pl, id) => (pl.tasks.find((t) => t.id === id) || {}).name;
-    ok('Template', 'applied to another job: quantities scaled × 2, lines matched to the same-named tasks, marked ≈ est', p2.bom.lines.length === 4 && p2.bom.lines.every((l) => l.source === 'template' && l.est) && p2.bom.lines.find((l) => l.item === tile.id).qty === 60 &&
-      p1.bom.lines.every((l) => { const m = p2.bom.lines.find((x) => x.name === l.name); return m && nm(p2, m.task) === nm(p1, l.task); }) && p2.bom.template === 'BT-001', JSON.stringify(p2.bom.lines.map((l) => [l.name, l.qty, nm(p2, l.task)])));
-    ok('Template', 'and its stock lines are on that job\'s tasks too', p2.tasks.some((t) => t.mats.some((m) => m.item === tile.id && m.qty === 60)));
+    ok('Template', 'applied to another job: quantities scaled × 2, all on that job\'s 🧱 milestone, marked ≈ est', p2.bom.lines.length === 4 && p2.bom.lines.every((l) => l.source === 'template' && l.est && l.task === p2.bom.milestone) && p2.bom.lines.find((l) => l.item === tile.id).qty === 60 && p2.bom.template === 'BT-001', JSON.stringify(p2.bom.lines.map((l) => [l.name, l.qty, nm(p2, l.task)])));
+    ok('Template', 'and its stock lines are set aside on that milestone', p2.tasks.find((t) => t.id === p2.bom.milestone).mats.some((m) => m.item === tile.id && m.qty === 60));
     await p.screenshot({ path: path.join(os.tmpdir(), 'bom-tab.png'), fullPage: true });
     await p.waitForSelector('#bomOAll'); await p.check('#bomOAll'); await sleep(200);
     ok('Ordered', 'tick several items still to order and mark them ordered together', /Mark 3 as ordered/.test(await p.textContent('#bomMarkSel')));

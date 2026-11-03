@@ -62,6 +62,7 @@ export function linesFromPlan(plan, { mode = 'tasks', margin = 0 } = {}) {
     if ((t.mats || []).length || Number(t.bomx) > 0) {   // v56: a task with materials is one line at its total (labour + materials, v93: all its BOM lines)
       const own = r2(t.qty) * r2(t.rate) > 0 ? `${r2(t.qty)} ${t.unit || ''} labour, `.replace(' ,', ',') : '';
       const mat = matsTxt(t);
+      if (plan.bom && plan.bom.milestone === t.id) return { desc: (`Materials (Bill of Materials, ${bomL.length} item${bomL.length === 1 ? '' : 's'}): ` + mat).slice(0, 400), qty: 1, price: r2(PLAN.taskCost(t) * k), gst: true, tid: t.id, mats: true, bom: true };   // v99
       return { desc: (t.name + ' (' + own + 'materials: ' + mat + ')' + (subs.length ? ': ' + subs.join(', ') : '')).slice(0, 400), qty: 1, price: r2(PLAN.taskCost(t) * k), gst: true, tid: t.id, mats: true };
     }
     const unit = t.unit && !/^lot$/i.test(t.unit) ? ` (${r2(t.qty)} ${t.unit})` : '';

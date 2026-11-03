@@ -1321,3 +1321,12 @@ body.is-subbie .top-search,body.is-subbie .top-new{display:none!important}
 .gsi-box{margin-top:14px}.gsi-or{display:flex;align-items:center;gap:10px;color:#8A8471;font-size:12px;margin:2px 0 12px}.gsi-or:before,.gsi-or:after{content:"";flex:1;border-top:1px solid var(--line)}
 #gsiBtn{display:flex;justify-content:center;min-height:44px}.gsi-note{font-size:12px;text-align:center;margin:8px 0 0}
 .us-kind.us-g{background:#FFF4E5;color:#9A3412}
+/* v99: BOM as one milestone; key phases picture */
+.bom-ph summary{cursor:pointer;margin-bottom:6px}.bom-phl{display:grid;gap:3px;max-height:240px;overflow:auto;padding-right:4px}
+.bom-phr{display:grid;grid-template-columns:26px minmax(140px,260px) 1fr 44px;gap:8px;align-items:center;font-size:12px;line-height:1.2}
+.bom-phr .n{color:#8A8471;text-align:right}.bom-phr .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bom-phr .d{color:#8A8471;font-size:11px}
+.bom-phr .tr{position:relative;height:12px;background:#F6F2E6;border-radius:6px}.bom-phr .tr i{position:absolute;top:2px;height:8px;border-radius:4px;background:#9DB0CF}
+.bom-phr .tr b{position:absolute;top:1px;width:10px;height:10px;margin-left:-5px;background:#1F2A44;transform:rotate(45deg)}
+.bom-phr.done .tr i{background:#7BC59A}.bom-phr.ms{font-weight:800}.bom-phr.ms .tr b{background:#C9A227;box-shadow:0 0 0 2px #FFF4C7}.bom-phr.ms .nm{color:#8A6A00}
+.bom-place{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;background:#FDF6DD;border:1px solid #EAD48A;border-radius:10px;padding:8px 12px;margin:0 0 10px;font-size:13px}
+.bom-place select{width:auto;max-width:340px;padding:4px 8px}

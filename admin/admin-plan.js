@@ -3166,12 +3166,57 @@
   function bomOf() { return S.plan.bom || null; }
   function bomLocked() { var b = bomOf(); return !!(b && b.status === 'Signed off'); }
   function bomLog(what) { var b = bomOf(); b.log = (b.log || []).concat([{ at: Date.now(), what: what }]).slice(-60); }
-  function bomLine(o) { return { id: 'b' + rid().slice(0, 12), task: o.task || '', name: o.name || 'Material', item: o.item || '', qty: q3c(o.qty), unit: o.unit || 'each', price: r2(o.price), lead: Math.max(0, Math.round(Number(o.lead) || 0)), note: o.note || '', source: o.source || 'manual', est: !!o.est, checked: false, checkedBy: '' }; }
+  function bomLine(o) { var ms = bomMs(); return { id: 'b' + rid().slice(0, 12), task: o.task || (ms ? ms.id : ''), name: o.name || 'Material', item: o.item || '', qty: q3c(o.qty), unit: o.unit || 'each', price: r2(o.price), lead: Math.max(0, Math.round(Number(o.lead) || 0)), note: o.note || '', source: o.source || 'manual', est: !!o.est, checked: false, checkedBy: '' }; }
+  // v99: the BOM is ONE milestone in the Gantt chart, "🧱 Bill of Materials", just before the build starts (e.g. site set-out and
+  // excavation). All the materials are costed and set aside there, not spread over the planning tasks.
+  function bomMs() { var b = bomOf(); return b && b.milestone ? S.plan.tasks.filter(function (t) { return t.id === b.milestone; })[0] || null : null; }
+  var BUILD_RX = /set.?out|excavat|demoli|strip.?out|mobilis|site (works|prep|establish)|establish|install|construct|build|fram(e|ing)|footing|pour|slab|start (of )?(work|construction)|commenc|remov|replac|lay(ing)? |erect|fit.?out|waterproof|tiling|tile |render|paint|deck(ing)? (build|install)|injection|repair|rectif/i;
+  var PRE_RX = /quote|scope|plan(ning)?\b|design|drawing|approv|council|permit|cdc|\bda\b|inspect|measure|survey|diagnos|assess|layout|concept|order|procure|purchas|contract|deposit|consult|report|pric|check|confirm|meeting|book|enquir|milestone|accepted|complete/i;
+  function bomBuildStart() {   // the first task where the physical work starts (the AI can say otherwise when it drafts the BOM)
+    var ms = bomMs(), T = S.plan.tasks.filter(function (t) { return !ms || t.id !== ms.id; });
+    var hit = T.filter(function (t) { return t.dur > 0 && BUILD_RX.test(t.name) && !PRE_RX.test(t.name); })[0];
+    if (hit) return hit;
+    var lastPre = -1; T.forEach(function (t, i) { if (PRE_RX.test(t.name)) lastPre = i; });
+    return T.slice(lastPre + 1).filter(function (t) { return t.dur > 0; })[0] || T.filter(function (t) { return t.dur > 0; })[0] || null;
+  }
+  function bomPlace(before) {   // put the milestone just before `before` (null = at the end), with every BOM line on it
+    var p = S.plan, b = bomOf(), ms = bomMs();
+    if (!ms) {
+      ms = { id: 't' + Date.now().toString(36) + 'bm', phase: (p.phases[0] || {}).id || 'ph1', name: '🧱 Bill of Materials', dur: 0, res: [], lead: '', resource: '', qty: 0, unit: '', rate: 0, actual: 0, pct: 0, status: 'todo', pred: [], snet: '', mats: [],
+        notes: 'All the materials for the job (the Bill of Materials): ordered, checked and on site before the build starts. Tick it done when the build starts (the stock is then used).' };
+      b.milestone = ms.id;
+    } else { p.tasks.splice(p.tasks.indexOf(ms), 1); p.tasks.forEach(function (t) { t.pred = (t.pred || []).filter(function (x) { return x !== ms.id; }); }); }
+    if (before && before.id !== ms.id) { ms.pred = (before.pred || []).filter(function (x) { return x !== ms.id; }); p.tasks.splice(p.tasks.indexOf(before), 0, ms); before.pred = (before.pred || []).concat([ms.id]); }
+    else { var last = p.tasks[p.tasks.length - 1]; ms.pred = last ? [last.id] : []; p.tasks.push(ms); }
+    b.buildStart = before ? before.id : '';
+    b.lines.forEach(function (l) { l.task = ms.id; });
+    return ms;
+  }
+  function bomEnsure() {   // older BOMs (lines on several tasks) move onto the one milestone
+    var b = bomOf(); if (!b) return false;
+    var ms = bomMs(), moved = false;
+    if (!ms) { ms = bomPlace(bomBuildStart()); moved = true; }
+    b.lines.forEach(function (l) { if (l.task !== ms.id) { l.task = ms.id; moved = true; } });
+    if (moved) { bomLog('Materials gathered on the 🧱 Bill of Materials milestone (before ' + (((S.plan.tasks.filter(function (t) { return t.id === b.buildStart; })[0]) || {}).name || 'the end') + ')'); bomSync(); dirty('BOM milestone'); }
+    return moved;
+  }
+  function bomPhases() {   // a small picture of the key phases, to refer to while working out the materials
+    var p = S.plan, ms = bomMs(), T = p.tasks.filter(function (t) { return t.es && t.ef; });
+    if (!T.length) return '';
+    var a = T.reduce(function (m, t) { return !m || t.es < m ? t.es : m; }, ''), z = T.reduce(function (m, t) { return t.ef > m ? t.ef : m; }, '');
+    var span = Math.max(1, (toD(z) - toD(a)) / 864e5 + 1), pos = function (d) { return Math.max(0, Math.min(100, (toD(d) - toD(a)) / 864e5 / span * 100)); };
+    return '<details class="card bom-ph" open><summary><b>Key phases</b> <small class="muted">to refer to while working out the materials · ' + esc(dmy(a)) + ' to ' + esc(dmy(z)) + '</small></summary><div class="bom-phl">' + T.map(function (t) {
+      var isMs = ms && t.id === ms.id, done = t.pct >= 100;
+      return '<div class="bom-phr' + (isMs ? ' ms' : '') + (done ? ' done' : '') + '" title="' + esc(t.name + ': ' + dmy(t.es) + (t.ef !== t.es ? ' to ' + dmy(t.ef) : '')) + '"><span class="n">' + (p.tasks.indexOf(t) + 1) + '</span><span class="nm">' + esc(t.name) + '</span><span class="tr">' +
+        (t.dur ? '<i style="left:' + pos(t.es) + '%;width:' + Math.max(1.5, ((toD(t.ef) - toD(t.es)) / 864e5 + 1) / span * 100) + '%"></i>' : '<b style="left:' + pos(t.es) + '%"></b>') + '</span><span class="d">' + esc(dmy(t.es).slice(0, 5)) + '</span></div>';
+    }).join('') + '</div></details>';
+  }
   function bomStart() {   // the first time: the materials already on the tasks become the first lines
     var p = S.plan, lines = [];
     p.tasks.forEach(function (t) { matsOf(t).forEach(function (m) { var i = invItem(m.item) || {}; lines.push(bomLine({ task: t.id, name: i.name || 'Stock item ' + m.item, item: m.item, qty: m.qty, unit: i.unit || 'each', price: m.price, source: 'plan' })); }); });
-    p.bom = { status: 'Draft', lines: lines, signedBy: '', signedRole: '', signedAt: 0, sig: '', template: '', log: [] };
-    bomLog('BOM started by ' + bomMe() + (lines.length ? ' with ' + pl(lines.length, 'line') + ' from the materials already on the tasks' : ''));
+    p.bom = { status: 'Draft', lines: lines, signedBy: '', signedRole: '', signedAt: 0, sig: '', template: '', log: [], milestone: '', buildStart: '' };
+    var at = bomBuildStart(); bomPlace(at);
+    bomLog('BOM started by ' + bomMe() + (lines.length ? ' with ' + pl(lines.length, 'line') + ' from the materials already on the tasks' : '') + '; 🧱 Bill of Materials milestone ' + (at ? 'before “' + at.name + '”' : 'added'));
     return p.bom;
   }
   function bomSync() {   // BOM ➜ tasks: each task's stock materials are the BOM lines on it that are Inventory items
@@ -3221,16 +3266,17 @@
     var B = $('#planBody'), b = bomOf();
     if (!b) {
       var have = 0; S.plan.tasks.forEach(function (t) { have += matsOf(t).length; });
-      B.innerHTML = '<div class="card bom-intro"><h2>🧱 Bill of Materials</h2><p>Every material, fixing and consumable the job needs, by task, with quantities and prices: checked and signed off <b>before the work starts</b>.</p>' +
+      B.innerHTML = '<div class="card bom-intro"><h2>🧱 Bill of Materials: ' + esc(S.plan.name) + '</h2><p>Every material, fixing and consumable the job needs, with quantities and prices: checked and signed off <b>before the work starts</b>. In the Gantt chart it is one milestone, <b>🧱 Bill of Materials</b>, just before the build starts (e.g. before site set-out and excavation), and all the materials are costed there.</p>' +
         '<ol class="bom-how"><li><b>✨ Draft with AI</b> from the plan, the scope and our stock, or start from a <b>📋 template</b> (e.g. a standard bathroom), or add lines yourself.</li>' +
         '<li><b>Stock first:</b> each line is matched to Inventory; you see what is in stock, free and short, and re-order the shortfall.</li>' +
-        '<li><b>Into the plan:</b> stock lines go onto their tasks automatically (set aside, costed, on the quote). Long-lead items can get an ordering task.</li>' +
+        '<li><b>Into the plan:</b> all of it is on the 🧱 Bill of Materials milestone (set aside in stock, costed, on the quote). Long-lead items can get an ordering task before it.</li>' +
         '<li><b>Check and sign off:</b> tick each line as checked, then sign. After that it is locked; changes need a reason, and go through 🔁 Change control where they change the contract.</li></ol>' +
         (have ? '<p class="muted">The ' + pl(have, 'material') + ' already on the tasks (📦) will become the first lines.</p>' : '') +
         '<div class="actions" style="justify-content:flex-start"><button class="btn btn-gold" id="bomGo" type="button">🧱 Start the BOM</button></div></div>';
       $('#bomGo').onclick = function () { bomStart(); bomSave('BOM started'); bomLoadStock().then(bomTab); };
       return;
     }
+    if (!bomLocked() && bomEnsure()) b = bomOf();   // v99: one milestone for all the materials
     if (!S.bomStockAt || S.bomStockCore !== S.core) { S.bomStockCore = S.core; S.bomStockAt = 1; bomLoadStock().then(function () { if (S.tab === 'bom') bomTab(); }); }
     var lock = bomLocked(), T = bomTotals(b), st = bomStock(), dis = lock ? ' disabled' : '';
     var shorts = Object.keys(st).filter(function (id) { return st[id].short > 0; });
@@ -3242,18 +3288,13 @@
       if (!s) return '<span class="muted">' + esc(i.name) + '</span>';
       return '<span class="bom-st' + (s.short ? ' short' : '') + '" title="' + esc(i.name + ': ' + s.onHand + ' ' + s.unit + ' on hand, ' + s.free + ' free for this job' + (s.onOrder ? ', ' + s.onOrder + ' on order' : '')) + '">' + (s.short ? 'Short ' + s.short + ' ' + esc(s.unit) : '✓ ' + s.free + ' ' + esc(s.unit) + ' free') + (s.onOrder ? ' · ' + s.onOrder + ' on order' : '') + '</span>' + (lock ? '' : '<button class="btn btn-sm bom-pk" data-blink type="button" title="Change the stock item (Inventory)">📦</button>');
     };
-    var rows = bomGroups(b).map(function (g) {
-      var sub = r2(g.rows.reduce(function (a, x) { return a + (Number(x.l.qty) || 0) * (Number(x.l.price) || 0); }, 0));
-      return '<tr class="bom-g"><td colspan="10">' + (g.t ? '<b>#' + g.n + ' ' + esc(g.t.name) + '</b>' + (g.t.status === 'done' ? ' <small class="muted">(done: stock used)</small>' : '') : '<b>Not linked to a task</b> <small class="bad">(on the quote as a separate materials line, but not in the plan budget: link each one to its task)</small>') + '<span class="sp"></span><b>' + money(sub) + '</b>' + (lock ? '' : '<span class="bom-gadd"><button class="btn btn-sm" data-gadd="' + esc(g.t ? g.t.id : '') + '" type="button" title="Add a line to this task">＋ Line</button><button class="btn btn-sm" data-gstock="' + esc(g.t ? g.t.id : '') + '" type="button" title="Pick materials from Inventory for this task">📦 From stock</button></span>') + '</td></tr>' +
-        g.rows.map(function (x) { var l = x.l, tot = r2((Number(l.qty) || 0) * (Number(l.price) || 0));
-          return '<tr data-bk="' + x.k + '" class="' + (l.checked ? 'ok' : '') + '"><td class="c"><label class="bom-ck" title="' + (l.checked ? 'Checked' + (l.checkedBy ? ' by ' + esc(l.checkedBy) : '') : 'Tick when you have checked the quantity and price') + '"><input type="checkbox" data-bf="checked"' + (l.checked ? ' checked' : '') + dis + '></label></td>' +
+    var rows = b.lines.map(function (l, k) { var tot = r2((Number(l.qty) || 0) * (Number(l.price) || 0));   // v99: one plain list (no phases)
+          return '<tr data-bk="' + k + '" class="' + (l.checked ? 'ok' : '') + '"><td class="c"><label class="bom-ck" title="' + (l.checked ? 'Checked' + (l.checkedBy ? ' by ' + esc(l.checkedBy) : '') : 'Tick when you have checked the quantity and price') + '"><input type="checkbox" data-bf="checked"' + (l.checked ? ' checked' : '') + dis + '></label></td>' +
             '<td><input data-bf="name" value="' + esc(l.name) + '"' + dis + '><div class="bom-tags"><span class="bom-src">' + (BOM_SRC[l.source] || '') + '</span>' + (l.est ? '<span class="est-tag" title="An estimate (AI or template): check it">≈ est</span>' : '') + (l.note ? '<small class="muted">' + esc(l.note) + '</small>' : '') + '</div></td>' +
-            '<td><select data-bf="task"' + dis + '>' + opts(l.task) + '</select></td>' +
             '<td class="num"><input data-bf="qty" type="number" min="0" step="any" value="' + l.qty + '"' + dis + '></td><td><input data-bf="unit" value="' + esc(l.unit) + '" class="bom-u"' + dis + '></td>' +
             '<td class="num"><input data-bf="price" type="number" min="0" step="any" value="' + l.price + '"' + (!(Number(l.price) > 0) ? ' class="bom-zero" title="No price: this line adds $0 to the quote"' : '') + dis + '></td><td class="num"><b>' + money(tot) + '</b></td>' +
             '<td class="num"><input data-bf="lead" type="number" min="0" max="365" value="' + (l.lead || 0) + '" title="Lead time: working days to arrive after ordering"' + dis + '></td>' +
             '<td class="bom-stk">' + stockCell(l) + '</td><td>' + (lock ? '' : '<button class="btn btn-sm bom-del" data-bdel type="button" title="Delete this line" aria-label="Delete line">🗑</button>') + '</td></tr>';
-        }).join('');
     }).join('');
     var ords = b.orders || {}, still = function (id) { return Math.max(0, q3c(st[id].short - ((ords[id] || {}).qty || 0))); }, toOrder = shorts.filter(function (id) { return still(id) > 0; });   // v92: what has been re-ordered
     var shortHtml = shorts.length ? '<div class="card bom-short' + (toOrder.length ? '' : ' all-ordered') + '"><div class="card-h"><h2>Shortfall: ' + pl(shorts.length, 'item') + '</h2><span class="bom-ostat">' + (shorts.length - toOrder.length ? '<span class="ok">✓ ' + (shorts.length - toOrder.length) + ' ordered</span>' : '') + (toOrder.length ? '<span class="bad">' + toOrder.length + ' still to order</span>' : '') + '</span><span class="sp"></span>' +
@@ -3266,19 +3307,23 @@
           (o ? '<span class="bom-ord" title="' + esc('Recorded by ' + (o.by || '') + (o.ref ? ', order ' + o.ref : '')) + '">' + (VIA_IC[o.via] || '✓') + ' ' + esc(o.qty + ' ' + s.unit) + ' ordered by ' + esc(o.via) + ' · ' + esc(dmy(new Date(o.at).toISOString().slice(0, 10))) + (o.supplier ? ' · ' + esc(o.supplier) : '') + (o.expected ? ' · due ' + esc(dmy(o.expected)) : '') + '</span>' + (lock ? '' : ' <button class="btn btn-sm bom-oundo" data-bundo="' + esc(id) + '" type="button" title="Not ordered after all: undo">↶</button>') : '') +
           (left && !lock ? (o ? '<br><small class="bad">' + left + ' ' + esc(s.unit) + ' still to order</small> ' : '') + (s.nostock ? '<button class="btn btn-sm" data-binvl="' + esc(id) + '" type="button" title="Add it to Inventory, so it can be re-ordered from a supplier and tracked in stock">＋ Add to Inventory</button>' : '<button class="btn btn-sm btn-gold" data-bro="' + esc(id) + '" type="button">Re-order ' + left + '</button>') + ' <button class="btn btn-sm" data-bmark="' + esc(id) + '" type="button">✓ Mark ordered</button>' : left ? '<span class="bad">' + left + ' ' + esc(s.unit) + ' to order</span>' : '') + '</td></tr>'; }).join('') +
       '</tbody></table></div></div>' : '';
-    B.innerHTML = '<div class="card"><div class="card-h"><h2>🧱 Bill of Materials</h2><span class="bom-pill ' + (lock ? 'ok' : '') + '">' + (lock ? '✓ Signed off' : 'Draft') + '</span><span class="sp"></span>' +
+    var ms = bomMs(), msN = ms ? S.plan.tasks.indexOf(ms) + 1 : 0, bs = S.plan.tasks.filter(function (t) { return t.id === b.buildStart; })[0];
+    var place = ms ? '<div class="bom-place"><span>🧱 In the Gantt chart: milestone <b>#' + msN + ' Bill of Materials</b>' + (ms.es ? ' on ' + esc(dmy(ms.es)) : '') + ', just before</span>' +
+      (lock ? '<b>' + esc(bs ? bs.name : 'the end') + '</b>' : '<select id="bomBefore" title="Where the build (physical work) starts: the materials are needed before it"><option value="">– the end of the plan –</option>' + S.plan.tasks.filter(function (t) { return t.id !== ms.id; }).map(function (t) { return '<option value="' + esc(t.id) + '"' + (bs && bs.id === t.id ? ' selected' : '') + '>#' + (S.plan.tasks.indexOf(t) + 1) + ' ' + esc(t.name.slice(0, 70)) + '</option>'; }).join('') + '</select>') +
+      '<small class="muted">where the build starts. All the materials are costed and set aside there.</small></div>' : '';
+    B.innerHTML = bomPhases() + '<div class="card"><div class="card-h"><h2>🧱 Bill of Materials: ' + esc(S.plan.name) + '</h2><span class="bom-pill ' + (lock ? 'ok' : '') + '">' + (lock ? '✓ Signed off' : 'Draft') + '</span><span class="sp"></span>' +
         (lock ? '' : '<button class="btn btn-sm" id="bomAi" type="button">✨ Draft with AI</button><button class="btn btn-sm" id="bomAdd" type="button">＋ Line</button><button class="btn btn-sm" id="bomStock" type="button" title="Pick materials from Inventory">📦 From stock</button>') +
         '<button class="btn btn-sm" id="bomTpl" type="button">📋 Templates</button><button class="btn btn-sm" id="bomDoc" type="button">📄 Document</button><button class="btn btn-sm" id="bomXls" type="button">⬇ Excel</button>' +
         (lock ? '<button class="btn btn-sm" id="bomOpen" type="button">🔓 Reopen</button>' : '<button class="btn btn-sm btn-gold" id="bomSign" type="button"' + (b.lines.length && T.checked === b.lines.length && !T.noTask && !T.zero ? '' : ' disabled title="' + (T.zero ? 'Every line needs a price first (no $0 lines)' : T.noTask ? 'Link every line to a task first (so its cost is in the plan)' : 'Tick every line as checked first') + '"') + '>✍ Sign off</button>') + '</div>' +
       '<div class="bom-kpi"><span><b>' + pl(b.lines.length, 'line') + '</b></span><span>Value <b>' + money(T.value) + '</b> ex GST</span><span>In the plan cost <b>' + money(T.inPlan) + '</b></span>' + (T.value - T.inPlan > 0.005 ? '<span class="bad" title="Lines not linked to a task: the quote adds them as a separate line, but the plan budget does not have them">Not in the budget <b>' + money(r2(T.value - T.inPlan)) + '</b></span>' : '') + '<span>Checked <b>' + T.checked + ' / ' + b.lines.length + '</b></span>' +
-        (shorts.length ? (toOrder.length ? '<span class="bad">To order: <b>' + toOrder.length + '</b></span>' : '<span class="ok">✓ Shortfall ordered</span>') : '') + (T.noItem ? '<span>Not in stock: <b>' + T.noItem + '</b></span>' : '') + '</div>' +
-      (lock ? '<p class="bom-signed">✍ Signed off by <b>' + esc(b.signedBy) + '</b>' + (b.signedRole ? ', ' + esc(b.signedRole) : '') + ' on ' + esc(dmy(new Date(b.signedAt).toISOString().slice(0, 10))) + (b.sig ? ' · signature: <i>' + esc(b.sig) + '</i>' : '') + '. The BOM is locked: to change it, reopen it with a reason' + ' (raise a 🔁 change request where it changes the contract or budget).</p>' : '') +
+        '' + (shorts.length ? (toOrder.length ? '<span class="bad">To order: <b>' + toOrder.length + '</b></span>' : '<span class="ok">✓ Shortfall ordered</span>') : '') + (T.noItem ? '<span>Not in stock: <b>' + T.noItem + '</b></span>' : '') + '</div>' +
+      place + (lock ? '<p class="bom-signed">✍ Signed off by <b>' + esc(b.signedBy) + '</b>' + (b.signedRole ? ', ' + esc(b.signedRole) : '') + ' on ' + esc(dmy(new Date(b.signedAt).toISOString().slice(0, 10))) + (b.sig ? ' · signature: <i>' + esc(b.sig) + '</i>' : '') + '. The BOM is locked: to change it, reopen it with a reason' + ' (raise a 🔁 change request where it changes the contract or budget).</p>' : '') +
       (T.zero && !lock ? '<div class="est-warn bom-zwarn"><div class="est-ic">$</div><div class="est-tx"><b>' + pl(T.zero, 'line') + ' with no price</b> (highlighted): ' + (T.zero === 1 ? 'it adds' : 'they add') + ' $0 to the plan and the quote, so the job would be under-priced. Put in the unit price (ex GST). The BOM can\'t be signed off until every line has a price.</div></div>' : '') +
       (T.est && !lock ? '<div class="est-warn"><div class="est-ic">⚠</div><div class="est-tx"><b>' + pl(T.est, 'line') + ' marked ≈ est</b> came from the AI or a template: check the quantity and price of each (and the waste allowance) against the drawings and supplier quotes, then tick it as checked.</div></div>' : '') +
-      (T.noItem && !lock ? '<p class="muted" style="font-size:12.5px;margin:6px 0">Every line is costed: its task\'s cost and the quote include it. Lines that are not in Inventory are not set aside or tracked in stock: press <b>＋ Add to Inventory</b> (or 📦 to pick an existing stock item)' + (T.noItem > 1 ? ', or <button class="btn btn-sm" id="bomInvAll" type="button">＋ Add all ' + T.noItem + ' to Inventory</button>' : '') + '.</p>' : '') +
-      (b.lines.length ? '<div class="table-wrap"><table class="rt bom-tbl"><thead><tr><th title="Checked">✓</th><th>Material</th><th>Task</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit $</th><th class="num">Total</th><th class="num" title="Lead time (working days)">Lead</th><th>Stock</th><th></th></tr></thead><tbody>' + rows +
-        (lock ? '' : '<tr class="bom-addrow"><td></td><td colspan="9"><button class="btn btn-sm" id="bomAdd2" type="button">＋ Add a line</button> <button class="btn btn-sm" id="bomStock2" type="button">📦 Add from Inventory</button> <small class="muted">Anything else the job needs: type it in, or pick it from stock.</small></td></tr>') +
-        '</tbody><tfoot><tr><td></td><td colspan="5"><b>Total materials</b> <small class="muted">ex GST</small></td><td class="num"><b>' + money(T.value) + '</b></td><td colspan="3"></td></tr></tfoot></table></div>'
+      (T.noItem && !lock ? '<p class="muted" style="font-size:12.5px;margin:6px 0">Every line is costed: the 🧱 Bill of Materials milestone and the quote include it. Lines that are not in Inventory are not set aside or tracked in stock: press <b>＋ Add to Inventory</b> (or 📦 to pick an existing stock item)' + (T.noItem > 1 ? ', or <button class="btn btn-sm" id="bomInvAll" type="button">＋ Add all ' + T.noItem + ' to Inventory</button>' : '') + '.</p>' : '') +
+      (b.lines.length ? '<div class="table-wrap"><table class="rt bom-tbl"><thead><tr><th title="Checked">✓</th><th>Material</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit $</th><th class="num">Total</th><th class="num" title="Lead time (working days)">Lead</th><th>Stock</th><th></th></tr></thead><tbody>' + rows +
+        (lock ? '' : '<tr class="bom-addrow"><td></td><td colspan="8"><button class="btn btn-sm" id="bomAdd2" type="button">＋ Add a line</button> <button class="btn btn-sm" id="bomStock2" type="button">📦 Add from Inventory</button> <small class="muted">Anything else the job needs: type it in, or pick it from stock.</small></td></tr>') +
+        '</tbody><tfoot><tr><td></td><td colspan="4"><b>Total materials</b> <small class="muted">ex GST</small></td><td class="num"><b>' + money(T.value) + '</b></td><td colspan="3"></td></tr></tfoot></table></div>'
         : '<div class="empty">No lines yet. ✨ Draft with AI, apply a 📋 template, or ＋ add a line.</div>') + '</div>' + shortHtml +
       ((b.log || []).length ? '<details class="card bom-log"><summary><b>History</b> (' + b.log.length + ')</summary><ul>' + b.log.slice().reverse().map(function (x) { return '<li><small class="muted">' + esc(new Date(x.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + '</small> ' + esc(x.what) + '</li>'; }).join('') + '</ul></details>' : '');
     bomWire(B, b, st);
@@ -3316,6 +3361,7 @@
     if (ms) ms.onclick = function () { var ids = osel(); if (ids.length) bomMarkDialog(ids, st); };
     var on = function (id, f) { var e = $('#' + id); if (e) e.onclick = f; };
     on('bomInvAll', function () { this.disabled = true; bomToInv(b.lines.filter(function (l) { return !l.item; })); });
+    var bb = $('#bomBefore'); if (bb) bb.onchange = function () { var t = S.plan.tasks.filter(function (x) { return x.id === bb.value; })[0] || null; bomPlace(t); bomLog('🧱 Bill of Materials milestone moved before ' + (t ? '“' + t.name + '”' : 'the end') + ' by ' + bomMe()); bomSave('BOM milestone moved'); toast('The 🧱 Bill of Materials milestone is now before ' + (t ? '“' + t.name + '”' : 'the end of the plan')); };   // v99
     var addLine = function (task) { b.lines.push(bomLine({ name: 'New material', source: 'manual', task: task || '', qty: 1 })); bomSave('BOM line added'); var k = b.lines.length - 1; setTimeout(function () { var r = B.querySelector('tr[data-bk="' + k + '"] [data-bf=name]'); if (r) { r.focus(); r.select(); r.scrollIntoView({ block: 'center' }); } }, 30); };
     B.querySelectorAll('[data-gadd]').forEach(function (x) { x.onclick = function () { addLine(x.getAttribute('data-gadd')); }; });   // v94
     B.querySelectorAll('[data-gstock]').forEach(function (x) { x.onclick = function () { bomStockDialog(x.getAttribute('data-gstock')); }; });
@@ -3387,12 +3433,12 @@
     };
     M.inv.load().then(function (d) {
       all = (d.items || []).filter(function (i) { return !i.archived; }); S.inv = S.inv || {}; all.forEach(function (i) { S.inv[i.id] = i; });
-      M.modal('<h2>📦 Add from Inventory</h2><label>For the task<select id="bsTask"><option value="">– not linked to a task –</option>' + S.plan.tasks.map(function (t, i) { return '<option value="' + esc(t.id) + '"' + (t.id === task ? ' selected' : '') + '>#' + (i + 1) + ' ' + esc(t.name.slice(0, 70)) + '</option>'; }).join('') + '</select></label>' +
+      M.modal('<h2>📦 Add from Inventory</h2><p class="muted" style="margin:-4px 0 6px">Pick the stock items and their quantities: they go into the Bill of Materials.</p>' +
         '<div id="bsRows" style="margin-top:10px"></div><h3 style="font-size:14px;margin:14px 0 6px">Stock</h3><input id="bsQ" placeholder="Search stock: name, code or category…" autocomplete="off"><div class="list" id="bsList" style="margin-top:8px;max-height:34vh;overflow:auto"></div>' +
         '<div class="actions" style="justify-content:space-between;margin-top:12px"><a class="btn" href="#inventory">Manage stock</a><span><button class="btn" data-close type="button">Cancel</button> <button class="btn btn-gold" id="bsSave" type="button">Add to the BOM</button></span></div>');
       $('#modal .modal-card').classList.add('sc-wide'); $('#bsQ').oninput = draw; draw(); $('#bsQ').focus();
       $('#bsSave').onclick = function () {
-        var b = bomOf(), tk = $('#bsTask').value, n = 0; if (!pick.length) return M.closeModal();
+        var b = bomOf(), tk = (bomMs() || {}).id || '', n = 0; if (!pick.length) return M.closeModal();
         pick.forEach(function (m) { if (!(m.qty > 0)) return; var ex = b.lines.filter(function (l) { return l.item === m.it.id && l.task === tk; })[0];
           if (ex) { ex.qty = q3c(ex.qty + m.qty); if (m.price > 0) ex.price = r2(m.price); ex.checked = false; ex.checkedBy = ''; } else b.lines.push(bomLine({ task: tk, name: m.it.name, item: m.it.id, qty: m.qty, unit: m.it.unit || 'each', price: m.price, source: 'manual' })); n++; });
         bomLog(pl(n, 'stock item') + ' added from Inventory by ' + bomMe()); M.closeModal(); bomSave('BOM: lines from stock'); bomLoadStock().then(function () { if (S.tab === 'bom') bomTab(); });
@@ -3443,14 +3489,13 @@
       M.closeModal(); bomSave('BOM reopened'); toast('BOM reopened: sign it off again when the changes are checked');
     };
   }
-  function bomAiDialog() {
-    var b = bomOf(), covered = {}; b.lines.forEach(function (l) { if (l.task) covered[l.task] = 1; });
-    var work = S.plan.tasks.map(function (t, i) { return { t: t, n: i + 1 }; }).filter(function (x) { return x.t.dur > 0 && x.t.status !== 'done'; }), open = work.filter(function (x) { return !covered[x.t.id]; });
-    M.modal('<h2>✨ Draft the BOM with AI</h2><p class="muted" style="margin:-4px 0 10px">The AI reads the plan, the scope and our stock catalogue, and suggests the materials each task needs with quantities and Sydney trade prices. Stock items are used where they match. Every line comes in marked <span class="est-tag">≈ est</span> for you to check.</p>' +
-      '<div class="est-opts"><label><input type="radio" name="bomW" value="open"' + (open.length ? ' checked' : ' disabled') + '> <span><b>Tasks with no materials yet</b> <small>' + pl(open.length, 'task') + '</small></span></label><label><input type="radio" name="bomW" value="all"' + (open.length ? '' : ' checked') + '> <span><b>All tasks not done</b> <small>' + pl(work.length, 'task') + '; existing lines are kept</small></span></label></div>' +
-      '<label style="margin-top:10px">Anything the AI should know? <small class="muted">(optional)</small><input id="bomNote" maxlength="300" placeholder="e.g. 2.4 × 1.8 m bathroom, 600 × 600 porcelain tiles, matt black tapware"></label>' +
-      '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="bomGo" type="button"' + (work.length ? '' : ' disabled') + '>✨ Draft the materials</button></div>');
-    $('#bomGo').onclick = function () { var w = document.querySelector('[name=bomW]:checked').value === 'open' ? open : work; bomAiRun(w.map(function (x) { return x.n; }), $('#bomNote').value.trim()); };
+  function bomAiDialog() {   // v99: the whole job, physical materials only
+    var b = bomOf(), aiN = b.lines.filter(function (l) { return l.source === 'ai' && !l.checked; }).length;
+    M.modal('<h2>✨ Draft the BOM with AI</h2><p class="muted" style="margin:-4px 0 10px">The AI reads the plan, the scope and our stock catalogue and lists the <b>physical materials</b> the build needs (no services, fees, approvals, reports or labour), with quantities, waste allowance and Sydney trade prices, using our stock items where they match. It also says where the build starts, for the 🧱 Bill of Materials milestone. Every line comes in marked <span class="est-tag">≈ est</span> for you to check.</p>' +
+      '<label>Anything the AI should know? <small class="muted">(optional)</small><input id="bomNote" maxlength="300" placeholder="e.g. 18 m² deck, hardwood boards, galvanised fixings, 600 mm footings"></label>' +
+      (aiN ? '<label class="sc-cb" style="margin-top:10px"><input type="checkbox" id="bomRepl" checked style="width:auto"> Replace the ' + pl(aiN, 'AI line') + ' not checked yet (lines you added or checked are kept)</label>' : '') +
+      '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="bomGo" type="button">✨ Draft the materials</button></div>');
+    $('#bomGo').onclick = function () { S.bomRepl = !!($('#bomRepl') && $('#bomRepl').checked); bomAiRun([], $('#bomNote').value.trim()); };
   }
   function bomAiRun(only, note) {
     var core = S.core, id = rid(), t0 = Date.now(); S.bomAiId = id;
@@ -3474,16 +3519,19 @@
     var L = r.lines, tot = r2(L.reduce(function (a, l) { return a + l.qty * l.price; }, 0));
     M.modal('<h2>✨ Suggested materials: ' + pl(L.length, 'line') + ', ' + money(tot) + '</h2>' +
       '<div class="est-warn est-in-dlg"><div class="est-ic">⚠</div><div class="est-tx"><b>Estimates only.</b> Check each quantity, waste allowance and price against the drawings and supplier quotes before you order. Lines stay marked <span class="est-tag">≈ est</span> until you tick them as checked.' + (r.caveat ? '<br><i>Double-check: ' + esc(r.caveat) + '</i>' : '') + '</div></div>' +
-      '<div class="table-wrap" style="max-height:46vh;overflow:auto"><table class="mini est-tbl"><thead><tr><th><input type="checkbox" id="baAll" checked title="All"></th><th>Task</th><th>Material</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit $</th><th class="num">Total</th><th>Stock</th></tr></thead><tbody>' +
-      L.map(function (l, k) { var i = invItem(l.item); return '<tr><td><input type="checkbox" data-ba="' + k + '" checked></td><td>' + (l.task ? '#' + num[l.task] + ' ' + esc(by[l.task].name.slice(0, 40)) : '<span class="muted">–</span>') + '</td><td>' + esc(l.name) + (l.note ? '<br><small class="muted">' + esc(l.note) + '</small>' : '') + (l.lead ? '<br><small>lead ' + l.lead + ' d</small>' : '') + '</td><td class="num">' + l.qty + '</td><td>' + esc(l.unit) + '</td><td class="num">' + money(l.price) + '</td><td class="num"><b>' + money(r2(l.qty * l.price)) + '</b></td><td>' + (i ? '📦 ' + esc(i.name.slice(0, 26)) : '<span class="muted">not in stock</span>') + '</td></tr>'; }).join('') +
-      '</tbody></table></div><div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="baGo" type="button">Add the ticked lines to the BOM</button></div>');
+      '<div class="table-wrap" style="max-height:46vh;overflow:auto"><table class="mini est-tbl"><thead><tr><th><input type="checkbox" id="baAll" checked title="All"></th><th>Material</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit $</th><th class="num">Total</th><th>Stock</th></tr></thead><tbody>' +
+      L.map(function (l, k) { var i = invItem(l.item); return '<tr><td><input type="checkbox" data-ba="' + k + '" checked></td><td>' + esc(l.name) + (l.note ? '<br><small class="muted">' + esc(l.note) + '</small>' : '') + (l.lead ? '<br><small>lead ' + l.lead + ' d</small>' : '') + '</td><td class="num">' + l.qty + '</td><td>' + esc(l.unit) + '</td><td class="num">' + money(l.price) + '</td><td class="num"><b>' + money(r2(l.qty * l.price)) + '</b></td><td>' + (i ? '📦 ' + esc(i.name.slice(0, 26)) : '<span class="muted">not in stock</span>') + '</td></tr>'; }).join('') +
+      '</tbody></table></div>' + (r.buildStart && by[r.buildStart] && r.buildStart !== (bomOf() || {}).buildStart ? '<label class="sc-cb" style="margin-top:10px"><input type="checkbox" id="baMs" checked style="width:auto"> Put the 🧱 Bill of Materials milestone before <b>#' + num[r.buildStart] + ' ' + esc(by[r.buildStart].name) + '</b> (the AI says the build starts there)</label>' : '') +
+      '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="baGo" type="button">' + (S.bomRepl ? 'Replace the AI lines with the ticked lines' : 'Add the ticked lines to the BOM') + '</button></div>');
     $('#modal .modal-card').classList.add('sc-wide');
     $('#baAll').onchange = function () { var c = this.checked; document.querySelectorAll('[data-ba]').forEach(function (x) { x.checked = c; }); };
     $('#baGo').onclick = function () {
-      var b = bomOf(), add = [];
-      document.querySelectorAll('[data-ba]:checked').forEach(function (x) { var l = L[+x.getAttribute('data-ba')]; add.push(bomLine({ task: l.task, name: l.name, item: l.item, qty: l.qty, unit: l.unit, price: l.price, lead: l.lead, note: l.note, source: 'ai', est: true })); });
-      if (!add.length) return M.closeModal();
-      b.lines = b.lines.concat(add); bomLog(pl(add.length, 'line') + ' drafted by the AI, added by ' + bomMe());
+      var b = bomOf(), add = [], gone = 0;
+      if ($('#baMs') && $('#baMs').checked) bomPlace(by[r.buildStart]);
+      if (S.bomRepl) { var keep = b.lines.filter(function (l) { return !(l.source === 'ai' && !l.checked); }); gone = b.lines.length - keep.length; b.lines = keep; }
+      document.querySelectorAll('[data-ba]:checked').forEach(function (x) { var l = L[+x.getAttribute('data-ba')]; add.push(bomLine({ task: '', name: l.name, item: l.item, qty: l.qty, unit: l.unit, price: l.price, lead: l.lead, note: l.note, source: 'ai', est: true })); });
+      if (!add.length && !gone) return M.closeModal();
+      b.lines = b.lines.concat(add); bomLog(pl(add.length, 'line') + ' drafted by the AI, added by ' + bomMe() + (gone ? ' (replacing ' + pl(gone, 'earlier AI line') + ')' : ''));
       M.closeModal(); bomSave('BOM: ' + add.length + ' AI lines'); bomLoadStock().then(bomTab);
       toast(pl(add.length, 'line') + ' added (≈ est): check each one, then tick it');
     };
@@ -3528,7 +3576,7 @@
         '<form class="form" id="taF"><label>Scale quantities ×<input name="k" type="number" min="0.05" max="50" step="0.05" value="1" required></label><div class="actions full"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" type="submit">Add to this BOM</button></div></form>');
       $('#taF').onsubmit = function (e) {
         e.preventDefault(); var k = Math.max(0.05, parseFloat(this.k.value) || 1), b = bomOf(), linked = 0;
-        var add = t.lines.map(function (l) { var tk = bomTaskFor(l.taskHint); if (tk) linked++; return bomLine({ task: tk, name: l.name, item: l.item && invItem(l.item) ? l.item : '', qty: q3c(l.qty * k), unit: l.unit, price: l.price, lead: l.lead, note: l.note, source: 'template', est: true }); });
+        var add = t.lines.map(function (l) { linked++; return bomLine({ task: '', name: l.name, item: l.item && invItem(l.item) ? l.item : '', qty: q3c(l.qty * k), unit: l.unit, price: l.price, lead: l.lead, note: l.note, source: 'template', est: true }); });
         b.lines = b.lines.concat(add); b.template = t.id; bomLog('Template ' + t.id + ' ' + t.name + ' applied × ' + k + ' by ' + bomMe() + ' (' + pl(add.length, 'line') + ', ' + linked + ' matched to tasks)');
         M.closeModal(); bomSave('BOM template applied'); bomLoadStock().then(bomTab);
         toast(pl(add.length, 'line') + ' added from the template' + (linked < add.length ? ': ' + (add.length - linked) + ' not matched to a task, link them' : '') + '. Check each one.');
