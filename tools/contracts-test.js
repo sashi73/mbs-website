@@ -64,7 +64,7 @@ const mock = http.createServer((req, res) => { const c = []; req.on('data', (d) 
     const plan = async () => kv.get('plan:' + core);
 
     const tabs = await p.$$eval('#planTabs .tab', (x) => x.map((a) => a.textContent.trim()));
-    ok('Tab', '"📜 Contracts" sits after Stakeholders (then Comms, SWMS and Project Intelligence)', tabs.indexOf('📜 Contracts') === tabs.indexOf('👥 Stakeholders') + 1 && tabs.indexOf('📞 Comms') === tabs.indexOf('📜 Contracts') + 1, tabs.join(' | '));
+    ok('Tab', '"📜 Contracts" sits after Issues (then Comms), since v80 moved Stakeholders before Scope', tabs.indexOf('📜 Contracts') === tabs.indexOf('❗ Issues') + 1 && tabs.indexOf('📞 Comms') === tabs.indexOf('📜 Contracts') + 1, tabs.join(' | '));
     await p.click('#planTabs >> text=Contracts'); await p.waitForSelector('#ctType');
     const types = await p.$$eval('#ctType option', (x) => x.map((o) => o.textContent));
     ok('Form', 'one line: type (customer, sub-contractor, supply, consultant), who with, upload Word or PDF', types.length === 4 && /Customer contract/.test(types[0]) && /Sub-contractor/.test(types[1]) && /Supply/.test(types[2]) && /Consultant/.test(types[3]) &&

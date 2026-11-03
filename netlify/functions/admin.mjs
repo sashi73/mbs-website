@@ -19,6 +19,8 @@ import { intelPost } from '../lib/plan-intel.mjs';
 import { swmsPost } from '../lib/swms.mjs';
 import { commsPost } from '../lib/comms.mjs';
 import { reportPost } from '../lib/reports.mjs';
+import * as U from '../lib/users.mjs';
+import * as PPL from '../lib/people.mjs';
 
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' };
 const out = (status, body, extra = {}) => new Response(JSON.stringify(body), { status, headers: { ...H, ...extra } });
@@ -52,6 +54,10 @@ async function handle(req, context) {
       const who = A.readSession(req);
       if (!who) return bad('Please log in', 401);
       const action = url.searchParams.get('action');
+      const gctx = await U.context(who, '', PPL.canLogin);   // v86: Users & access
+      if (!gctx) return bad('Please log in', 401);
+      const gmod = action === 'photo' || action === 'export' ? 'job' : action === 'backup' ? 'dataDelete' : 'acctReport';
+      const gok = U.allows(gctx, gmod); if (!gok.ok) return bad(gok.error, 403);
       if (action === 'photo') {
         const st = url.searchParams.get('store') || A.LIVE, k = url.searchParams.get('key') || '';
         if (!storeOk(st) || !/^(photo|receipt):/.test(k)) return bad('Not found', 404);
@@ -88,11 +94,17 @@ async function handle(req, context) {
       const ip = A.clientIp(req);
       const { wait, had } = await A.loginCheck(ip);
       if (wait) return bad(`Too many wrong attempts. Try again in ${wait} minute${wait > 1 ? 's' : ''}.`, 429);
-      if (!A.checkPassword(body.username, body.password)) {
+      const owner = A.checkPassword(body.username, body.password);
+      const usr = owner ? null : await U.login(body.username, body.password, PPL.canLogin);   // v86: a user from Users & access
+      if (!owner && !usr) {
         const left = await A.noteFailure(ip);
         return bad(left ? `Wrong username or password (${left} tr${left > 1 ? 'ies' : 'y'} left).` : 'Too many wrong attempts. Locked for 15 minutes.', 401);
       }
       if (had) await A.later(A.clearFailures(ip));
+      if (usr) {
+        await A.audit(usr.username, 'Logged in (' + usr.role + ')');
+        return out(200, { ok: true, user: usr.username, name: usr.name, mustChange: !!usr.mustChange }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(usr.username, Date.now(), { uid: usr.id, v: usr.ver || 0 })) });
+      }
       const user = env('ADMIN_USERNAME').trim();
       await A.audit(user, 'Logged in');
       return out(200, { ok: true, user }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(user)) });
@@ -101,10 +113,21 @@ async function handle(req, context) {
 
     const session = A.readSession(req);
     if (!session) return bad('Please log in', 401);
+    const ctx = await U.context(session, '', PPL.canLogin);   // v86: Users & access: who this is and what they can use
+    if (!ctx) return out(401, { error: 'Your access has changed or ended. Please sign in again.' }, { 'Set-Cookie': A.clearCookie(req) });
     const who = session.u, by = `Admin (${who})`;
+    if (ctx.mustChange && !['me', 'userPassword'].includes(action)) return bad('Set your own password first.', 403);
+    const ok = U.allows(ctx, action);
+    if (!ok.ok) return bad(ok.error, 403);
+    if (action === 'userPassword') {
+      const r = await U.userPost(action, body, { ctx, audit: A.audit, person: PPL.get });
+      if (r.status !== 200) return r;
+      const j = await r.json();
+      return out(200, { ok: true }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(j.name, Date.now(), { uid: j.uid, v: j.v })) });
+    }
 
     switch (action) {
-      case 'me': return out(200, { user: who, expires: session.exp });
+      case 'me': return out(200, { user: who, name: ctx.name, expires: session.exp, owner: ctx.owner, role: ctx.role, mods: ctx.mods, mustChange: !!ctx.mustChange, personId: ctx.personId || '', modules: U.MODS.map((m) => ({ key: m[0], name: m[1] })) });
 
       // ---------- CRM ----------
       case 'dashboard': {
@@ -198,12 +221,14 @@ async function handle(req, context) {
       }
       case 'dataGet': {
         if (!storeOk(body.store)) return bad('Unknown store');
+        if (/^ppl/.test(String(body.key || '')) && !U.allows(ctx, 'pplGet').ok) return bad('People records need access to People.', 403);   // v86
         return out(200, { key: body.key, value: await A.getValue(body.store, String(body.key || '')) });
       }
       case 'dataDelete': {
         if (!storeOk(body.store)) return bad('Unknown store');
         const keys = (Array.isArray(body.keys) ? body.keys : []).map(String).slice(0, 500);
         if (!keys.length) return bad('Nothing selected');
+        if (keys.some((k) => /^ppl/.test(k)) && !U.allows(ctx, 'pplSave').ok) return bad('People records need edit access to People.', 403);   // v86
         const done = await A.deleteKeys(body.store, keys);
         await A.audit(who, `Deleted ${done.length} item(s) from ${body.store}: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '…' : ''}`);
         return out(200, { deleted: done });
@@ -225,7 +250,7 @@ async function handle(req, context) {
       }
       case 'log': return out(200, { log: await A.auditLog() });
       default: {
-        const a = (await acctPost(action, body, { who, by })) || (await sqlPost(action, body, { who, by })) || (await planPost(action, body, { who, by, audit: A.audit })) || (await invPost(action, body, { who, by, audit: A.audit })) || (await custPost(action, body, { who, by, audit: A.audit })) || (await planQuotePost(action, body, { who, by, audit: A.audit })) || (await subPost(action, body, { who, by, audit: A.audit })) || (await intelPost(action, body, { who, by, audit: A.audit })) || (await swmsPost(action, body, { who, by, audit: A.audit })) || (await commsPost(action, body, { who, by, audit: A.audit })) || (await reportPost(action, body, { who, by, audit: A.audit }));
+        const a = (await acctPost(action, body, { who, by })) || (await sqlPost(action, body, { who, by })) || (await planPost(action, body, { who, by, audit: A.audit })) || (await invPost(action, body, { who, by, audit: A.audit })) || (await custPost(action, body, { who, by, audit: A.audit })) || (await planQuotePost(action, body, { who, by, audit: A.audit })) || (await subPost(action, body, { who, by, audit: A.audit })) || (await intelPost(action, body, { who, by, audit: A.audit })) || (await swmsPost(action, body, { who, by, audit: A.audit })) || (await commsPost(action, body, { who, by, audit: A.audit })) || (await reportPost(action, body, { who, by, audit: A.audit })) || (await PPL.pplPost(action, body, { who, by, audit: A.audit })) || (await U.userPost(action, body, { ctx, audit: A.audit, person: PPL.get }));
         return a || bad('Unknown action');
       }
     }

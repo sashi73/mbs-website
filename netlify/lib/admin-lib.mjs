@@ -38,8 +38,8 @@ export function checkPassword(user, pass) {
   const p = same(String(pass || ''), env('ADMIN_PASSWORD'));
   return u && p;
 }
-export function makeSession(user, now = Date.now()) {
-  const body = b64(JSON.stringify({ u: user, iat: now, exp: now + HOURS * 3600000 }));
+export function makeSession(user, now = Date.now(), extra = {}) {   // v86: extra = { uid, v } for a user from Users & access (the Owner has none)
+  const body = b64(JSON.stringify({ u: user, iat: now, exp: now + HOURS * 3600000, ...(extra.uid ? { uid: extra.uid, v: extra.v || 0 } : {}) }));
   return body + '.' + sign(body);
 }
 export function readSession(req, now = Date.now()) {

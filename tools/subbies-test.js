@@ -58,7 +58,7 @@ const run = (cwd, args, env, ms) => new Promise((res) => { const c = spawn('node
     await p.waitForSelector('#app:not([hidden])');
     const menu = await p.$$eval('.side-nav > *', (x) => x.map((e) => e.textContent.trim()));
     const gi = menu.indexOf('Sub-contractors');
-    ok('Menu', 'a "Sub-contractors" group with Subbies and Licences & insurance, between Stock and Data & Reports', gi > menu.indexOf('Stock') && /Subbies/.test(menu[gi + 1]) && /Licences & insurance/.test(menu[gi + 2]) && menu[gi + 3] === 'Data & Reports', menu.join(' | '));
+    ok('Menu', 'a "Sub-contractors" group with Subbies and Licences & insurance, between Stock and People (v86)', gi > menu.indexOf('Stock') && /Subbies/.test(menu[gi + 1]) && /Licences & insurance/.test(menu[gi + 2]) && menu[gi + 3] === 'People', menu.join(' | '));
     await p.waitForFunction(() => { const b = document.querySelector('[data-nav=subscomp] .nbadge'); return b && !b.hidden; }, null, { timeout: 10000 }).catch(() => {});
     await p.goto(`${BASE}/admin/#subs`); await p.waitForSelector('[data-stab=compliance]');
     ok('Menu', 'the Licences & insurance tab shows the same count as the menu', (await p.textContent('[data-stab=compliance] b')) === String(flagged));

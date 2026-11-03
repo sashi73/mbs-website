@@ -949,6 +949,7 @@
     dirty('undid the AI finish-by changes'); render(); toast('The plan is back the way it was before the AI changes');
   }
   function render() {
+    pplLoad();   // v86: People for the pickers (once)
     var L0 = $('#gLeft'), R0 = $('#gRight');
     var st = { y: window.scrollY, x: window.scrollX, lt: L0 ? L0.scrollTop : 0, ll: L0 ? L0.scrollLeft : 0, rl: R0 ? R0.scrollLeft : null, tab: S.tab, core: S.core };
     var a = document.activeElement, focus = null;
@@ -1340,7 +1341,7 @@
       '<div class="gsplitter" id="gSplitter" title="Drag to make the task list or the Gantt chart wider (double-click to reset)"><span></span></div>' +
       '<div class="gpane gright" id="gRight"><table class="gt gtr"><thead><tr><th class="gcol">' + scale + '</th></tr></thead><tbody>' + G + '</tbody><tfoot><tr><td class="gcol"><div class="gleg" title="Bar colours: how far each task and sub-task has got">' + [0, 25, 50, 75, 100].map(function (n) { return '<span><i class="pb-' + n + '"></i>' + (n === 100 ? '100% done' : n + '%') + '</span>'; }).join('') + '<span><i class="pb-late"></i>Late</span><span><i class="pb-mile"></i>Milestone</span></div></td></tr></tfoot></table></div></div>' +
       '<div class="res-tip" id="resTip" hidden><b>Tip:</b> you can add more than one person or trade. Press <kbd>Enter</kbd> or type a comma after each name. <b>★</b> = the lead: the first one added is the lead; click another name to make them the lead.</div>' +
-      '<datalist id="resList">' + Array.from(new Set([].concat.apply([], p.tasks.map(function (t) { return t.res || []; })).concat(['Labourer', 'Tiler', 'Plumber', 'Electrician', 'Painter', 'Carpenter', 'Waterproofer', 'Supplier', 'Customer']))).filter(Boolean).map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist></div>';
+      '<datalist id="resList">' + pplOpts() + Array.from(new Set([].concat.apply([], p.tasks.map(function (t) { return t.res || []; })).concat(['Labourer', 'Tiler', 'Plumber', 'Electrician', 'Painter', 'Carpenter', 'Waterproofer', 'Supplier', 'Customer']))).filter(function (r) { return r && !pplNames()[r.toLowerCase()]; }).map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist></div>';
     $('#planBody').innerHTML = html;
     var B = $('#planBody'); estWire(B);
     dateBoxes(B);   // before the rows are lined up with the Gantt chart
@@ -2056,6 +2057,20 @@
   var PRIO = ['High', 'Medium', 'Low'], PTS = [1, 2, 3, 5, 8, 13], PL = { High: 'H', Medium: 'M', Low: 'L' };
   function bfState() { if (!S.bf) { var v = {}; try { v = JSON.parse(localStorage.getItem('mbsBoardF') || '{}') || {}; } catch (e) {} S.bf = { owner: v.owner || '', prio: v.prio || '', sort: v.sort || 'plan', q: '' }; } return S.bf; }
   function bfSave() { try { localStorage.setItem('mbsBoardF', JSON.stringify({ owner: S.bf.owner, prio: S.bf.prio, sort: S.bf.sort })); } catch (e) {} }
+  // v86: People (employees and contractors) in the plan's pickers: resources, story owners, stakeholders, the project manager
+  function pplAll() { return M.people ? M.people.list() : []; }
+  function pplNames() { var o = {}; pplAll().forEach(function (x) { o[x.name.toLowerCase()] = x; }); return o; }
+  function pplOpts() { return pplAll().map(function (x) { return '<option value="' + esc(x.name) + '" label="' + esc((x.role || x.type) + (x.costRate ? ' · $' + x.costRate + '/hr' : '')) + '">'; }).join(''); }
+  function pplLoad() {   // once; never redraws the whole plan (that would close an open picker): the lists update in place
+    if (!M.people || S.pplLoaded || !(M.allowed && M.allowed('people', 'view', ['projects']))) return;
+    S.pplLoaded = true; if (pplAll().length) return;
+    M.people.load().then(function () {
+      if (!S.plan || !pplAll().length) return;
+      var rl = document.getElementById('resList'); if (rl) rl.insertAdjacentHTML('afterbegin', pplOpts());
+      var pm = document.getElementById('chPM'); if (pm) pm.innerHTML = pplAll().map(function (x) { return '<option value="' + esc(x.name) + '" label="' + esc(x.role || x.type) + '">'; }).join('');
+      if (S.tab === 'stake' && !document.querySelector('#rcDrawer, .kpop')) render();
+    }).catch(function () {});
+  }
   function ownerOf(t) { var sh = (S.plan.stakeholders || []).filter(function (x) { return x.id === t.owner; })[0]; return sh ? (sh.name || sh.role) : (t.owner || ''); }
   function initials(n) { return String(n || '').split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0].toUpperCase(); }).join('') || '?'; }
   function kFit() {   // each column scrolls on its own, in the space left on the screen
@@ -2129,8 +2144,9 @@
     // v67: a new name typed here goes into the Stakeholder register too (RACI R), so the register stays complete
     var set = function (n) {
       if (n && !sh.some(function (x) { return (x.name || x.role || '').toLowerCase() === n.toLowerCase(); })) {
-        (S.plan.stakeholders = S.plan.stakeholders || []).push({ id: 's' + Date.now().toString(36), name: n, role: '', raci: 'R', phone: '', email: '', sub: '' });
-        toast(n + ' added to the Stakeholder register: add their role and contact details on the 👥 Stakeholders tab');
+        var pe = pplNames()[n.toLowerCase()];
+        (S.plan.stakeholders = S.plan.stakeholders || []).push({ id: 's' + Date.now().toString(36), name: n, role: pe ? pe.role || '' : '', raci: 'R', phone: pe ? pe.phone || '' : '', email: pe ? pe.email || '' : '', sub: '', person: pe ? pe.id : '' });
+        toast(n + ' added to the Stakeholder register' + (pe ? ' (from People, with their contact details)' : ': add their role and contact details on the 👥 Stakeholders tab'));
       }
       set0(n);
     };
@@ -2138,8 +2154,11 @@
       var q = m.querySelector('.kpop-q'), L = m.querySelector('.kpop-list');
       var draw = function () {
         var v = q.value.trim(), lv = v.toLowerCase(), hits = sh.filter(function (x) { return !lv || ((x.name || '') + ' ' + (x.role || '')).toLowerCase().indexOf(lv) >= 0; });
+        var known = {}; sh.forEach(function (x) { known[(x.name || x.role || '').toLowerCase()] = 1; });
+        var pp = pplAll().filter(function (x) { return !known[x.name.toLowerCase()] && (!lv || (x.name + ' ' + (x.role || '')).toLowerCase().indexOf(lv) >= 0); }).slice(0, 8);
         L.innerHTML = hits.map(function (x) { var n = x.name || x.role; return '<button type="button" data-own="' + esc(n) + '"' + (n === cur ? ' class="on"' : '') + '><span class="kav">' + esc(initials(n)) + '</span><span><b>' + esc(n) + '</b><small>' + esc(x.role || '') + '</small></span></button>'; }).join('') +
-          (v && !sh.some(function (x) { return (x.name || x.role || '').toLowerCase() === lv; }) ? '<button type="button" data-own="' + esc(v) + '"><span class="kav none">+</span><span><b>Add “' + esc(v) + '”</b><small>also adds them to the Stakeholder register</small></span></button>' : '') +
+          (pp.length ? '<div class="kpop-sep">From People</div>' + pp.map(function (x) { return '<button type="button" data-own="' + esc(x.name) + '" data-pid="' + esc(x.id) + '"><span class="kav pp">' + esc(initials(x.name)) + '</span><span><b>' + esc(x.name) + '</b><small>' + esc(x.role || x.type) + ' · adds them as a stakeholder</small></span></button>'; }).join('') : '') +
+          (v && !sh.some(function (x) { return (x.name || x.role || '').toLowerCase() === lv; }) && !pplNames()[lv] ? '<button type="button" data-own="' + esc(v) + '"><span class="kav none">+</span><span><b>Add “' + esc(v) + '”</b><small>also adds them to the Stakeholder register</small></span></button>' : '') +
           (!hits.length && !v ? '<p class="muted" style="margin:6px;font-size:12px">No stakeholders yet: type a name.</p>' : '');
         L.querySelectorAll('[data-own]').forEach(function (b) { b.onclick = function () { set(b.getAttribute('data-own')); done(); }; });
       };
@@ -2291,7 +2310,7 @@
     var main =
       sec(1, 'Project details', '<div class="chg chg-4"><div class="chf"><label class="chf-l" for="ch_name">Plan name</label><input id="ch_name" data-p="name" value="' + esc(p.name) + '"></div>' +
         '<div class="chf"><label class="chf-l" for="ch_customer">Customer (sponsor)</label><input id="ch_customer" data-c="customer" value="' + esc(c.customer) + '" placeholder="Who approves and pays"></div>' +
-        '<div class="chf"><label class="chf-l" for="ch_manager">Project manager</label><input id="ch_manager" data-c="manager" value="' + esc(c.manager) + '" placeholder="Who runs the project"></div>' +
+        '<div class="chf"><label class="chf-l" for="ch_manager">Project manager</label><input id="ch_manager" data-c="manager" list="chPM" value="' + esc(c.manager) + '" placeholder="Who runs the project"><datalist id="chPM">' + pplAll().slice().sort(function (a, b) { var r = function (x) { return /director|manager/i.test(x.role || '') ? 0 : /supervisor|leading/i.test(x.role || '') ? 1 : 2; }; return r(a) - r(b) || (a.name > b.name ? 1 : -1); }).map(function (x) { return '<option value="' + esc(x.name) + '" label="' + esc(x.role || x.type) + '">'; }).join('') + '</datalist></div>' +
         '<div class="chf"><label class="chf-l" for="ch_budget">Approved budget</label><input id="ch_budget" data-c="budget" inputmode="decimal" value="' + esc(money0(c.budget)) + '" placeholder="$0"></div></div>' +
         '<div class="ch-facts"><span>Start <b>' + esc(dmy(R.start) || '–') + '</b></span><span>Finish <b>' + esc(dmy(R.finish) || '–') + '</b></span>' + (p.finishBy ? '<span>Finish by <b>' + esc(dmy(p.finishBy)) + '</b></span>' : '') +
         '<span>Planned cost <b>' + money(R.BAC) + '</b></span>' + (c.budget ? '<span class="' + (R.BAC > c.budget ? 'ch-over' : 'ch-ok') + '">' + (R.BAC > c.budget ? 'Over budget by <b>' + money(R.BAC - c.budget) + '</b>' : 'Contingency <b>' + money(c.budget - R.BAC) + '</b>') + '</span>' : '') +
@@ -2606,6 +2625,11 @@
 
   /* ---------- v45: 👥 Stakeholders (RACI) ---------- */
   var RACI = { R: ['Responsible', 'does the work'], A: ['Accountable', 'signs off, has the final say'], C: ['Consulted', 'asked before decisions'], I: ['Informed', 'kept up to date'] };
+  function pplPick() {   // v86: people not yet on this plan's register, employees first
+    var on = {}; (S.plan.stakeholders || []).forEach(function (x) { on[(x.name || '').toLowerCase()] = 1; });
+    var L = pplAll().filter(function (x) { return !on[x.name.toLowerCase()]; });
+    return ['Employee', 'Contractor'].map(function (t) { var g = L.filter(function (x) { return x.type === t; }); return g.length ? '<optgroup label="' + t + 's">' + g.map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.name + (x.role ? ' · ' + x.role : '')) + (x.comp && x.comp.worst === 'expired' ? ' ⚠ tickets expired' : '') + '</option>'; }).join('') + '</optgroup>' : ''; }).join('');
+  }
   function subOpts() {   // active subbies, not "Do not use", grouped by trade
     var by = {}; M.subs.list().filter(function (s) { return !s.archived && s.status !== 'Do not use'; }).forEach(function (s) { var t = M.subs.tradeName(s.trade); (by[t] = by[t] || []).push(s); });
     return Object.keys(by).sort().map(function (t) { return '<optgroup label="' + esc(t) + '">' + by[t].map(function (s) { return '<option value="' + esc(s.id) + '">' + esc(s.business) + (s.comp && s.comp.worst === 'expired' ? ' ⚠ papers expired' : '') + '</option>'; }).join('') + '</optgroup>'; }).join('');
@@ -2666,6 +2690,7 @@
     var mgr = (p.charter || {}).manager || '', haveMgr = !mgr || L.some(function (x) { return x.name.toLowerCase() === mgr.toLowerCase(); });
     $('#planBody').innerHTML = '<div class="card"><div class="card-h"><h2>Stakeholder list</h2><span class="sp"></span>' +
         (S.job && !haveCust ? '<button class="btn btn-sm" id="skCust">＋ Add the customer</button> ' : '') + (!haveMgr ? '<button class="btn btn-sm" id="skMgr">＋ Add the project manager</button> ' : '') +
+        (pplAll().length ? '<select id="skPpl" style="width:auto;max-width:240px"><option value="">🧑‍🔧 Add from People…</option>' + pplPick() + '</select> ' : '') +
         (M.subs ? '<select id="skSub" style="width:auto;max-width:240px"><option value="">👷 Add a subbie…</option>' + subOpts() + '</select> ' : '') +
         '<button class="btn btn-sm" id="raciOpen" title="Who is R, A, C or I for each activity: a grid of activities and people">🧭 RACI map</button> <button class="btn btn-sm btn-gold" id="addStake">＋ Add stakeholder</button></div>' +
       '<p class="muted" style="margin:-4px 0 10px">Everyone with a part in this job and what they do, using <b>RACI</b>: ' +
@@ -2705,6 +2730,12 @@
       add({ name: sb.business + (sb.contact ? ' (' + sb.contact + ')' : ''), role: M.subs.tradeName(sb.trade), raci: 'R', phone: sb.phone || '', email: sb.email || '', sub: sb.id });
       if (sb.comp && /expired/.test(sb.comp.worst)) toast('Heads up: ' + sb.business + ' has expired papers (' + sb.comp.problems.join(', ') + ')');
     };
+    if ($('#skPpl')) $('#skPpl').onchange = function () {
+      var pe = pplAll().filter(function (x) { return x.id === this.value; }, this)[0]; if (!pe) return;
+      add({ name: pe.name, role: pe.role || (pe.type === 'Contractor' ? 'Contractor' : 'Employee'), raci: /manager|director/i.test(pe.role || '') ? 'A' : 'R', phone: pe.phone || '', email: pe.email || '', person: pe.id });
+      if (pe.comp && pe.comp.worst === 'expired') toast('Heads up: ' + pe.name + ' has expired tickets (' + pe.comp.problems.join(', ') + ')');
+    };
+    pplLoad();
     if (M.subs && !S.subsLoaded) { S.subsLoaded = true; M.subs.load().then(function () { if (S.tab === 'stake' && $('#skSub')) render(); }).catch(function () {}); }
     if ($('#skMgr')) $('#skMgr').onclick = function () { add({ name: mgr, role: 'Project manager', raci: 'A' }); };
   }

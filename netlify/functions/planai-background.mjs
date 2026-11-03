@@ -8,6 +8,8 @@ import * as INTEL from '../lib/plan-intel.mjs';
 import * as SWMS from '../lib/swms.mjs';
 import * as COMMS from '../lib/comms.mjs';
 import * as REPORTS from '../lib/reports.mjs';
+import * as U from '../lib/users.mjs';
+import * as PPL from '../lib/people.mjs';
 
 const ok = () => new Response('', { status: 202 });
 export default async (req) => {
@@ -16,10 +18,13 @@ export default async (req) => {
     if (req.method !== 'POST' || req.headers.get('x-mbs-admin') !== '1') return new Response('', { status: 403 });
     const session = A.readSession(req);
     if (!session) return new Response('', { status: 401 });
+    const ctx = await U.context(session, '', PPL.canLogin);   // v86: Users & access
+    if (!ctx) return new Response('', { status: 401 });
     let body = {};
     try { body = await req.json(); } catch { return new Response('', { status: 400 }); }
     id = String(body.id || '').replace(/[^a-z0-9]/gi, '').slice(0, 40);
     if (id.length < 12) return new Response('', { status: 400 });
+    if (!U.allowsBg(ctx, body.mode)) return new Response('', { status: 403 });
     await kv.set('aiplan:' + id, { status: 'working', at: Date.now() });
     if (body.mode === 'swms') {   // v57: 🦺 write the SWMS from the project plan
       const r = await SWMS.generate({ core: body.core }, `Admin (${session.u})`);

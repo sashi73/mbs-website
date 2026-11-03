@@ -42,7 +42,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const stored = async () => (await kv.get('plan:' + core)).stakeholders || [];
 
     const tabs = await p.$$eval('#planTabs .tab', (x) => x.map((a) => a.textContent.trim()));
-    ok('Tab', '"👥 Stakeholders" comes right after "❗ Issues"', tabs.indexOf('👥 Stakeholders') === tabs.indexOf('❗ Issues') + 1 && tabs.indexOf('👥 Stakeholders') > 0, tabs.join(' | '));
+    ok('Tab', '"👥 Stakeholders" comes right before "🎯 Scope" (v80: identify stakeholders first)', tabs.indexOf('🎯 Scope') === tabs.indexOf('👥 Stakeholders') + 1 && tabs.indexOf('👥 Stakeholders') > 0, tabs.join(' | '));
     await p.click('#planTabs >> text=Stakeholders'); await p.waitForSelector('#addStake');
     ok('Tab', 'opens at #plan/<job>/stake with an empty list and a RACI key', /\/stake$/.test(await p.evaluate(() => location.hash)) && /No stakeholders yet/.test(await p.textContent('#planBody')) && /Accountable/.test(await p.textContent('#planBody')));
 

@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>MBS Console</title>
 <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="admin.css?v=85">
+<link rel="stylesheet" href="admin.css?v=86">
 </head>
 <body>
 
@@ -48,17 +48,23 @@
       <p class="side-h">Sub-contractors</p>
       <a href="#subs" data-nav="subs"><i>👷</i>Subbies</a>
       <a href="#subs/compliance" data-nav="subscomp"><i>🛡</i>Licences &amp; insurance</a>
+      <p class="side-h">People</p>
+      <a href="#people" data-nav="people"><i>🧑‍🔧</i>Employees &amp; contractors</a>
+      <a href="#people/compliance" data-nav="peoplecomp"><i>🎫</i>Tickets &amp; licences</a>
+      <a href="#people/workload" data-nav="peoplework"><i>📅</i>Workload</a>
       <p class="side-h">Data &amp; Reports</p>
       <a href="#sql/ask" data-nav="ask"><i>✨</i>Ask AI (plain English)</a>
       <a href="#sql" data-nav="sql"><i>🧮</i>SQL wizard &amp; reports</a>
       <a href="#data" data-nav="data"><i>🗄</i>Data explorer</a>
       <a href="#activity" data-nav="activity"><i>🕘</i>Activity log</a>
+      <p class="side-h">Admin</p>
+      <a href="#users" data-nav="users"><i>🔐</i>Users &amp; access</a>
       <p class="side-h">Coming soon</p>
       <a href="#analytics" data-nav="analytics"><i>✨</i>Analytics &amp; AI</a>
     </nav>
     <div class="side-foot">
-      <span class="who" id="who"></span>
-      <small class="ver" title="Console version">v85</small>
+      <span class="who-box"><button class="who link" id="who" type="button"></button><small class="who-role" id="whoRole"></small></span>
+      <small class="ver" title="Console version">v86</small>
       <button class="link" id="logout" type="button">Sign out</button>
     </div>
   </aside>
@@ -77,15 +83,17 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="modal" id="modal" hidden><div class="modal-card" role="dialog" aria-modal="true"><div id="modalBody"></div></div></div>
 
-<script src="admin.js?v=85"></script>
-<script src="admin-acct.js?v=85"></script>
-<script src="admin-sql.js?v=85"></script>
-<script src="admin-plan.js?v=85"></script>
-<script src="admin-inv.js?v=85"></script>
-<script src="admin-board.js?v=85"></script>
-<script src="admin-cust.js?v=85"></script>
-<script src="admin-subs.js?v=85"></script>
-<script src="admin-swms.js?v=85"></script>
-<script src="admin-report.js?v=85"></script>
+<script src="admin.js?v=86"></script>
+<script src="admin-acct.js?v=86"></script>
+<script src="admin-sql.js?v=86"></script>
+<script src="admin-plan.js?v=86"></script>
+<script src="admin-inv.js?v=86"></script>
+<script src="admin-board.js?v=86"></script>
+<script src="admin-cust.js?v=86"></script>
+<script src="admin-subs.js?v=86"></script>
+<script src="admin-swms.js?v=86"></script>
+<script src="admin-report.js?v=86"></script>
+<script src="admin-people.js?v=86"></script>
+<script src="admin-users.js?v=86"></script>
 </body>
 </html>

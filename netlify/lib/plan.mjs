@@ -181,7 +181,7 @@ function clean(p, core) {
       owner: str(x.owner, 80), raised: ymdOk(x.raised), due: ymdOk(x.due), status: ['Open', 'In progress', 'Resolved'].includes(x.status) ? x.status : 'Open', resolution: str(x.resolution, 800) })),
     // v45: stakeholder list (RACI). Contact details stay in the plan and are never sent to the AI.
     stakeholders: (Array.isArray(p.stakeholders) ? p.stakeholders : []).slice(0, 100).map((x) => ({ id: uid(x.id, 's'), name: str(x.name, 120), role: str(x.role, 120),
-      raci: ['R', 'A', 'C', 'I'].includes(x.raci) ? x.raci : 'I', phone: str(x.phone, 40), email: str(x.email, 160), sub: /^SC-\d{3,5}$/.test(x.sub || '') ? x.sub : '' })),
+      raci: ['R', 'A', 'C', 'I'].includes(x.raci) ? x.raci : 'I', phone: str(x.phone, 40), email: str(x.email, 160), sub: /^SC-\d{3,5}$/.test(x.sub || '') ? x.sub : '', person: /^P-\d{3,5}$/.test(x.person || '') ? x.person : '' })),
     // v53: contracts for this job: one line each (type, who with, the uploaded Word/PDF). Project Intelligence reads the document.
     contracts: (Array.isArray(p.contracts) ? p.contracts : []).slice(0, 60).map((c) => ({ id: uid(c.id, 'c'),
       type: ['Customer', 'Sub-contractor', 'Supply', 'Consultant'].includes(c.type) ? c.type : 'Consultant', party: str(c.party, 120), partyRef: str(c.partyRef, 30),

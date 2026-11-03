@@ -37,7 +37,7 @@
   }
   function fail(e) { toast(e.message || String(e), true); }
   function modal(html) { $('#modalBody').innerHTML = html; $('#modal').hidden = false; var f = $('#modalBody input,#modalBody button'); if (f) f.focus(); }
-  function closeModal() { $('#modal').hidden = true; $('#modalBody').innerHTML = ''; }
+  function closeModal() { if ($('#modal').getAttribute('data-locked')) return; $('#modal').hidden = true; $('#modalBody').innerHTML = ''; }
   $('#modal').addEventListener('click', function (e) { if (e.target.id === 'modal' || e.target.hasAttribute('data-close')) closeModal(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('#modal').hidden) closeModal(); });
   function confirmBox(title, text, okLabel, danger) {
@@ -50,7 +50,32 @@
 
   /* ---------------- login ---------------- */
   function showLogin() { $('#app').hidden = true; $('#login').hidden = false; setTimeout(function () { var u = $('#loginForm [name=username]'); if (u) u.focus(); }, 50); }
-  function showApp(user) { $('#login').hidden = true; $('#app').hidden = false; $('#who').textContent = user; route(); }
+  // v86: Users & access: what the signed-in person can use. The menu shows only the modules they have; a page they can't use says so.
+  var NAVMOD = { dashboard: 'crm', jobs: 'crm', customers: 'crm', new: 'crm', reminders: 'crm', projects: 'projects', quotes: 'accounts', invoices: 'accounts', expenses: 'accounts', accounts: 'accounts',
+    inventory: 'stock', suppliers: 'stock', subs: 'subbies', subscomp: 'subbies', people: 'people', peoplecomp: 'people', peoplework: 'people', ask: 'data', sql: 'data', data: 'data', activity: 'data', analytics: 'data', users: 'users' };
+  var VIEWMOD = { dashboard: 'crm', jobs: 'crm', job: 'crm', new: 'crm', reminders: 'crm', reports: 'crm', customers: 'crm', customer: 'crm', projects: 'projects', plan: 'projects', swms: 'projects',
+    quotes: 'accounts', invoices: 'accounts', doc: 'accounts', expenses: 'accounts', accounts: 'accounts', inventory: 'stock', subs: 'subbies', people: 'people', sql: 'data', data: 'data', activity: 'data', analytics: 'data', users: 'users' };
+  var LVN = { none: 0, view: 1, edit: 2 };
+  function allowed(mod, lv, alt) { var me = window.MBS && window.MBS.me; if (!me || me.owner) return true; var m = me.mods || {}; if (LVN[m[mod]] >= LVN[lv || 'view']) return true; return (alt || []).some(function (k) { return LVN[m[k]] >= 1; }); }
+  function applyAccess(me) {
+    window.MBS.me = me;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (a) { var mod = NAVMOD[a.getAttribute('data-nav')]; a.hidden = !!mod && !allowed(mod, 'view'); });
+    Array.prototype.forEach.call(document.querySelectorAll('.side-nav .side-h'), function (h) { var n = h.nextElementSibling, any = false; while (n && !n.classList.contains('side-h')) { if (n.matches('[data-nav]') && !n.hidden) any = true; n = n.nextElementSibling; } h.hidden = !any; });
+    $('#who').textContent = me.name || me.user; $('#who').title = (me.owner ? 'Owner' : me.role) + ' · click to change your password';
+    var r = $('#whoRole'); if (r) r.textContent = me.owner ? 'Owner' : me.role;
+    document.body.classList.toggle('is-owner', !!me.owner);
+  }
+  function firstPage() { var order = [['dashboard', 'crm'], ['projects', 'projects'], ['quotes', 'accounts'], ['inventory', 'stock'], ['subs', 'subbies'], ['people', 'people'], ['sql/ask', 'data'], ['users', 'users']];
+    for (var i = 0; i < order.length; i++) if (allowed(order[i][1], 'view')) return order[i][0]; return 'dashboard'; }
+  function showApp(user) {
+    $('#login').hidden = true;
+    api('me').then(function (me) {
+      applyAccess(me); $('#app').hidden = false;
+      if (me.mustChange && window.MBS.users) { view.innerHTML = '<div class="empty">Set your own password to carry on.</div>'; window.MBS.users.changePassword(true); return; }
+      if (!allowed(VIEWMOD[(location.hash.slice(1) || 'dashboard').split('/')[0]] || 'crm', 'view')) { var fp = firstPage(); if (location.hash.slice(1) !== fp) { location.hash = '#' + fp; return; } }
+      route();
+    }).catch(function () { showLogin(); });
+  }
   $('#loginForm').addEventListener('submit', function (e) {
     e.preventDefault();
     var f = e.target, msg = $('#loginMsg'), btn = f.querySelector('button');
@@ -61,6 +86,7 @@
       .then(function () { btn.disabled = false; btn.textContent = 'Sign in'; });
   });
   $('#logout').addEventListener('click', function () { api('logout').then(function () { location.hash = ''; showLogin(); }); });
+  $('#who').addEventListener('click', function () { if (window.MBS.users) window.MBS.users.changePassword(false); });
   var closeMenu = function () { $('#side').classList.remove('open'); };
   $('#menuBtn').addEventListener('click', function () { $('#side').classList.toggle('open'); });
   $('#sideClose').addEventListener('click', closeMenu);
@@ -115,6 +141,9 @@
     if ($('#app').hidden) return;
     var parts = (location.hash.slice(1) || 'dashboard').split('/').map(decodeURIComponent);
     var name = VIEWS[parts[0]] ? parts[0] : 'dashboard';
+    if (VIEWMOD[name] && !allowed(VIEWMOD[name], 'view', name === 'job' ? ['projects'] : null)) {   // v86: no access to this module
+      $('#title').textContent = TITLES[name]; view.innerHTML = '<div class="card noaccess"><h2>🔒 No access</h2><p class="muted">Your login (' + esc((window.MBS.me || {}).role || '') + ') doesn\'t include this part of the console. Ask an administrator if you need it.</p><p><a class="btn" href="#' + firstPage() + '">Go to my start page</a></p></div>'; return;
+    }
     $('#title').textContent = TITLES[name];
     document.title = TITLES[name] + ' · MBS Console';
     var navOn = name === 'sql' && parts[1] === 'ask' ? 'ask' : name === 'inventory' && parts[1] === 'suppliers' ? 'suppliers' : (NAVKEY[name] || name);
@@ -403,6 +432,7 @@
     api: api, esc: esc, money: money, gst: gst, date: date, day: day, chip: chip, toast: toast, fail: fail, modal: modal, closeModal: closeModal,
     confirmBox: confirmBox, route: route, $: $, view: function () { return view; }, API: API,
     addView: function (name, title, fn, navKey) { VIEWS[name] = fn; TITLES[name] = title; if (navKey) NAVKEY[name] = navKey; },
+    allowed: allowed, me: null,
     onJob: function (fn) { jobExtras.push(fn); }
   };
 
