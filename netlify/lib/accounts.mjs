@@ -25,7 +25,8 @@ export function prettyDate(ymd) { if (!ymd) return ''; const [y, m, d] = ymd.spl
 // items: [{ desc, qty, price, gst }]  price = unit price; pricesInc = the prices already include GST
 export function cleanItems(items) {
   return (Array.isArray(items) ? items : []).slice(0, 60).map((i) => ({
-    desc: clean(i.desc, 400), qty: r2(i.qty === '' || i.qty == null ? 1 : i.qty) || 0, price: r2(i.price), gst: i.gst !== false
+    desc: clean(i.desc, 400), qty: r2(i.qty === '' || i.qty == null ? 1 : i.qty) || 0, price: r2(i.price), gst: i.gst !== false,
+    ...(/^[\w-]{1,24}$/.test(i.tid || '') ? { tid: i.tid } : {}), ...(i.mats ? { mats: true } : {})   // v87: the plan task a quote line came from
   })).filter((i) => i.desc || i.price);
 }
 export function calc(items, pricesInc = false) {

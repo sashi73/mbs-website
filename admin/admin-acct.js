@@ -91,7 +91,7 @@
   function editor(d, meta) {
     meta = meta || {};
     var isQ = d.type === 'quote', locked = d.status === 'void' || d.status === 'paid' || (!isQ && d.paid > 0) || (isQ && !!d.invoiceId);
-    var items = (d.items && d.items.length ? d.items : [{ desc: '', qty: 1, price: '', gst: true }]).map(function (i) { return { desc: i.desc, qty: i.qty, price: i.price, gst: i.gst !== false }; });
+    var items = (d.items && d.items.length ? d.items : [{ desc: '', qty: 1, price: '', gst: true }]).map(function (i) { return { desc: i.desc, qty: i.qty, price: i.price, gst: i.gst !== false, tid: i.tid, mats: i.mats }; });
     var dirty = false;
     var dis = locked ? ' disabled' : '';
     var title = d.id ? (isQ ? 'Quote ' : 'Invoice ') + d.id : 'New ' + (isQ ? 'quote' : 'invoice');
@@ -165,7 +165,7 @@
     function fields() {
       var f = { customer: { name: $('#cName').value, email: $('#cEmail').value, phone: $('#cPhone').value, address: $('#cAddr').value }, title: $('#dTitle').value,
         issued: $('#dIssued').value, notes: $('#dNotes').value, pricesInc: $('#pInc').checked,
-        items: items.map(function (i) { return { desc: i.desc, qty: num(i.qty), price: num(i.price), gst: i.gst }; }).filter(function (i) { return i.desc || i.price; }) };
+        items: items.map(function (i) { return { desc: i.desc, qty: num(i.qty), price: num(i.price), gst: i.gst, tid: i.tid, mats: i.mats }; }).filter(function (i) { return i.desc || i.price; }) };
       f[isQ ? 'validUntil' : 'due'] = $('#dDue').value;
       return f;
     }
@@ -175,7 +175,9 @@
       var p = d.id ? api('docUpdate', { id: d.id, fields: fields() }) : api('docCreate', { type: d.type, fields: fields() });
       return p.then(function (r) {
         dirty = false;
-        if (!quiet) toast('Saved ' + r.doc.id);
+        var ps = r.planSync; if (ps && ps.n) toast('Saved ' + r.doc.id + '. Project plan updated too: ' + ps.n + ' task' + (ps.n === 1 ? '' : 's') + ' (' + ps.changes.slice(0, 2).join('; ') + (ps.n > 2 ? '; …' : '') + ')');
+        else if (ps && ps.error) toast(ps.error, true);
+        else if (!quiet) toast('Saved ' + r.doc.id);
         if (!d.id) { history.replaceState(null, '', '#doc/' + r.doc.id); }
         d = r.doc; return d;
       });

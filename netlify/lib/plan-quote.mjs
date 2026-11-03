@@ -58,11 +58,37 @@ export function linesFromPlan(plan, { mode = 'tasks', margin = 0 } = {}) {
     if ((t.mats || []).length) {   // v56: a task with stock materials is one line at its total (labour + materials)
       const own = r2(t.qty) * r2(t.rate) > 0 ? `${r2(t.qty)} ${t.unit || ''} labour, `.replace(' ,', ',') : '';
       const mat = t.mats.map((m) => `${r2(m.qty)} x ${(plan.matNames && plan.matNames[m.item]) || 'stock item ' + m.item}`).join(', ');
-      return { desc: (t.name + ' (' + own + 'materials: ' + mat + ')' + (subs.length ? ': ' + subs.join(', ') : '')).slice(0, 400), qty: 1, price: r2(PLAN.taskCost(t) * k), gst: true };
+      return { desc: (t.name + ' (' + own + 'materials: ' + mat + ')' + (subs.length ? ': ' + subs.join(', ') : '')).slice(0, 400), qty: 1, price: r2(PLAN.taskCost(t) * k), gst: true, tid: t.id, mats: true };
     }
     const unit = t.unit && !/^lot$/i.test(t.unit) ? ` (${r2(t.qty)} ${t.unit})` : '';
-    return { desc: (t.name + unit + (subs.length ? ': ' + subs.join(', ') : '')).slice(0, 400), qty: r2(t.qty), price: r2(r2(t.rate) * k), gst: true };
+    return { desc: (t.name + unit + (subs.length ? ': ' + subs.join(', ') : '')).slice(0, 400), qty: r2(t.qty), price: r2(r2(t.rate) * k), gst: true, tid: t.id };
   });
+}
+// v87: the quote is the source of truth for what was agreed: when a quote made from the plan is saved, each line's quantity and
+// unit price go back to its task (the margin taken off, so the plan holds the cost). Lines know their task (tid); older quotes
+// are matched by the task name at the start of the line. Lines for tasks with stock materials (one total line) and "one total
+// line" quotes are left alone: they can't be split back into hours and rates.
+export async function syncBack(doc, by) {
+  const pi = doc && doc.plan;
+  if (!doc || doc.type !== 'quote' || !pi || !pi.core || pi.mode === 'lump' || ['void', 'declined'].includes(doc.status) || doc.invoiceId) return null;
+  const plan = await PLAN.get(pi.core); if (!plan) return null;
+  const k = 1 + Math.max(0, Math.min(200, Number(pi.margin) || 0)) / 100, used = new Set(), changes = [];
+  for (const it of doc.items || []) {
+    let t = it.tid ? plan.tasks.find((x) => x.id === it.tid) : null;
+    if (!t && !it.tid) t = plan.tasks.filter((x) => x.name && !used.has(x.id) && String(it.desc || '').startsWith(x.name)).sort((a, b) => b.name.length - a.name.length)[0];
+    if (!t || used.has(t.id)) continue; used.add(t.id);
+    if ((t.mats || []).length || it.mats) continue;
+    const ex = doc.pricesInc && it.gst !== false ? it.price / 1.1 : it.price, rate = r2(ex / k), qty = r2(it.qty);
+    if (qty === r2(t.qty) && Math.abs(rate - r2(t.rate)) < 0.01) continue;
+    changes.push(`${t.name}: ${r2(t.qty)} ${t.unit || ''} x $${r2(t.rate)} to ${qty} ${t.unit || ''} x $${rate}`.replace(/\s+x/g, ' x'));
+    t.qty = qty; t.rate = rate; t.est = false;
+    t.notes = ((t.notes ? t.notes + '\n' : '') + `Qty and unit price from quote ${doc.id}${k > 1 ? ' (less the ' + pi.margin + '% margin)' : ''}`).slice(0, 1000);
+  }
+  if (!changes.length) return { n: 0 };
+  const r = await PLAN.save(pi.core, plan, plan.rev, by);
+  if (!r.plan) return { n: 0, error: 'The plan was being changed at the same moment: save the quote again.' };
+  await ACC.setPlan(doc.id, { ...pi, rev: r.plan.rev, fp: fingerprint(r.plan) }, by, `Project plan updated from this quote: ${changes.length} task${changes.length === 1 ? '' : 's'}`);
+  return { n: changes.length, changes, core: pi.core };
 }
 function address(job, cust) { return (cust && cust.address) || job.address || job.suburb || ''; }
 async function linked(core) {

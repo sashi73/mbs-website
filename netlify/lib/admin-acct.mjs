@@ -4,7 +4,7 @@ import * as J from './jobs.mjs';
 import * as ACC from './accounts.mjs';
 import * as kv from './kv.mjs';
 import { buildPdf, business } from './pdf.mjs';
-import { packPlan } from './plan-quote.mjs';
+import { packPlan, syncBack } from './plan-quote.mjs';
 import { audit, deleteKeys, LIVE } from './admin-lib.mjs';
 
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
@@ -100,7 +100,12 @@ export async function acctPost(action, body, { who, by }) {
     }
     case 'docUpdate': {
       const r = await ACC.updateDoc(String(body.id || ''), body.fields || {}, by);
-      return res(r) || out(200, { doc: withStatus(r.doc) });
+      if (r.error) return res(r);
+      let planSync = null;   // v87: a quote made from the plan sends its changed quantities and prices back to the plan's tasks
+      try { planSync = await syncBack(r.doc, by); } catch (e) { console.error('Quote to plan sync failed:', e); }
+      if (planSync && planSync.n) await audit(who, `${r.doc.id}: project plan ${planSync.core} updated from the quote (${planSync.changes.join('; ').slice(0, 300)})`);
+      const doc2 = planSync && planSync.n ? await ACC.get(r.doc.id) : r.doc;
+      return out(200, { doc: withStatus(doc2), planSync });
     }
     case 'docStatus': {
       const r = await ACC.setStatus(String(body.id || ''), String(body.status || ''), by, String(body.note || '').slice(0, 200));
