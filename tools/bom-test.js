@@ -52,6 +52,7 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     await INV.saveSupplier({ name: 'Tile Depot', phone: '02 9000 0000', email: 'orders@tiledepot.example' }, 'test');
     const tile = (await INV.saveItem({ name: 'Porcelain tile 600x600', unit: 'm2', onHand: 10, category: 'Tiles' }, 'test')).item;
     const glue = (await INV.saveItem({ name: 'Tile adhesive 20kg', unit: 'bag', onHand: 50, category: 'Tiles' }, 'test')).item;
+    const meter = (await INV.saveItem({ name: 'Moisture reading meter', unit: 'each', onHand: 1, category: 'Tools' }, 'test')).item;
     br = await chromium.launch();
     const ctx = await br.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
     const p = await ctx.newPage(); p.setDefaultTimeout(20000);
@@ -100,7 +101,10 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     pl = await P.get(core);
     ok('Add', '"＋ Line" on a task adds a new line to that task, ready to type', pl.bom.lines.some((l) => l.name === 'New material' && l.task === gt) && await p.evaluate(() => document.activeElement && document.activeElement.value === 'New material'));
     ok('No $0', 'a line with no price is highlighted and warned about (it would add $0 to the quote)', !!(await p.$('input.bom-zero')) && /1 line with no price/.test(await p.textContent('.bom-zwarn')));
-    await line('New material').locator('[data-bdel]').click(); await sleep(1500);
+    await line('New material').locator('[data-blink]').click(); await p.waitForSelector(`[data-pk="${meter.id}"]`); await p.click(`[data-pk="${meter.id}"]`); await sleep(1500);
+    pl = await P.get(core);
+    ok('Add', 'picking a stock item with 📦 names the new line after it ("Moisture reading meter", not "New material")', pl.bom.lines.some((l) => l.item === meter.id && l.name === 'Moisture reading meter' && l.task === gt) && !pl.bom.lines.some((l) => l.name === 'New material') && (await line('Moisture reading meter').count()) === 1);
+    await line('Moisture reading meter').locator('[data-bdel]').click(); await sleep(1500);
     ok('No $0', 'gone once the line is deleted (or priced)', !(await p.$('.bom-zwarn')));
 
     // 3. ＋ Add to Inventory, ordering tasks, re-order

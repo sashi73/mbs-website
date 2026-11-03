@@ -3297,7 +3297,10 @@
     });
     B.querySelectorAll('[data-bdel]').forEach(function (el) { el.onclick = function () { var l = line(el); b.lines.splice(b.lines.indexOf(l), 1); bomLog('Line deleted: ' + l.qty + ' ' + l.unit + ' ' + l.name + ' by ' + bomMe()); bomSave('BOM line deleted'); }; });
     B.querySelectorAll('[data-bmatch]').forEach(function (el) { el.onclick = function () { var l = line(el), i = invItem(el.getAttribute('data-bmatch')); l.item = i.id; if (!l.price && i.price) l.price = i.price; l.unit = i.unit || l.unit; bomSave('BOM line linked to stock'); }; });
-    B.querySelectorAll('[data-blink]').forEach(function (el) { el.onclick = function () { var l = line(el); M.inv.pick(l.item, function (i) { M.closeModal(); l.item = i ? i.id : ''; if (i) { S.inv = S.inv || {}; S.inv[i.id] = i; l.unit = i.unit || l.unit; if (!l.price && i.price) l.price = i.price; } bomSave('BOM line stock item'); }); }; });
+    B.querySelectorAll('[data-blink]').forEach(function (el) { el.onclick = function () { var l = line(el); M.inv.pick(l.item, function (i) { M.closeModal(); var was = invItem(l.item);
+      // v95: the line takes the stock item's name (unless someone typed their own name for it)
+      if (i && (!String(l.name || '').trim() || /^new material$/i.test(String(l.name).trim()) || (was && l.name === was.name) || !l.item)) l.name = i.name;
+      l.item = i ? i.id : ''; if (i) { S.inv = S.inv || {}; S.inv[i.id] = i; l.unit = i.unit || l.unit; if (!l.price && i.price) l.price = i.price; l.checked = false; l.checkedBy = ''; } bomSave('BOM line stock item'); }); }; });
     B.querySelectorAll('[data-binv]').forEach(function (el) { el.onclick = function () { el.disabled = true; bomToInv([line(el)]); }; });
     var left = function (id) { return Math.max(0, q3c(st[id].short - (((b.orders || {})[id] || {}).qty || 0))); };
     B.querySelectorAll('[data-bro]').forEach(function (el) { el.onclick = function () { var id = el.getAttribute('data-bro'); M.inv.reorder(id, left(id), function (o) { bomOrdered([id], o, st); }); }; });   // v92: marked here once ordered
