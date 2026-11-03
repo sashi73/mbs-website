@@ -30,7 +30,7 @@ const VIA = ['phone', 'email', 'online', 'in person', 'other'];
 function cleanOrders(o) {
   const res = {};
   for (const [k, v] of Object.entries(o && typeof o === 'object' ? o : {}).slice(0, 400)) {
-    if (!/^I-\d{3,6}$/.test(k) || !v || typeof v !== 'object') continue;
+    if (!/^(I-\d{3,6}|[\w-]{1,20})$/.test(k) || !v || typeof v !== 'object') continue;   // v96: a stock item, or a BOM line not in Inventory
     res[k] = { qty: Math.max(0, Math.min(1e7, q3(v.qty))), via: VIA.includes(v.via) ? v.via : 'other', supplier: str(v.supplier, 120), ref: str(v.ref, 60), expected: /^\d{4}-\d{2}-\d{2}$/.test(v.expected || '') ? v.expected : '', at: Number(v.at) || Date.now(), by: str(v.by, 80) };
   }
   return res;

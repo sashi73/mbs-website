@@ -3196,6 +3196,9 @@
       var free = Math.max(0, q3c((Number(i.available) || 0) + (base[id] || 0)));   // other jobs' shortfall is theirs, not this job's
       r[id] = { need: need[id], onHand: q3c(i.onHand), free: free, short: Math.max(0, q3c(need[id] - free)), onOrder: Number(i.onOrder && i.onOrder.qty != null ? i.onOrder.qty : i.onOrder) || 0, unit: i.unit, name: i.name, lead: lead[id] };
     });
+    // v96: materials that are not in Inventory have none in stock: the whole quantity is to be ordered (keyed by the line)
+    b.lines.forEach(function (l) { if (l.item || done[l.task] || !(Number(l.qty) > 0)) return;
+      r[l.id] = { need: q3c(l.qty), onHand: 0, free: 0, short: q3c(l.qty), onOrder: 0, unit: l.unit || 'each', name: l.name, lead: l.lead || 0, nostock: true, task: l.task }; });
     return r;
   }
   function bomTotals(b) {
@@ -3259,9 +3262,9 @@
       '<p class="muted" style="margin:-4px 0 8px;font-size:12.5px"><b>Re-order</b> opens Inventory\'s re-order (call or email the supplier); it is marked here when you mark it ordered by phone or send the email. Ordered some other way, or no supplier saved? Press <b>✓ Mark ordered</b> and say how.</p>' +
       '<div class="table-wrap"><table class="mini bom-otbl"><thead><tr>' + (toOrder.length > 1 && !lock ? '<th class="c"><input type="checkbox" id="bomOAll" title="Tick all still to order"></th>' : '') + '<th>Item</th><th class="num">Needed</th><th class="num">Free</th><th class="num">Short</th><th class="num">Lead</th><th>Ordered</th></tr></thead><tbody>' +
       shorts.slice().sort(function (a, c) { return (still(c) > 0) - (still(a) > 0); }).map(function (id) { var s = st[id], o = ords[id], left = still(id);
-        return '<tr class="' + (left ? '' : 'bom-done') + '">' + (toOrder.length > 1 && !lock ? '<td class="c">' + (left ? '<input type="checkbox" data-bosel="' + esc(id) + '">' : '') + '</td>' : '') + '<td><b>' + esc(s.name) + '</b></td><td class="num">' + s.need + ' ' + esc(s.unit) + '</td><td class="num">' + s.free + '</td><td class="num' + (left ? ' bad' : '') + '"><b>' + s.short + ' ' + esc(s.unit) + '</b></td><td class="num">' + (s.lead ? s.lead + ' d' : '–') + '</td><td class="bom-ocell">' +
+        return '<tr class="' + (left ? '' : 'bom-done') + '">' + (toOrder.length > 1 && !lock ? '<td class="c">' + (left ? '<input type="checkbox" data-bosel="' + esc(id) + '">' : '') + '</td>' : '') + '<td><b>' + esc(s.name) + '</b>' + (s.nostock ? ' <small class="bom-ns">not in Inventory</small>' : '') + '</td><td class="num">' + s.need + ' ' + esc(s.unit) + '</td><td class="num">' + s.free + '</td><td class="num' + (left ? ' bad' : '') + '"><b>' + s.short + ' ' + esc(s.unit) + '</b></td><td class="num">' + (s.lead ? s.lead + ' d' : '–') + '</td><td class="bom-ocell">' +
           (o ? '<span class="bom-ord" title="' + esc('Recorded by ' + (o.by || '') + (o.ref ? ', order ' + o.ref : '')) + '">' + (VIA_IC[o.via] || '✓') + ' ' + esc(o.qty + ' ' + s.unit) + ' ordered by ' + esc(o.via) + ' · ' + esc(dmy(new Date(o.at).toISOString().slice(0, 10))) + (o.supplier ? ' · ' + esc(o.supplier) : '') + (o.expected ? ' · due ' + esc(dmy(o.expected)) : '') + '</span>' + (lock ? '' : ' <button class="btn btn-sm bom-oundo" data-bundo="' + esc(id) + '" type="button" title="Not ordered after all: undo">↶</button>') : '') +
-          (left && !lock ? (o ? '<br><small class="bad">' + left + ' ' + esc(s.unit) + ' still to order</small> ' : '') + '<button class="btn btn-sm btn-gold" data-bro="' + esc(id) + '" type="button">Re-order ' + left + '</button> <button class="btn btn-sm" data-bmark="' + esc(id) + '" type="button">✓ Mark ordered</button>' : left ? '<span class="bad">' + left + ' ' + esc(s.unit) + ' to order</span>' : '') + '</td></tr>'; }).join('') +
+          (left && !lock ? (o ? '<br><small class="bad">' + left + ' ' + esc(s.unit) + ' still to order</small> ' : '') + (s.nostock ? '<button class="btn btn-sm" data-binvl="' + esc(id) + '" type="button" title="Add it to Inventory, so it can be re-ordered from a supplier and tracked in stock">＋ Add to Inventory</button>' : '<button class="btn btn-sm btn-gold" data-bro="' + esc(id) + '" type="button">Re-order ' + left + '</button>') + ' <button class="btn btn-sm" data-bmark="' + esc(id) + '" type="button">✓ Mark ordered</button>' : left ? '<span class="bad">' + left + ' ' + esc(s.unit) + ' to order</span>' : '') + '</td></tr>'; }).join('') +
       '</tbody></table></div></div>' : '';
     B.innerHTML = '<div class="card"><div class="card-h"><h2>🧱 Bill of Materials</h2><span class="bom-pill ' + (lock ? 'ok' : '') + '">' + (lock ? '✓ Signed off' : 'Draft') + '</span><span class="sp"></span>' +
         (lock ? '' : '<button class="btn btn-sm" id="bomAi" type="button">✨ Draft with AI</button><button class="btn btn-sm" id="bomAdd" type="button">＋ Line</button><button class="btn btn-sm" id="bomStock" type="button" title="Pick materials from Inventory">📦 From stock</button>') +
@@ -3304,6 +3307,7 @@
     B.querySelectorAll('[data-binv]').forEach(function (el) { el.onclick = function () { el.disabled = true; bomToInv([line(el)]); }; });
     var left = function (id) { return Math.max(0, q3c(st[id].short - (((b.orders || {})[id] || {}).qty || 0))); };
     B.querySelectorAll('[data-bro]').forEach(function (el) { el.onclick = function () { var id = el.getAttribute('data-bro'); M.inv.reorder(id, left(id), function (o) { bomOrdered([id], o, st); }); }; });   // v92: marked here once ordered
+    B.querySelectorAll('[data-binvl]').forEach(function (el) { el.onclick = function () { var l = b.lines.filter(function (x) { return x.id === el.getAttribute('data-binvl'); })[0]; if (l) { el.disabled = true; bomToInv([l]); } }; });   // v96
     B.querySelectorAll('[data-bmark]').forEach(function (el) { el.onclick = function () { bomMarkDialog([el.getAttribute('data-bmark')], st); }; });
     B.querySelectorAll('[data-bundo]').forEach(function (el) { el.onclick = function () { bomUnorder(el.getAttribute('data-bundo'), st); }; });
     var osel = function () { return Array.prototype.map.call(B.querySelectorAll('[data-bosel]:checked'), function (x) { return x.getAttribute('data-bosel'); }); }, ms = $('#bomMarkSel');
@@ -3348,7 +3352,7 @@
       e.preventDefault(); var f = this, via = f.querySelector('[name=via]:checked').value, o = { via: via, supplier: f.sup.value.trim(), ref: f.ref.value.trim(), expected: f.exp.value, qty: one ? Math.max(0, parseFloat(f.qty.value) || 0) : 0 };
       var bt = f.querySelector('button[type=submit]'); bt.disabled = true;
       var chain = Promise.resolve();
-      ids.forEach(function (id) { var q = one ? o.qty : left(id); chain = chain.then(function () { return api('invOrdered', { id: id, qty: q, expected: o.expected, via: via }); }); });
+      ids.forEach(function (id) { var q = one ? o.qty : left(id); chain = chain.then(function () { if (st[id].nostock) return null; return api('invOrdered', { id: id, qty: q, expected: o.expected, via: via }); }); });
       chain.then(function () { M.closeModal(); bomOrdered(ids, o, st); toast((one ? one.name : pl(ids.length, 'item')) + ' marked as ordered (' + via + ')'); }).catch(function (er) { bt.disabled = false; fail(er); });
     };
   }
@@ -3356,7 +3360,7 @@
     var b = bomOf(), o = (b.orders || {})[id], s = st[id]; if (!o) return;
     M.confirmBox('Undo the order for ' + s.name + '?', 'It goes back to “still to order” on the BOM. ' + (o.qty >= (s.onOrder || 0) ? 'Inventory stops showing it as on order.' : 'Inventory keeps the other jobs\' orders for it.'), 'Undo the order').then(function (y) {
       if (!y) return;
-      (o.qty >= (s.onOrder || 0) ? api('invOrdered', { id: id, qty: 0 }) : Promise.resolve()).then(function () {
+      (!s.nostock && o.qty >= (s.onOrder || 0) ? api('invOrdered', { id: id, qty: 0 }) : Promise.resolve()).then(function () {
         delete b.orders[id]; bomLog('Order undone: ' + s.name + ' (' + bomMe() + ')'); bomSave('BOM: order undone'); return bomLoadStock();
       }).then(function () { if (S.tab === 'bom') bomTab(); }).catch(fail);
     });
@@ -3398,7 +3402,7 @@
   }
   function bomToInv(lines) {   // ＋ Add to Inventory: a stock item for each unmatched line (no stock on hand yet), then link it
     var n = 0, chain = Promise.resolve();
-    lines.forEach(function (l) { chain = chain.then(function () { return M.inv.save({ name: l.name, unit: l.unit, category: 'From BOM', onHand: 0, notes: 'Added from the BOM of ' + (S.job.ref || S.plan.name) }).then(function (r) { l.item = r.item.id; S.inv = S.inv || {}; S.inv[r.item.id] = r.item; n++; }); }); });
+    lines.forEach(function (l) { chain = chain.then(function () { return M.inv.save({ name: l.name, unit: l.unit, category: 'From BOM', onHand: 0, notes: 'Added from the BOM of ' + (S.job.ref || S.plan.name) }).then(function (r) { var b0 = bomOf(); if (b0 && b0.orders && b0.orders[l.id]) { b0.orders[r.item.id] = b0.orders[l.id]; delete b0.orders[l.id]; } l.item = r.item.id; S.inv = S.inv || {}; S.inv[r.item.id] = r.item; n++; }); }); });
     chain.then(function () { bomLog(pl(n, 'material') + ' added to Inventory by ' + bomMe()); bomSync(); return saveNow('BOM materials added to Inventory'); }).then(bomLoadStock).then(function () { bomTab(); toast(pl(n, 'material') + ' added to Inventory (no stock yet: re-order the shortfall)'); })
       .catch(function (e) { fail(e); bomTab(); });
   }
@@ -3407,7 +3411,7 @@
     Object.keys(st).forEach(function (id) {
       var s = st[id]; if (!(s.short > 0 && s.lead > 0)) return;
       var name = 'Order: ' + s.name; if (p.tasks.some(function (t) { return t.name === name; })) return;
-      var users = b.lines.filter(function (l) { return l.item === id && l.task; }).map(function (l) { return l.task; }), first = p.tasks.filter(function (t) { return users.indexOf(t.id) >= 0; })[0];
+      var users = s.nostock ? (s.task ? [s.task] : []) : b.lines.filter(function (l) { return l.item === id && l.task; }).map(function (l) { return l.task; }), first = p.tasks.filter(function (t) { return users.indexOf(t.id) >= 0; })[0];
       var t = { id: 't' + Date.now().toString(36) + made, phase: first ? first.phase : (p.phases[0] || {}).id, name: name, dur: s.lead, res: [], lead: '', resource: '', qty: 0, unit: '', rate: 0, actual: 0, pct: 0, status: 'todo', pred: [], snet: '', notes: 'Order ' + s.short + ' ' + s.unit + ' (lead time ' + s.lead + ' working days). From the BOM.' };
       p.tasks.splice(first ? p.tasks.indexOf(first) : p.tasks.length, 0, t);
       p.tasks.forEach(function (x) { if (users.indexOf(x.id) >= 0 && x.pred.indexOf(t.id) < 0) x.pred.push(t.id); });

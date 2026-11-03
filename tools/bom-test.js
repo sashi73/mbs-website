@@ -86,7 +86,9 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     ok('AI', 'the lines are added marked ≈ est, matched to our stock item where it is the same thing (no em dashes)', pl.bom.lines.length === 4 && pl.bom.lines.filter((l) => l.est && l.source === 'ai').length === 3 && tl && tl.name === 'Porcelain tile 600x600' && bench.lead === 15 && !/—/.test(bench.note), JSON.stringify(pl.bom.lines));
     ok('Plan', 'stock lines go onto their tasks automatically (set aside and in the task cost)', pl.tasks.find((t) => t.id === tl.task).mats.some((m) => m.item === tile.id && m.qty === 25 && m.price === 60) && pl.tasks[1].mats.length === 1);
     await p.waitForSelector('.bom-short'); await sleep(500);
-    ok('Stock', 'the shortfall: 25 m2 of tile needed, 10 in stock, short 15 (not counting this job twice)', /Short 15 m2/.test(await line('Porcelain tile 600x600').textContent()) && /Shortfall: 1 item/.test(await p.textContent('.bom-short')), await p.textContent('.bom-short'));
+    ok('Stock', 'the shortfall: 25 m2 of tile needed, 10 in stock, short 15 (not counting this job twice)', /Short 15 m2/.test(await line('Porcelain tile 600x600').textContent()) && /Shortfall: 3 items/.test(await p.textContent('.bom-short')), await p.textContent('.bom-short'));
+    const sht = await p.textContent('.bom-short');
+    ok('Stock', 'materials not in Inventory are in the shortfall too (none in stock: all to order), marked "not in Inventory", with ＋ Add to Inventory and ✓ Mark ordered', /Waterproofing membrane\s*not in Inventory\s*2 each\s*0\s*2 each/.test(sht) && /Stone benchtop\s*not in Inventory/.test(sht) && (await p.$$('[data-binvl]')).length === 2, sht);
     ok('Stock', 'the adhesive is covered by stock', /✓ 50 bag free/.test(await line('Tile adhesive 20kg').textContent()), await line('Tile adhesive 20kg').textContent());
     ok('Warning', 'a warning to check the ≈ est lines', /3 lines marked ≈ est/.test(await p.textContent('#planBody .est-warn')));
     // v94: add a line anywhere, pick from stock, no $0 lines
@@ -123,16 +125,20 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     pl = await P.get(core);
     const tileIdx = (await kv.get('inv-index')).items[tile.id];
     ok('Ordered', '"I ordered by phone" in the re-order marks it on the BOM (15 m2, by phone) and in Inventory (on order)', pl.bom.orders && pl.bom.orders[tile.id] && pl.bom.orders[tile.id].via === 'phone' && pl.bom.orders[tile.id].qty === 15 && tileIdx.onOrder === 15 && /15 m2 ordered by phone/.test(await p.textContent('.bom-short')), JSON.stringify(pl.bom.orders));
-    ok('Ordered', 'the shortfall says what is ordered and what is still to order', /✓ 1 ordered/.test(await p.textContent('.bom-short')) && /1 still to order/.test(await p.textContent('.bom-short')) && /To order: 1/.test(await p.textContent('.bom-kpi')));
+    ok('Ordered', 'the shortfall says what is ordered and what is still to order', /✓ 1 ordered/.test(await p.textContent('.bom-short')) && /2 still to order/.test(await p.textContent('.bom-short')) && /To order: 2/.test(await p.textContent('.bom-kpi')));
     await p.click(`[data-bmark="${bi}"]`); await p.waitForSelector('#moF');
     await p.check('#moF [name=via][value=email]'); await p.fill('#moF [name=sup]', 'Stone Co'); await p.fill('#moF [name=ref]', 'PO-1234'); await p.click('#moF button[type=submit]'); await sleep(2500);
     pl = await P.get(core); const bo = pl.bom.orders[bi];
-    ok('Ordered', '"✓ Mark ordered" records any other order: by email, from Stone Co, order PO-1234, due after the 15-day lead time', bo && bo.via === 'email' && bo.supplier === 'Stone Co' && bo.ref === 'PO-1234' && bo.qty === 1 && bo.expected > new Date().toISOString().slice(0, 10) && (await kv.get('inv-index')).items[bi].onOrder === 1 && /✓ Shortfall ordered/.test(await p.textContent('.bom-kpi')), JSON.stringify(bo));
+    ok('Ordered', '"✓ Mark ordered" records any other order: by email, from Stone Co, order PO-1234, due after the 15-day lead time', bo && bo.via === 'email' && bo.supplier === 'Stone Co' && bo.ref === 'PO-1234' && bo.qty === 1 && bo.expected > new Date().toISOString().slice(0, 10) && (await kv.get('inv-index')).items[bi].onOrder === 1 && /To order: 1/.test(await p.textContent('.bom-kpi')), JSON.stringify(bo));
     ok('Ordered', 'and it is in the BOM history', pl.bom.log.some((x) => /Stone benchtop: 1 each ordered by email from Stone Co/.test(x.what)));
     await p.click(`[data-bundo="${bi}"]`); await p.waitForSelector('#okBtn'); await p.click('#okBtn'); await sleep(2500);
     pl = await P.get(core);
-    ok('Ordered', '↶ undo puts it back to "still to order" (and off order in Inventory)', !pl.bom.orders[bi] && !(await kv.get('inv-index')).items[bi].onOrder && /1 still to order/.test(await p.textContent('.bom-short')));
+    ok('Ordered', '↶ undo puts it back to "still to order" (and off order in Inventory)', !pl.bom.orders[bi] && !(await kv.get('inv-index')).items[bi].onOrder && /2 still to order/.test(await p.textContent('.bom-short')));
     await p.click(`[data-bmark="${bi}"]`); await p.waitForSelector('#moF'); await p.click('#moF button[type=submit]'); await sleep(2500);
+    const mid = (await P.get(core)).bom.lines.find((l) => /membrane/i.test(l.name)).id;
+    await p.click(`[data-bmark="${mid}"]`); await p.waitForSelector('#moF'); await p.check('#moF [name=via][value=online]'); await p.fill('#moF [name=sup]', 'Bunnings Trade'); await p.click('#moF button[type=submit]'); await sleep(2500);
+    pl = await P.get(core);
+    ok('Ordered', 'a material not in Inventory can be marked ordered too (recorded on the BOM)', pl.bom.orders[mid] && pl.bom.orders[mid].via === 'online' && pl.bom.orders[mid].qty === 2 && /✓ Shortfall ordered/.test(await p.textContent('.bom-kpi')), JSON.stringify(pl.bom.orders));
     await p.locator('.bom-short').screenshot({ path: path.join(os.tmpdir(), 'bom-ordered.png') });
 
     // 4. edit a line: the task follows
@@ -195,10 +201,10 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     ok('Template', 'and its stock lines are on that job\'s tasks too', p2.tasks.some((t) => t.mats.some((m) => m.item === tile.id && m.qty === 60)));
     await p.screenshot({ path: path.join(os.tmpdir(), 'bom-tab.png'), fullPage: true });
     await p.waitForSelector('#bomOAll'); await p.check('#bomOAll'); await sleep(200);
-    ok('Ordered', 'tick several items still to order and mark them ordered together', /Mark 2 as ordered/.test(await p.textContent('#bomMarkSel')));
+    ok('Ordered', 'tick several items still to order and mark them ordered together', /Mark 3 as ordered/.test(await p.textContent('#bomMarkSel')));
     await p.click('#bomMarkSel'); await p.waitForSelector('#moF'); await p.check('#moF [name=via][value=online]'); await p.fill('#moF [name=sup]', 'Trade Direct'); await p.click('#moF button[type=submit]'); await sleep(3000);
     const p2o = (await P.get(core2)).bom.orders;
-    ok('Ordered', 'each gets its own still-to-order quantity, ordered online from Trade Direct', Object.keys(p2o).length === 2 && Object.values(p2o).every((o) => o.via === 'online' && o.supplier === 'Trade Direct' && o.qty > 0) && /✓ Shortfall ordered/.test(await p.textContent('.bom-kpi')), JSON.stringify(p2o));
+    ok('Ordered', 'each gets its own still-to-order quantity, ordered online from Trade Direct', Object.keys(p2o).length === 3 && Object.values(p2o).every((o) => o.via === 'online' && o.supplier === 'Trade Direct' && o.qty > 0) && /✓ Shortfall ordered/.test(await p.textContent('.bom-kpi')), JSON.stringify(p2o));
     await p.click('#bomTpl'); await p.waitForSelector('[data-tdel]'); await p.click('[data-tdel]'); await p.waitForSelector('#okBtn'); await p.click('#okBtn'); await sleep(1200);
     ok('Template', 'a template can be deleted', JSON.parse(await p.evaluate(() => window.MBS.api('planBomTplList').then((r) => JSON.stringify(r.templates)))).length === 0);
     ok('Console', 'no JavaScript errors', errors.length === 0, errors.join(' | '));
