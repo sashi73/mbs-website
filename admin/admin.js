@@ -92,6 +92,28 @@
       .catch(function (err) { msg.textContent = err.message; if (pj.hidden) { f.password.value = ''; f.password.focus(); } else f.project.focus(); })
       .then(function () { btn.disabled = false; btn.textContent = 'Sign in'; });
   });
+  // v97: "Sign in with Google" when the test site has it switched on (GOOGLE_CLIENT_ID)
+  function googleButton() {
+    api('loginOptions').then(function (o) {
+      if (!o.google) return;
+      var box = $('#gsiBox'), go = function () {
+        try {
+          window.google.accounts.id.initialize({ client_id: o.google, ux_mode: 'popup', callback: function (r) {
+            var msg = $('#loginMsg'); msg.textContent = 'Signing in with Google…';
+            api('loginGoogle', { credential: r.credential }).then(function (j) { msg.textContent = ''; showApp(j.user); }).catch(function (e) { msg.textContent = e.message; });
+          } });
+          window.google.accounts.id.renderButton($('#gsiBtn'), { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', width: 280 });
+          box.hidden = false;
+        } catch (e) {}
+      };
+      box.hidden = false;
+      if (window.google && window.google.accounts) return go();
+      var sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true; sc.onload = go;
+      sc.onerror = function () { $('#gsiBtn').innerHTML = '<p class="muted" style="font-size:12.5px;margin:0">Google sign-in could not load. Check your connection.</p>'; };
+      document.head.appendChild(sc);
+    }).catch(function () {});
+  }
+  googleButton();
   $('#logout').addEventListener('click', function () { api('logout').then(function () { location.hash = ''; showLogin(); }); });
   $('#who').addEventListener('click', function () { if (window.MBS.users) window.MBS.users.changePassword(false); });
   var closeMenu = function () { $('#side').classList.remove('open'); };

@@ -30,8 +30,8 @@
         (canEdit() ? '<button class="btn" id="usNewSub" title="A login for a sub-contractor from Subbies: Projects only, and only the projects you give them">👷 ＋ Sub-contractor login</button> <button class="btn btn-gold" id="usNew">＋ Give someone a login</button>' : '<span class="muted">View only</span>') + '</div>' +
       '<div class="card"><div class="table-wrap"><table class="sc-table us-table"><thead><tr><th>Person</th><th>Username</th><th>Role</th>' + d.mods.map(function (m) { return '<th class="us-m" title="' + esc(m.name + ': ' + m.about) + '">' + esc(SHORT[m.key] || m.name) + '</th>'; }).join('') + '<th>Last sign-in</th><th></th></tr></thead><tbody>' +
         '<tr class="us-owner"><td><b>Owner</b><br><small class="muted">The Netlify login (ADMIN_USERNAME)</small></td><td>' + (me.owner ? esc(me.user) : '<span class="muted">set in Netlify</span>') + '</td><td><span class="us-role owner">Owner</span></td>' + d.mods.map(function () { return '<td class="us-m"><span class="us-lv edit">✎</span></td>'; }).join('') + '<td class="muted">–</td><td class="muted" style="font-size:12px">Always has full access</td></tr>' +
-        U.map(function (u) { var p = person(u.personId), sb = u.kind === 'subbie';
-          return '<tr data-uid="' + esc(u.id) + '" class="click' + (u.active ? '' : ' tdone') + '"><td><b>' + esc(u.name) + '</b>' + (sb ? '<span class="us-kind">👷 Sub-contractor</span>' : '') + '<br><small class="muted">' + (sb ? esc(projNames(u.projects)) : esc(p ? (p.role || p.type) : 'not in People')) + (u.active ? '' : ' · disabled') + '</small></td><td>' + esc(u.username) + (u.mustChange ? '<br><small class="muted">password not set yet</small>' : '') + '</td>' +
+        U.map(function (u) { var p = person(u.personId), sb = u.kind === 'subbie', gg = u.kind === 'google';
+          return '<tr data-uid="' + esc(u.id) + '" class="click' + (u.active ? '' : ' tdone') + '"><td><b>' + esc(u.name) + '</b>' + (sb ? '<span class="us-kind">👷 Sub-contractor</span>' : gg ? '<span class="us-kind us-g">G Google</span>' : '') + '<br><small class="muted">' + (sb ? esc(projNames(u.projects)) : gg ? 'Signed in with Google · view only' : esc(p ? (p.role || p.type) : 'not in People')) + (u.active ? '' : ' · disabled') + '</small></td><td>' + esc(u.username) + (u.mustChange ? '<br><small class="muted">password not set yet</small>' : '') + '</td>' +
             '<td><span class="us-role">' + esc(u.role) + '</span></td>' + d.mods.map(function (m) { var v = (u.mods || {})[m.key] || 'none'; return '<td class="us-m"><span class="us-lv ' + v + '" title="' + esc(m.name + ': ' + v) + '">' + (v === 'edit' ? '✎' : v === 'view' ? '👁' : '–') + '</span></td>'; }).join('') +
             '<td class="nowrap muted" style="font-size:12.5px">' + esc(when(u.lastLogin)) + '</td><td>' + (canEdit() ? '<button class="btn btn-sm" data-uedit>Edit</button>' : '') + '</td></tr>'; }).join('') +
         '</tbody></table></div>' + (U.length ? '' : '<div class="empty" style="margin-top:10px">No logins yet: only the Owner can sign in. Add your team in <a href="#people">People</a>, then give them a login here.</div>') +
@@ -51,7 +51,7 @@
         return load().then(draw);
       }).catch(fail);
     };
-    V().querySelectorAll('tr[data-uid]').forEach(function (tr) { tr.onclick = function () { if (!canEdit()) return; var id = tr.getAttribute('data-uid'), x = S.data.users.filter(function (y) { return y.id === id; })[0]; if (x && x.kind === 'subbie') editSub(id); else editUser(id); }; });
+    V().querySelectorAll('tr[data-uid]').forEach(function (tr) { tr.onclick = function () { if (!canEdit()) return; var id = tr.getAttribute('data-uid'), x = S.data.users.filter(function (y) { return y.id === id; })[0]; if (x && x.kind === 'subbie') editSub(id); else if (x && x.kind === 'google') editGoogle(x); else editUser(id); }; });
   }
 
   function editUser(id, personId) {
@@ -100,6 +100,13 @@
   }
 
   // v91: 👷 a sub-contractor login: Projects only (view or edit), only the projects given; they sign in with a project code
+  // v97: a Google sign-in (test site): view only, can only be switched off or on
+  function editGoogle(u) {
+    M.modal('<h2>G ' + esc(u.name) + '</h2><p class="muted" style="margin:-4px 0 10px">Signed in with Google as <b>' + esc(u.username) + '</b>. Google sign-ins are <b>view only</b> on every module and have no access to Users &amp; access. Last sign-in: ' + esc(when(u.lastLogin)) + '.</p>' +
+      '<label class="us-chk"><input type="checkbox" id="usActive"' + (u.active ? ' checked' : '') + '> <span><b>Can sign in</b> <small class="muted">Untick to stop this Google account signing in (they are signed out straight away)</small></span></label>' +
+      '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="usSave" type="button">Save</button></div>');
+    $('#usSave').onclick = function () { api('userSave', { user: { id: u.id, active: $('#usActive').checked } }).then(function (r) { M.closeModal(); toast(r.user.active ? 'Google sign-in on' : 'Google sign-in switched off'); return load().then(draw); }).catch(fail); };
+  }
   function projNames(cores) { var L = (cores || []).map(function (c) { var p = (S.plans || []).filter(function (x) { return x.core === c; })[0]; return p ? p.ref : c; }); return L.length ? 'Projects: ' + L.join(', ') : 'No projects'; }
   function editSub(id, subId) {
     if (!canEdit()) return;
@@ -144,6 +151,7 @@
   // your own password (and the first sign-in with a temporary one)
   function changePassword(forced) {
     var me = M.me || {};
+    if (me.kind === 'google') return M.modal('<h2>🔑 Your password</h2><p>You signed in with your <b>Google account</b> (' + esc(me.user) + '), so there is no password here. Manage it at Google.</p><div class="actions"><button class="btn btn-gold" data-close type="button">OK</button></div>');   // v97
     if (me.owner) return M.modal('<h2>🔑 Your password</h2><p>You are signed in as the <b>Owner</b>. The Owner\'s username and password are set in Netlify (ADMIN_USERNAME and ADMIN_PASSWORD under Site configuration, Environment variables). Change them there.</p><div class="actions"><button class="btn btn-gold" data-close type="button">OK</button></div>');
     M.modal('<h2>🔑 ' + (forced ? 'Set your own password' : 'Change your password') + '</h2>' + (forced ? '<p>Welcome, ' + esc(me.name || me.user) + '. You signed in with a temporary password: choose your own to carry on.</p>' : '') +
       '<form class="form" id="pwF"><label class="full">' + (forced ? 'Temporary password' : 'Current password') + '<input type="password" name="old" required autocomplete="current-password"></label>' +

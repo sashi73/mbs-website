@@ -23,7 +23,20 @@ import * as U from '../lib/users.mjs';
 import * as PPL from '../lib/people.mjs';
 import * as SUB from '../lib/subbies.mjs';
 // v91: who may sign in: a person in People, or a sub-contractor in Subbies
-const canIn = (pid, u) => (u && u.kind === 'subbie' ? SUB.canLogin(u.subId) : PPL.canLogin(pid));
+const canIn = (pid, u) => (u && u.kind === 'google' ? PPL.isTest() && !!env('GOOGLE_CLIENT_ID').trim() : u && u.kind === 'subbie' ? SUB.canLogin(u.subId) : PPL.canLogin(pid));   // v97: Google sign-ins only while the test site has it on
+// v97: "Sign in with Google" on the test site. The Google ID token is checked with Google (tokeninfo): our client ID, a verified
+// email, not expired. GOOGLE_ALLOWED (optional) limits it to some emails or @domains.
+async function googleVerify(cred) {
+  const id = env('GOOGLE_CLIENT_ID').trim(); if (!id || !PPL.isTest()) return { error: 'Sign in with Google is not available here.', code: 403 };
+  if (!/^[\w-]+\.[\w-]+\.[\w-]+$/.test(String(cred || ''))) return { error: 'Google sign-in failed. Try again.' };
+  let t;
+  try { const r = await fetch((env('GOOGLE_TOKENINFO_URL').trim() || 'https://oauth2.googleapis.com/tokeninfo') + '?id_token=' + encodeURIComponent(cred), { signal: AbortSignal.timeout(8000) }); if (!r.ok) return { error: 'Google did not accept that sign-in. Try again.' }; t = await r.json(); }
+  catch { return { error: 'Could not reach Google to check the sign-in. Try again.' }; }
+  if (t.aud !== id || !['accounts.google.com', 'https://accounts.google.com'].includes(t.iss) || !(t.email_verified === true || t.email_verified === 'true') || Number(t.exp) * 1000 < Date.now()) return { error: 'Google sign-in failed. Try again.' };
+  const email = String(t.email || '').toLowerCase(), allow = env('GOOGLE_ALLOWED').split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
+  if (allow.length && !allow.some((a) => (a.startsWith('@') ? email.endsWith(a) : email === a))) return { error: 'This Google account is not allowed on this site. Ask MBS for access.', code: 403 };
+  return { email, name: String(t.name || '').slice(0, 100) };
+}
 const projectOf = async (code) => { const j = await J.find(code); return j && (await getPlan(j.core)) ? { core: j.core, ref: J.refFor(j), name: j.name } : null; };
 import { bomPost } from '../lib/bom.mjs';
 
@@ -127,6 +140,20 @@ async function handle(req, context) {
       return out(200, { ok: true, user }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(user)) });
     }
     if (action === 'logout') return out(200, { ok: true }, { 'Set-Cookie': A.clearCookie(req) });
+    if (action === 'loginOptions') return out(200, { google: PPL.isTest() && env('GOOGLE_CLIENT_ID').trim() ? env('GOOGLE_CLIENT_ID').trim() : '' });   // v97: the sign-in page asks
+    if (action === 'loginGoogle') {   // v97
+      if (!A.adminReady()) return bad('The admin console is not set up yet.', 503);
+      const ip = A.clientIp(req), { wait } = await A.loginCheck(ip);
+      if (wait) return bad(`Too many attempts. Try again in ${wait} minute${wait > 1 ? 's' : ''}.`, 429);
+      const g = await googleVerify(body.credential);
+      if (g.error) { await A.noteFailure(ip); return bad(g.error, g.code || 401); }
+      const u = await U.googleUser(g.email, g.name, 'Google sign-in');
+      if (!u) return bad('Google sign-in failed. Try again.', 401);
+      if (u.clash) return bad('This email already has a staff login: sign in with your username and password.', 409);
+      if (u.disabled) return bad('Your Google sign-in has been switched off. Ask MBS.', 403);
+      await A.audit(u.username, 'Signed in with Google (view only)');
+      return out(200, { ok: true, user: u.username, name: u.name }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(u.username, Date.now(), { uid: u.id, v: u.ver || 0 })) });
+    }
 
     const session = A.readSession(req);
     if (!session) return bad('Please log in', 401);

@@ -1317,3 +1317,7 @@ body.is-subbie .top-search,body.is-subbie .top-new{display:none!important}
 .bom-tbl input.bom-zero,.mt-tbl input.bom-zero{border-color:#D92D20!important;background:#FEF3F2}
 .bom-zwarn{border-left-color:#D92D20;background:#FEF3F2;border-color:#F4B4AE}
 .bom-pk{padding:2px 7px}
+/* v97: Sign in with Google (test site) */
+.gsi-box{margin-top:14px}.gsi-or{display:flex;align-items:center;gap:10px;color:#8A8471;font-size:12px;margin:2px 0 12px}.gsi-or:before,.gsi-or:after{content:"";flex:1;border-top:1px solid var(--line)}
+#gsiBtn{display:flex;justify-content:center;min-height:44px}.gsi-note{font-size:12px;text-align:center;margin:8px 0 0}
+.us-kind.us-g{background:#FFF4E5;color:#9A3412}

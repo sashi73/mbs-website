@@ -106,6 +106,18 @@ const summary = (u) => ({ id: u.id, personId: u.personId, name: u.name, username
   kind: u.kind || 'person', subId: u.subId || '', projects: u.projects || [] });
 // v91: a sub-contractor login: Projects only (view or edit), and only the projects it was given
 const subMods = (lv) => ({ ...all('none'), projects: lv === 'view' ? 'view' : 'edit' });
+// v97: "Sign in with Google" (test site): anyone with a verified Google account gets View on every module, nothing in Users & access
+export const GOOGLE_MODS = { ...all('view'), users: 'none' };
+export async function googleUser(email, name, by) {
+  email = str(email, 160).toLowerCase(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return null;
+  const hit = (await list()).find((x) => x.kind === 'google' && x.username === email);
+  if (hit) { const u = await get(hit.id); if (!u || !u.active) return u ? { disabled: true } : null; u.lastLogin = Date.now(); if (name) u.name = str(name, 100); await put(u); return u; }
+  if ((await list()).some((x) => x.username === email)) return { clash: true };   // a staff login already uses this email: they sign in with their password
+  const n = await kv.update('user-seq', (x) => ({ n: ((x && x.n) || 0) + 1 }), () => ({ n: 0 }));
+  const u = { id: 'U-' + String(n.n).padStart(3, '0'), kind: 'google', personId: '', name: str(name, 100) || email, email, username: email, role: 'Read only', mods: { ...GOOGLE_MODS }, active: true, mustChange: false,
+    ver: 1, created: Date.now(), lastLogin: Date.now(), by: str(by, 60) || 'Google sign-in' };
+  await put(u); return u;
+}
 // what a sub-contractor signed in to one project may do. Every request naming a project must be theirs; other requests only
 // from this list (the plan page's own lookups). Money, people and other subbies' details stay out.
 const SCOPE_FREE = new Set(['me', 'logout', 'userPassword', 'planList', 'planAiStatus', 'commsSetup', 'planBomTplList', 'planBomTplGet', 'invList', 'invGet']);
@@ -130,6 +142,7 @@ export async function context(session, ownerName, personOk) {
   const u = await get(session.uid);
   if (!u || !u.active || (u.ver || 0) !== (session.v || 0)) return null;
   if (personOk && !(await personOk(u.personId, u))) return null;
+  if (u.kind === 'google') return { owner: false, who: u.username, uid: u.id, role: 'Google (view only)', mods: { ...GOOGLE_MODS }, name: u.name, mustChange: false, personId: '', kind: 'google' };   // v97
   if (u.kind === 'subbie') {   // v91: signed in to one of their projects; nothing else
     if (!session.pc || !(u.projects || []).includes(session.pc)) return null;
     return { owner: false, who: u.username, uid: u.id, role: 'Sub-contractor', mods: subMods((u.mods || {}).projects), name: u.name, mustChange: !!u.mustChange, personId: '', subId: u.subId, kind: 'subbie', scope: [session.pc] };
@@ -160,6 +173,12 @@ export async function userPost(action, body, { ctx, audit, person, sub, project 
     case 'userSave': {
       const f = body.user || {}, id = /^U-\d{3,5}$/.test(f.id || '') ? f.id : '';
       const old = id ? await get(id) : null; if (id && !old) return out(404, { error: 'User not found' });
+      if (old && old.kind === 'google') {   // v97: Google sign-ins are always view only: they can only be switched on or off
+        const u = { ...old, active: f.active !== false, by: ctx.who, updated: Date.now() };
+        if (old.active !== u.active) u.ver = (old.ver || 0) + 1;
+        await put(u); await log(`Google sign-in ${u.active ? 'enabled' : 'disabled'}: ${u.username}`);
+        return out(200, { user: summary(u), temp: '' });
+      }
       if ((old && old.kind === 'subbie') || (!old && f.kind === 'subbie')) {   // v91: a sub-contractor: Projects only, their projects only
         const sc = sub ? await sub(str(f.subId || (old && old.subId), 12)) : null;
         if (!sc) return out(400, { error: 'Pick a sub-contractor from Subbies.' });
@@ -208,6 +227,7 @@ export async function userPost(action, body, { ctx, audit, person, sub, project 
     }
     case 'userReset': {
       const u = await get(str(body.id, 10)); if (!u) return out(404, { error: 'User not found' });
+      if (u.kind === 'google') return out(400, { error: 'Google sign-ins have no password here: they sign in with their Google account.' });
       const temp = tempPassword(); Object.assign(u, hashPw(temp)); u.mustChange = true; u.ver = (u.ver || 0) + 1; await put(u);
       await log(`Password reset for ${u.username}`);
       return out(200, { user: summary(u), temp });

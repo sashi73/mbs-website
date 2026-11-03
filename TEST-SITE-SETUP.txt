@@ -216,6 +216,17 @@ GKH BRANDING (v33): on the test site the console shows "Global Knowledge House Â
 Change the words with CONSOLE_BRAND and CONSOLE_TAGLINE in the test site's Netlify settings (then redeploy);
 CONSOLE_BRAND = off turns it off. The live site never shows it.
 
+SIGN IN WITH GOOGLE (v97, test site only): anyone with a Google (Gmail) account can sign in to the test console with
+view-only access to everything except Users & access. To switch it on:
+  1. Google Cloud Console (console.cloud.google.com) > APIs & Services > Credentials > Create credentials >
+     OAuth client ID > Web application. (First time: set up the OAuth consent screen, External, app name "MBS Test".)
+  2. Authorised JavaScript origins: https://fixittest.netlify.app   (no redirect URI is needed)
+  3. Copy the Client ID (ends in .apps.googleusercontent.com).
+  4. Netlify > test site > Environment variables: GOOGLE_CLIENT_ID = that Client ID. Redeploy.
+  Optional: GOOGLE_ALLOWED = emails or @domains allowed, separated by commas (e.g. @gkhconsultancy.com, a.person@gmail.com).
+  Empty = any Google account. Each Google sign-in shows in Users & access (G Google), where it can be switched off.
+  The live site never offers it, even if GOOGLE_CLIENT_ID is set there.
+
 
 Good to know
 - Which branch is this folder on?   git branch --show-current
