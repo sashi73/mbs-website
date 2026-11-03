@@ -88,6 +88,20 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     ok('Stock', 'the shortfall: 25 m2 of tile needed, 10 in stock, short 15 (not counting this job twice)', /Short 15 m2/.test(await line('Porcelain tile 600x600').textContent()) && /Shortfall: 1 item/.test(await p.textContent('.bom-short')), await p.textContent('.bom-short'));
     ok('Stock', 'the adhesive is covered by stock', /✓ 50 bag free/.test(await line('Tile adhesive 20kg').textContent()), await line('Tile adhesive 20kg').textContent());
     ok('Warning', 'a warning to check the ≈ est lines', /3 lines marked ≈ est/.test(await p.textContent('#planBody .est-warn')));
+    // v94: add a line anywhere, pick from stock, no $0 lines
+    ok('Add', 'each task in the BOM has "＋ Line" and "📦 From stock", and there is "＋ Add a line / 📦 Add from Inventory" at the bottom; stock is picked with 📦 (not 🔗)', (await p.$$('[data-gadd]')).length >= 3 && !!(await p.$('#bomAdd2')) && !!(await p.$('#bomStock2')) && !/🔗/.test(await p.textContent('.bom-tbl')) && /📦/.test(await p.textContent('.bom-tbl .bom-stk')));
+    await p.click('#bomStock2'); await p.waitForSelector('#bsTask'); await p.selectOption('#bsTask', pl.tasks[1].id);
+    await p.click(`[data-sadd="${glue.id}"]`); await sleep(100); await p.fill('[data-sk="0"] [data-sq]', '3'); await p.press('[data-sk="0"] [data-sq]', 'Tab'); await sleep(100); await p.fill('[data-sk="0"] [data-sp]', '30'); await p.press('[data-sk="0"] [data-sp]', 'Tab'); await sleep(100);
+    await p.click('#bsSave'); await sleep(2000);
+    pl = await P.get(core);
+    ok('Add', '📦 Add from Inventory: pick a stock item, its quantity and the task; already on that task, so the quantity adds up (4 + 3 bags)', pl.bom.lines.filter((l) => l.item === glue.id).length === 1 && pl.bom.lines.find((l) => l.item === glue.id).qty === 7 && pl.tasks[1].mats.find((m) => m.item === glue.id).qty === 7);
+    const gt = pl.bom.lines.find((l) => /membrane/i.test(l.name)).task;
+    await p.click(`[data-gadd="${gt}"]`); await sleep(1500);
+    pl = await P.get(core);
+    ok('Add', '"＋ Line" on a task adds a new line to that task, ready to type', pl.bom.lines.some((l) => l.name === 'New material' && l.task === gt) && await p.evaluate(() => document.activeElement && document.activeElement.value === 'New material'));
+    ok('No $0', 'a line with no price is highlighted and warned about (it would add $0 to the quote)', !!(await p.$('input.bom-zero')) && /1 line with no price/.test(await p.textContent('.bom-zwarn')));
+    await line('New material').locator('[data-bdel]').click(); await sleep(1500);
+    ok('No $0', 'gone once the line is deleted (or priced)', !(await p.$('.bom-zwarn')));
 
     // 3. ＋ Add to Inventory, ordering tasks, re-order
     await line('Stone benchtop').locator('[data-binv]').click(); await p.waitForFunction(() => /Short 1 each/.test(document.querySelector('#planBody').textContent), null, { timeout: 15000 });
@@ -140,7 +154,11 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
 
     // 5. check, sign off, locked, reopen
     ok('Sign off', 'Sign off is disabled until every line is checked', await p.$eval('#bomSign', (b) => b.disabled));
-    for (let i = 0; i < 4; i++) { await p.locator('tr[data-bk] [data-bf=checked]:not(:checked)').first().click(); await sleep(400); }
+    const zl = line('Waterproofing membrane').locator('[data-bf=price]'); await zl.fill('0'); await zl.press('Tab'); await sleep(1200);
+    for (let i = 0; i < 4; i++) { const c = p.locator('tr[data-bk] [data-bf=checked]:not(:checked)').first(); if (await c.count()) { await c.click(); await sleep(400); } }
+    ok('No $0', 'the BOM can\'t be signed off while any line has no price', await p.$eval('#bomSign', (b) => b.disabled && /needs a price/.test(b.title)));
+    const zl2 = line('Waterproofing membrane').locator('[data-bf=price]'); await zl2.fill('180'); await zl2.press('Tab'); await sleep(1200);
+    for (let i = 0; i < 4; i++) { const c = p.locator('tr[data-bk] [data-bf=checked]:not(:checked)').first(); if (await c.count()) { await c.click(); await sleep(400); } }
     await sleep(1200); pl = await P.get(core);
     ok('Checked', 'ticking a line as checked clears ≈ est and records who', pl.bom.lines.every((l) => l.checked && !l.est && l.checkedBy));
     await p.click('#bomSign'); await p.fill('#bsF [name=by]', 'Olivia Bennett'); await p.fill('#bsF [name=sig]', 'Olivia Bennett'); await p.click('#bsF button[type=submit]'); await sleep(1800);

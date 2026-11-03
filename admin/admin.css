@@ -1311,3 +1311,9 @@ body.is-subbie .top-search,body.is-subbie .top-new{display:none!important}
 .bom-oundo{padding:1px 7px}.bom-kpi .ok{color:#1E7A43}
 .bom-via{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
 .bom-short.all-ordered h2{color:#1E7A43}
+/* v94: BOM: add lines anywhere, pick from stock, no $0 lines */
+.bom-gadd{display:inline-flex;gap:6px;margin-left:12px;opacity:.55;transition:opacity .15s}.bom-tbl tr.bom-g:hover .bom-gadd,.bom-gadd:focus-within{opacity:1}.bom-gadd .btn{padding:2px 8px;font-size:11.5px}
+.bom-tbl tr.bom-addrow td{background:#FCFBF7;border-top:1px dashed var(--line)}
+.bom-tbl input.bom-zero,.mt-tbl input.bom-zero{border-color:#D92D20!important;background:#FEF3F2}
+.bom-zwarn{border-left-color:#D92D20;background:#FEF3F2;border-color:#F4B4AE}
+.bom-pk{padding:2px 7px}
