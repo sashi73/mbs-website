@@ -35,6 +35,7 @@ export const ROLES = {
   'Site supervisor': { crm: 'view', projects: 'edit', accounts: 'none', stock: 'view', subbies: 'view', people: 'view', data: 'none', users: 'none' },
   Accounts: { crm: 'view', projects: 'view', accounts: 'edit', stock: 'view', subbies: 'view', people: 'view', data: 'view', users: 'none' },
   'Read only': { ...all('view'), users: 'none' },
+  Guest: { ...all('none'), crm: 'view', projects: 'view' },   // v88: for trying the console out
   Custom: null };
 export const ROLE_KEYS = Object.keys(ROLES);
 export const OWNER_MODS = all('edit');
@@ -158,6 +159,19 @@ export async function userPost(action, body, { ctx, audit, person }) {
       const temp = tempPassword(); Object.assign(u, hashPw(temp)); u.mustChange = true; u.ver = (u.ver || 0) + 1; await put(u);
       await log(`Password reset for ${u.username}`);
       return out(200, { user: summary(u), temp });
+    }
+    case 'userGuestLoad': {   // v88: test site only: a Guest login for each sample person, all with one test password
+      if (!body.test) return out(403, { error: 'Guest logins can only be made on the test site.' });
+      const pw = 'GuestTest2026', made = [], have = await list();
+      for (const pid of (Array.isArray(body.personIds) ? body.personIds : []).slice(0, 20)) {
+        const p = await person(str(pid, 12)); if (!p || !p.email || p.archived || have.some((x) => x.personId === p.id)) continue;
+        const n = await kv.update('user-seq', (x) => ({ n: ((x && x.n) || 0) + 1 }), () => ({ n: 0 }));
+        const u = { id: 'U-' + String(n.n).padStart(3, '0'), personId: p.id, name: p.name, email: p.email, username: p.email.toLowerCase(), role: 'Guest', mods: cleanMods(ROLES.Guest, 'Guest'), active: true,
+          mustChange: false, ver: 1, created: Date.now(), by: ctx.who, guest: true, ...hashPw(pw) };
+        await put(u); made.push(u.username);
+      }
+      await log(`Guest logins made for ${made.length} sample people`);
+      return out(200, { made, password: made.length ? pw : '' });
     }
     case 'userPassword': {   // your own password
       if (!ctx.uid) return out(400, { error: 'The Owner login is set in Netlify (ADMIN_PASSWORD). Change it there.' });

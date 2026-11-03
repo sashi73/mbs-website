@@ -122,6 +122,26 @@ export async function assignments(onlyId) {
   return res;
 }
 
+// ---------- v88: 10 sample people for trying things out (test site only). Made-up names, @example.com emails. ----------
+export const SAMPLE = [
+  { type: 'Employee', name: 'Olivia Bennett', role: 'Project director', employment: 'Full-time', phone: '0400 100 101', email: 'olivia.bennett@example.com', suburb: 'Bella Vista', costRate: 120, chargeRate: 190, hours: 38, rating: 5, startDays: -900, tickets: { whiteCard: { number: 'WC10101' }, driver: { class: 'C', expiryDays: 700 }, firstAid: { number: 'FA1', expiryDays: 200 } } },
+  { type: 'Employee', name: 'Jack Morrison', role: 'Project manager', employment: 'Full-time', phone: '0400 100 102', email: 'jack.morrison@example.com', suburb: 'Castle Hill', costRate: 95, chargeRate: 160, hours: 38, rating: 4, startDays: -600, tickets: { whiteCard: { number: 'WC10102' }, firstAid: { number: 'FA2', expiryDays: 20 } } },
+  { type: 'Employee', name: 'Mei Chen', role: 'Site supervisor', employment: 'Full-time', phone: '0400 100 103', email: 'mei.chen@example.com', suburb: 'Kellyville', costRate: 78, chargeRate: 130, hours: 40, rating: 5, startDays: -400, tickets: { whiteCard: { number: 'WC10103' }, heights: { number: 'WAH3', expiryDays: 400 }, firstAid: { number: 'FA3', expiryDays: 300 } } },
+  { type: 'Employee', name: 'Tom Walsh', role: 'Leading hand', trade: 'carpenter', employment: 'Full-time', phone: '0400 100 104', email: 'tom.walsh@example.com', suburb: 'Rouse Hill', costRate: 65, chargeRate: 110, hours: 40, rating: 4, startDays: -800, tickets: { whiteCard: { number: 'WC10104' }, licence: { number: 'CAR104', class: 'Carpentry', expiryDays: 300 }, ewp: { number: 'EWP4', expiryDays: 150 } } },
+  { type: 'Employee', name: 'Aisha Rahman', role: 'Estimator', employment: 'Part-time', phone: '0400 100 105', email: 'aisha.rahman@example.com', suburb: 'Parramatta', costRate: 70, chargeRate: 0, hours: 24, rating: 4, startDays: -200, tickets: { whiteCard: { number: 'WC10105' } } },
+  { type: 'Employee', name: 'Liam O\'Connor', role: 'Tradesperson', trade: 'electrician', employment: 'Full-time', phone: '0400 100 106', email: 'liam.oconnor@example.com', suburb: 'Blacktown', costRate: 62, chargeRate: 105, hours: 38, rating: 3, startDays: -300, tickets: { whiteCard: { number: 'WC10106' }, licence: { number: 'EC106', class: 'Electrician', expiryDays: -10 } } },
+  { type: 'Employee', name: 'Sofia Rossi', role: 'Apprentice', trade: 'carpenter', employment: 'Apprentice', phone: '0400 100 107', email: 'sofia.rossi@example.com', suburb: 'Box Hill', costRate: 32, chargeRate: 60, hours: 38, rating: 4, startDays: -120, tickets: { whiteCard: { number: 'WC10107' } } },
+  { type: 'Contractor', name: 'Ben Nguyen', role: 'Tradesperson', trade: 'plumber', business: 'Nguyen Plumbing', abn: '51 824 753 556', gst: true, phone: '0400 100 108', email: 'ben.nguyen@example.com', suburb: 'Baulkham Hills', costRate: 90, chargeRate: 0, rating: 4, startDays: -500, tickets: { whiteCard: { number: 'WC10108' }, licence: { number: 'PL108', class: 'Plumber, drainer', expiryDays: 260 } }, insurance: { insurer: 'QBE', policy: 'PL-108', expiryDays: 250 }, workersComp: { soleTrader: true } },
+  { type: 'Employee', name: 'Grace Taylor', role: 'Accounts', employment: 'Part-time', phone: '0400 100 109', email: 'grace.taylor@example.com', suburb: 'Norwest', costRate: 55, chargeRate: 0, hours: 20, rating: 5, startDays: -700, tickets: {} },
+  { type: 'Contractor', name: 'Daniel Park', role: 'Engineer', business: 'Park Engineering', abn: '33 615 948 270', gst: true, phone: '0400 100 110', email: 'daniel.park@example.com', suburb: 'Epping', costRate: 140, chargeRate: 0, rating: 4, startDays: -150, tickets: { whiteCard: { number: 'WC10110' } }, insurance: { insurer: 'Allianz', policy: 'PI-110', expiryDays: 15 }, workersComp: { policy: 'WC-110', expiryDays: 180 } }];
+export const isTest = () => String(env('SITE_ENV', '')).trim().toLowerCase() === 'test';
+async function sampleLoad(by) {
+  if (!isTest()) return { error: 'Sample people can only be loaded on the test site.', code: 403 };
+  const have = new Set(Object.values((await index()).people || {}).map((p) => p.name.toLowerCase()));
+  const r = await testLoad({ people: SAMPLE.filter((p) => !have.has(p.name.toLowerCase())) }, by);
+  return { ...r, skipped: SAMPLE.length - r.ids.length };
+}
+
 // ---------- test data (test site only) ----------
 async function testLoad(body, by) {
   if (String(env('SITE_ENV', '')).trim().toLowerCase() !== 'test') return { error: 'Test data can only be loaded on the test site.', code: 403 };
@@ -149,6 +169,7 @@ export async function pplPost(action, body, { who, by, audit }) {
       await log(`Person saved: ${r.person.id} ${r.person.name} (${r.person.type})`);
       return out(200, { person: r.person, comp: compliance(r.person) });
     }
+    case 'pplSampleLoad': { const r = await sampleLoad(by); if (r.error) return out(r.code || 400, r); await log(`Sample people loaded: ${r.ids.length}`); return out(200, r); }
     case 'pplTestLoad': { const r = await testLoad(body, by); if (r.error) return out(r.code || 400, r); await log(`Test data loaded: ${r.ids.length} people`); return out(200, r); }
     default: return null;
   }

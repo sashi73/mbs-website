@@ -1269,3 +1269,4 @@ tr.us-owner td{background:#FFFBEB}
 .side-nav [data-nav][hidden],.side-nav .side-h[hidden]{display:none!important}
 .kpop-sep{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8A8577;padding:6px 8px 2px}.kav.pp{background:#FDE68A;color:#78350F}
 .who-box{display:flex;flex-direction:column;min-width:0;flex:1}.who-box .who{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.us-table th.us-m,.us-roles th.us-m{font-size:10.5px}
+.us-pw{font-size:18px;background:#FBF8EF;border:1px dashed #C9A227;border-radius:8px;padding:3px 10px}

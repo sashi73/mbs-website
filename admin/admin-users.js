@@ -25,6 +25,7 @@
     var d = S.data, U = d.users, me = M.me || {};
     var person = function (id) { return S.people.filter(function (p) { return p.id === id; })[0]; };
     V().innerHTML = '<div class="row" style="margin-bottom:12px"><div><h2 style="margin:0">🔐 Users &amp; access</h2><p class="muted" style="margin:2px 0 0;font-size:13px">Who can sign in to the console, and what each person can use. Only people in <a href="#people">People</a> can be given a login.</p></div><span class="sp"></span>' +
+        ((M.me || {}).test && canEdit() ? '<button class="btn btn-sm" id="usGuest" title="Test site only: a Guest login (view Jobs & customers and Projects) for each sample person, all with one test password">🧪 Make Guest logins for the sample people</button> ' : '') +
         (canEdit() ? '<button class="btn btn-gold" id="usNew">＋ Give someone a login</button>' : '<span class="muted">View only</span>') + '</div>' +
       '<div class="card"><div class="table-wrap"><table class="sc-table us-table"><thead><tr><th>Person</th><th>Username</th><th>Role</th>' + d.mods.map(function (m) { return '<th class="us-m" title="' + esc(m.name + ': ' + m.about) + '">' + esc(SHORT[m.key] || m.name) + '</th>'; }).join('') + '<th>Last sign-in</th><th></th></tr></thead><tbody>' +
         '<tr class="us-owner"><td><b>Owner</b><br><small class="muted">The Netlify login (ADMIN_USERNAME)</small></td><td>' + (me.owner ? esc(me.user) : '<span class="muted">set in Netlify</span>') + '</td><td><span class="us-role owner">Owner</span></td>' + d.mods.map(function () { return '<td class="us-m"><span class="us-lv edit">✎</span></td>'; }).join('') + '<td class="muted">–</td><td class="muted" style="font-size:12px">Always has full access</td></tr>' +
@@ -37,6 +38,17 @@
       '<div class="card" style="margin-top:14px"><h2>Roles</h2><p class="muted" style="margin:-4px 0 10px;font-size:13px">Pick a role for each user; choose <b>Custom</b> to set each module yourself.</p><div class="table-wrap"><table class="sc-table us-roles"><thead><tr><th>Role</th>' + d.mods.map(function (m) { return '<th class="us-m" title="' + esc(m.name + ': ' + m.about) + '">' + esc(SHORT[m.key] || m.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
         d.roles.filter(function (r) { return r.mods; }).map(function (r) { return '<tr><td><b>' + esc(r.name) + '</b></td>' + d.mods.map(function (m) { var v = r.mods[m.key]; return '<td class="us-m"><span class="us-lv ' + v + '">' + (v === 'edit' ? '✎' : v === 'view' ? '👁' : '–') + '</span></td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div></div>';
     var n = $('#usNew'); if (n) n.onclick = function () { editUser(''); };
+    var g = $('#usGuest'); if (g) g.onclick = function () {   // v88: test site only
+      var ids = S.people.filter(function (p) { return /@example\.com$/i.test(p.email || ''); }).map(function (p) { return p.id; });
+      if (!ids.length) return toast('Load the sample people first (People › 🧪 Load 10 sample people)', true);
+      api('userGuestLoad', { personIds: ids }).then(function (r) {
+        if (!r.made.length) { toast('The sample people already have logins'); return; }
+        M.modal('<h2>🧪 Guest logins made</h2><p>' + r.made.length + ' sample people can now sign in with the role <b>Guest</b> (view Jobs &amp; customers and Projects). Test site only.</p><p>Password for all of them: <code class="us-pw">' + esc(r.password) + '</code></p>' +
+          '<div class="table-wrap" style="max-height:40vh;overflow:auto"><table class="sc-table"><thead><tr><th>Username</th></tr></thead><tbody>' + r.made.map(function (u) { return '<tr><td>' + esc(u) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+          '<p class="muted" style="font-size:12.5px">Change any of them to another role to try what that role can do. Sign in as them in a private window.</p><div class="actions"><button class="btn btn-gold" data-close type="button">Done</button></div>');
+        return load().then(draw);
+      }).catch(fail);
+    };
     V().querySelectorAll('tr[data-uid]').forEach(function (tr) { tr.onclick = function () { if (canEdit()) editUser(tr.getAttribute('data-uid')); }; });
   }
 

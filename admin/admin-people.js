@@ -48,9 +48,13 @@
         '<button class="tab' + (S.tab === 'compliance' ? ' on' : '') + '" data-ptab="compliance">🎫 Tickets &amp; licences' + (probs.length ? ' <b class="bad">' + probs.length + '</b>' : '') + '</button>' +
         '<button class="tab' + (S.tab === 'work' ? ' on' : '') + '" data-ptab="work">📅 Workload</button></div>' +
         '<span class="muted" style="font-size:13px">' + emp + ' employee' + (emp === 1 ? '' : 's') + ' · ' + (act.length - emp) + ' contractor' + (act.length - emp === 1 ? '' : 's') + '</span>' +
-        '<span class="sp"></span>' + (can('edit') ? '<button class="btn btn-gold" id="ppNew">＋ Person</button>' : '<span class="muted" style="font-size:12.5px">View only</span>') + '</div><div id="ppBody"></div>';
+        '<span class="sp"></span>' + ((M.me || {}).test && can('edit') ? '<button class="btn btn-sm" id="ppSample" title="Test site only: 10 made-up employees and contractors to try things out with">🧪 Load 10 sample people</button>' : '') +
+        (can('edit') ? '<button class="btn btn-gold" id="ppNew">＋ Person</button>' : '<span class="muted" style="font-size:12.5px">View only</span>') + '</div><div id="ppBody"></div>';
     V().querySelectorAll('[data-ptab]').forEach(function (b) { b.onclick = function () { S.tab = b.getAttribute('data-ptab'); history.replaceState(null, '', { list: '#people', compliance: '#people/compliance', work: '#people/workload' }[S.tab]); draw(); }; });
     var nb = $('#ppNew'); if (nb) nb.onclick = function () { edit(''); };
+    var sb = $('#ppSample'); if (sb) sb.onclick = function () {   // v88: test site only
+      sb.disabled = true; api('pplSampleLoad').then(function (r) { toast(r.ids.length ? r.ids.length + ' sample people added' + (r.skipped ? ' (' + r.skipped + ' were already there)' : '') + '. Give them Guest logins in Users & access.' : 'The sample people are already there'); return load(); }).then(draw).catch(function (e) { sb.disabled = false; fail(e); });
+    };
     if (S.tab === 'compliance') compTab(); else if (S.tab === 'work') workTab(); else listTab();
   }
 
