@@ -45,7 +45,7 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     await api(p, 'pplSave', { person: { type: 'Employee', name: 'Sam Ortega', role: 'Tradesperson', email: 'sam@example.com' } });
     await api(p, 'pplSave', { person: { type: 'Contractor', name: 'Lee Tran', role: 'Site supervisor' } });
     await p.goto(`${BASE}/admin/#users`); await p.waitForSelector('#usNew');
-    ok('Page', 'Users & access: the Owner row (full access), no logins yet, and the roles table', /Owner/.test(await p.textContent('.us-owner')) && /No logins yet/.test(await p.textContent('#view')) && (await p.$$('.us-roles tbody tr')).length === 6);
+    ok('Page', 'Users & access: the Owner row (full access), no logins yet, and the roles table', /Owner/.test(await p.textContent('.us-owner')) && /No logins yet/.test(await p.textContent('#view')) && (await p.$$('.us-roles tbody tr')).length === 7);   // v91: + Sub-contractor
     await p.click('#usNew'); await p.waitForSelector('#usPerson');
     const po = await p.$$eval('#usPerson option', (o) => o.map((x) => x.textContent));
     ok('Only People', 'only people in the People register can be picked', po.length === 4 && po.some((x) => /Priya Shah · Project manager/.test(x)) && po.some((x) => /Lee Tran.*no email/.test(x)));

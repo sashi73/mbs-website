@@ -730,7 +730,8 @@ export async function planPost(action, body, { who, by, audit }) {
     const today = new Date().toISOString().slice(0, 10);
     const [jobList, planList] = await Promise.all([J.all(), list()]);
     const jobs = Object.fromEntries(jobList.map((j) => [j.core, j]));
-    const plans = planList.map((p) => ({ core: p.core, name: p.name, ref: jobs[p.core] ? jobs[p.core].ref : p.core, customer: jobs[p.core] ? jobs[p.core].name : '', updated: p.updated, ...rollup(p, body.today || today) }));
+    const only = Array.isArray(body.onlyCores) ? body.onlyCores : null;   // v91: a sub-contractor sees only their project
+    const plans = planList.filter((p) => !only || only.includes(p.core)).map((p) => ({ core: p.core, name: p.name, ref: jobs[p.core] ? jobs[p.core].ref : p.core, customer: jobs[p.core] ? jobs[p.core].name : '', updated: p.updated, ...rollup(p, body.today || today) }));
     return out(200, { plans: plans.sort((a, b) => (b.updated || 0) - (a.updated || 0)) });
   }
   if (action === 'planGet') {

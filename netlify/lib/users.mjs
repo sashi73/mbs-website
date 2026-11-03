@@ -37,6 +37,7 @@ export const ROLES = {
   Accounts: { crm: 'view', projects: 'view', accounts: 'edit', stock: 'view', subbies: 'view', people: 'view', data: 'view', users: 'none' },
   'Read only': { ...all('view'), users: 'none' },
   Guest: { ...all('none'), crm: 'view', projects: 'view' },   // v88: for trying the console out
+  'Sub-contractor': { ...all('none'), projects: 'edit' },   // v91: a subbie: only their own project(s), nothing else
   Custom: null };
 export const ROLE_KEYS = Object.keys(ROLES);
 export const OWNER_MODS = all('edit');
@@ -61,8 +62,8 @@ export function need(action) {
   return { mod, level: READ.test(a) && !/^(planQuote|quoteStart)$/.test(a) ? 'view' : 'edit' };
 }
 // reads other modules need to work (the plan page shows subbies, stock, people and the job's quote / invoice)
-const SUPPORT = { subList: ['projects', 'people'], invList: ['projects'], invGet: ['projects'], pplList: ['projects', 'subbies', 'crm'], docForJob: ['projects', 'crm'], job: ['projects'],
-  custFor: ['projects', 'accounts'], custGet: ['accounts'], custList: ['accounts'], planList: ['people'], pplAssign: ['projects'], dashboard: [] };
+const SUPPORT = { subList: ['projects', 'people', 'users'], invList: ['projects'], invGet: ['projects'], pplList: ['projects', 'subbies', 'crm'], docForJob: ['projects', 'crm'], job: ['projects'],
+  custFor: ['projects', 'accounts'], custGet: ['accounts'], custList: ['accounts'], planList: ['people', 'users'], pplAssign: ['projects'], dashboard: [] };
 export function allows(ctx, action) {
   if (!ctx) return { ok: false };
   if (ctx.owner) return { ok: true };
@@ -101,7 +102,22 @@ export function tempPassword() {   // easy to read out: no 0/O, 1/l
 
 // ---------- users ----------
 const cleanMods = (m, role) => { const base = ROLES[role] || null, o = {}; for (const k of MOD_KEYS) { const v = (m || {})[k]; o[k] = LEVELS.includes(v) ? v : base ? base[k] : 'none'; } return o; };
-const summary = (u) => ({ id: u.id, personId: u.personId, name: u.name, username: u.username, email: u.email, role: u.role, mods: u.mods, active: u.active, mustChange: !!u.mustChange, lastLogin: u.lastLogin || 0, created: u.created });
+const summary = (u) => ({ id: u.id, personId: u.personId, name: u.name, username: u.username, email: u.email, role: u.role, mods: u.mods, active: u.active, mustChange: !!u.mustChange, lastLogin: u.lastLogin || 0, created: u.created,
+  kind: u.kind || 'person', subId: u.subId || '', projects: u.projects || [] });
+// v91: a sub-contractor login: Projects only (view or edit), and only the projects it was given
+const subMods = (lv) => ({ ...all('none'), projects: lv === 'view' ? 'view' : 'edit' });
+// what a sub-contractor signed in to one project may do. Every request naming a project must be theirs; other requests only
+// from this list (the plan page's own lookups). Money, people and other subbies' details stay out.
+const SCOPE_FREE = new Set(['me', 'logout', 'userPassword', 'planList', 'planAiStatus', 'commsSetup', 'planBomTplList', 'planBomTplGet', 'invList', 'invGet']);
+const SCOPE_DENY = new Set(['planDelete', 'planJobs', 'planQuote', 'planQuoteInfo', 'quoteStart', 'docToInvoice', 'docForJob', 'pipelineBoard', 'planBomTplSave', 'planBomTplDelete', 'pplList', 'pplAssign', 'subList', 'custFor', 'job']);
+export function scopeCheck(ctx, action, body) {
+  if (!ctx || !ctx.scope) return { ok: true };
+  const a = String(action || ''), no = { ok: false, error: 'Sub-contractor logins can only work on their own project.' };
+  if (SCOPE_DENY.has(a)) return no;
+  const core = body && (body.core || (body.plan && body.plan.core));
+  if (core) return ctx.scope.includes(String(core)) ? { ok: true } : no;
+  return SCOPE_FREE.has(a) ? { ok: true } : no;
+}
 async function index() { return (await kv.get('user-index')) || { users: {} }; }
 export async function list() { const i = await index(); return Object.values(i.users || {}).sort((a, b) => (a.name.toLowerCase() > b.name.toLowerCase() ? 1 : -1)); }
 export async function get(id) { return /^U-\d{3,5}$/.test(id || '') ? kv.get('user:' + id) : null; }
@@ -113,7 +129,11 @@ export async function context(session, ownerName, personOk) {
   if (!session.uid) return { owner: true, who: session.u, uid: '', role: 'Owner', mods: OWNER_MODS, name: session.u };
   const u = await get(session.uid);
   if (!u || !u.active || (u.ver || 0) !== (session.v || 0)) return null;
-  if (personOk && !(await personOk(u.personId))) return null;
+  if (personOk && !(await personOk(u.personId, u))) return null;
+  if (u.kind === 'subbie') {   // v91: signed in to one of their projects; nothing else
+    if (!session.pc || !(u.projects || []).includes(session.pc)) return null;
+    return { owner: false, who: u.username, uid: u.id, role: 'Sub-contractor', mods: subMods((u.mods || {}).projects), name: u.name, mustChange: !!u.mustChange, personId: '', subId: u.subId, kind: 'subbie', scope: [session.pc] };
+  }
   return { owner: false, who: u.username, uid: u.id, role: u.role, mods: cleanMods(u.mods, u.role), name: u.name, mustChange: !!u.mustChange, personId: u.personId };
 }
 // v90: a person deleted from People: their login goes too
@@ -128,18 +148,42 @@ export async function login(username, password, personOk) {
   const s = (await list()).find((x) => x.username === name || (x.email && x.email.toLowerCase() === name));
   if (!s || !s.active) return null;
   const u = await get(s.id); if (!u || !checkPw(u, password)) return null;
-  if (personOk && !(await personOk(u.personId))) return null;
+  if (personOk && !(await personOk(u.personId, u))) return null;
   u.lastLogin = Date.now(); await put(u);
   return u;
 }
 
-export async function userPost(action, body, { ctx, audit, person }) {
+export async function userPost(action, body, { ctx, audit, person, sub, project }) {
   const log = (t) => (audit ? audit(ctx.who, t) : null);
   switch (action) {
     case 'userList': return out(200, { users: await list(), mods: MODS.map((m) => ({ key: m[0], name: m[1], about: m[2] })), roles: ROLE_KEYS.map((r) => ({ name: r, mods: ROLES[r] })), levels: LEVELS });
     case 'userSave': {
       const f = body.user || {}, id = /^U-\d{3,5}$/.test(f.id || '') ? f.id : '';
       const old = id ? await get(id) : null; if (id && !old) return out(404, { error: 'User not found' });
+      if ((old && old.kind === 'subbie') || (!old && f.kind === 'subbie')) {   // v91: a sub-contractor: Projects only, their projects only
+        const sc = sub ? await sub(str(f.subId || (old && old.subId), 12)) : null;
+        if (!sc) return out(400, { error: 'Pick a sub-contractor from Subbies.' });
+        if (sc.archived || sc.status === 'Do not use') return out(400, { error: sc.business + ' is archived or marked "Do not use" in Subbies.' });
+        const projects = [];
+        for (const c of (Array.isArray(f.projects) ? f.projects : []).slice(0, 30)) { const pj = project ? await project(str(c, 30)) : null; if (pj && !projects.includes(pj.core)) projects.push(pj.core); }
+        if (!projects.length) return out(400, { error: 'Give them at least one project.' });
+        const username = str(f.username || sc.email || (old && old.username), 160).toLowerCase();
+        if (!/^[a-z0-9._@+-]{3,160}$/.test(username)) return out(400, { error: 'The username can use letters, numbers and . _ @ + - (at least 3). Add an email to the subbie, or type a username.' });
+        const clash = (await list()).find((x) => x.id !== id && (x.username === username || (x.subId && x.subId === sc.id)));
+        if (clash) return out(400, { error: clash.subId === sc.id ? sc.business + ' already has a login (' + clash.username + ').' : 'That username is taken.' });
+        const mods = subMods(f.level || (old && old.mods && old.mods.projects));
+        const u = { ...(old || {}), kind: 'subbie', subId: sc.id, personId: '', name: sc.contact ? sc.contact + ' (' + sc.business + ')' : sc.business, email: sc.email || '', username, role: 'Sub-contractor', mods, projects, active: f.active !== false, by: ctx.who, updated: Date.now() };
+        let temp = '';
+        if (!old) {
+          const n = await kv.update('user-seq', (x) => ({ n: ((x && x.n) || 0) + 1 }), () => ({ n: 0 }));
+          u.id = 'U-' + String(n.n).padStart(3, '0'); u.created = Date.now(); u.ver = 1;
+          temp = tempPassword(); Object.assign(u, hashPw(temp)); u.mustChange = true;
+        }
+        if (old && (old.active !== u.active || JSON.stringify(old.mods) !== JSON.stringify(u.mods) || JSON.stringify(old.projects || []) !== JSON.stringify(projects))) u.ver = (old.ver || 0) + 1;
+        await put(u);
+        await log(`${old ? 'Sub-contractor login changed' : 'Sub-contractor login added'}: ${u.username} (${sc.business}), Projects ${mods.projects}, ${projects.length} project(s)${u.active ? '' : ', disabled'}`);
+        return out(200, { user: summary(u), temp });
+      }
       const p = await person(str(f.personId || (old && old.personId), 12));
       if (!p) return out(400, { error: 'Pick someone from People: only people in the register can have a login.' });
       if (p.archived || p.status === 'Inactive') return out(400, { error: p.name + ' is not active in People.' });
@@ -147,7 +191,7 @@ export async function userPost(action, body, { ctx, audit, person }) {
       if (!/^[a-z0-9._@+-]{3,160}$/.test(username)) return out(400, { error: 'The username can use letters, numbers and . _ @ + - (at least 3)' });
       const clash = (await list()).find((x) => x.id !== id && (x.username === username || x.personId === p.id));
       if (clash) return out(400, { error: clash.personId === p.id ? p.name + ' already has a login (' + clash.username + ').' : 'That username is taken.' });
-      const role = ROLE_KEYS.includes(f.role) ? f.role : 'Read only';
+      const role = ROLE_KEYS.includes(f.role) && f.role !== 'Sub-contractor' ? f.role : 'Read only';
       const mods = cleanMods(role === 'Custom' ? f.mods : ROLES[role], role);
       if (ctx.uid && id === ctx.uid && (mods.users !== 'edit' || f.active === false)) return out(400, { error: 'You can\'t take away your own access to Users & access.' });
       const u = { ...(old || {}), personId: p.id, name: p.name, email: p.email || '', username, role, mods, active: f.active !== false, by: ctx.who, updated: Date.now() };

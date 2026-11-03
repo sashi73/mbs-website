@@ -39,7 +39,7 @@ export function checkPassword(user, pass) {
   return u && p;
 }
 export function makeSession(user, now = Date.now(), extra = {}) {   // v86: extra = { uid, v } for a user from Users & access (the Owner has none)
-  const body = b64(JSON.stringify({ u: user, iat: now, exp: now + HOURS * 3600000, ...(extra.uid ? { uid: extra.uid, v: extra.v || 0 } : {}) }));
+  const body = b64(JSON.stringify({ u: user, iat: now, exp: now + HOURS * 3600000, ...(extra.uid ? { uid: extra.uid, v: extra.v || 0 } : {}), ...(extra.pc ? { pc: extra.pc } : {}) }));   // v91: pc = the project a sub-contractor signed in to
   return body + '.' + sign(body);
 }
 export function readSession(req, now = Date.now()) {

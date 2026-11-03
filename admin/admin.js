@@ -56,7 +56,7 @@
   var VIEWMOD = { dashboard: 'crm', jobs: 'crm', job: 'crm', new: 'crm', reminders: 'crm', reports: 'crm', customers: 'crm', customer: 'crm', projects: 'projects', plan: 'projects', swms: 'projects',
     quotes: 'accounts', invoices: 'accounts', doc: 'accounts', expenses: 'accounts', accounts: 'accounts', inventory: 'stock', subs: 'subbies', people: 'people', sql: 'data', data: 'data', activity: 'data', analytics: 'data', users: 'users' };
   var LVN = { none: 0, view: 1, edit: 2 };
-  function allowed(mod, lv, alt) { var me = window.MBS && window.MBS.me; if (!me || me.owner) return true; var m = me.mods || {}; if (LVN[m[mod]] >= LVN[lv || 'view']) return true; return (alt || []).some(function (k) { return LVN[m[k]] >= 1; }); }
+  function allowed(mod, lv, alt) { var me = window.MBS && window.MBS.me; if (!me || me.owner) return true; var m = me.mods || {}; if (LVN[m[mod]] >= LVN[lv || 'view']) return true; if (me.scope) return false; return (alt || []).some(function (k) { return LVN[m[k]] >= 1; }); }   // v91: a sub-contractor: no support reads
   function applyAccess(me) {
     window.MBS.me = me;
     Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (a) { var mod = NAVMOD[a.getAttribute('data-nav')]; a.hidden = !!mod && !allowed(mod, 'view'); });
@@ -64,14 +64,17 @@
     $('#who').textContent = me.name || me.user; $('#who').title = (me.owner ? 'Owner' : me.role) + ' · click to change your password';
     var r = $('#whoRole'); if (r) r.textContent = me.owner ? 'Owner' : me.role;
     document.body.classList.toggle('is-owner', !!me.owner);
+    document.body.classList.toggle('is-subbie', !!me.scope);   // v91: a sub-contractor signed in to their project
   }
-  function firstPage() { var order = [['dashboard', 'crm'], ['projects', 'projects'], ['quotes', 'accounts'], ['inventory', 'stock'], ['subs', 'subbies'], ['people', 'people'], ['sql/ask', 'data'], ['users', 'users']];
+  function firstPage() { var me0 = window.MBS && window.MBS.me; if (me0 && me0.scope) return 'plan/' + me0.scope[0] + '/overview';
+    var order = [['dashboard', 'crm'], ['projects', 'projects'], ['quotes', 'accounts'], ['inventory', 'stock'], ['subs', 'subbies'], ['people', 'people'], ['sql/ask', 'data'], ['users', 'users']];
     for (var i = 0; i < order.length; i++) if (allowed(order[i][1], 'view')) return order[i][0]; return 'dashboard'; }
   function showApp(user) {
     $('#login').hidden = true;
     api('me').then(function (me) {
       applyAccess(me); $('#app').hidden = false;
       if (me.mustChange && window.MBS.users) { view.innerHTML = '<div class="empty">Set your own password to carry on.</div>'; window.MBS.users.changePassword(true); return; }
+      if (me.scope) { var h = location.hash.slice(1); if (h.indexOf('plan/' + me.scope[0]) !== 0) { location.hash = '#' + firstPage(); return; } }   // v91: their project only
       if (!allowed(VIEWMOD[(location.hash.slice(1) || 'dashboard').split('/')[0]] || 'crm', 'view')) { var fp = firstPage(); if (location.hash.slice(1) !== fp) { location.hash = '#' + fp; return; } }
       route();
     }).catch(function () { showLogin(); });
@@ -80,9 +83,13 @@
     e.preventDefault();
     var f = e.target, msg = $('#loginMsg'), btn = f.querySelector('button');
     msg.textContent = ''; btn.disabled = true; btn.textContent = 'Signing in…';
-    api('login', { username: f.username.value, password: f.password.value })
-      .then(function (j) { f.password.value = ''; showApp(j.user); })
-      .catch(function (err) { msg.textContent = err.message; f.password.value = ''; f.password.focus(); })
+    var pj = $('#loginProj');
+    api('login', { username: f.username.value, password: f.password.value, project: pj.hidden ? '' : f.project.value.trim() })
+      .then(function (j) {
+        if (j.needProject) { pj.hidden = false; msg.textContent = 'You are signing in as a sub-contractor: enter your project code.'; f.project.required = true; f.project.focus(); return; }   // v91
+        f.password.value = ''; showApp(j.user);
+      })
+      .catch(function (err) { msg.textContent = err.message; if (pj.hidden) { f.password.value = ''; f.password.focus(); } else f.project.focus(); })
       .then(function () { btn.disabled = false; btn.textContent = 'Sign in'; });
   });
   $('#logout').addEventListener('click', function () { api('logout').then(function () { location.hash = ''; showLogin(); }); });

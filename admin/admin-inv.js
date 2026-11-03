@@ -340,7 +340,7 @@
     if (!S.queue.length || !document.getElementById('modal').hidden) return;
     reorder(S.queue.shift(), true);
   }
-  function reorder(id, triggered, want) {   // v89: want = a quantity to suggest (the BOM's shortfall)
+  function reorder(id, triggered, want, onDone) {   // v92: onDone({ via, qty, expected, supplier }) once it is ordered   // v89: want = a quantity to suggest (the BOM's shortfall)
     api('invGet', { id: id }).then(function (r) {
       var it = r.item, s = r.summary, sups = r.suppliers.filter(function (x) { return !x.archived; });
       var quoted = (it.prices || []).map(function (p) { return p.supplier; });
@@ -366,7 +366,8 @@
       if (!sups.length) { $('#roNewSup').onclick = function () { M.closeModal(); editSupplier(null, function () { reorder(id, triggered); }); }; return; }
       info(); $('#roSup').onchange = function () { info(); $('#roMail').innerHTML = ''; };
       $('#roMarked').onclick = function () {
-        api('invOrdered', { id: id, qty: $('#roQty').value, supplier: $('#roSup').value, expected: $('#roExp').value, via: 'phone' }).then(function () { M.closeModal(); toast('Marked as on order'); afterOrder(); }).catch(fail);
+        var o = { via: 'phone', qty: parseFloat($('#roQty').value) || 0, expected: $('#roExp').value, supplier: ($('#roSup').selectedOptions[0] || {}).textContent || '' };
+        api('invOrdered', { id: id, qty: $('#roQty').value, supplier: $('#roSup').value, expected: $('#roExp').value, via: 'phone' }).then(function () { M.closeModal(); toast('Marked as on order'); afterOrder(); if (onDone) onDone(o); }).catch(fail);
       };
       var draft = function (ai) {
         var btn = ai ? $('#roAI') : $('#roEmail'); var old = btn.textContent; btn.disabled = true; btn.textContent = ai ? 'Writing…' : old;
@@ -381,8 +382,9 @@
           $('#emApp').onclick = function (e) { e.preventDefault(); location.href = 'mailto:' + encodeURIComponent($('#emTo').value) + '?subject=' + encodeURIComponent($('#emSub').value) + '&body=' + encodeURIComponent($('#emBody').value); };
           $('#emSend').onclick = function () {
             var b = $('#emSend'); b.disabled = true; b.textContent = 'Sending…';
+            var oq = parseFloat($('#roQty').value) || 0, oe = $('#roExp').value;
             api('invReorderSend', { id: id, supplier: $('#roSup').value, qty: $('#roQty').value, expected: $('#roExp').value, to: $('#emTo').value, subject: $('#emSub').value, body: $('#emBody').value, copyMe: $('#emCopy').checked })
-              .then(function (x) { M.closeModal(); toast('Order emailed to ' + x.to); afterOrder(); })
+              .then(function (x) { M.closeModal(); toast('Order emailed to ' + x.to); afterOrder(); if (onDone) onDone({ via: 'email', qty: oq, expected: oe, supplier: x.to || '' }); })
               .catch(function (e) { b.disabled = false; b.textContent = 'Send email & mark on order'; fail(e); });
           };
         }).catch(function (e) { $('#roMail').innerHTML = '<p class="ai-err">' + esc(e.message) + '</p>'; }).then(function () { btn.disabled = false; btn.textContent = old; });
@@ -415,7 +417,7 @@
     }).catch(fail);
   }
 
-  M.inv = { load: load, prompt: prompt, reorder: function (id, qty) { reorder(id, false, qty); }, save: function (it) { return api('invSave', { item: it }); }, pick: pick, items: function () { return S.data ? S.data.items : []; } };
+  M.inv = { load: load, prompt: prompt, reorder: function (id, qty, onDone) { reorder(id, false, qty, onDone); }, save: function (it) { return api('invSave', { item: it }); }, pick: pick, items: function () { return S.data ? S.data.items : []; } };
   M.addView('inventory', 'Inventory & suppliers', page);
   window.MBS.invState = S;   // for tests
   // low-stock badge in the menu: on start and whenever the dashboard is opened

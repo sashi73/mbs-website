@@ -25,12 +25,22 @@ export function cleanLine(x, taskIds) {
     lead: int(x.lead, 0, 365, 0), note: str(x.note, 240), source: ['ai', 'manual', 'template', 'plan'].includes(x.source) ? x.source : 'manual',
     est: !!x.est, checked: !!x.checked, checkedBy: str(x.checkedBy, 80) };
 }
+// v92: re-orders made from the BOM: per stock item, how it was ordered (phone, email, online, other), how many, from whom, when due
+const VIA = ['phone', 'email', 'online', 'in person', 'other'];
+function cleanOrders(o) {
+  const res = {};
+  for (const [k, v] of Object.entries(o && typeof o === 'object' ? o : {}).slice(0, 400)) {
+    if (!/^I-\d{3,6}$/.test(k) || !v || typeof v !== 'object') continue;
+    res[k] = { qty: Math.max(0, Math.min(1e7, q3(v.qty))), via: VIA.includes(v.via) ? v.via : 'other', supplier: str(v.supplier, 120), ref: str(v.ref, 60), expected: /^\d{4}-\d{2}-\d{2}$/.test(v.expected || '') ? v.expected : '', at: Number(v.at) || Date.now(), by: str(v.by, 80) };
+  }
+  return res;
+}
 export function cleanBom(b, taskIds) {
   if (!b || typeof b !== 'object') return null;
   const lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 400).map((x) => cleanLine(x, taskIds)).filter(Boolean);
   const signed = b.status === 'Signed off' && lines.length && lines.every((x) => x.checked);
   return { status: signed ? 'Signed off' : 'Draft', lines, signedBy: signed ? str(b.signedBy, 80) : '', signedRole: signed ? str(b.signedRole, 60) : '', signedAt: signed ? Number(b.signedAt) || Date.now() : 0,
-    sig: signed ? str(b.sig, 80) : '', template: str(b.template, 20), log: (Array.isArray(b.log) ? b.log : []).slice(-60).map((x) => ({ at: Number(x && x.at) || Date.now(), what: str(x && x.what, 300) })).filter((x) => x.what) };
+    sig: signed ? str(b.sig, 80) : '', template: str(b.template, 20), orders: cleanOrders(b.orders), log: (Array.isArray(b.log) ? b.log : []).slice(-60).map((x) => ({ at: Number(x && x.at) || Date.now(), what: str(x && x.what, 300) })).filter((x) => x.what) };
 }
 
 // ---------- ✨ the AI drafts the BOM ----------

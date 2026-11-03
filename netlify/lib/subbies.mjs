@@ -79,6 +79,9 @@ export async function saveSub(f, by) {
   await kv.update('sub-index', (x) => { x.subs = x.subs || {}; x.subs[id] = summary(s); return x; }, () => ({ subs: {} }));
   return { sub: s };
 }
+// v91: can this sub-contractor sign in? (in the register, not archived, not "Do not use")
+export async function canLogin(id) { const s = /^SC-\d{3,5}$/.test(id || '') ? await kv.get('sub:' + id) : null; return !!(s && !s.archived && s.status !== 'Do not use'); }
+export async function getSub(id) { return /^SC-\d{3,5}$/.test(id || '') ? kv.get('sub:' + id) : null; }
 export async function list() {
   const idx = await index(), now = today();
   const subs = Object.values(idx.subs || {}).map((s) => ({ ...s, comp: compliance({ trade: s.trade, licence: { expiry: s.licenceExpiry }, insurance: { expiry: s.plExpiry },

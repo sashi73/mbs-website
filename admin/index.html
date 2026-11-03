@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>MBS Console</title>
 <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="admin.css?v=90">
+<link rel="stylesheet" href="admin.css?v=91">
 </head>
 <body>
 
@@ -15,9 +15,10 @@
   <form class="login-card" id="loginForm" autocomplete="on">
     <img src="../assets/mbs-logo.svg" alt="Modern Building Solutions" class="login-logo" width="190" height="93">
     <h1>MBS Console</h1>
-    <p class="muted">Staff and admin only.</p>
+    <p class="muted">Staff, admin and sub-contractors.</p>
     <label>Username<input name="username" autocomplete="username" required autofocus></label>
     <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <label id="loginProj" hidden>Project code <small class="muted">(sub-contractors: the code MBS gave you)</small><input name="project" autocomplete="off" placeholder="e.g. J261103-000002"></label>
     <p class="login-msg" id="loginMsg" role="alert"></p>
     <button class="btn btn-gold btn-block" type="submit">Sign in</button>
     <a class="back" href="../index.html">← Back to the website</a>
@@ -64,7 +65,7 @@
     </nav>
     <div class="side-foot">
       <span class="who-box"><button class="who link" id="who" type="button"></button><small class="who-role" id="whoRole"></small></span>
-      <small class="ver" title="Console version">v90</small>
+      <small class="ver" title="Console version">v91</small>
       <button class="link" id="logout" type="button">Sign out</button>
     </div>
   </aside>
@@ -74,7 +75,7 @@
       <button class="menu-btn" id="menuBtn" type="button" aria-label="Menu">☰</button>
       <h1 id="title">Dashboard</h1>
       <form class="top-search" id="topSearch" role="search"><input id="q" placeholder="Search name, phone, suburb or job number…" aria-label="Search jobs"></form>
-      <a class="btn btn-gold btn-sm" href="#new">＋ New job</a>
+      <a class="btn btn-gold btn-sm top-new" href="#new">＋ New job</a>
     </header>
     <main class="view" id="view" tabindex="-1"></main>
   </div>
@@ -83,17 +84,17 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="modal" id="modal" hidden><div class="modal-card" role="dialog" aria-modal="true"><div id="modalBody"></div></div></div>
 
-<script src="admin.js?v=90"></script>
-<script src="admin-acct.js?v=90"></script>
-<script src="admin-sql.js?v=90"></script>
-<script src="admin-plan.js?v=90"></script>
-<script src="admin-inv.js?v=90"></script>
-<script src="admin-board.js?v=90"></script>
-<script src="admin-cust.js?v=90"></script>
-<script src="admin-subs.js?v=90"></script>
-<script src="admin-swms.js?v=90"></script>
-<script src="admin-report.js?v=90"></script>
-<script src="admin-people.js?v=90"></script>
-<script src="admin-users.js?v=90"></script>
+<script src="admin.js?v=91"></script>
+<script src="admin-acct.js?v=91"></script>
+<script src="admin-sql.js?v=91"></script>
+<script src="admin-plan.js?v=91"></script>
+<script src="admin-inv.js?v=91"></script>
+<script src="admin-board.js?v=91"></script>
+<script src="admin-cust.js?v=91"></script>
+<script src="admin-subs.js?v=91"></script>
+<script src="admin-swms.js?v=91"></script>
+<script src="admin-report.js?v=91"></script>
+<script src="admin-people.js?v=91"></script>
+<script src="admin-users.js?v=91"></script>
 </body>
 </html>
