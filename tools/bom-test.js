@@ -101,7 +101,21 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     ok('Ordering task', 'not added twice', (await P.get(core)).tasks.filter((t) => t.name === 'Order: Stone benchtop').length === 1);
     await p.click(`[data-bro="${tile.id}"]`); await p.waitForSelector('#roQty');
     ok('Re-order', '"Re-order 15" opens the Inventory re-order with the shortfall as the quantity', (await p.inputValue('#roQty')) === '15', await p.inputValue('#roQty'));
-    await p.click('#modal [data-close]'); await sleep(300);
+    await p.click('#roMarked'); await sleep(2500);   // v92: ordered by phone in Inventory's re-order: marked on the BOM
+    pl = await P.get(core);
+    const tileIdx = (await kv.get('inv-index')).items[tile.id];
+    ok('Ordered', '"I ordered by phone" in the re-order marks it on the BOM (15 m2, by phone) and in Inventory (on order)', pl.bom.orders && pl.bom.orders[tile.id] && pl.bom.orders[tile.id].via === 'phone' && pl.bom.orders[tile.id].qty === 15 && tileIdx.onOrder === 15 && /15 m2 ordered by phone/.test(await p.textContent('.bom-short')), JSON.stringify(pl.bom.orders));
+    ok('Ordered', 'the shortfall says what is ordered and what is still to order', /✓ 1 ordered/.test(await p.textContent('.bom-short')) && /1 still to order/.test(await p.textContent('.bom-short')) && /To order: 1/.test(await p.textContent('.bom-kpi')));
+    await p.click(`[data-bmark="${bi}"]`); await p.waitForSelector('#moF');
+    await p.check('#moF [name=via][value=email]'); await p.fill('#moF [name=sup]', 'Stone Co'); await p.fill('#moF [name=ref]', 'PO-1234'); await p.click('#moF button[type=submit]'); await sleep(2500);
+    pl = await P.get(core); const bo = pl.bom.orders[bi];
+    ok('Ordered', '"✓ Mark ordered" records any other order: by email, from Stone Co, order PO-1234, due after the 15-day lead time', bo && bo.via === 'email' && bo.supplier === 'Stone Co' && bo.ref === 'PO-1234' && bo.qty === 1 && bo.expected > new Date().toISOString().slice(0, 10) && (await kv.get('inv-index')).items[bi].onOrder === 1 && /✓ Shortfall ordered/.test(await p.textContent('.bom-kpi')), JSON.stringify(bo));
+    ok('Ordered', 'and it is in the BOM history', pl.bom.log.some((x) => /Stone benchtop: 1 each ordered by email from Stone Co/.test(x.what)));
+    await p.click(`[data-bundo="${bi}"]`); await p.waitForSelector('#okBtn'); await p.click('#okBtn'); await sleep(2500);
+    pl = await P.get(core);
+    ok('Ordered', '↶ undo puts it back to "still to order" (and off order in Inventory)', !pl.bom.orders[bi] && !(await kv.get('inv-index')).items[bi].onOrder && /1 still to order/.test(await p.textContent('.bom-short')));
+    await p.click(`[data-bmark="${bi}"]`); await p.waitForSelector('#moF'); await p.click('#moF button[type=submit]'); await sleep(2500);
+    await p.locator('.bom-short').screenshot({ path: path.join(os.tmpdir(), 'bom-ordered.png') });
 
     // 4. edit a line: the task follows
     const q = line('Porcelain tile 600x600').locator('[data-bf=qty]'); await q.fill('30'); await q.press('Tab'); await sleep(1800);
@@ -123,7 +137,7 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     // documents (signed)
     let f = await dl(async () => { await p.click('#bomDoc'); await p.waitForSelector('#bdDocx'); await p.click('#bdDocx'); });
     const txt = (await mammoth.extractRawText({ path: f })).value;
-    ok('Document', 'Word: the BOM by task with totals, the shortfall to order and the sign-off', /BILL OF MATERIALS/.test(txt) && /Materials by task/.test(txt) && /Stone benchtop/.test(txt) && /To order \(shortfall\)/.test(txt) && /Olivia Bennett/.test(txt) && /15 working days/.test(txt), txt.slice(0, 300));
+    ok('Document', 'Word: the BOM by task with totals, the shortfall to order and the sign-off', /BILL OF MATERIALS/.test(txt) && /Materials by task/.test(txt) && /Stone benchtop/.test(txt) && /To order \(shortfall\)/.test(txt) && /Olivia Bennett/.test(txt) && /15 working days/.test(txt) && /15 m2 by phone/.test(txt), txt.slice(0, 300));
     f = await dl(async () => { await p.click('#bomDoc'); await p.waitForSelector('#bdPdf'); await p.click('#bdPdf'); });
     ok('Document', 'PDF too', fs.readFileSync(f).slice(0, 5).toString() === '%PDF-' && fs.statSync(f).size > 3000);
     f = await dl(() => p.click('#bomXls'));
@@ -145,6 +159,11 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
       p1.bom.lines.every((l) => { const m = p2.bom.lines.find((x) => x.name === l.name); return m && nm(p2, m.task) === nm(p1, l.task); }) && p2.bom.template === 'BT-001', JSON.stringify(p2.bom.lines.map((l) => [l.name, l.qty, nm(p2, l.task)])));
     ok('Template', 'and its stock lines are on that job\'s tasks too', p2.tasks.some((t) => t.mats.some((m) => m.item === tile.id && m.qty === 60)));
     await p.screenshot({ path: path.join(os.tmpdir(), 'bom-tab.png'), fullPage: true });
+    await p.waitForSelector('#bomOAll'); await p.check('#bomOAll'); await sleep(200);
+    ok('Ordered', 'tick several items still to order and mark them ordered together', /Mark 2 as ordered/.test(await p.textContent('#bomMarkSel')));
+    await p.click('#bomMarkSel'); await p.waitForSelector('#moF'); await p.check('#moF [name=via][value=online]'); await p.fill('#moF [name=sup]', 'Trade Direct'); await p.click('#moF button[type=submit]'); await sleep(3000);
+    const p2o = (await P.get(core2)).bom.orders;
+    ok('Ordered', 'each gets its own still-to-order quantity, ordered online from Trade Direct', Object.keys(p2o).length === 2 && Object.values(p2o).every((o) => o.via === 'online' && o.supplier === 'Trade Direct' && o.qty > 0) && /✓ Shortfall ordered/.test(await p.textContent('.bom-kpi')), JSON.stringify(p2o));
     await p.click('#bomTpl'); await p.waitForSelector('[data-tdel]'); await p.click('[data-tdel]'); await p.waitForSelector('#okBtn'); await p.click('#okBtn'); await sleep(1200);
     ok('Template', 'a template can be deleted', JSON.parse(await p.evaluate(() => window.MBS.api('planBomTplList').then((r) => JSON.stringify(r.templates)))).length === 0);
     ok('Console', 'no JavaScript errors', errors.length === 0, errors.join(' | '));
