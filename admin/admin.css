@@ -1270,3 +1270,19 @@ tr.us-owner td{background:#FFFBEB}
 .kpop-sep{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8A8577;padding:6px 8px 2px}.kav.pp{background:#FDE68A;color:#78350F}
 .who-box{display:flex;flex-direction:column;min-width:0;flex:1}.who-box .who{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.us-table th.us-m,.us-roles th.us-m{font-size:10.5px}
 .us-pw{font-size:18px;background:#FBF8EF;border:1px dashed #C9A227;border-radius:8px;padding:3px 10px}
+/* v89: 🧱 Bill of Materials */
+.bom-how{margin:6px 0 12px;padding-left:20px;line-height:1.55}.bom-how li{margin:4px 0}
+.bom-pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#F3EFE3;color:#6B665A;margin-left:8px}.bom-pill.ok{background:#E7F5EC;color:#1E7A43}
+.bom-kpi{display:flex;flex-wrap:wrap;gap:8px 18px;margin:2px 0 10px;font-size:13.5px}.bom-kpi .bad{color:#B42318}
+.bom-signed{background:#E7F5EC;border:1px solid #BFE3CC;border-radius:10px;padding:8px 12px;font-size:13.5px}
+.bom-tbl td{vertical-align:top}.bom-tbl input,.bom-tbl select{padding:5px 7px;font-size:13px}
+.bom-tbl td.num input{width:78px;text-align:right}.bom-tbl input.bom-u{width:62px}.bom-tbl select{max-width:190px}
+.bom-tbl td:nth-child(2){min-width:200px}
+.bom-tbl tr.bom-g td{background:#F6F2E6;font-size:13px}.bom-tbl tr.bom-g td{display:table-cell}.bom-tbl tr.bom-g .sp{display:inline-block;width:14px}
+.bom-tbl tr.ok td{background:#FAFDF9}
+.bom-tbl td.c{width:30px;text-align:center}.bom-ck input{width:18px!important;height:18px;margin:6px 0 0}
+.bom-tags{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;margin-top:3px;font-size:11.5px}.bom-src{color:#8A8471}
+.bom-stk{font-size:12.5px;white-space:nowrap}.bom-stk .btn{margin-left:4px;padding:2px 7px;font-size:11.5px}
+.bom-st{color:#1E7A43;font-weight:600}.bom-st.short{color:#B42318}.bom-ns{color:#8A8471}
+.bom-del{padding:2px 7px}.bom-log ul{margin:6px 0 0;padding-left:18px;font-size:13px}.bom-log summary{cursor:pointer}
+.bom-short h2{color:#B42318}

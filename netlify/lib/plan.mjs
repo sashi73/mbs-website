@@ -8,6 +8,7 @@ import { env, isTestSite } from './shared.mjs';
 import { llmJson, usage, checkLimit, llmSetup, sydToday } from './ai.mjs';
 import * as INV from './inventory.mjs';
 import * as ACC from './accounts.mjs';
+import { cleanBom } from './bom.mjs';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const str = (s, max = 300) => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
@@ -201,6 +202,7 @@ function clean(p, core) {
   };
   // v75: the RACI map: for each activity (task), each stakeholder's R / A / C / I
   const tSet = new Set(res.tasks.map((t) => t.id)), sSet = new Set(res.stakeholders.map((x) => x.id)), rm = p.raciMap && typeof p.raciMap === 'object' ? p.raciMap : {};
+  res.bom = p.bom ? cleanBom(p.bom, tSet) : null;   // v89: the Bill of Materials
   res.raciMap = {};
   for (const [tid, row] of Object.entries(rm).slice(0, 400)) {
     if (!tSet.has(tid) || !row || typeof row !== 'object') continue;

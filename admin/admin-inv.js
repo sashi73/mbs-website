@@ -340,7 +340,7 @@
     if (!S.queue.length || !document.getElementById('modal').hidden) return;
     reorder(S.queue.shift(), true);
   }
-  function reorder(id, triggered) {
+  function reorder(id, triggered, want) {   // v89: want = a quantity to suggest (the BOM's shortfall)
     api('invGet', { id: id }).then(function (r) {
       var it = r.item, s = r.summary, sups = r.suppliers.filter(function (x) { return !x.archived; });
       var quoted = (it.prices || []).map(function (p) { return p.supplier; });
@@ -351,7 +351,7 @@
         '<p style="margin:6px 0 2px">Available <b>' + fmtQ(s.available) + ' ' + esc(it.unit) + '</b>' + (s.allocated ? ' (' + fmtQ(s.onHand) + ' on hand, ' + fmtQ(s.allocated) + ' set aside for jobs)' : '') + ' · re-order at ' + fmtQ(it.reorderLevel) + (s.onOrder ? ' · ' + fmtQ(s.onOrder) + ' already on order' : '') + '</p>' +
         (triggered ? '<p class="muted" style="margin:0 0 10px">Do you want to contact the supplier by phone or email?</p>' : '') +
         (sups.length ? '<div class="form" style="margin-top:8px"><label>Supplier<select id="roSup">' + order.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === sel ? ' selected' : '') + '>' + esc(x.name) + (x.id === it.preferred ? ' (preferred)' : '') + '</option>'; }).join('') + '</select></label>' +
-          '<label>Quantity to order (' + esc(it.unit) + ')<input id="roQty" inputmode="decimal" value="' + fmtQ(r.suggested) + '"></label></div><p class="muted" id="roInfo" style="margin:6px 0"></p>' +
+          '<label>Quantity to order (' + esc(it.unit) + ')<input id="roQty" inputmode="decimal" value="' + fmtQ(want > 0 ? Math.max(want, 0) : r.suggested) + '"></label></div><p class="muted" id="roInfo" style="margin:6px 0"></p>' +
           '<div class="ro-ways"><div class="ro-way"><h3>📞 Phone</h3><div id="roCall"></div><button class="btn btn-sm" id="roMarked" type="button">I ordered by phone: mark as on order</button></div>' +
           '<div class="ro-way"><h3>✉ Email</h3><p class="muted" style="margin:0 0 8px">Write it yourself or let the AI write it with the quantity.</p><button class="btn btn-sm" id="roEmail" type="button">Write the email</button> <button class="btn btn-sm btn-ai" id="roAI" type="button">✨ Write it with AI</button></div></div>' +
           '<div id="roMail"></div>'
@@ -415,7 +415,7 @@
     }).catch(fail);
   }
 
-  M.inv = { load: load, prompt: prompt, reorder: function (id) { reorder(id, false); }, pick: pick, items: function () { return S.data ? S.data.items : []; } };
+  M.inv = { load: load, prompt: prompt, reorder: function (id, qty) { reorder(id, false, qty); }, save: function (it) { return api('invSave', { item: it }); }, pick: pick, items: function () { return S.data ? S.data.items : []; } };
   M.addView('inventory', 'Inventory & suppliers', page);
   window.MBS.invState = S;   // for tests
   // low-stock badge in the menu: on start and whenever the dashboard is opened

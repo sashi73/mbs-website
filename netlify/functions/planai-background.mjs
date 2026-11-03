@@ -10,6 +10,7 @@ import * as COMMS from '../lib/comms.mjs';
 import * as REPORTS from '../lib/reports.mjs';
 import * as U from '../lib/users.mjs';
 import * as PPL from '../lib/people.mjs';
+import * as BOM from '../lib/bom.mjs';
 
 const ok = () => new Response('', { status: 202 });
 export default async (req) => {
@@ -53,6 +54,12 @@ export default async (req) => {
       const r = await COMMS.assessChange({ core: body.core, title: body.title, text: body.text }, `Admin (${session.u})`);
       await kv.set('aiplan:' + id, { cr: r.error ? null : r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
       if (!r.error) await A.audit(session.u, `AI assessed a change request on ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
+      return ok();
+    }
+    if (body.mode === 'bom') {   // v89: ✨ the AI drafts the Bill of Materials
+      const r = await BOM.draft({ core: body.core, note: body.note, only: body.only }, `Admin (${session.u})`);
+      await kv.set('aiplan:' + id, { bom: r.error ? null : r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
+      if (!r.error) await A.audit(session.u, `AI drafted a BOM for ${String(body.core || '').slice(0, 20)}: ${r.lines.length} lines (${r.tokens || 0} tokens)`);
       return ok();
     }
     if (body.mode === 'cost') {   // v78: ✨ indicative costs (benchmarks) for tasks
