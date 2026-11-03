@@ -212,6 +212,24 @@ const csvParse = (s) => { const rows = []; let row = [], cur = '', q = false; fo
     ok('Ordered', 'each gets its own still-to-order quantity, ordered online from Trade Direct', Object.keys(p2o).length === 3 && Object.values(p2o).every((o) => o.via === 'online' && o.supplier === 'Trade Direct' && o.qty > 0) && /✓ Shortfall ordered/.test(await p.textContent('.bom-kpi')), JSON.stringify(p2o));
     await p.click('#bomTpl'); await p.waitForSelector('[data-tdel]'); await p.click('[data-tdel]'); await p.waitForSelector('#okBtn'); await p.click('#okBtn'); await sleep(1200);
     ok('Template', 'a template can be deleted', JSON.parse(await p.evaluate(() => window.MBS.api('planBomTplList').then((r) => JSON.stringify(r.templates)))).length === 0);
+    // v100: numbered, filters and search, compact; a long BOM scrolls inside with its header kept
+    let px = await P.get(core2); const names = ['Hardwood 140x45 F17 (per m)', 'Treated pine 90x45 H3 (per m)', 'Pine framing 90x45 MGP10 (per m)', 'Joist hangers 45mm (pack 10)', 'Galv cup head bolts M12x150 (pack 10)', 'Masonry anchors 10x75 (pack 50)', 'Chemset anchor kit', 'Framing nails 75mm (box 2kg)', 'Spotted gum decking 135x19 (per m)', 'Decking screws (box 1000)', 'Balustrade posts and rails', 'Balustrade fixings and brackets', 'Concrete 20MPa (bag 20kg)', 'Galvanised stirrups', 'Builders film', 'Drop sheet canvas 3.6x3.6', 'Masking tape 36mm', 'Sugar soap 1L', 'Acrylic gap filler white', 'Deck oil 4L', 'Paint brushes assorted', 'Paint tray', 'Rubbish bags heavy duty (pack 50)', 'Ant capping', 'Flashing tape'];
+    px.bom.lines = px.bom.lines.concat(names.map((n, i) => ({ id: 'bx' + i, task: px.bom.milestone, name: n, item: '', qty: 2 + i, unit: 'each', price: i % 7 === 3 ? 0 : 10 + i, lead: i % 5 === 0 ? 10 : 0, note: 'note ' + i, source: 'ai', est: true }))); await P.save(core2, px, px.rev, 'test');
+    if (await p.$('#modal:not([hidden])')) { await p.keyboard.press('Escape'); await sleep(300); }
+    await p.goto(`${BASE}/admin/#plan/${core}/schedule`); await sleep(500); await p.goto(`${BASE}/admin/#plan/${core2}/bom`); await p.waitForSelector('.bom-tbl'); await sleep(1500);
+    if (await p.$('#modal:not([hidden])')) { await p.keyboard.press('Escape'); await sleep(300); }
+    const nums = await p.$$eval('.bom-tbl tbody td.bom-no', (x) => x.map((e) => e.textContent));
+    ok('Readable', 'every BOM line is numbered (1 to 29) and the total says how many lines', nums.length === 29 && nums[0] === '1' && nums[28] === '29' && /29 lines/.test(await p.textContent('.bom-tbl tfoot')), nums.join(','));
+    const fs0 = await p.$eval('.bom-tbl', (t) => parseFloat(getComputedStyle(t).fontSize)), rh = await p.$eval('.bom-tbl tbody tr[data-bk]', (r) => r.getBoundingClientRect().height);
+    ok('Readable', 'smaller text and compact rows; the list scrolls inside with its header and total kept in view', fs0 <= 13 && rh <= 56 && await p.$eval('.bom-scroll', (d) => d.scrollHeight > d.clientHeight && getComputedStyle(d.querySelector('thead th')).position === 'sticky'), fs0 + ' ' + rh);
+    await p.click('[data-bomf=noprice]'); await sleep(500);
+    ok('Readable', 'quick filters: e.g. "No price" shows just those lines (numbers kept)', (await p.$$('.bom-tbl tbody tr[data-bk]')).length === 4 && /4 of 29 lines/.test(await p.textContent('.bom-fbar')));
+    await p.click('[data-bomf=all]'); await sleep(400); await p.fill('#bomQ', 'balustrade'); await sleep(600);
+    ok('Readable', 'and a search box (keeps typing focus)', (await p.$$('.bom-tbl tbody tr[data-bk]')).length === 2 && await p.evaluate(() => document.activeElement.id === 'bomQ'));
+    await p.fill('#bomQ', ''); await sleep(600);
+    const sh = await p.$$eval('.bom-otbl tbody tr', (r) => r.map((x) => x.cells[0].textContent));
+    ok('Readable', 'the shortfall is numbered too, still-to-order first and longest lead first', sh.length > 5 && sh[0] === '1' && sh[sh.length - 1] === String(sh.length));
+    await p.screenshot({ path: path.join(os.tmpdir(), 'bom-v100.png'), fullPage: true });
     ok('Console', 'no JavaScript errors', errors.length === 0, errors.join(' | '));
     await br.close(); br = null;
   } catch (e) { try { if (br) await br.close(); } catch {} ok('Run', 'test run completed', false, e.stack.split('\n').slice(0, 4).join(' / ') + ' ERRORS: ' + errorsAll.join(' | ') + ' LOG: ' + log.slice(-400)); }
