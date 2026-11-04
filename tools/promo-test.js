@@ -18,7 +18,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const { port: bport } = await blobs.start();
   const ctxB64 = Buffer.from(JSON.stringify({ siteID: 'mbs', token: 'tok', edgeURL: `http://localhost:${bport}`, uncachedEdgeURL: `http://localhost:${bport}`, apiURL: `http://localhost:${bport}` })).toString('base64');
   process.env.NETLIFY_BLOBS_CONTEXT = ctxB64;
-  const env = { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', NETLIFY_BLOBS_CONTEXT: ctxB64, ADMIN_USERNAME: 'sashi73', ADMIN_PASSWORD: 'sashi98', SITE_ENV: 'test', LLM_API_KEY: '', TELEGRAM_BOT_TOKEN: '', RESEND_API_KEY: '', PROMO_GAME_URL: 'https://wonderbird-game.netlify.app' };
+  const env = { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', NETLIFY_BLOBS_CONTEXT: ctxB64, ADMIN_USERNAME: 'sashi73', ADMIN_PASSWORD: 'sashi98', SITE_ENV: 'test', LLM_API_KEY: '', TELEGRAM_BOT_TOKEN: '', RESEND_API_KEY: '' };
   const srv = spawn('node', ['local-server.mjs'], { cwd: SITE, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; srv.stdout.on('data', (d) => (log += d)); srv.stderr.on('data', (d) => (log += d));
   for (let i = 0; i < 40 && !/running/.test(log); i++) await sleep(150);
@@ -32,7 +32,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const ctx = await br.newContext({ viewport: { width: 1440, height: 900 } });
     const pg = await ctx.newPage(); pg.setDefaultTimeout(15000);
     const errors = []; errorsAll = errors; pg.on('pageerror', (e) => errors.push(e.message));
-    await ctx.route('https://wonderbird-game.netlify.app/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<title>Wonder Bird</title>game' }));
 
     // the menu link on every page
     for (const p of ['index.html', 'about.html', 'services.html', 'projects.html', 'contact.html', 'privacy.html']) {
@@ -58,10 +57,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await pg.check('.fx-promo-form input[name=consent]'); await pg.click('.fx-promo-go');
     await pg.waitForSelector('.fx-promo-play', { timeout: 15000 });
     const play = await pg.getAttribute('.fx-promo-play', 'href');
-    const m = play.match(/^https:\/\/wonderbird-game\.netlify\.app\/\?wb=(WB-\d{6})\.([a-f0-9]{32})&name=Priya$/);
+    const m = play.match(/^\/wonderbird\.html\?wb=(WB-\d{6})\.([a-f0-9]{32})&name=Priya$/);
     ok('Entry', 'they are in: player WB-000001 and a "▶ Play Wonder Bird" link to the game', !!m && m[1] === 'WB-000001' && /You’re in the draw/.test(await pg.textContent('.fx-promo')), play);
-    const [game] = await Promise.all([ctx.waitForEvent('page'), pg.click('.fx-chip:has-text("▶ Play Wonder Bird"):not(a)')]);
-    await game.waitForLoadState(); ok('Entry', 'the Play button takes them to the Wonder Bird screen', /wonderbird-game\.netlify\.app\/\?wb=WB-000001\./.test(game.url())); await game.close();
+    await Promise.all([pg.waitForURL(/wonderbird\.html/), pg.click('.fx-chip:has-text("▶ Play Wonder Bird"):not(a)')]);
+    ok('Entry', 'the Play button takes them to the Wonder Bird page on the site', /\/wonderbird\.html/.test(pg.url()));
+    await pg.goto(`${BASE}/services.html`, { waitUntil: 'networkidle' });
     const rec = await PR.get('WB-000001');
     ok('Saved', 'their details are saved in the separate draw table (not as a customer)', rec && rec.first === 'Priya' && rec.last === 'Nair' && rec.phone === '0412 345 678' && rec.email === 'priya.nair@example.com' && rec.consent && rec.consentAt > 0 && !(await import(path.join(SITE, 'netlify/lib/kv.mjs')).then((kv) => kv.get('customers'))), rec);
     // coming back
@@ -81,14 +81,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
     // scores from the game
     const tok = m[2];
-    r = await post({ action: 'score', id: 'WB-000001', token: 'f'.repeat(32), score: 999 }, 'https://wonderbird-game.netlify.app');
-    ok('Scores', 'a score with the wrong token is refused', r.status === 401);
-    r = await post({ action: 'score', id: 'WB-000001', token: tok, score: 1200, level: 4 }, 'https://wonderbird-game.netlify.app');
-    ok('Scores', 'the game can send a score (allowed from the game\'s own site)', r.status === 200 && r.j.best === 1200 && r.j.rank === 1 && r.h.get('access-control-allow-origin') === 'https://wonderbird-game.netlify.app', r.j);
-    r = await post({ action: 'score', id: 'WB-000001', token: tok, score: 800 });
-    ok('Scores', 'the best score of the week counts', r.j.best === 1200);
-    r = await post({ action: 'score', id: 'WB-000001', token: tok, score: -5 });
-    ok('Scores', 'a silly score is refused', r.status === 400);
+    const BOT = await import(path.join(SITE, 'tools/wb-bot.mjs')), CORE = await import(path.join(SITE, 'assets/wb-core.mjs'));
+    r = await post({ action: 'start', id: 'WB-000001', token: 'f'.repeat(32) });
+    ok('Scores', 'a wrong token can\'t start a run', r.status === 401);
+    r = await post({ action: 'score', id: 'WB-000001', token: tok, score: 999999 });
+    ok('Scores', 'a typed-in score is not accepted any more (scores come from replaying the run)', r.status === 400);
+    const st1 = await post({ action: 'start', id: 'WB-000001', token: tok });
+    { const pp = await PR.get('WB-000001'); pp.runs.find((x) => x.id === st1.j.run).at -= 15 * 60e3; await PR.put(pp); }
+    const att1 = BOT.playRun(st1.j.seed, 2), exp1 = CORE.scoreRun(st1.j.seed, att1).score;
+    r = await post({ action: 'run', id: 'WB-000001', token: tok, run: st1.j.run, attempts: att1 });
+    ok('Scores', 'the game sends its run and the server scores it', r.status === 200 && r.j.score === exp1 && r.j.best === exp1 && r.j.rank === 1, r.j);
+    const st2 = await post({ action: 'start', id: 'WB-000001', token: tok });
+    { const pp = await PR.get('WB-000001'); pp.runs.find((x) => x.id === st2.j.run).at -= 15 * 60e3; await PR.put(pp); }
+    r = await post({ action: 'run', id: 'WB-000001', token: tok, run: st2.j.run, attempts: BOT.playRun(st2.j.seed, 1) });
+    ok('Scores', 'the best score of the week counts', r.j.best === exp1);
+    const PRIYA = exp1;
 
     // a finished week with 5 players
     const now = Date.now(), lastWk = PR.weekOf(now - 7 * 864e5), thisWk = PR.weekOf(now);
@@ -109,7 +116,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Console', 'a "🎁 Wonder Bird draw" page under CRM', await a.isVisible('[data-nav="wonderbird"]'));
     await a.click('[data-nav="wonderbird"]'); await a.waitForSelector('#wbTab');
     let t = await a.textContent('#wbBody');
-    ok('Console', 'this week: Priya with 1,200, and vouchers wait until the week ends', /1,200/.test(t) && /once this week ends/.test(t) && !(await a.isVisible('#wbIssue')) && new RegExp(thisWk).test(t));
+    ok('Console', 'this week: Priya with her checked score, and vouchers wait until the week ends', t.includes(PRIYA.toLocaleString('en-AU')) && /once this week ends/.test(t) && !(await a.isVisible('#wbIssue')) && new RegExp(thisWk).test(t));
     await a.click('#wbPrev'); await a.waitForFunction((w) => document.querySelector('.wb-wk') && document.querySelector('.wb-wk').textContent === w, lastWk);
     t = await a.textContent('#wbTab');
     ok('Console', 'last week: top 3 marked $50 / $30 / $20 to issue', /\$50 to issue/.test(t) && /\$30 to issue/.test(t) && /\$20 to issue/.test(t) && (await a.locator('.wb-tbl tbody tr').count()) === 5);

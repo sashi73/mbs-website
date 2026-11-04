@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-11-04 v101 (Wonder Bird weekly voucher draw)';
+const VERSION = '2026-11-04 v102 (Wonder Bird game page on the site, server-checked leaderboard)';
 const NEEDS = [
   ['netlify/lib/shared.mjs', 'isTestSite'],
   ['netlify/lib/plan.mjs', 'gateOf'],
@@ -160,7 +160,7 @@ function limitOf(name, def) {
   const m = String(process.env['LIMIT_' + name.toUpperCase()] || def).match(/^(\d+)\/(\d+)$/);
   return m ? [Number(m[1]), Number(m[2]) * 60000] : [Infinity, 60000];
 }
-const LIMITS = { chat: limitOf('chat', '40/10'), tts: limitOf('tts', '80/10'), lead: limitOf('lead', '8/60'), visits: limitOf('visits', '20/10'), admin: limitOf('admin', '600/10'), promo: limitOf('promo', '30/10') };
+const LIMITS = { chat: limitOf('chat', '40/10'), tts: limitOf('tts', '80/10'), lead: limitOf('lead', '8/60'), visits: limitOf('visits', '20/10'), admin: limitOf('admin', '600/10'), promo: limitOf('promo', '400/10') };
 const hits = new Map();
 function clientIp(req) {
   const peer = req.socket.remoteAddress || '';

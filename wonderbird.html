@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wonder Bird | Win an MBS voucher every week | Modern Building Solutions</title>
+<meta name="description" content="Fly past the world's wonders in Wonder Bird. The top 3 scores each week win Modern Building Solutions vouchers: $50, $30 and $20.">
+<link rel="stylesheet" href="assets/style.css?v=38">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="theme-color" content="#0A0A0A">
+<meta property="og:title" content="Wonder Bird | Win an MBS voucher every week">
+<meta property="og:description" content="Fly past the world's wonders. Top 3 each week win $50, $30 and $20 MBS vouchers.">
+<meta property="og:url" content="https://mbsplc.com.au/wonderbird.html">
+<meta property="og:image" content="https://mbsplc.com.au/assets/og-image.jpg">
+<link rel="canonical" href="https://mbsplc.com.au/wonderbird.html">
+</head>
+<body class="wb-page">
+<header class="wb-bar">
+  <a class="wb-back" href="index.html" title="Back to the MBS website"><span aria-hidden="true">←</span><img src="assets/mbs-logo.svg" alt="Modern Building Solutions" width="82" height="40"></a>
+  <h1 class="wb-title">Wonder <span>Bird</span></h1>
+  <nav class="wb-tools" aria-label="Game">
+    <button type="button" class="wb-btn wb-gold" data-pop="board">🏆 <span>Leaders</span></button>
+    <button type="button" class="wb-btn" data-pop="help">❓ <span>How to play</span></button>
+    <button type="button" class="wb-btn" data-win>🎁 <span>Win $50</span></button>
+    <button type="button" class="wb-btn wb-icon" id="wbMusic" aria-pressed="true" title="Music (M)">♪ Music on</button>
+    <button type="button" class="wb-btn wb-icon" id="wbVoice" aria-pressed="true" title="Mr. Fixit's voice">🗣 Mr. Fixit on</button>
+    <button type="button" class="wb-btn wb-icon" id="wbFull" title="Full screen">⛶</button>
+  </nav>
+</header>
+
+<main class="wb-main">
+  <div class="wb-stage" id="wbStage">
+    <canvas id="wbCanvas" width="800" height="450" tabindex="0" aria-label="Wonder Bird game. Drag the bird back and let go, then tap or press Space to flap."></canvas>
+    <div class="wb-hud" aria-live="off">
+      <span><i>Level</i><b id="wbLevel">1</b></span>
+      <span class="wb-hide-s"><i>Wonder</i><b id="wbWonder">–</b></span>
+      <span><i>Gates</i><b id="wbGates">0/5</b></span>
+      <span><i>Lives</i><b id="wbLives" class="wb-hearts">♥♥♥</b></span>
+      <span class="wb-sc"><i>Score</i><b id="wbScore">0</b></span>
+      <span class="wb-hide-s"><i>Best</i><b id="wbBest">0</b></span>
+    </div>
+    <div class="wb-toast" id="wbToast" role="status"></div>
+  </div>
+  <p class="wb-who" id="wbWho"></p>
+</main>
+
+<!-- pop-up panels -->
+<div class="wb-pop" id="wbPop-board" role="dialog" aria-modal="true" aria-label="This week's leaderboard">
+  <div class="wb-card wb-side">
+    <button type="button" class="wb-x" aria-label="Close">✕</button>
+    <div id="wbBoard"><p class="wb-small">Loading the leaderboard…</p></div>
+  </div>
+</div>
+<div class="wb-pop" id="wbPop-help" role="dialog" aria-modal="true" aria-label="How to play">
+  <div class="wb-card">
+    <button type="button" class="wb-x" aria-label="Close">✕</button>
+    <h2>How to play</h2>
+    <ol class="wb-steps">
+      <li><b>Launch.</b> Drag the bird back on the slingshot and let go. (Keyboard: hold <kbd>Space</kbd>, aim with <kbd>↑</kbd> <kbd>↓</kbd>, let go.)</li>
+      <li><b>Fly.</b> Tap, click or press <kbd>Space</kbd> to flap through the gaps in the sandstone.</li>
+      <li><b>Collect.</b> Gold coins 25, blue gems 150. The black-and-gold <b>Mr. Fixit</b> badge flies you through on autopilot for a few seconds.</li>
+      <li><b>Score.</b> Clear the gates to finish a level. Fewer flaps score more: glide for a bonus. 99 levels, and 3 lives a run.</li>
+    </ol>
+    <div class="wb-prize">
+      <b>Win MBS vouchers every week</b>
+      <span>🥇 $50 · 🥈 $30 · 🥉 $20 for the top 3 scores (Monday to Sunday, Sydney time).</span>
+      <button type="button" class="wb-btn wb-gold" data-win>🎁 Enter the draw</button>
+    </div>
+    <p class="wb-small">Scores are checked by our server. Vouchers are for MBS work, one voucher per job. <a href="privacy.html#vouchers" target="_blank" rel="noopener">Draw terms</a></p>
+    <button type="button" class="wb-btn wb-gold wb-go wb-x">Let’s fly ▶</button>
+  </div>
+</div>
+
+<script src="assets/fixit-kb.js?v=36"></script>
+<script src="assets/fixit.js?v=38"></script>
+<script type="module" src="assets/wonderbird.js?v=1"></script>
+</body>
+</html>

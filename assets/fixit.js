@@ -1223,7 +1223,8 @@
         return sendLead();
       case 'promo_play':
         var pd = (S.promo && S.promo.done) || promoSaved();
-        if (pd && pd.play) window.open(pd.play, '_blank', 'noopener');
+        if (onGame()) return setOpen(false);
+        if (pd && pd.play) location.href = pd.play;
         return;
       case 'promo_new':
         S.log.push({ who: 'me', text: c.label }); promoKeep(null); if (S.promo) S.promo.done = null; save();
@@ -1238,6 +1239,7 @@
   // The "🎁 Win $50" link in the menu opens Mr. Fixit, who explains the prizes and takes their details
   // (first and last name, contact number, email). Then they get a button to play Wonder Bird.
   var PROMO_KEY = 'mbsWonderBird.v1';
+  function onGame() { return document.body.classList.contains('wb-page'); }
   function promoSaved() { try { return JSON.parse(localStorage.getItem(PROMO_KEY) || 'null'); } catch (e) { return null; } }
   function promoKeep(x) { try { if (x) localStorage.setItem(PROMO_KEY, JSON.stringify(x)); else localStorage.removeItem(PROMO_KEY); } catch (e) {} }
   function promoState() { if (!S.promo) S.promo = { f: {}, err: '', busy: false, done: null }; return S.promo; }
@@ -1248,7 +1250,7 @@
       return el('div', { class: 'fx-card sent fx-promo' }, [
         el('b', { class: 'fx-card-title', text: 'You’re in the draw ✓' }),
         el('p', { class: 'fx-promo-p', text: 'Player ' + P.done.id + ' · ' + P.done.first + '. Your best score each week counts. Play as often as you like.' }),
-        el('a', { class: 'fx-chip primary fx-promo-play', href: P.done.play, target: '_blank', rel: 'noopener', text: '▶ Play Wonder Bird' })
+        el('a', { class: 'fx-chip primary fx-promo-play', href: P.done.play, text: '▶ Play Wonder Bird', onclick: function (e) { if (onGame()) { e.preventDefault(); setOpen(false); } } })
       ]);
     }
     var F = P.f;
@@ -1290,7 +1292,8 @@
         if (!x.ok || !x.j.id) { P.err = (x.j && x.j.error) || 'Sorry, that didn’t save. Please try again.'; save(); render(); return; }
         P.done = { id: x.j.id, first: x.j.first, play: x.j.play }; P.err = ''; P.f = {};
         promoKeep(P.done); save(); render();
-        say([(x.j.again ? 'Welcome back, ' : 'You’re in, ') + x.j.first + '! 🎉', 'Tap ▶ Play Wonder Bird to start. Good luck, and keep an eye on your email: we’ll contact the week’s top 3.'],
+        if (onGame()) try { window.dispatchEvent(new CustomEvent('mbs:wb-entered')); } catch (e) {}
+        say([(x.j.again ? 'Welcome back, ' : 'You’re in, ') + x.j.first + '! 🎉', (onGame() ? 'Close this chat and fly: your runs now count.' : 'Tap ▶ Play Wonder Bird to start.') + ' Good luck, and keep an eye on your email: we’ll contact the week’s top 3.'],
           [{ label: '▶ Play Wonder Bird', act: 'promo_play', primary: true }, { label: 'Main menu', act: 'exit_expert' }]);
       })
       .catch(function () { P.busy = false; P.err = 'No connection. Please check your internet and try again.'; save(); render(); });

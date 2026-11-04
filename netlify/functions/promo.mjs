@@ -1,12 +1,14 @@
 // POST /.netlify/functions/promo   (v101: 🎁 Wonder Bird weekly voucher draw)
 //   { action: 'enter', first, last, phone, email, consent: true, website: '' }   a visitor enters: returns their player number and
 //                                                                              the link to play
-//   { action: 'score', id, token, score, level }                                 the game sends a score
-// Called from the MBS website and (for scores) from the Wonder Bird game's own site (PROMO_GAME_URL).
+//   { action: 'start', id, token }                       the game starts a run: returns the run and its seed
+//   { action: 'run', id, token, run, attempts }          the run so far: the server replays it and keeps the score
+//   { action: 'board', id?, token? }                     this week's top 10 and where the player stands
+// The game is a page of the site (wonderbird.html, or PROMO_GAME_URL).
 import { env, clean } from '../lib/shared.mjs';
 import * as PR from '../lib/promo.mjs';
 
-const GAME = () => env('PROMO_GAME_URL', 'https://wonderbird-game.netlify.app').trim().replace(/\/+$/, '');
+const GAME = () => env('PROMO_GAME_URL', '/wonderbird.html').trim().replace(/\/+$/, '');
 function headers(req) {
   const o = req.headers.get('origin') || '', site = env('ALLOWED_ORIGIN', '*');
   let game = ''; try { game = new URL(GAME()).origin; } catch {}
@@ -24,14 +26,15 @@ export default async (req) => {
     if (body.action === 'enter') {
       const r = await PR.register({ ...body, source: 'website' });
       if (r.error) return reply(400, r);
-      const p = r.player, play = `${GAME()}/?wb=${encodeURIComponent(p.id)}.${p.token}&name=${encodeURIComponent(p.first)}`;
+      const p = r.player, play = `${GAME()}?wb=${encodeURIComponent(p.id)}.${p.token}&name=${encodeURIComponent(p.first)}`;
       return reply(200, { ok: true, id: p.id, first: p.first, again: r.again, play, week: PR.weekOf(), prizes: PR.PRIZES });
     }
-    if (body.action === 'score') {
-      const r = await PR.score(body);
+    if (body.action === 'start' || body.action === 'run') {
+      const r = await (body.action === 'start' ? PR.startRun(body) : PR.submitRun(body));
       if (r.error) return reply(r.code || 400, r);
       return reply(200, r);
     }
+    if (body.action === 'board') return reply(200, await PR.publicBoard(body));
     return reply(400, { error: 'Unknown action' });
   } catch (e) {
     console.error('Promo error:', e);

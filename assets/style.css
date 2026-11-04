@@ -781,3 +781,82 @@ img.ilogo{display:block;width:min(320px,64vw);height:auto;background:none;color:
 .fx-promo-go[disabled]{opacity:.6;cursor:wait}
 .fx-promo-p{margin:0 0 10px;font-size:13px;color:#DCD6C9}
 a.fx-promo-play{display:inline-flex;align-items:center;text-decoration:none}
+
+/* v102: 🎁 Wonder Bird game page: the screen is the game; a slim bar goes back to the site */
+body.wb-page{visibility:visible;min-height:100dvh;display:flex;flex-direction:column;background:radial-gradient(120% 90% at 50% 0%,#1b1710 0%,#0A0A0A 60%);overflow-x:hidden}
+.wb-page .fx-launch,.wb-page .fx-tip{display:none!important}
+.wb-bar{display:flex;align-items:center;gap:14px;padding:8px max(14px,env(safe-area-inset-left));border-bottom:1px solid rgba(212,175,55,.25);background:rgba(10,10,10,.85);backdrop-filter:blur(10px);position:sticky;top:0;z-index:50}
+.wb-back{display:flex;align-items:center;gap:8px;color:var(--gold);text-decoration:none;font-weight:800;font-size:18px;flex:none}
+.wb-back img{height:32px;width:auto;display:block}
+.wb-back:hover{color:var(--gold-hi)}
+.wb-title{font-family:'Archivo',sans-serif;font-stretch:62%;font-weight:900;text-transform:uppercase;font-size:24px;letter-spacing:.02em;margin:0;line-height:1;color:#fff;white-space:nowrap}
+.wb-title span{color:var(--gold)}
+.wb-tools{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.wb-btn{height:34px;padding:0 12px;border-radius:999px;border:1px solid #3A3A3A;background:#141414;color:#EDEAE3;font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;transition:border-color .2s,color .2s,transform .2s}
+.wb-btn:hover{border-color:var(--gold);color:var(--gold-hi);transform:translateY(-1px)}
+.wb-btn.wb-gold{background:linear-gradient(100deg,var(--gold) 0%,var(--gold-hi) 100%);color:#0A0A0A;border-color:transparent}
+.wb-btn.wb-gold:hover{color:#0A0A0A;box-shadow:0 8px 20px rgba(212,175,55,.3)}
+.wb-btn[aria-pressed="false"]{opacity:.6}
+.wb-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 12px 14px;gap:8px}
+.wb-stage{position:relative;width:min(100%,calc((100dvh - 120px) * 16 / 9));aspect-ratio:16/9;border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(212,175,55,.35);background:#000}
+.wb-stage:fullscreen{width:100vw;height:100vh;border-radius:0;aspect-ratio:auto;display:flex;align-items:center;justify-content:center}
+.wb-stage:fullscreen canvas{width:min(100vw,calc(100vh * 16 / 9));height:auto}
+.wb-stage canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-user-select:none;user-select:none;outline:none;cursor:pointer}
+.wb-hud{position:absolute;left:10px;right:10px;bottom:10px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
+.wb-hud span{display:flex;flex-direction:column;padding:5px 11px;border-radius:12px;background:rgba(8,8,8,.55);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.08)}
+.wb-hud i{font-style:normal;font-size:9.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#B9B3A6}
+.wb-hud b{font-family:'Archivo',sans-serif;font-stretch:80%;font-weight:900;font-size:16px;color:#fff;line-height:1.15;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wb-hud .wb-sc{margin-left:auto;border-color:rgba(212,175,55,.5)}
+.wb-hud .wb-sc b{color:var(--gold-hi);font-size:20px}
+.wb-hearts{color:#ff6b6b!important;letter-spacing:.06em}
+.wb-toast{position:absolute;left:50%;top:14px;transform:translate(-50%,-30px);opacity:0;padding:9px 16px;border-radius:999px;background:linear-gradient(100deg,var(--gold) 0%,var(--gold-hi) 100%);color:#0A0A0A;font-weight:800;font-size:14px;transition:.35s cubic-bezier(.2,.9,.25,1);pointer-events:none;white-space:nowrap}
+.wb-toast.show{opacity:1;transform:translate(-50%,0)}
+.wb-who{margin:0;font-size:13px;color:#B9B3A6;text-align:center}
+.wb-who b{color:var(--gold-hi)}
+.wb-link{background:none;border:0;padding:0;font:inherit;color:var(--gold-hi);text-decoration:underline;cursor:pointer;font-weight:700}
+.wb-pop{position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;pointer-events:none;transition:opacity .25s}
+.wb-pop.open{opacity:1;pointer-events:auto}
+.wb-card{position:relative;width:min(520px,100%);max-height:calc(100dvh - 32px);overflow:auto;background:#111;border:1px solid rgba(212,175,55,.45);border-radius:20px;padding:22px 22px 20px;box-shadow:0 30px 80px rgba(0,0,0,.6);transform:translateY(14px) scale(.98);transition:transform .3s cubic-bezier(.2,.9,.25,1)}
+.wb-pop.open .wb-card{transform:none}
+#wbPop-board{justify-content:flex-end;padding:0}
+.wb-card.wb-side{width:min(400px,100%);height:100dvh;max-height:none;border-radius:20px 0 0 20px;transform:translateX(30px)}
+.wb-card h2{font-family:'Archivo',sans-serif;font-stretch:62%;font-weight:900;text-transform:uppercase;font-size:28px;margin:0 0 12px;color:#fff;line-height:1}
+.wb-x{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:50%;border:1px solid #3A3A3A;background:#151515;color:#EDEAE3;cursor:pointer;font-size:14px}
+.wb-x.wb-go{position:static;width:auto;height:40px;border-radius:999px;margin-top:14px;padding:0 20px;font-size:15px}
+.wb-steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:9px;font-size:14px;line-height:1.5;color:#DCD6C9}
+.wb-steps b{color:var(--gold-hi)}
+.wb-steps kbd{display:inline-block;padding:0 6px;border:1px solid #4a4a4a;border-bottom-width:2px;border-radius:4px;background:#1c1c1c;color:var(--gold-hi);font:inherit;font-size:12px}
+.wb-prize{margin:16px 0 8px;padding:14px;border-radius:14px;background:linear-gradient(160deg,rgba(212,175,55,.16) 0%,rgba(10,10,10,0) 80%);border:1px solid rgba(212,175,55,.35);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.wb-prize b{color:#fff;font-size:15px}
+.wb-prize span{font-size:13.5px;color:#DCD6C9}
+.wb-small{font-size:12px;color:#9C968A;margin:8px 0 0;line-height:1.5}
+.wb-small a{color:var(--gold-hi)}
+.wb-bh{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding-right:40px}
+.wb-ends{font-size:12px;font-weight:800;color:var(--gold-hi);white-space:nowrap}
+.wb-list{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}
+.wb-list li{display:grid;grid-template-columns:34px 1fr auto auto 42px;gap:8px;align-items:center;padding:9px 10px;border-radius:12px;background:#171717;border:1px solid #232323;font-size:14px}
+.wb-list li.pod{background:linear-gradient(100deg,rgba(212,175,55,.16),rgba(23,23,23,1) 70%);border-color:rgba(212,175,55,.35)}
+.wb-list li.me{outline:2px solid var(--gold);outline-offset:-2px}
+.wb-list li.empty{display:block;text-align:center;color:#9C968A}
+.wb-list .r{font-weight:900;text-align:center;font-size:16px;color:#B9B3A6}
+.wb-list .n{font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wb-list .l{font-size:11px;color:#9C968A;font-weight:700}
+.wb-list .s{font-family:'Archivo',sans-serif;font-stretch:80%;font-weight:900;color:var(--gold-hi);font-size:16px;text-align:right}
+.wb-list .p{font-size:11px;font-weight:900;color:#0A0A0A;background:var(--gold);border-radius:999px;text-align:center;padding:2px 0}
+.wb-list .p:empty{background:none}
+.wb-mine{margin:14px 0 0;padding:10px 12px;border-radius:12px;background:#171717;font-size:13.5px;color:#DCD6C9}
+.wb-mine b{color:var(--gold-hi)}
+@media (max-width:760px){
+  .wb-tools .wb-btn span{display:none}
+  .wb-tools .wb-icon{font-size:0;width:34px;padding:0;justify-content:center}
+  .wb-tools .wb-icon::first-letter{font-size:15px}
+  #wbMusic::before{content:'♪';font-size:15px} #wbVoice::before{content:'🗣';font-size:15px} #wbFull::before{content:'⛶';font-size:15px}
+  .wb-title{font-size:18px}
+  .wb-back img{height:26px}
+  .wb-hide-s{display:none!important}
+  .wb-hud b{font-size:14px} .wb-hud .wb-sc b{font-size:16px}
+  .wb-stage{border-radius:12px}
+  .wb-main{padding:8px 6px}
+}
+@media (max-width:440px){ .wb-title{display:none} }
+@media (orientation:portrait) and (max-width:760px){ .wb-main::after{content:'Tip: turn your phone sideways for a bigger screen';font-size:12px;color:#9C968A} }
