@@ -100,7 +100,7 @@ const PAID_LEAVE = ['annual', 'personal', 'compassionate', 'fdv', 'rdo'];
 const defProfile = (p) => ({ pid: p.id, classification: p.trade ? 'CW3' : 'CW1a', tool: '', hourly: 0, employment: EMPLOY.includes(p.employment) ? p.employment : 'Full-time', residency: 'resident', tft: true, noTfn: false, stsl: false, medicare: 'none',
   balances: { annual: 0, personal: 0, rdo: 0 }, active: true, updated: 0 });
 export async function profile(pid) { const p = await PPL.get(pid); if (!p) return null; const x = await kv.get('prl:prof:' + pid); return { ...defProfile(p), ...(x || {}), name: p.name, role: p.role, trade: p.trade }; }
-async function saveProfile(f, by) {
+export async function saveProfile(f, by) {
   const p = await PPL.get(str(f.pid, 10)); if (!p) return { error: 'Person not found', code: 404 };
   if (p.type !== 'Employee') return { error: 'Payroll is for employees. Contractors invoice you and show in the TPAR report.' };
   const old = (await kv.get('prl:prof:' + p.id)) || defProfile(p), S = await settings();
@@ -124,7 +124,7 @@ export function baseRate(pr, S) {
 const tsKey = (pid, week) => 'prl:ts:' + pid + ':' + week;
 export { tsKey, PAID_LEAVE };
 export async function timesheet(pid, week) { week = mondayOf(ymd(week) || new Date().toISOString().slice(0, 10)); return (await kv.get(tsKey(pid, week))) || { pid, week, days: {}, status: 'draft' }; }
-async function saveTimesheet(f, by) {
+export async function saveTimesheet(f, by) {
   const pid = str(f.pid, 10), week = mondayOf(ymd(f.week) || ''); if (!week) return { error: 'Pick a week' };
   const p = await PPL.get(pid); if (!p) return { error: 'Person not found', code: 404 };
   const old = await timesheet(pid, week);
@@ -211,7 +211,7 @@ export function calcPerson(weeks, pr, S) {
 /* ---------------- pay runs ---------------- */
 async function runs() { return (await kv.get('prl-runs')) || []; }
 async function employees() { return (await PPL.list()).people.filter((p) => p.type === 'Employee' && !p.archived && p.status !== 'Inactive'); }
-async function createRun(f, by) {
+export async function createRun(f, by) {
   const S = await settings(), weeksN = S.frequency === 'fortnightly' ? 2 : 1, from = mondayOf(ymd(f.from) || '');
   if (!from) return { error: 'Pick the first Monday of the pay period' };
   const to = addDays(from, weeksN * 7 - 1), list = await runs();
@@ -237,7 +237,7 @@ async function createRun(f, by) {
 }
 const tot = (lines) => ({ gross: r2(lines.reduce((s, l) => s + l.gross, 0)), tax: r2(lines.reduce((s, l) => s + l.tax + l.stsl, 0)), net: r2(lines.reduce((s, l) => s + l.net, 0)), super: r2(lines.reduce((s, l) => s + l.super, 0)) });
 export async function getRun(id) { return /^PR-\d{4}$/.test(id || '') ? kv.get('prl:run:' + id) : null; }
-async function finaliseRun(id, by) {
+export async function finaliseRun(id, by) {
   const run = await getRun(id); if (!run) return { error: 'Pay run not found', code: 404 };
   if (run.status !== 'draft') return { error: 'This pay run is already final.' };
   const weeksN = run.frequency === 'fortnightly' ? 2 : 1;
@@ -332,6 +332,12 @@ export async function prlPost(action, body, { by, audit, who, A, SUB }) {
     case 'prlRunCsv': { const r = await getRun(str(body.id, 10)); if (!r) return out(404, { error: 'Pay run not found' }); return out(200, { csv: runCsv(r), name: `MBS-${r.id}-${r.from}.csv` }); }
     case 'prlJobCosts': { const from = ymd(body.from), to = ymd(body.to); if (!from || !to) return out(400, { error: 'Pick dates' }); return out(200, { from, to, jobs: await jobCosts(from, to), settings: await settings() }); }
     case 'prlTpar': return out(200, await tpar(body.fy, A, SUB));
+    case 'prlSampleLoad': {   // v109: test payroll data (test site only)
+      const r = await (await import('./payroll-sample.mjs')).samplePayroll(by);
+      if (r.error) return out(r.code || 400, r);
+      await log(`Test payroll data loaded: ${r.people} employees, ${r.timesheets} timesheets, pay runs ${r.runs.join(', ')}, ${r.leave} leave requests`);
+      return out(200, r);
+    }
     default: return null;
   }
 }

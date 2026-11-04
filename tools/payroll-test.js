@@ -139,6 +139,21 @@ const near = (a, b, e = 0.011) => Math.abs(a - b) <= e;
     await a.check('#s_checked'); await a.click('#s_save'); await a.waitForFunction(() => !/Check the rates before/.test(document.querySelector('#view').textContent));
     ok('Rates', 'ticking "Checked" removes the banner', (await api('prlSettings')).settings.checked === true);
     // access: a role with People view only can't see pay
+    // test data (test site only)
+    await a.goto(`${BASE}/admin/#payroll/runs`); await a.waitForSelector('#runNew');
+    ok('Test data', 'on the test site there is a "Load test payroll data" button', await a.isVisible('#prlSample'));
+    await a.click('#prlSample'); await a.click('#okBtn');
+    await a.waitForFunction(() => /test employees/.test((document.querySelector('#toast') || {}).textContent || ''), null, { timeout: 60000 });
+    const tp1 = await api('prlPeople'), tst = tp1.people.filter((p) => /\(test\)$/.test(p.name));
+    ok('Test data', '20 test employees with pay profiles (13 full-time, 3 part-time, 4 casual)', tst.length === 20 && tst.filter((p) => p.employment === 'Full-time').length === 13 && tst.filter((p) => p.employment === 'Casual').length === 4, tst.length);
+    ok('Test data', 'full-time employees have annual leave balances', tst.filter((p) => p.employment === 'Full-time').every((p) => p.balances.annual > 0), tst.map((p) => p.name + ':' + p.balances.annual));
+    const rr = (await api('prlRuns')).runs;
+    ok('Test data', 'a finished pay run and a draft one with the test team', rr.filter((x) => x.status === 'final').length >= 2 && rr.some((x) => x.status === 'draft' && x.people >= 15), rr);
+    const lvd = await api('lvList');
+    ok('Test data', 'annual leave requests: approved and waiting, including a Christmas clash', lvd.requests.filter((x) => x.status === 'approved').length >= 5 && lvd.pending >= 4 && lvd.requests.some((x) => x.status === 'pending' && x.clashes.length), [lvd.pending]);
+    ok('Test data', 'loading it twice is refused', /already loaded/.test((await api('prlSampleLoad')).error || ''));
+    process.env.SITE_ENV = ''; const SM = await import(path.join(SITE, 'netlify/lib/payroll-sample.mjs'));
+    ok('Test data', 'never on the live site', (await SM.samplePayroll('x')).code === 403); process.env.SITE_ENV = 'test';
     const U = await import(path.join(SITE, 'netlify/lib/users.mjs'));
     const nd = ['prlPeople', 'prlRuns', 'prlRunGet', 'prlTimesheet'].map((x) => U.need(x));
     ok('Access', 'every payroll action needs edit access to People: someone with only view access can\'t see anyone\'s pay', nd.every((x) => x.mod === 'people' && x.level === 'edit'), nd);

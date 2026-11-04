@@ -24,9 +24,16 @@
     if (!M.allowed('people', 'edit')) { V().innerHTML = '<div class="card noaccess"><h2>🔒 No access</h2><p class="muted">Payroll needs edit access to People.</p></div>'; return; }
     return api('prlSettings').then(function (s) {
       P.S = s.settings; P.LEAVE = s.leave; P.EMPLOY = s.employ;
-      V().innerHTML = '<div class="row" style="margin-bottom:12px"><div class="tabs" style="margin:0">' + TABS.map(function (t) { return '<a class="tab' + (P.tab === t[0] ? ' on' : '') + '" href="#payroll/' + t[0] + '">' + t[1] + '</a>'; }).join('') + '</div></div>' +
+      V().innerHTML = '<div class="row" style="margin-bottom:12px"><div class="tabs" style="margin:0">' + TABS.map(function (t) { return '<a class="tab' + (P.tab === t[0] ? ' on' : '') + '" href="#payroll/' + t[0] + '">' + t[1] + '</a>'; }).join('') + '</div><span class="sp"></span>' + ((M.me || {}).test ? '<button class="btn btn-sm" id="prlSample" title="Test site only: 20 test employees, leave balances, timesheets, pay runs and leave requests">🧪 Load test payroll data</button>' : '') + '</div>' +
         (P.S.checked ? '' : '<div class="card prl-warn"><b>⚠ Check the rates before the first pay run.</b> They are pre-filled for ' + esc(P.S.year) + ': the award\'s 2025 rates plus the 4.75% Annual Wage Review 2026 increase, the ATO 2026-27 tax formulas and 12% super. Compare them with the Fair Work pay guide for the Building and Construction General On-site Award, then tick "Checked" in <a href="#payroll/rates">Rates &amp; rules</a>.</div>') +
         '<div id="prlBody"><div class="empty">Loading…</div></div>';
+      if ($('#prlSample')) $('#prlSample').onclick = function () {
+        var b = this;
+        M.confirmBox('Load test payroll data?', '20 test employees (names end in “(test)”) with pay profiles and leave balances, two weeks of approved timesheets, a finished pay run and a draft one, and annual leave requests. Test site only.', 'Load it').then(function (ok) {
+          if (!ok) return; b.disabled = true;
+          api('prlSampleLoad').then(function (r) { toast(r.people + ' test employees, ' + r.timesheets + ' timesheets, pay runs ' + r.runs.join(' and ') + ', ' + r.leave + ' leave requests loaded'); page([P.tab]); }).catch(function (e) { b.disabled = false; fail(e); });
+        });
+      };
       return draw();
     }).catch(fail);
   }
