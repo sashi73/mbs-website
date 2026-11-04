@@ -20,6 +20,9 @@ const out = (status, body) => new Response(JSON.stringify(body), { status, heade
 export const PRIZES = [50, 30, 20];   // 1st, 2nd, 3rd of the week
 export const VALID_DAYS = 90;
 export const PLAYS_PER_DAY = 1;       // each person (one phone number or email) plays once a day, with 3 lives (resets at midnight Sydney time); the best play of the week counts
+// free-play days (Sydney dates, comma-separated): no once-a-day limit on these days. Set PROMO_FREE_DAYS in Netlify to change;
+// 'none' turns it off. Default: 4 Nov 2026 only, so it ends by itself at midnight.
+export const freeDay = (d) => String(env('PROMO_FREE_DAYS', '2026-11-04')).split(',').map((x) => x.trim()).includes(d || dayOf());
 export const dayOf = (t = Date.now()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t));
 const digits = (p) => String(p || '').replace(/\D/g, '').replace(/^61/, '0');          // a voucher can be used for 3 months
 
@@ -88,10 +91,11 @@ export async function startRun(f) {
   const week = weekOf(now), day = dayOf(now);
   p.runs = (p.runs || []).filter((r) => now - r.at < 21 * 864e5);
   const used = p.runs.filter((r) => (r.day || dayOf(r.at)) === day).length;
-  if (used >= PLAYS_PER_DAY) return { error: 'You’ve had your play for today. You’re welcome to play again tomorrow.', code: 403, playsLeft: 0 };
+  const free = freeDay(day);
+  if (!free && used >= PLAYS_PER_DAY) return { error: 'You’ve had your play for today. You’re welcome to play again tomorrow.', code: 403, playsLeft: 0 };
   const run = { id: randomBytes(6).toString('hex'), seed: randomBytes(8).toString('hex'), at: now, week, day, score: 0, cleared: 0 };
   p.runs = p.runs.concat([run]); await put(p);
-  return { run: run.id, seed: run.seed, week, play: used + 1, playsLeft: PLAYS_PER_DAY - used - 1 };
+  return { run: run.id, seed: run.seed, week, play: used + 1, playsLeft: free ? 99 : PLAYS_PER_DAY - used - 1, free };
 }
 // the game sends the run so far (after each level and at the end). The server replays it and keeps the score.
 export async function submitRun(f) {
@@ -116,10 +120,10 @@ export async function publicBoard(f) {
   let me = null;
   if (f.id && f.token) {
     const p = await player(f);
-    if (p) { const i = all.findIndex((x) => x.id === p.id); const today = dayOf(); me = { name: p.first, playsLeft: Math.max(0, PLAYS_PER_DAY - (p.runs || []).filter((r) => (r.day || dayOf(r.at)) === today).length), plays: PLAYS_PER_DAY, rank: i + 1, best: i >= 0 ? all[i].score : 0, toPrize: i >= 3 && all[2] ? all[2].score - all[i].score + 1 : 0, third: all[2] ? all[2].score : 0 }; }
+    if (p) { const i = all.findIndex((x) => x.id === p.id); const today = dayOf(); me = { name: p.first, free: freeDay(today), playsLeft: freeDay(today) ? 99 : Math.max(0, PLAYS_PER_DAY - (p.runs || []).filter((r) => (r.day || dayOf(r.at)) === today).length), plays: PLAYS_PER_DAY, rank: i + 1, best: i >= 0 ? all[i].score : 0, toPrize: i >= 3 && all[2] ? all[2].score - all[i].score + 1 : 0, third: all[2] ? all[2].score : 0 }; }
   }
   const r = weekRange(week), ends = Date.parse(r.to + 'T23:59:59+11:00');
-  return { week, range: r, endsIn: Math.max(0, ends - Date.now()), prizes: PRIZES, players: all.length, top, me };
+  return { week, free: freeDay(), range: r, endsIn: Math.max(0, ends - Date.now()), prizes: PRIZES, players: all.length, top, me };
 }
 export async function leaderboard(week, n = 10) {
   const P = Object.values((await index()).players || {});

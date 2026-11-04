@@ -50,7 +50,7 @@ function newRun() {
   if (me && G.playsLeft === 0) { G.state = 'locked'; goHome(10); hud(); return; }
   if (me) {
     G.pending = true; G.state = 'ready';
-    post({ action: 'start', id: me.id, token: me.token }).then((r) => { G.run = r.run; G.seed = r.seed; G.play = r.play; G.playsLeft = r.playsLeft; G.pending = false; initLevel(1); hud(); })
+    post({ action: 'start', id: me.id, token: me.token }).then((r) => { G.run = r.run; G.seed = r.seed; G.play = r.play; G.playsLeft = r.playsLeft; G.free = !!r.free; G.pending = false; initLevel(1); hud(); })
       .catch((e) => {
         G.pending = false;
         if (/play for today/.test(e.message)) { G.playsLeft = 0; G.state = 'locked'; goHome(10); hud(); return; }
@@ -123,7 +123,7 @@ function crash() {
   endAttempt(); AU.sfx.crash(); G.shake = 10; G.lives--; mood('ouch', 99999, ['Ouch!', 'My nose!', 'Who put that there?!', 'Oof!'][G.t % 4]);
   const p = G.S.pilot;
   for (let i = 0; i < 14; i++) G.feathers.push({ x: p.x, y: p.y, vx: (Math.random() - 0.5) * 4, vy: -Math.random() * 3, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.2, life: 70 + Math.random() * 40, c: ['#2f9e44', '#1c7ed6', '#f76707', '#fab005'][i % 4] });
-  if (G.lives <= 0) { G.state = 'over'; if (me && G.run && G.playsLeft != null) G.playsLeft = Math.max(0, G.playsLeft); submit(true); AU.say('over'); goHome(me ? 8 : 12); } else G.state = 'crashed';
+  if (G.lives <= 0) { G.state = 'over'; if (me && G.run && G.playsLeft != null) G.playsLeft = Math.max(0, G.playsLeft); submit(true); AU.say('over'); goHome(me && !(G.playsLeft > 0) ? 8 : 12); } else G.state = 'crashed';
   hud();
 }
 function cleared() {
@@ -158,7 +158,7 @@ function press(p) {
   else if (G.state === 'flight') flap();
   else if (G.state === 'crashed') initLevel(G.cfg.n);
   else if (G.state === 'levelup') initLevel(G.cfg.n + 1);
-  else if ((G.state === 'over' || G.state === 'won') && !me) newRun();
+  else if ((G.state === 'over' || G.state === 'won') && (!me || G.playsLeft > 0)) newRun();   // guests, and everyone on a free-play day
   else if (G.state === 'over' || G.state === 'won' || G.state === 'locked') location.href = 'index.html';
 }
 function drag(p) {
@@ -532,7 +532,7 @@ function draw() {
     const lines = [{ t: 'Score ' + fmt(G.score) + ' · ' + G.cleared + (G.cleared === 1 ? ' level' : ' levels') + '', c: '#F2D98B' }];
     if (!me) lines.push({ t: 'Practice only: enter the draw so your plays count', c: '#a9e34b' });
     else if (b && b.me && b.me.rank) lines.push({ t: 'Best this week: ' + fmt(b.me.best) + ' · #' + b.me.rank + (b.me.rank > 3 && b.me.toPrize ? ' · ' + fmt(b.me.toPrize) + ' to a voucher' : b.me.rank <= 3 ? ' · on the podium!' : ''), c: '#a9e34b' });
-    lines.push(me ? { t: 'That was your play for today. Come back tomorrow! Back to the site in ' + secs + 's', c: '#B9B3A6' } : { t: 'Tap to play again · back to the site in ' + secs + 's', c: '#B9B3A6' });
+    lines.push(me && G.playsLeft > 0 ? { t: '🎉 Free play today: tap to play again · back to the site in ' + secs + 's', c: '#a9e34b' } : me ? { t: 'That was your play for today. Come back tomorrow! Back to the site in ' + secs + 's', c: '#B9B3A6' } : { t: 'Tap to play again · back to the site in ' + secs + 's', c: '#B9B3A6' });
     panel(G.state === 'won' ? 'All 99 wonders flown!' : 'Out of lives', lines, G.state === 'won' ? '#a9e34b' : '#ff8a7a');
   } else if (G.state === 'locked') {
     const b = G.board, secs = Math.max(0, Math.ceil((G.home - Date.now()) / 1000));
@@ -565,7 +565,7 @@ function renderBoard() {
     : '<li class="empty">No scores yet this week. Be the first!</li>';
   let mine = '';
   if (me && b.me) mine = b.me.rank ? '<p class="wb-mine">You: <b>#' + b.me.rank + '</b> · best ' + fmt(b.me.best) + (b.me.rank > 3 && b.me.toPrize ? ' · <b>' + fmt(b.me.toPrize) + '</b> more to reach the $20 spot' : b.me.rank <= 3 ? ' · you’re on the podium. Hold on to it!' : '') + '</p>' : '<p class="wb-mine">No score yet this week. Clear a level to get on the board.</p>';
-  if (me && b.me) mine += '<p class="wb-mine wb-plays">🎮 ' + (b.me.playsLeft ? '<b>Today’s play is ready</b> · 3 lives' : '<b>Today’s play is used</b> · play again tomorrow') + '</p>';
+  if (me && b.me) mine += '<p class="wb-mine wb-plays">🎮 ' + (b.me.free ? '<b>🎉 Free play today</b> · play as often as you like' : b.me.playsLeft ? '<b>Today’s play is ready</b> · 3 lives' : '<b>Today’s play is used</b> · play again tomorrow') + '</p>';
   else if (!me) mine = '<p class="wb-mine">Guest scores aren’t saved. <button type="button" class="wb-link" data-win>Enter the draw</button> to get on the board.</p>';
   const html = '<div class="wb-bh"><h2>This week’s leaders</h2><span class="wb-ends" title="Week ends Sunday midnight, Sydney time">Ends in ' + left(b.endsIn) + '</span></div><ol class="wb-list">' + rows + '</ol>' + mine +
     '<p class="wb-small">' + fmt(b.players) + ' player' + (b.players === 1 ? '' : 's') + ' this week · top 3 win MBS vouchers: $50, $30, $20</p>';
