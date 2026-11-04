@@ -55,6 +55,7 @@ export function need(action) {
   else if (/^(inv|sup)[A-Z]/.test(a)) mod = 'stock';
   else if (/^sub[A-Z]/.test(a)) mod = 'subbies';
   else if (/^ppl[A-Z]/.test(a)) mod = 'people';
+  else if (/^prl[A-Z]/.test(a)) return { mod: 'people', level: 'edit' };   // v107: payroll is people's pay: edit access only, even to look
   else if (/^user[A-Z]/.test(a)) mod = 'users';
   else if (/^(sql[A-Z]|data[A-Z]|stores$|rebuildIndex$|log$|aiPing$)/.test(a)) mod = 'data';
   else mod = 'users';   // anything not listed: administrators only

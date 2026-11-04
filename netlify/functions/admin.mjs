@@ -40,6 +40,8 @@ async function googleVerify(cred) {
 const projectOf = async (code) => { const j = await J.find(code); return j && (await getPlan(j.core)) ? { core: j.core, ref: J.refFor(j), name: j.name } : null; };
 import { bomPost } from '../lib/bom.mjs';
 import { promoPost } from '../lib/promo.mjs';
+import { prlPost } from '../lib/payroll.mjs';
+import * as ACC from '../lib/accounts.mjs';
 
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' };
 const out = (status, body, extra = {}) => new Response(JSON.stringify(body), { status, headers: { ...H, ...extra } });
@@ -76,7 +78,7 @@ async function handle(req, context) {
       const gctx = await U.context(who, '', canIn);   // v86: Users & access
       if (!gctx) return bad('Please log in', 401);
       if (gctx.scope) return bad('Not available to sub-contractor logins.', 403);   // v91
-      const gmod = action === 'photo' || action === 'export' ? 'job' : action === 'backup' ? 'dataDelete' : action === 'voucherPdf' ? 'promoList' : 'acctReport';
+      const gmod = action === 'photo' || action === 'export' ? 'job' : action === 'backup' ? 'dataDelete' : action === 'voucherPdf' ? 'promoList' : action === 'payslipPdf' ? 'prlRuns' : 'acctReport';
       const gok = U.allows(gctx, gmod); if (!gok.ok) return bad(gok.error, 403);
       if (action === 'photo') {
         const st = url.searchParams.get('store') || A.LIVE, k = url.searchParams.get('key') || '';
@@ -97,6 +99,13 @@ async function handle(req, context) {
         for (const r of rows) data[r.key] = await A.getValue(st, r.key);
         return new Response(JSON.stringify({ store: st, at: new Date().toISOString(), data }, null, 1), { status: 200, headers: {
           'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${st}-backup-${new Date().toISOString().slice(0, 10)}.json"`, 'Cache-Control': 'no-store' } });
+      }
+      if (action === 'payslipPdf') {   // v107: a payslip as a PDF
+        const PR = await import('../lib/payroll.mjs'), PS = await import('../lib/payslip-pdf.mjs');
+        const run = await PR.getRun(url.searchParams.get('run') || ''), l = run && run.lines.find((x) => x.pid === url.searchParams.get('pid'));
+        if (!l) return bad('Payslip not found', 404);
+        const buf = await PS.payslipPdf(run, l);
+        return new Response(buf, { status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `${url.searchParams.get('view') ? 'inline' : 'attachment'}; filename="Payslip-${run.id}-${l.name.replace(/[^A-Za-z0-9]+/g, '-')}.pdf"`, 'Cache-Control': 'no-store' } });
       }
       if (action === 'voucherPdf') {   // v105: a Wonder Bird voucher as a PDF
         const PRm = await import('../lib/promo.mjs'), VP = await import('../lib/voucher-pdf.mjs');
@@ -305,7 +314,7 @@ async function handle(req, context) {
       }
       case 'log': return out(200, { log: await A.auditLog() });
       default: {
-        const a = (await acctPost(action, body, { who, by })) || (await sqlPost(action, body, { who, by })) || (await planPost(action, body, { who, by, audit: A.audit })) || (await invPost(action, body, { who, by, audit: A.audit })) || (await custPost(action, body, { who, by, audit: A.audit })) || (await planQuotePost(action, body, { who, by, audit: A.audit })) || (await subPost(action, body, { who, by, audit: A.audit })) || (await intelPost(action, body, { who, by, audit: A.audit })) || (await swmsPost(action, body, { who, by, audit: A.audit })) || (await commsPost(action, body, { who, by, audit: A.audit })) || (await reportPost(action, body, { who, by, audit: A.audit })) || (await PPL.pplPost(action, body, { who, by, audit: A.audit, unlogin: U.removeForPerson })) || (await bomPost(action, body, { who, by, audit: A.audit })) || (await promoPost(action, body, { who, by, audit: A.audit })) || (await U.userPost(action, action === 'userGuestLoad' ? { ...body, test: PPL.isTest() } : body, { ctx, audit: A.audit, person: PPL.get, sub: SUB.getSub, project: projectOf }));
+        const a = (await acctPost(action, body, { who, by })) || (await sqlPost(action, body, { who, by })) || (await planPost(action, body, { who, by, audit: A.audit })) || (await invPost(action, body, { who, by, audit: A.audit })) || (await custPost(action, body, { who, by, audit: A.audit })) || (await planQuotePost(action, body, { who, by, audit: A.audit })) || (await subPost(action, body, { who, by, audit: A.audit })) || (await intelPost(action, body, { who, by, audit: A.audit })) || (await swmsPost(action, body, { who, by, audit: A.audit })) || (await commsPost(action, body, { who, by, audit: A.audit })) || (await reportPost(action, body, { who, by, audit: A.audit })) || (await PPL.pplPost(action, body, { who, by, audit: A.audit, unlogin: U.removeForPerson })) || (await bomPost(action, body, { who, by, audit: A.audit })) || (await promoPost(action, body, { who, by, audit: A.audit })) || (await prlPost(action, body, { who, by, audit: A.audit, A: ACC, SUB })) || (await U.userPost(action, action === 'userGuestLoad' ? { ...body, test: PPL.isTest() } : body, { ctx, audit: A.audit, person: PPL.get, sub: SUB.getSub, project: projectOf }));
         return a || bad('Unknown action');
       }
     }
