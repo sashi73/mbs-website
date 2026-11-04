@@ -11,6 +11,9 @@
   var day = function (ms) { return ms ? new Date(ms).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Australia/Sydney' }) : ''; };
   var dd = function (s) { return s ? new Date(s + 'T00:00:00Z').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : ''; };
   var MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' };
+  // v105: the voucher PDF (made out to the winner, with the QR check code)
+  var pdfUrl = function (id, code, view) { return M.API + '?action=voucherPdf&id=' + encodeURIComponent(id) + '&code=' + encodeURIComponent(code) + (view ? '&view=1' : ''); };
+  var pdfBtn = function (id, code) { return '<a class="btn btn-sm" href="' + pdfUrl(id, code, true) + '" target="_blank" rel="noopener" title="Open the voucher PDF to print or send">📄 PDF</a>'; };
   var ST = { issued: 'Issued', redeemed: 'Used', void: 'Cancelled' };
   function isoWeek(ymd) {   // the ISO week a date (YYYY-MM-DD) falls in
     var d = new Date(ymd + 'T00:00:00Z'), dow = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dow + 3);
@@ -64,7 +67,7 @@
           return '<tr class="' + (i < 3 ? 'wb-win' : '') + '"><td>' + (MEDAL[i + 1] || i + 1) + '</td><td><b>' + esc(x.first + ' ' + x.last) + '</b><div class="muted wb-id">' + esc(x.id) + '</div></td>' +
             '<td><a href="tel:' + esc(x.phone) + '">' + esc(x.phone) + '</a><div><a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a></div></td>' +
             '<td class="num"><b>' + esc(x.score.toLocaleString('en-AU')) + '</b></td>' +
-            '<td>' + (v ? '<code class="wb-code">' + esc(v.code) + '</code> <span class="chip wb-st-' + esc(v.status) + '">$' + v.amount + ' · ' + esc(ST[v.status] || v.status) + '</span>' : prize ? '<span class="muted">$' + prize + (over ? ' to issue' : ' if it stays') + '</span>' : '') + '</td></tr>';
+            '<td>' + (v ? '<code class="wb-code">' + esc(v.code) + '</code> <span class="chip wb-st-' + esc(v.status) + '">$' + v.amount + ' · ' + esc(ST[v.status] || v.status) + '</span> ' + pdfBtn(x.id, v.code) : prize ? '<span class="muted">$' + prize + (over ? ' to issue' : ' if it stays') + '</span>' : '') + '</td></tr>';
         }).join('') + '</tbody></table></div>'
         : '<div class="empty">Nobody has played in this week yet.</div>');
     $('#wbPrev').onclick = function () { shift(-1); };
@@ -75,7 +78,7 @@
       M.confirmBox('Issue vouchers for ' + D.week + '?', w.map(function (x) { var i = top.indexOf(x); return (MEDAL[i + 1] || '') + ' <b>' + esc(x.first + ' ' + x.last) + '</b>: $' + D.prizes[i] + ' (score ' + esc(x.score) + ')'; }).join('<br>') +
         '<br><br>Each gets its own voucher number, valid for 90 days. Then email or call the winners.', 'Issue vouchers').then(function (ok) {
         if (!ok) return;
-        api('promoIssue', { week: D.week }).then(function (r) { toast(r.issued.length + ' vouchers issued'); return load(); }).catch(fail);
+        api('promoIssue', { week: D.week }).then(function (r) { toast(r.issued.length + ' vouchers issued: open each one’s 📄 PDF to send it'); return load(); }).catch(fail);
       });
     };
   }
@@ -96,13 +99,13 @@
   function vouchersTab(T, vAll) {
     vAll.sort(function (a, b) { return b.week.localeCompare(a.week) || a.place - b.place; });
     var edit = M.allowed('crm', 'edit');
-    T.innerHTML = vAll.length ? '<div class="wb-scroll"><table class="sc-table wb-tbl"><thead><tr><th>Voucher number</th><th>Week</th><th>Place</th><th class="num">Amount</th><th>Winner</th><th>Contact</th><th>Expires</th><th>Status</th><th>Used on job</th>' + (edit ? '<th></th>' : '') + '</tr></thead><tbody>' +
+    T.innerHTML = vAll.length ? '<div class="wb-scroll"><table class="sc-table wb-tbl"><thead><tr><th>Voucher number</th><th>Check code</th><th>Week</th><th>Place</th><th class="num">Amount</th><th>Winner</th><th>Contact</th><th>Expires</th><th>Status</th><th>Used on job</th>' + (edit ? '<th></th>' : '') + '</tr></thead><tbody>' +
       vAll.map(function (v, k) {
         var expired = v.status === 'issued' && v.expires < new Date().toISOString().slice(0, 10);
-        return '<tr><td><code class="wb-code">' + esc(v.code) + '</code></td><td>' + esc(v.week) + '</td><td>' + (MEDAL[v.place] || v.place) + '</td><td class="num">$' + esc(v.amount) + '</td>' +
+        return '<tr><td><code class="wb-code">' + esc(v.code) + '</code></td><td><code>' + esc(v.check || '') + '</code></td><td>' + esc(v.week) + '</td><td>' + (MEDAL[v.place] || v.place) + '</td><td class="num">$' + esc(v.amount) + '</td>' +
           '<td><b>' + esc(v.name) + '</b><div class="muted wb-id">' + esc(v.id) + '</div></td><td><a href="tel:' + esc(v.phone) + '">' + esc(v.phone) + '</a><div><a href="mailto:' + esc(v.email) + '">' + esc(v.email) + '</a></div></td>' +
           '<td>' + esc(dd(v.expires)) + (expired ? ' <span class="chip wb-st-void">expired</span>' : '') + '</td><td><span class="chip wb-st-' + esc(v.status) + '">' + esc(ST[v.status] || v.status) + '</span></td><td>' + (v.job ? '<a href="#job/' + encodeURIComponent(v.job) + '">' + esc(v.job) + '</a>' : '') + '</td>' +
-          (edit ? '<td class="wb-act">' + (v.status !== 'redeemed' ? '<button class="btn btn-sm" data-k="' + k + '" data-s="redeemed" type="button">✓ Used</button>' : '') +
+          (edit ? '<td class="wb-act">' + pdfBtn(v.id, v.code) + ' ' + (v.status !== 'redeemed' ? '<button class="btn btn-sm" data-k="' + k + '" data-s="redeemed" type="button">✓ Used</button>' : '') +
             (v.status !== 'issued' ? '<button class="btn btn-sm" data-k="' + k + '" data-s="issued" type="button">↺ Reopen</button>' : '') +
             (v.status === 'issued' ? '<button class="btn btn-sm" data-k="' + k + '" data-s="void" type="button">Cancel</button>' : '') + '</td>' : '') + '</tr>';
       }).join('') + '</tbody></table></div>' : '<div class="empty">No vouchers yet. Issue them from the Leaderboard once a week ends.</div>';

@@ -35,6 +35,7 @@ export default async (req) => {
       return reply(200, r);
     }
     if (body.action === 'board') return reply(200, await PR.publicBoard(body));
+    if (body.action === 'verify') return reply(200, await PR.verifyVoucher(body));   // v105: is this voucher genuine?
     return reply(400, { error: 'Unknown action' });
   } catch (e) {
     console.error('Promo error:', e);

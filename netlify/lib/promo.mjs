@@ -8,7 +8,8 @@
 // inputs of every attempt (launch + the frames they flapped). The server replays them with the same rules (assets/wb-core.mjs)
 // and works out the score itself, so a typed-in score can't get onto the leaderboard.
 // Staff issue the week's vouchers in the console (Wonder Bird page).
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHmac } from 'node:crypto';
+import { env } from './shared.mjs';
 import * as kv from './kv.mjs';
 import { scoreRun } from '../../assets/wb-core.mjs';
 
@@ -44,7 +45,7 @@ const summary = (p) => {
   const best = {}, bestAt = {}, lvl = {};
   for (const s of p.scores || []) if (best[s.week] == null || s.score > best[s.week]) { best[s.week] = s.score; bestAt[s.week] = s.at; lvl[s.week] = s.level || 0; }
   return { id: p.id, first: p.first, last: p.last, phone: p.phone, email: p.email, suburb: p.suburb || '', created: p.created, lastPlayed: p.lastPlayed || 0, plays: (p.scores || []).length,
-    best, bestAt, lvl, runsWk: (p.runs || []).reduce((m, r) => { m[r.week] = (m[r.week] || 0) + 1; return m; }, {}), top: Math.max(0, ...Object.values(best)), vouchers: (p.vouchers || []).map((v) => ({ code: v.code, week: v.week, place: v.place, amount: v.amount, status: v.status, expires: v.expires, job: v.job || '' })) };
+    best, bestAt, lvl, runsWk: (p.runs || []).reduce((m, r) => { m[r.week] = (m[r.week] || 0) + 1; return m; }, {}), top: Math.max(0, ...Object.values(best)), vouchers: (p.vouchers || []).map((v) => ({ code: v.code, check: v.check || '', week: v.week, place: v.place, amount: v.amount, status: v.status, expires: v.expires, job: v.job || '' })) };
 };
 export async function put(p) {
   await kv.set('promo:' + p.id, p);
@@ -129,7 +130,28 @@ async function rankOf(id, week) { const L = await leaderboard(week, 1000); const
 
 // staff issue the week's vouchers: the top 3 (with a score above 0) get $50, $30, $20
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-function code(amount) { const b = randomBytes(6); let s = ''; for (let i = 0; i < 6; i++) s += CODE_CHARS[b[i] % CODE_CHARS.length]; return `MBS${amount}-${s}`; }
+// v105: vouchers are numbered MBS-000001, MBS-000002… and each carries a check code (a signature of its number, amount and
+// winner). The QR code on the PDF holds the number, the amount and the check code, so anyone can confirm it is genuine.
+async function nextCode() { const n = await kv.update('voucher-seq', (x) => ({ n: ((x && x.n) || 0) + 1 }), () => ({ n: 0 })); return 'MBS-' + String(n.n).padStart(6, '0'); }
+const secret = () => env('PROMO_SECRET') || env('ADMIN_PASSWORD') || 'mbs-wonder-bird';
+export function checkCode(code, amount, playerId) {
+  const h = createHmac('sha256', secret()).update(code + '|' + amount + '|' + playerId).digest();
+  let s = ''; for (let i = 0; i < 8; i++) s += CODE_CHARS[h[i] % CODE_CHARS.length];
+  return s.slice(0, 4) + '-' + s.slice(4);
+}
+// what the QR code opens: the public check page with the number, amount and check code
+export const verifyLink = (origin, v) => `${String(origin || '').replace(/\/+$/, '')}/voucher.html?v=${encodeURIComponent(v.code)}&a=${v.amount}&c=${encodeURIComponent(v.check || '')}`;
+// public check: is this voucher genuine, and is it still good?
+export async function verifyVoucher(f) {
+  const codeIn = str(f.v, 20).toUpperCase(), chk = str(f.c, 12).toUpperCase(), amt = Math.round(Number(f.a) || 0);
+  if (!/^MBS-\d{6}$/.test(codeIn) || !chk) return { valid: false, why: 'Type the voucher number (MBS-000001) and the check code printed under the QR code.' };
+  const hit = Object.values((await index()).players || {}).find((p) => (p.vouchers || []).some((v) => v.code === codeIn));
+  const p = hit && await get(hit.id), v = p && (p.vouchers || []).find((x) => x.code === codeIn);
+  if (!v || v.check !== chk || (amt && amt !== v.amount)) return { valid: false, why: 'This voucher is not genuine: the number, amount or check code does not match our records.' };
+  const expired = v.status === 'issued' && v.expires < dayOf();
+  return { valid: true, code: v.code, amount: v.amount, name: p.first + ' ' + String(p.last || '').slice(0, 1) + '.', week: v.week, place: v.place, issued: new Date(v.issuedAt).toISOString().slice(0, 10), expires: v.expires,
+    status: expired ? 'expired' : v.status, usedOn: v.status === 'redeemed' ? (v.redeemedAt ? new Date(v.redeemedAt).toISOString().slice(0, 10) : '') : '' };
+}
 export async function issue(week, by) {
   if (!/^\d{4}-W\d{2}$/.test(week || '')) return { error: 'Pick a week' };
   if (week >= weekOf()) return { error: 'This week is not over yet. Vouchers are issued once the week has finished (after Sunday, Sydney time).' };
@@ -140,7 +162,8 @@ export async function issue(week, by) {
     const p = await get(top[i].id); if (!p) continue;
     if ((p.vouchers || []).some((v) => v.week === week)) { done.push({ id: p.id, skipped: true }); continue; }
     const amount = PRIZES[i], now = Date.now();
-    const v = { code: code(amount), week, place: i + 1, amount, score: top[i].score, issuedAt: now, issuedBy: str(by, 60), expires: new Date(now + VALID_DAYS * 864e5).toISOString().slice(0, 10), status: 'issued', redeemedAt: 0, note: '' };
+    const vcode = await nextCode();
+    const v = { code: vcode, check: checkCode(vcode, amount, p.id), week, place: i + 1, amount, score: top[i].score, issuedAt: now, issuedBy: str(by, 60), expires: new Date(now + VALID_DAYS * 864e5).toISOString().slice(0, 10), status: 'issued', redeemedAt: 0, note: '' };
     p.vouchers = (p.vouchers || []).concat([v]); await put(p);
     done.push({ id: p.id, name: p.first + ' ' + p.last, email: p.email, phone: p.phone, ...v });
   }
@@ -169,6 +192,11 @@ export async function promoPost(action, body, { who, by, audit }) {
     case 'promoList': {
       const wk = /^\d{4}-W\d{2}$/.test(body.week || '') ? body.week : weekOf();
       return out(200, { players: Object.values((await index()).players || {}).sort((a, b) => b.created - a.created), week: wk, thisWeek: weekOf(), range: weekRange(wk), prizes: PRIZES, top: await leaderboard(wk, 10) });
+    }
+    case 'promoVoucherLink': {   // the check link for a voucher (the console shows it beside the PDF)
+      const p = await get(str(body.id, 12)), v = p && (p.vouchers || []).find((x) => x.code === str(body.code, 30));
+      if (!v) return out(404, { error: 'Voucher not found' });
+      return out(200, { link: verifyLink(body.origin, v), check: v.check || '' });
     }
     case 'promoGet': { const p = await get(str(body.id, 12)); if (!p) return out(404, { error: 'Player not found' }); const { token, ...x } = p; return out(200, { player: x }); }
     case 'promoIssue': { const r = await issue(str(body.week, 10), by); if (r.error) return out(400, r); if (r.issued.length) await log(`Wonder Bird vouchers issued for ${r.week}: ${r.issued.map((v) => v.code + ' ' + v.name).join(', ')}`); return out(200, r); }

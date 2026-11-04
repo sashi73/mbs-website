@@ -5,6 +5,7 @@
 import * as C from './wb-core.mjs';
 import * as AU from './wb-audio.mjs';
 import { heroFor, drawHero } from './wb-heroes.mjs';
+import { shaderSky } from './wb-sky.mjs';
 
 const { W, H } = C;
 const $ = (s) => document.querySelector(s);
@@ -223,7 +224,7 @@ function makeScene(cfg) {
   const L = Object.assign({}, L0, { far: bio === BIOMES.green ? L0.far : landCol(bio.far, cfg.time), near: bio === BIOMES.green ? L0.near : landCol(bio.near, cfg.time),
     ground: bio === BIOMES.green ? L0.ground : [rgb(landCol(bio.ground, cfg.time)), rgb(landCol(bio.ground, cfg.time), 0.7)], bio });
   // sky, sun or moon, stars
-  const sky = off(W, H), s = sky.getContext('2d');
+  const sky = off(W * 2, H * 2), s = sky.getContext('2d'); s.scale(2, 2);
   const g = s.createLinearGradient(0, 0, 0, H); g.addColorStop(0, L.sky[0]); g.addColorStop(0.62, L.sky[1]); g.addColorStop(1, L.sky[2]);
   s.fillStyle = g; s.fillRect(0, 0, W, H);
   if (L.stars) for (let i = 0; i < 160 * L.stars; i++) { s.fillStyle = `rgba(255,255,255,${0.2 + rnd() * 0.7})`; const r = rnd() < 0.08 ? 1.4 : 0.7; s.beginPath(); s.arc(rnd() * W, rnd() * H * 0.7, r, 0, 7); s.fill(); }
@@ -232,6 +233,12 @@ function makeScene(cfg) {
   const core = s.createRadialGradient(su.x, su.y, 0, su.x, su.y, su.r * 1.6); core.addColorStop(0, '#ffffff'); core.addColorStop(0.55, su.c); core.addColorStop(1, 'rgba(255,255,255,0)');
   s.fillStyle = core; s.beginPath(); s.arc(su.x, su.y, su.r * 1.6, 0, 7); s.fill();
   if (su.moon) { s.fillStyle = 'rgba(180,185,200,0.35)'; [[-6, -5, 5], [7, 4, 4], [-2, 9, 3]].forEach(([x, y, r]) => { s.beginPath(); s.arc(su.x + x, su.y + y, r, 0, 7); s.fill(); }); }
+  // v105: the realistic sky from the graphics card, when it can (otherwise the canvas sky above stays)
+  const biomeKey = BIOME_OF[cfg.wonder] || 'green';
+  const gsky = shaderSky(L, W, H, 2, { seed: C.hashU32('sky' + cfg.n) % 1000, cover: [0.5, 0.42, 0.36, 0.55, 0.45, 0.3][cfg.time] * (biomeKey === 'desert' || biomeKey === 'outback' ? 0.6 : 1),
+    amp: { green: 0.22, snow: 0.34, water: 0.14, desert: 0.05, outback: 0.04 }[biomeKey], snow: biomeKey === 'snow' ? 1 : biomeKey === 'green' ? 0.25 : 0,
+    mount: landCol(biomeKey === 'desert' || biomeKey === 'outback' ? [190, 150, 110] : [92, 108, 128], cfg.time), mount2: landCol(biomeKey === 'desert' ? [200, 160, 105] : biomeKey === 'outback' ? [170, 95, 60] : [78, 98, 80], cfg.time) });
+  if (gsky) { s.clearRect(0, 0, W, H); s.drawImage(gsky, 0, 0, W, H); }
   // the wonder, far away in the haze
   const won = off(W, H), w = won.getContext('2d');
   w.fillStyle = rgb(WCOL[cfg.wonder] ? landCol(WCOL[cfg.wonder], cfg.time) : L.far); if (cfg.style === 'pyramid') drawGiza(w, cfg, L); else drawWonder(w, cfg, WCOL[cfg.wonder] ? Object.assign({}, L, { far: landCol(WCOL[cfg.wonder], cfg.time) }) : L);
@@ -263,7 +270,7 @@ function makeScene(cfg) {
   });
   // clouds: soft, lit from above
   const clouds = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < (gsky ? 2 : 6); i++) {
     const cw = 160 + rnd() * 160, ch = 60 + rnd() * 30, c = off(cw, ch), cc = c.getContext('2d');
     for (let k = 0; k < 14; k++) {
       const x = cw * 0.15 + rnd() * cw * 0.7, y = ch * 0.45 + rnd() * ch * 0.25, r = ch * (0.22 + rnd() * 0.22);

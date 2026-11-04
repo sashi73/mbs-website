@@ -76,7 +76,7 @@ async function handle(req, context) {
       const gctx = await U.context(who, '', canIn);   // v86: Users & access
       if (!gctx) return bad('Please log in', 401);
       if (gctx.scope) return bad('Not available to sub-contractor logins.', 403);   // v91
-      const gmod = action === 'photo' || action === 'export' ? 'job' : action === 'backup' ? 'dataDelete' : 'acctReport';
+      const gmod = action === 'photo' || action === 'export' ? 'job' : action === 'backup' ? 'dataDelete' : action === 'voucherPdf' ? 'promoList' : 'acctReport';
       const gok = U.allows(gctx, gmod); if (!gok.ok) return bad(gok.error, 403);
       if (action === 'photo') {
         const st = url.searchParams.get('store') || A.LIVE, k = url.searchParams.get('key') || '';
@@ -97,6 +97,13 @@ async function handle(req, context) {
         for (const r of rows) data[r.key] = await A.getValue(st, r.key);
         return new Response(JSON.stringify({ store: st, at: new Date().toISOString(), data }, null, 1), { status: 200, headers: {
           'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${st}-backup-${new Date().toISOString().slice(0, 10)}.json"`, 'Cache-Control': 'no-store' } });
+      }
+      if (action === 'voucherPdf') {   // v105: a Wonder Bird voucher as a PDF
+        const PRm = await import('../lib/promo.mjs'), VP = await import('../lib/voucher-pdf.mjs');
+        const p = await PRm.get(url.searchParams.get('id') || ''), v = p && (p.vouchers || []).find((x) => x.code === url.searchParams.get('code'));
+        if (!v) return bad('Voucher not found', 404);
+        const buf = await VP.voucherPdf(p, v, url.origin);
+        return new Response(buf, { status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `${url.searchParams.get('view') ? 'inline' : 'attachment'}; filename="${v.code}-${(p.first + '-' + p.last).replace(/[^A-Za-z0-9-]+/g, '')}.pdf"`, 'Cache-Control': 'no-store' } });
       }
       const g = await acctGet(action, url);
       return g || bad('Unknown request', 404);
