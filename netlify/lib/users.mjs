@@ -49,7 +49,7 @@ export function need(action) {
   if (['me', 'logout', 'login', 'userPassword'].includes(a)) return null;
   let mod;
   if (a === 'quoteStart' || a === 'planQuote') mod = 'accounts';
-  else if (/^(dashboard|jobs|job|stage|note|create|reminders|remind|unremind|report|pipelineBoard)$/.test(a) || /^cust[A-Z]/.test(a)) mod = 'crm';
+  else if (/^(dashboard|jobs|job|stage|note|create|reminders|remind|unremind|report|pipelineBoard)$/.test(a) || /^(cust|promo)[A-Z]/.test(a)) mod = 'crm';
   else if (/^(plan|comms|intel|swms|board)[A-Z]/.test(a) || /^report[A-Z]/.test(a)) mod = 'projects';
   else if (/^(acct|doc|exp|pay)[A-Z]/.test(a)) mod = 'accounts';
   else if (/^(inv|sup)[A-Z]/.test(a)) mod = 'stock';

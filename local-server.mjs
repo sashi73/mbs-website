@@ -28,7 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon'
 };
 // Site version. If any file below is from an older download, the window says so.
-const VERSION = '2026-11-04 v100 (BOM easier to read: numbered, compact, filters)';
+const VERSION = '2026-11-04 v101 (Wonder Bird weekly voucher draw)';
 const NEEDS = [
   ['netlify/lib/shared.mjs', 'isTestSite'],
   ['netlify/lib/plan.mjs', 'gateOf'],
@@ -152,7 +152,7 @@ async function oldFiles() {
   return [...out];
 }
 
-const FUNCTIONS = { chat: './netlify/functions/chat.mjs', lead: './netlify/functions/lead.mjs', tts: './netlify/functions/tts.mjs', visits: './netlify/functions/visits.mjs', admin: './netlify/functions/admin.mjs', 'planai-background': './netlify/functions/planai-background.mjs' };
+const FUNCTIONS = { chat: './netlify/functions/chat.mjs', lead: './netlify/functions/lead.mjs', tts: './netlify/functions/tts.mjs', visits: './netlify/functions/visits.mjs', admin: './netlify/functions/admin.mjs', 'planai-background': './netlify/functions/planai-background.mjs', promo: './netlify/functions/promo.mjs' };
 
 // Per-visitor limits, so nobody can run up AI costs or flood staff with fake enquiries once the site is public.
 // [requests allowed, per this many minutes]. Change in .env, e.g. LIMIT_CHAT=60/10
@@ -160,7 +160,7 @@ function limitOf(name, def) {
   const m = String(process.env['LIMIT_' + name.toUpperCase()] || def).match(/^(\d+)\/(\d+)$/);
   return m ? [Number(m[1]), Number(m[2]) * 60000] : [Infinity, 60000];
 }
-const LIMITS = { chat: limitOf('chat', '40/10'), tts: limitOf('tts', '80/10'), lead: limitOf('lead', '8/60'), visits: limitOf('visits', '20/10'), admin: limitOf('admin', '600/10') };
+const LIMITS = { chat: limitOf('chat', '40/10'), tts: limitOf('tts', '80/10'), lead: limitOf('lead', '8/60'), visits: limitOf('visits', '20/10'), admin: limitOf('admin', '600/10'), promo: limitOf('promo', '30/10') };
 const hits = new Map();
 function clientIp(req) {
   const peer = req.socket.remoteAddress || '';

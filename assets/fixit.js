@@ -30,7 +30,7 @@
   function savePhotos() { try { sessionStorage.setItem(PHOTO_STORE, JSON.stringify(PHOTOS)); } catch (e) {} }
   function clearPhotos() { PHOTOS = []; try { sessionStorage.removeItem(PHOTO_STORE); } catch (e) {} }
   function save() {
-    try { sessionStorage.setItem(STORE, JSON.stringify({ log: S.log, chips: S.chips, flow: S.flow, lead: S.lead, sent: S.sent, greeted: S.greeted, mode: S.mode, lastQ: S.lastQ, tipClosed: S.tipClosed })); } catch (e) {}
+    try { sessionStorage.setItem(STORE, JSON.stringify({ log: S.log, chips: S.chips, flow: S.flow, lead: S.lead, sent: S.sent, greeted: S.greeted, mode: S.mode, lastQ: S.lastQ, tipClosed: S.tipClosed, promo: S.promo })); } catch (e) {}
   }
 
   /* ================= Mr. Fixit artwork ================= */
@@ -378,6 +378,7 @@
     S.log.forEach(function (m) {
       if (m.who === 'card') { if (S.lead) list.appendChild(summaryCard()); }
       else if (m.who === 'photos') list.appendChild(photoBubble(m));
+      else if (m.who === 'promo') list.appendChild(promoCard());
       else if (m.who === 'projects') { /* project cards were removed in v20e */ }
       else if (m.who === 'note') list.appendChild(el('div', { class: 'fx-setup fx-note', role: 'note', text: m.text }));
       else if (m.who === 'tip') list.appendChild(el('div', { class: 'fx-setup', role: 'note', text: m.text }));
@@ -1220,9 +1221,100 @@
       case 'send':
         S.log.push({ who: 'me', text: c.label }); save();
         return sendLead();
+      case 'promo_play':
+        var pd = (S.promo && S.promo.done) || promoSaved();
+        if (pd && pd.play) window.open(pd.play, '_blank', 'noopener');
+        return;
+      case 'promo_new':
+        S.log.push({ who: 'me', text: c.label }); promoKeep(null); if (S.promo) S.promo.done = null; save();
+        return promoStart();
       default:
         return userSays(c.label);
     }
+  }
+
+
+  /* ================= v101: 🎁 Wonder Bird weekly voucher draw ================= */
+  // The "🎁 Win $50" link in the menu opens Mr. Fixit, who explains the prizes and takes their details
+  // (first and last name, contact number, email). Then they get a button to play Wonder Bird.
+  var PROMO_KEY = 'mbsWonderBird.v1';
+  function promoSaved() { try { return JSON.parse(localStorage.getItem(PROMO_KEY) || 'null'); } catch (e) { return null; } }
+  function promoKeep(x) { try { if (x) localStorage.setItem(PROMO_KEY, JSON.stringify(x)); else localStorage.removeItem(PROMO_KEY); } catch (e) {} }
+  function promoState() { if (!S.promo) S.promo = { f: {}, err: '', busy: false, done: null }; return S.promo; }
+
+  function promoCard() {
+    var P = promoState();
+    if (P.done) {
+      return el('div', { class: 'fx-card sent fx-promo' }, [
+        el('b', { class: 'fx-card-title', text: 'You’re in the draw ✓' }),
+        el('p', { class: 'fx-promo-p', text: 'Player ' + P.done.id + ' · ' + P.done.first + '. Your best score each week counts. Play as often as you like.' }),
+        el('a', { class: 'fx-chip primary fx-promo-play', href: P.done.play, target: '_blank', rel: 'noopener', text: '▶ Play Wonder Bird' })
+      ]);
+    }
+    var F = P.f;
+    function field(k, label, type, auto, ph) {
+      return el('label', { class: 'fx-pf' }, [el('span', { text: label }),
+        el('input', { type: type, name: k, autocomplete: auto, placeholder: ph || '', value: F[k] || '', maxlength: k === 'email' ? '160' : '60', required: 'required',
+          oninput: function (e) { F[k] = e.target.value; save(); } })]);
+    }
+    var tick = el('input', { type: 'checkbox', name: 'consent', onchange: function (e) { F.consent = e.target.checked; save(); } });
+    if (F.consent) tick.checked = true;
+    var form = el('form', { class: 'fx-promo-form', novalidate: 'novalidate', onsubmit: function (e) { e.preventDefault(); promoSend(); } }, [
+      el('div', { class: 'fx-pf2' }, [field('first', 'First name', 'text', 'given-name'), field('last', 'Last name', 'text', 'family-name')]),
+      field('phone', 'Contact number', 'tel', 'tel', '04xx xxx xxx'),
+      field('email', 'Email', 'email', 'email', 'you@example.com'),
+      el('input', { type: 'text', name: 'website', tabindex: '-1', autocomplete: 'off', class: 'fx-hp', 'aria-hidden': 'true' }),
+      el('label', { class: 'fx-pc' }, [tick, el('span', { html: 'I agree to the <a href="/privacy.html#vouchers" target="_blank" rel="noopener">voucher draw terms</a> and to MBS contacting me about it.' })]),
+      P.err ? el('p', { class: 'fx-perr', role: 'alert', text: P.err }) : null,
+      el('button', { type: 'submit', class: 'fx-chip primary fx-promo-go', disabled: P.busy ? 'disabled' : null, text: P.busy ? 'Saving…' : 'Enter and play ▶' })
+    ]);
+    return el('div', { class: 'fx-card fx-promo' }, [el('b', { class: 'fx-card-title', text: '🎁 Enter the weekly voucher draw' }), form]);
+  }
+
+  function promoSend() {
+    var P = promoState(), F = P.f;
+    var first = String(F.first || '').trim(), last = String(F.last || '').trim(), email = String(F.email || '').trim();
+    var hp = list.querySelector('.fx-promo-form .fx-hp');
+    var phone = phoneOk(String(F.phone || '')) || (/^\+\d{8,15}$/.test(String(F.phone || '').replace(/[\s()-]/g, '')) ? String(F.phone).replace(/[\s()-]/g, '') : null);
+    P.err = !first || !last ? 'Please type your first and last name.'
+      : !phone ? 'Please check your contact number (e.g. 0412 345 678).'
+      : !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email) ? 'Please check your email address.'
+      : !F.consent ? 'Please tick the box to agree to the draw terms.' : '';
+    if (P.err) { save(); render(); return; }
+    P.busy = true; render();
+    fetch(API + '/promo', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'enter', first: first, last: last, phone: phone, email: email, consent: true, website: hp ? hp.value : '' }) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (x) {
+        P.busy = false;
+        if (!x.ok || !x.j.id) { P.err = (x.j && x.j.error) || 'Sorry, that didn’t save. Please try again.'; save(); render(); return; }
+        P.done = { id: x.j.id, first: x.j.first, play: x.j.play }; P.err = ''; P.f = {};
+        promoKeep(P.done); save(); render();
+        say([(x.j.again ? 'Welcome back, ' : 'You’re in, ') + x.j.first + '! 🎉', 'Tap ▶ Play Wonder Bird to start. Good luck, and keep an eye on your email: we’ll contact the week’s top 3.'],
+          [{ label: '▶ Play Wonder Bird', act: 'promo_play', primary: true }, { label: 'Main menu', act: 'exit_expert' }]);
+      })
+      .catch(function () { P.busy = false; P.err = 'No connection. Please check your internet and try again.'; save(); render(); });
+  }
+
+  function promoStart() {
+    S.flow = null; S.mode = 'promo';
+    var P = promoState(), back = promoSaved();
+    if (back && back.play && !P.done) P.done = back;
+    if (P.done) {
+      save();
+      return say(['Welcome back, ' + P.done.first + '! You’re already in this week’s draw. 🎁', 'Top 3 scores each week win MBS vouchers: 🥇 $50, 🥈 $30, 🥉 $20.'],
+        [{ label: '▶ Play Wonder Bird', act: 'promo_play', primary: true }, { label: 'Not me: enter someone else', act: 'promo_new' }, { label: 'Main menu', act: 'exit_expert' }]);
+    }
+    say(['🎁 Fancy winning a discount on your next job?', 'Play our Wonder Bird game. The top 3 scores each week (Monday to Sunday) win an MBS voucher: 🥇 $50, 🥈 $30 and 🥉 $20.',
+      'To enter, I just need your first and last name, a contact number and your email, so we can get your voucher to you if you win.'], [], function () {
+      S.log.push({ who: 'promo' }); save(); render();
+      setTimeout(function () { var i = list.querySelector('.fx-promo-form input'); if (i) i.focus(); }, 60);
+    });
+  }
+  function promoOpen() {
+    if (!S.open) { S.greeted = true; setOpen(true); }
+    var go = function () { if (S.busy) return setTimeout(go, 300); promoStart(); };
+    go();
   }
 
   /* ================= v35: main menu and start again ================= */
@@ -1241,7 +1333,7 @@
     if (sending) return;
     gen++;   // drop anything still on its way from the old chat
     stopSpeaking(); clearTimeout(autoPickTimer); askRestart(false);
-    S.log = []; S.chips = []; S.flow = null; S.mode = null; S.lastQ = ''; S.busy = false;
+    S.log = []; S.chips = []; S.flow = null; S.mode = null; S.lastQ = ''; S.busy = false; S.promo = null;
     clearPhotos(); input.value = ''; input.style.height = ''; mood(null); save(); render();
     say(['Fresh start! I’m Mr. Fixit.', 'What can I help you with?'], START_CHIPS);
     setTimeout(function () { input.focus(); }, 200);
@@ -1302,6 +1394,8 @@
 
   // Any element with data-chat opens Mr. Fixit
   document.addEventListener('click', function (e) {
+    var w = e.target.closest && e.target.closest('[data-win]');
+    if (w) { e.preventDefault(); var m = document.querySelector('.menu.open'); if (m) m.classList.remove('open'); return promoOpen(); }
     var t = e.target.closest && e.target.closest('[data-chat]');
     if (t) { e.preventDefault(); setOpen(true); }
   });
@@ -1309,6 +1403,7 @@
   // Lets the page open Mr. Fixit, e.g. from the "Ask Mr. Fixit" section on the home page
   window.MrFixit = {
     open: function () { setOpen(true); },
+    win: function () { promoOpen(); },
     ask: function (q) {
       q = String(q || '').trim().slice(0, 1000);
       S.flow = null;
@@ -1323,6 +1418,8 @@
       else go();
     }
   };
+
+  if (location.hash === '#win') setTimeout(promoOpen, 600);
 
   // Friendly nudge once per visit, after the intro has finished
   function nudge() {

@@ -758,3 +758,26 @@ img.ilogo{display:block;width:min(320px,64vw);height:auto;background:none;color:
 /* v98: privacy policy page */
 .legal{max-width:820px;display:flex;flex-direction:column;gap:14px}.legal h2{font-size:1.35rem;margin:22px 0 0;color:#fff}.legal p,.legal li{line-height:1.65;color:var(--muted, #BDB8AC)}
 .legal ul{margin:0;padding-left:20px;display:grid;gap:8px}.legal a{color:var(--gold-hi, #E9C46A)}
+
+/* v101: 🎁 Wonder Bird voucher draw: the menu link and the entry card in Mr. Fixit */
+.menu a.nav-win{color:#0A0A0A;background:linear-gradient(100deg,var(--gold) 0%,var(--gold-hi) 100%);padding:6px 12px;border-radius:999px;font-size:13px;font-weight:800;white-space:nowrap;box-shadow:0 0 0 0 rgba(212,175,55,.5);animation:winPulse 2.6s ease-in-out infinite}
+.menu a.nav-win::after{display:none}
+.menu a.nav-win:hover{box-shadow:0 8px 20px rgba(212,175,55,.35)}
+@keyframes winPulse{0%,100%{box-shadow:0 0 0 0 rgba(212,175,55,.45)}50%{box-shadow:0 0 0 7px rgba(212,175,55,0)}}
+@media (prefers-reduced-motion:reduce){.menu a.nav-win{animation:none}}
+@media (max-width:900px){.menu a.nav-win{width:auto;margin-top:12px;padding:10px 16px;border-bottom:0}}
+.fx-promo-form{display:flex;flex-direction:column;gap:9px}
+.fx-pf2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fx-pf{min-width:0;display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:700;letter-spacing:.04em;color:#B9B3A6}
+.fx-pf input{width:100%;box-sizing:border-box;min-width:0;height:38px;padding:0 11px;border-radius:10px;border:1px solid #3A3A3A;background:#0F0F0F;color:#EDEAE3;font:inherit;font-size:14px;font-weight:500;letter-spacing:0}
+.fx-pf input:focus{outline:none;border-color:var(--gold)}
+.fx-pc{display:flex;flex-direction:row;gap:8px;font-weight:500;align-items:flex-start;font-size:12px;line-height:1.4;color:#CFC9BC}
+.fx-pc input{width:16px;height:16px;margin:2px 0 0;accent-color:#D4AF37;flex:none}
+.fx-pc span{flex:1;min-width:0}
+.fx-pc a{color:var(--gold-hi)}
+.fx-hp{position:absolute!important;left:-9999px!important;width:1px;height:1px;opacity:0}
+.fx-perr{margin:0;font-size:12.5px;color:#FFB4A8}
+.fx-promo-go{align-self:flex-start}
+.fx-promo-go[disabled]{opacity:.6;cursor:wait}
+.fx-promo-p{margin:0 0 10px;font-size:13px;color:#DCD6C9}
+a.fx-promo-play{display:inline-flex;align-items:center;text-decoration:none}
