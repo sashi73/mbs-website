@@ -36,7 +36,7 @@ const emailOk = (e) => /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(String(e || ''));
 const summary = (p) => {
   const best = {}; for (const s of p.scores || []) if (!best[s.week] || s.score > best[s.week]) best[s.week] = s.score;
   return { id: p.id, first: p.first, last: p.last, phone: p.phone, email: p.email, created: p.created, lastPlayed: p.lastPlayed || 0, plays: (p.scores || []).length,
-    best, top: Math.max(0, ...Object.values(best)), vouchers: (p.vouchers || []).map((v) => ({ code: v.code, week: v.week, place: v.place, amount: v.amount, status: v.status, expires: v.expires })) };
+    best, top: Math.max(0, ...Object.values(best)), vouchers: (p.vouchers || []).map((v) => ({ code: v.code, week: v.week, place: v.place, amount: v.amount, status: v.status, expires: v.expires, job: v.job || '' })) };
 };
 export async function put(p) {
   await kv.set('promo:' + p.id, p);
@@ -112,7 +112,15 @@ export async function setVoucher(f, by) {
   const p = await get(str(f.id, 12)); if (!p) return { error: 'Player not found', code: 404 };
   const v = (p.vouchers || []).find((x) => x.code === str(f.code, 30)); if (!v) return { error: 'Voucher not found', code: 404 };
   const st = ['issued', 'redeemed', 'void'].includes(f.status) ? f.status : null; if (!st) return { error: 'Unknown status' };
-  v.status = st; v.redeemedAt = st === 'redeemed' ? Date.now() : 0; v.note = str(f.note, 200); v.changedBy = str(by, 60);
+  // one voucher per job: vouchers can't be combined, so a job that already used a voucher can't take another
+  let job = '';
+  if (st === 'redeemed') {
+    job = str(f.job, 40).toUpperCase().replace(/\s+/g, '');
+    if (!job) return { error: 'Type the job number the voucher is used on (one voucher per job).' };
+    for (const x of Object.values((await index()).players || {})) for (const o of x.vouchers || [])
+      if (o.status === 'redeemed' && o.job === job && o.code !== v.code) return { error: `Job ${job} already used voucher ${o.code}. Only one voucher per job: vouchers can't be combined.` };
+  }
+  v.status = st; v.redeemedAt = st === 'redeemed' ? Date.now() : 0; v.job = job; v.note = str(f.note, 200); v.changedBy = str(by, 60);
   await put(p); return { voucher: v };
 }
 
@@ -126,7 +134,7 @@ export async function promoPost(action, body, { who, by, audit }) {
     }
     case 'promoGet': { const p = await get(str(body.id, 12)); if (!p) return out(404, { error: 'Player not found' }); const { token, ...x } = p; return out(200, { player: x }); }
     case 'promoIssue': { const r = await issue(str(body.week, 10), by); if (r.error) return out(400, r); if (r.issued.length) await log(`Wonder Bird vouchers issued for ${r.week}: ${r.issued.map((v) => v.code + ' ' + v.name).join(', ')}`); return out(200, r); }
-    case 'promoVoucher': { const r = await setVoucher(body, by); if (r.error) return out(r.code || 400, r); await log(`Wonder Bird voucher ${r.voucher.code} ${r.voucher.status}`); return out(200, r); }
+    case 'promoVoucher': { const r = await setVoucher(body, by); if (r.error) return out(r.code || 400, r); await log(`Wonder Bird voucher ${r.voucher.code} ${r.voucher.status}${r.voucher.job ? ' on job ' + r.voucher.job : ''}`); return out(200, r); }
     default: return null;
   }
 }

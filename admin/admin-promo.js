@@ -96,22 +96,39 @@
   function vouchersTab(T, vAll) {
     vAll.sort(function (a, b) { return b.week.localeCompare(a.week) || a.place - b.place; });
     var edit = M.allowed('crm', 'edit');
-    T.innerHTML = vAll.length ? '<div class="wb-scroll"><table class="sc-table wb-tbl"><thead><tr><th>Voucher number</th><th>Week</th><th>Place</th><th class="num">Amount</th><th>Winner</th><th>Contact</th><th>Expires</th><th>Status</th>' + (edit ? '<th></th>' : '') + '</tr></thead><tbody>' +
+    T.innerHTML = vAll.length ? '<div class="wb-scroll"><table class="sc-table wb-tbl"><thead><tr><th>Voucher number</th><th>Week</th><th>Place</th><th class="num">Amount</th><th>Winner</th><th>Contact</th><th>Expires</th><th>Status</th><th>Used on job</th>' + (edit ? '<th></th>' : '') + '</tr></thead><tbody>' +
       vAll.map(function (v, k) {
         var expired = v.status === 'issued' && v.expires < new Date().toISOString().slice(0, 10);
         return '<tr><td><code class="wb-code">' + esc(v.code) + '</code></td><td>' + esc(v.week) + '</td><td>' + (MEDAL[v.place] || v.place) + '</td><td class="num">$' + esc(v.amount) + '</td>' +
           '<td><b>' + esc(v.name) + '</b><div class="muted wb-id">' + esc(v.id) + '</div></td><td><a href="tel:' + esc(v.phone) + '">' + esc(v.phone) + '</a><div><a href="mailto:' + esc(v.email) + '">' + esc(v.email) + '</a></div></td>' +
-          '<td>' + esc(dd(v.expires)) + (expired ? ' <span class="chip wb-st-void">expired</span>' : '') + '</td><td><span class="chip wb-st-' + esc(v.status) + '">' + esc(ST[v.status] || v.status) + '</span></td>' +
+          '<td>' + esc(dd(v.expires)) + (expired ? ' <span class="chip wb-st-void">expired</span>' : '') + '</td><td><span class="chip wb-st-' + esc(v.status) + '">' + esc(ST[v.status] || v.status) + '</span></td><td>' + (v.job ? '<a href="#job/' + encodeURIComponent(v.job) + '">' + esc(v.job) + '</a>' : '') + '</td>' +
           (edit ? '<td class="wb-act">' + (v.status !== 'redeemed' ? '<button class="btn btn-sm" data-k="' + k + '" data-s="redeemed" type="button">✓ Used</button>' : '') +
             (v.status !== 'issued' ? '<button class="btn btn-sm" data-k="' + k + '" data-s="issued" type="button">↺ Reopen</button>' : '') +
             (v.status === 'issued' ? '<button class="btn btn-sm" data-k="' + k + '" data-s="void" type="button">Cancel</button>' : '') + '</td>' : '') + '</tr>';
       }).join('') + '</tbody></table></div>' : '<div class="empty">No vouchers yet. Issue them from the Leaderboard once a week ends.</div>';
     Array.prototype.forEach.call(T.querySelectorAll('[data-k]'), function (b) {
       b.onclick = function () {
-        var v = vAll[+b.getAttribute('data-k')], st = b.getAttribute('data-s'); b.disabled = true;
+        var v = vAll[+b.getAttribute('data-k')], st = b.getAttribute('data-s');
+        if (st === 'redeemed') return useDialog(v);
+        b.disabled = true;
         api('promoVoucher', { id: v.id, code: v.code, status: st }).then(function () { toast(v.code + ': ' + ST[st]); return load(); }).catch(function (e) { b.disabled = false; fail(e); });
       };
     });
+  }
+
+  // one voucher per job: ask which job it is used on (the server refuses a job that already used one)
+  function useDialog(v) {
+    M.modal('<h2>Mark ' + esc(v.code) + ' as used</h2><p class="muted">$' + esc(v.amount) + ' for ' + esc(v.name) + '. One voucher per job: vouchers can\'t be combined on the same job.</p>' +
+      '<label>Job number it is used on<input id="wbJob" maxlength="40" placeholder="e.g. MBS-1234" autocomplete="off"></label><p class="wb-err" id="wbJobErr" role="alert"></p>' +
+      '<div class="actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="wbUse" type="button">✓ Mark used</button></div>');
+    var go = function () {
+      var job = $('#wbJob').value.trim(), e = $('#wbJobErr');
+      if (!job) { e.textContent = 'Type the job number.'; return; }
+      $('#wbUse').disabled = true;
+      api('promoVoucher', { id: v.id, code: v.code, status: 'redeemed', job: job }).then(function () { M.closeModal(); toast(v.code + ': used on ' + job.toUpperCase()); return load(); })
+        .catch(function (x) { $('#wbUse').disabled = false; e.textContent = x.message; });
+    };
+    $('#wbUse').onclick = go; $('#wbJob').onkeydown = function (k) { if (k.key === 'Enter') go(); }; $('#wbJob').focus();
   }
 
   function csv(players, vAll) {
@@ -119,7 +136,7 @@
     var L = [['Player', 'First name', 'Last name', 'Contact number', 'Email', 'Joined', 'Plays', 'Best ever score', 'Best this week (' + P.week + ')', 'Last played', 'Vouchers won', 'Voucher numbers']];
     players.forEach(function (p) {
       L.push([p.id, p.first, p.last, p.phone, p.email, day(p.created), p.plays || 0, p.top || 0, (p.best || {})[P.week] != null ? p.best[P.week] : '', day(p.lastPlayed), (p.vouchers || []).length,
-        (p.vouchers || []).map(function (v) { return v.code + ' ($' + v.amount + ', ' + v.week + ', ' + (ST[v.status] || v.status) + ')'; }).join('; ')]);
+        (p.vouchers || []).map(function (v) { return v.code + ' ($' + v.amount + ', ' + v.week + ', ' + (ST[v.status] || v.status) + (v.job ? ' on ' + v.job : '') + ')'; }).join('; ')]);
     });
     var t = '﻿' + L.map(function (r) { return r.map(cell).join(','); }).join('\r\n') + '\r\n';
     var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([t], { type: 'text/csv;charset=utf-8' })); a.download = 'MBS-WonderBird-players-' + new Date().toISOString().slice(0, 10) + '.csv';
