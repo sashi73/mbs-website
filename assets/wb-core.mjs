@@ -3,7 +3,7 @@
 // the clock, and every random number comes from a seeded generator: the same inputs always give the same result.
 // Based on Sashi's "Wonders Flight" engine (slingshot launch, flap, 99 levels, gates, coins, gems, stabiliser).
 
-export const W = 800, H = 450, TOTAL_LEVELS = 99, START_LIVES = 3;
+export const W = 800, H = 450, TOTAL_LEVELS = 99, START_LIVES = 3;   // three lives in the day's one play
 export const GRAVITY = 0.25, FLAP = -5.5, LOCK_X = 180, MAX_PULL = 100, LAUNCH_POWER = 0.12, PILOT_R = 15;
 export const FRAME_CAP = 60 * 60 * 6;   // six minutes of frames per level at most
 export const COIN_POINTS = 25, GEM_POINTS = 150, STABILIZER_FRAMES = 400;
@@ -23,7 +23,7 @@ export function hashU32(s) {
   return h >>> 0;
 }
 
-// 33 wonders x 3 times of day = 99 levels
+// 33 wonders, six times of day, 99 levels
 export const WONDERS = [
   ['Giza Pyramids', 'pyramid'], ['Taj Mahal', 'dome'], ['Great Wall', 'wall'], ['Machu Picchu', 'terrace'], ['Petra', 'arches'],
   ['Colosseum', 'arches'], ['Chichen Itza', 'ziggurat'], ['Angkor Wat', 'tower'], ['Eiffel Tower', 'tower'], ['Stonehenge', 'monolith'],
@@ -33,13 +33,13 @@ export const WONDERS = [
   ['Tower of Pisa', 'tower'], ['Mesa Verde', 'terrace'], ['Bagan Temples', 'spires'], ['Potala Palace', 'terrace'], ['Uluru', 'rock'],
   ['Sydney Harbour Bridge', 'arch'], ['Shibam Towers', 'skyline'], ['Cappadocia Spires', 'spires']
 ].map(([name, style]) => ({ name, style }));
-export const TIMES = ['Morning', 'Sunset', 'Night'];
+export const TIMES = ['Sunrise', 'Morning', 'Afternoon', 'Sunset', 'Twilight', 'Midnight'];
 
 // difficulty climbs all the way to 99
 export function levelConfig(n) {
   n = Math.max(1, Math.min(TOTAL_LEVELS, n | 0));
   const wonder = WONDERS[(n - 1) % WONDERS.length];
-  const time = Math.floor((n - 1) / WONDERS.length) % TIMES.length;
+  const time = (n - 1) % TIMES.length;   // the light changes every level
   const towerWidth = Math.min(96, 62 + (n - 1) * 0.36);
   const gates = Math.min(16, 5 + Math.floor((n - 1) / 5));
   return {

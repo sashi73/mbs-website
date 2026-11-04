@@ -880,3 +880,12 @@ body.wb-page{visibility:visible;min-height:100dvh;display:flex;flex-direction:co
 @media (max-width:520px){ .wb-bar .wb-back{font-size:0;gap:0} .wb-bar .wb-back span{font-size:18px} .wb-bar .wb-back::after{content:'MBS site';font-size:13px;margin-left:5px} }
 .wb-side-col{height:calc(min(100vw - 340px, (100dvh - 120px) * 16 / 9) * 9 / 16);min-height:320px}
 .wb-bh-h{font-family:'Archivo',sans-serif;font-stretch:62%;font-weight:900;text-transform:uppercase;font-size:22px;margin:0 0 8px;color:#fff}
+.wb-rules-h{margin:16px 0 6px;font-size:15px;color:#fff}
+.wb-rules{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13.5px;line-height:1.5;color:#DCD6C9}
+.wb-rules b{color:var(--gold-hi)}
+.fx-pf-sub{position:relative}
+.fx-sugg{position:absolute;left:0;right:0;top:100%;z-index:5;display:flex;flex-direction:column;background:#151515;border:1px solid #3A3A3A;border-radius:10px;overflow:hidden;margin-top:2px;box-shadow:0 10px 24px rgba(0,0,0,.5)}
+.fx-sugg:empty{display:none}
+.fx-sugg-i{text-align:left;padding:8px 11px;background:none;border:0;border-bottom:1px solid #222;color:#EDEAE3;font:inherit;font-size:13.5px;font-weight:600;letter-spacing:0;cursor:pointer}
+.fx-sugg-i:hover,.fx-sugg-i:focus{background:rgba(212,175,55,.18);color:var(--gold-hi);outline:none}
+.wb-plays{border:1px solid rgba(212,175,55,.35)}

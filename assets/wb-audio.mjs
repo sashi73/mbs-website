@@ -85,6 +85,24 @@ function fuse(t, dur) {   // a lit fuse: crackling, hissing noise that sweeps up
   s.connect(f); f.connect(g); g.connect(A.music); s.start(t); s.stop(t + dur + 0.1);
   for (let k = 0; k < dur * 22; k++) { const tt = t + Math.random() * dur; hat(tt, false, 0.03 + Math.random() * 0.05); }   // crackles
 }
+function timp(t, n, lvl) {   // timpani: a low boom with a little pitch drop
+  const g = A.c.createGain(); g.connect(A.music); g.connect(A.rev); env(g, t, 0.004, lvl || 0.5, 0.35, 0.002, 0.2, t + 0.45);
+  const o = A.c.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(midi(n) * 1.25, t); o.frequency.exponentialRampToValueAtTime(midi(n), t + 0.08); o.connect(g); o.start(t); o.stop(t + 0.9);
+  const s = A.c.createBufferSource(); s.buffer = A.noise; const lp = A.c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 400; const ng = A.c.createGain(); s.connect(lp); lp.connect(ng); ng.connect(A.music); env(ng, t, 0.002, 0.25, 0.08, 0.001, 0.05, t + 0.1); s.start(t); s.stop(t + 0.3);
+}
+function horn(n, t, dur) {   // warm brass for the heroic tune
+  const g = A.c.createGain(), f = A.c.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 1; f.frequency.setValueAtTime(700, t); f.frequency.linearRampToValueAtTime(1900, t + 0.12);
+  f.connect(g); g.connect(A.music); g.connect(A.rev); env(g, t, 0.06, 0.16, 0.2, 0.12, 0.15, t + dur * 0.92);
+  [-7, 0, 7].forEach((d) => osc('sawtooth', midi(n), t, t + dur, f, d)); osc('sawtooth', midi(n - 12), t, t + dur, f, 3);
+}
+function gallop(n, t, e) {   // low strings, short-short-long, the sailing-ship stride
+  [[0, 0.45], [1, 0.45], [2, 0.9]].forEach(([k, l]) => { const g = A.c.createGain(), f = A.c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1300; f.connect(g); g.connect(A.music); env(g, t + k * e / 1.5, 0.01, 0.11, 0.08, 0.05, 0.05, t + k * e / 1.5 + l * e); [-5, 5].forEach((d) => osc('sawtooth', midi(n), t + k * e / 1.5, t + k * e / 1.5 + l * e, f, d)); });
+}
+function swell(t, dur) {   // cymbal roll that rises into the next part
+  const s = A.c.createBufferSource(); s.buffer = A.noise; s.loop = true; const f = A.c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 5000;
+  const g = A.c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.13, t + dur); g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.25);
+  s.connect(f); f.connect(g); g.connect(A.music); s.start(t); s.stop(t + dur + 0.3);
+}
 function trill(n, t, dur) {   // fast flute trill, then hold the note
   const e = eighth() / 3, half = dur * 0.5;
   for (let x = 0, k = 0; x < half; x += e, k++) flute(k % 2 ? n + 2 : n, t + x, e * 1.1);
@@ -106,7 +124,9 @@ const TUNE = [
   [62, 86, 1], [63, 84, 1], [64, 82, 1], [65, 81, 2], [67, 79, 1], [68, 77, 1], [69, 76, 1],
   [70, 74, 6], [76, 69, 2], [78, 74, 2]
 ];
-const B_BASS = [0, 0, 5, 7];                       // B section: the riff steps up (D, D, G, A)
+const B_BASS = [0, 0, 5, 7];
+// the B part's heroic horn tune (our own), over four bars of ten eighths
+const HORN = [[0, 62, 3], [3, 69, 2], [5, 65, 1], [6, 67, 1], [7, 69, 3], [10, 70, 3], [13, 69, 2], [15, 67, 2], [17, 65, 3], [20, 67, 2], [22, 69, 1], [23, 70, 2], [25, 72, 2], [27, 74, 3], [30, 76, 2], [32, 73, 3], [35, 69, 5]];                       // B section: the riff steps up (D, D, G, A)
 const B_STABS = [[62, 65, 69, 76], [62, 65, 69, 76], [67, 70, 74, 77], [69, 73, 76, 79]];
 const FORM = [['intro', 2], ['A', 8], ['B', 4], ['A2', 8], ['B', 4]];
 const FORM_BARS = FORM.reduce((s, x) => s + x[1], 0);
@@ -116,19 +136,18 @@ function sectionAt(bar) {
   for (const [name, n] of FORM) { if (b < n) return [name, b]; b -= n; }
   return ['A', 0];
 }
-const eighth = () => 60 / Math.min(184, 164 + (ST.level - 1) * 0.5) / 2;
+const eighth = () => 60 / Math.min(148, 126 + (ST.level - 1) * 0.25) / 2;   // a steady, heavy stride
 
 function playStep(t) {
   const pos = ST.step % 10, bar = ST.bar, [sec, sb] = sectionAt(bar), e = eighth(), busy = ST.level >= 3;
   const shift = sec === 'B' ? B_BASS[sb % 4] : 0;
   for (const [p, n, l] of BASS) if (p === pos) bass(n + shift, t, l * e);
   if (bar === 0 && pos === 0) fuse(t, e * 20);                       // the fuse is lit
-  hat(t, pos === 9, [0, 2, 5, 7].includes(pos) ? 0.11 : 0.05);
-  hat(t + e / 2, false, 0.03);                                        // the off-beat tick keeps it nervous
-  if (pos === 5 || pos === 0 && sec !== 'intro') rim(t);
-  if ([1, 3, 6, 8].includes(pos)) bongo(t, true);                    // bongos from the start
-  if (pos === 4 || pos === 9) bongo(t, false);
-  if (busy && pos === 7) bongo(t + e / 2, true);
+  if ([0, 2, 5, 7].includes(pos)) hat(t, false, 0.08);
+  if (pos === 5 && sec !== 'B') rim(t);
+  if (pos === 3 || pos === 8) bongo(t, true);
+  if (busy && pos === 9) bongo(t, false);
+  if (pos === 0 && sec !== 'intro') timp(t, 38, sec === 'B' ? 0.55 : 0.35);
   if (sec === 'A' || sec === 'A2') {
     const at = sb * 10 + pos;
     for (const [p, n, l] of TUNE) if (p === at) (l >= 3 ? trill : flute)(sec === 'A2' ? n - 12 : n, t, l * e);
@@ -137,8 +156,12 @@ function playStep(t) {
     if (sec === 'A2' && pos === 0 && sb % 2 === 0) stab([62, 65, 69], t, e * 1.5, 0.09);
   }
   if (sec === 'B') {
-    if (pos === 0) { stab(B_STABS[sb], t, e * 2, 0.14); strings(B_STABS[sb].map((n) => n - 12), t, e * 10); }
-    if (pos === 5) stab(B_STABS[sb], t, e, 0.1);
+    if (pos === 0) { stab(B_STABS[sb], t, e * 2, 0.1); strings(B_STABS[sb].map((n) => n - 12), t, e * 10); }
+    if (pos === 0 || pos === 5) gallop(B_STABS[sb][0] - 24, t, e);
+    if (pos === 5) timp(t, 38 + B_BASS[sb % 4], 0.45);
+    const at = sb * 10 + pos;
+    for (const [p, n, l] of HORN) if (p === at) horn(n, t, l * e);
+    if (sb === 3 && pos === 0) swell(t, e * 9);
     if (sb === 3 && pos === 6) say('tag');               // "Mister Fixit!" on the last bar of every B section
   }
 }

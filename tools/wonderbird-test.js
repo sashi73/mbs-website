@@ -29,11 +29,11 @@ const SHOTS = process.env.WB_SHOTS || os.tmpdir();
     const r1 = BOT.playLevel(1, 'a:0');
     ok('Rules', 'a level can be cleared, and replaying its inputs gives exactly the same result', r1.stats.cleared && JSON.stringify(C.replay({ level: 1, salt: 'a:0', launch: r1.attempt.launch, flaps: r1.attempt.flaps })) === JSON.stringify(r1.stats));
     const run = BOT.playRun('seed1', 3), sr = C.scoreRun('seed1', run);
-    ok('Rules', 'a whole run is scored from its inputs: 3 levels cleared, then 3 crashes end it', sr.ok && sr.cleared === 3 && sr.crashes === 3 && sr.over && sr.score > 0, sr);
+    ok('Rules', 'a play is scored from its inputs: 3 levels cleared, then 3 crashes (3 lives) end it', sr.ok && sr.cleared === 3 && sr.crashes === 3 && sr.over && sr.score > 0, sr);
     ok('Rules', 'the same inputs with another seed don\'t add up (layouts come from the server\'s seed)', !C.scoreRun('seed2', run).ok || C.scoreRun('seed2', run).score !== sr.score);
 
     // server: a player, a run, its score
-    const ent = await post({ action: 'enter', first: 'Ava', last: 'Stone', phone: '0412 111 222', email: 'ava@example.com', consent: true });
+    const ent = await post({ action: 'enter', first: 'Ava', last: 'Stone', phone: '0412 111 222', email: 'ava@example.com', suburb: 'Box Hill 2765', consent: true });
     const [id, token] = ent.j.play.match(/wb=(WB-\d{6})\.([a-f0-9]{32})/).slice(1);
     ok('Entry', 'the Play link now opens the game page on the MBS site', /^\/wonderbird\.html\?wb=WB-\d{6}\.[a-f0-9]{32}&name=Ava$/.test(ent.j.play), ent.j.play);
     let st = await post({ action: 'start', id, token });
@@ -53,8 +53,14 @@ const SHOTS = process.env.WB_SHOTS || os.tmpdir();
     ok('Server', 'made-up inputs don\'t check out', sb.status === 400, sb.j);
     sb = await post({ action: 'run', id, token, run: st.j.run, attempts: att.slice(0, 1) });
     ok('Server', 'sending the same run again updates it (one score per run, not a new one each time)', sb.status === 200 && (await PR.get(id)).scores.filter((s) => s.run === st.j.run).length === 1);
+    const sTwo = await post({ action: 'start', id, token });
+    ok('Plays', 'one play a day: a second play the same day is refused (“play again tomorrow”)', sTwo.status === 403 && /play for today/.test(sTwo.j.error) && /tomorrow/.test(sTwo.j.error), sTwo.j);
+    const dup = await post({ action: 'enter', first: 'Ava', last: 'Two', phone: '+61 412 111 222', email: 'other.ava@example.com', suburb: 'Box Hill 2765', consent: true });
+    ok('Plays', 'the same phone number with a different email is the same person (no extra plays)', dup.j.id === id && (await post({ action: 'start', id, token })).status === 403);
+    const dup2 = await post({ action: 'enter', first: 'Ava', last: 'Stone', phone: '0499 999 999', email: 'AVA@example.com', suburb: 'Box Hill 2765', consent: true });
+    ok('Plays', 'the same email with a different phone is the same person too', dup2.j.id === id);
     const bd = await post({ action: 'board', id, token });
-    ok('Board', 'the public leaderboard shows first name and initial only, the score and the prize', bd.j.top[0] && bd.j.top[0].name === 'Ava S.' && bd.j.top[0].prize === 50 && bd.j.top[0].me && !JSON.stringify(bd.j).includes('0412') && !JSON.stringify(bd.j).includes('ava@') && bd.j.me.rank === 1 && bd.j.endsIn > 0, bd.j);
+    ok('Board', 'the public leaderboard shows first name and initial only, the score and the prize', bd.j.top[0] && bd.j.top[0].name === 'Ava S.' && bd.j.top[0].prize === 50 && bd.j.top[0].me && !JSON.stringify(bd.j).includes('0412') && !JSON.stringify(bd.j).includes('ava@') && bd.j.me.rank === 1 && bd.j.me.playsLeft === 0 && bd.j.endsIn > 0, bd.j);
     const bg = await post({ action: 'board' });
     ok('Board', 'anyone can see the board (no "me" without a token)', bg.status === 200 && !bg.j.me && !bg.j.top[0].me);
 
@@ -64,6 +70,7 @@ const SHOTS = process.env.WB_SHOTS || os.tmpdir();
     const pg = await ctx.newPage(); pg.setDefaultTimeout(15000);
     const errors = []; errorsAll = errors; pg.on('pageerror', (e) => errors.push(e.message)); pg.on('console', (m) => { if (m.type() === 'error' && !/tts|404|503|Failed to load resource/.test(m.text())) errors.push('console: ' + m.text()); });
     await pg.goto(`${BASE}/wonderbird.html`, { waitUntil: 'networkidle' }); await sleep(800);
+    ok('Page', 'How to play lists the rules: one play a day with 3 lives (again tomorrow), one life a play, best play counts, one phone/email = one person', /One play a day, with 3 lives/.test(await pg.textContent('#wbPop-help')) && /welcome to play again tomorrow/.test(await pg.textContent('#wbPop-help'))  && /best play of the week/.test(await pg.textContent('#wbPop-help')) && /same phone or email/.test(await pg.textContent('#wbPop-help')));
     ok('Page', 'first visit: "How to play" pops up over the game (no wall of text, no collectible cards, no "enter the draw" box)', await pg.isVisible('#wbPop-help.open') && !/NFT|mint|collectible/i.test(await pg.content()) && !/Enter the draw/i.test(await pg.textContent('#wbPop-help')));
     await pg.screenshot({ path: path.join(SHOTS, 'wb-help.png') });
     await pg.click('#wbPop-help .wb-go'); await sleep(300);
@@ -77,17 +84,17 @@ const SHOTS = process.env.WB_SHOTS || os.tmpdir();
     const box = await pg.locator('#wbCanvas').boundingBox(), sx = box.width / 800, sy = box.height / 450;
     await pg.mouse.move(box.x + 100 * sx, box.y + 300 * sy); await pg.mouse.down(); await pg.mouse.move(box.x + 40 * sx, box.y + 330 * sy, { steps: 6 }); await pg.mouse.up();
     await sleep(200);
-    ok('Game', 'a different funny pilot each level (squirrel, bat, pup, cat, bear, lorikeet)', (await import(path.join(SITE, 'assets/wb-heroes.mjs'))).CAST.map((h) => h.key).join() === 'lorikeet,squirrel,bat,dog,cat,bear');
+    ok('Game', '26 funny pilots take turns, a different one each level', (await import(path.join(SITE, 'assets/wb-heroes.mjs'))).CAST.length === 26);
     ok('Game', 'dragging the pilot back and letting go launches it', (await pg.evaluate(() => window.WonderBird.state().state)) === 'flight');
     for (let i = 0; i < 6; i++) { await pg.keyboard.press('Space'); await sleep(260); }
     await pg.screenshot({ path: path.join(SHOTS, 'wb-flight.png') });
-    await pg.waitForFunction(() => ['crashed', 'levelup'].includes(window.WonderBird.state().state), null, { timeout: 30000 });
+    await pg.waitForFunction(() => ['crashed', 'over', 'levelup'].includes(window.WonderBird.state().state), null, { timeout: 30000 });
     ok('Game', 'the level ends (crash or clear) and an overlay says what next', true);
     await pg.screenshot({ path: path.join(SHOTS, 'wb-overlay.png') });
     // enter the draw from the game page: Mr. Fixit pops up, then the runs count
     await pg.click('#wbWho [data-win]'); await pg.waitForSelector('.fx-panel.open .fx-promo-form');
     await pg.fill('.fx-promo-form input[name=first]', 'Ben'); await pg.fill('.fx-promo-form input[name=last]', 'Kerr');
-    await pg.fill('.fx-promo-form input[name=phone]', '0400 123 456'); await pg.fill('.fx-promo-form input[name=email]', 'ben@example.com');
+    await pg.fill('.fx-promo-form input[name=phone]', '0400 123 456'); await pg.fill('.fx-promo-form input[name=email]', 'ben@example.com'); await pg.fill('.fx-promo-form input[name=suburb]', 'Kellyville 2155');
     await pg.check('.fx-promo-form input[name=consent]'); await pg.click('.fx-promo-go');
     await pg.waitForSelector('.fx-promo-play');
     await pg.click('.fx-promo-play'); await sleep(400);
@@ -102,6 +109,10 @@ const SHOTS = process.env.WB_SHOTS || os.tmpdir();
     // a reload keeps the player (and the private link isn't left in the address bar)
     await pg.goto(`${BASE}${ent.j.play}`, { waitUntil: 'networkidle' }); await sleep(500);
     ok('Entry', 'opening the Play link signs them in, then hides the private code from the address bar', /Ava/.test(await pg.textContent('#wbWho')) && !/wb=/.test(pg.url()));
+    await pg.waitForFunction(() => window.WonderBird.state().state === 'locked', null, { timeout: 8000 });
+    ok('Plays', 'with today’s play used, the game says so and goes back to the MBS website', true);
+    await pg.waitForURL(/index\.html$/, { timeout: 15000 });
+    ok('Plays', '…and it does go back to the main site', /index\.html$/.test(pg.url()));
 
     // the menu link on the site still opens Mr. Fixit first
     const s2 = await br.newContext({ viewport: { width: 1280, height: 800 } }); const q = await s2.newPage();

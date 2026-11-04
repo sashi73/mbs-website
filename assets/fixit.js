@@ -1265,6 +1265,7 @@
       el('div', { class: 'fx-pf2' }, [field('first', 'First name', 'text', 'given-name'), field('last', 'Last name', 'text', 'family-name')]),
       field('phone', 'Contact number', 'tel', 'tel', '04xx xxx xxx'),
       field('email', 'Email', 'email', 'email', 'you@example.com'),
+      suburbField(F),
       el('input', { type: 'text', name: 'website', tabindex: '-1', autocomplete: 'off', class: 'fx-hp', 'aria-hidden': 'true' }),
       el('label', { class: 'fx-pc' }, [tick, el('span', { html: 'I agree to the <a href="/privacy.html#vouchers" target="_blank" rel="noopener">voucher draw terms</a> and to MBS contacting me about it.' })]),
       P.err ? el('p', { class: 'fx-perr', role: 'alert', text: P.err }) : null,
@@ -1273,19 +1274,45 @@
     return el('div', { class: 'fx-card fx-promo' }, [el('b', { class: 'fx-card-title', text: '🎁 Enter the weekly voucher draw' }), form]);
   }
 
+  // suburb: after 3 letters, matching suburbs pop up to pick from
+  function suburbField(F) {
+    var box = el('div', { class: 'fx-sugg', role: 'listbox' });
+    var inp = el('input', { type: 'text', name: 'suburb', autocomplete: 'off', placeholder: 'Start typing, e.g. Box Hill', value: F.suburb || '', maxlength: '60', 'aria-autocomplete': 'list',
+      oninput: function (e) {
+        F.suburb = e.target.value; F.suburbPicked = false; save();
+        var v = e.target.value;
+        var show = function () {
+          if (inp.value !== v) return;
+          box.innerHTML = '';
+          var found = v.trim().length >= 3 ? matchSuburbs(v, 6) : [];
+          if (found.some(function (x) { return (x[0] + ' ' + x[1]).toLowerCase() === v.trim().toLowerCase(); })) { F.suburbPicked = true; return; }   // already a full match: nothing to pick
+          found.forEach(function (sub) {
+            box.appendChild(el('button', { type: 'button', class: 'fx-sugg-i', role: 'option', text: sub[0] + ' ' + sub[1], onmousedown: function (ev) { ev.preventDefault(); },
+              onclick: function () { F.suburb = sub[0] + ' ' + sub[1]; F.suburbPicked = true; inp.value = F.suburb; box.innerHTML = ''; save(); } }));
+          });
+        };
+        if (SUBURBS) show(); else { var p = loadSuburbs(); if (p) p.then(show); }
+      },
+      onblur: function () { setTimeout(function () { box.innerHTML = ''; }, 150); },
+      onkeydown: function (e) { if (e.key === 'Escape') { box.innerHTML = ''; e.stopPropagation(); } } });
+    loadSuburbs();
+    return el('label', { class: 'fx-pf fx-pf-sub' }, [el('span', { text: 'Suburb' }), inp, box]);
+  }
+
   function promoSend() {
     var P = promoState(), F = P.f;
-    var first = String(F.first || '').trim(), last = String(F.last || '').trim(), email = String(F.email || '').trim();
+    var first = String(F.first || '').trim(), last = String(F.last || '').trim(), email = String(F.email || '').trim(), suburb = String(F.suburb || '').trim();
     var hp = list.querySelector('.fx-promo-form .fx-hp');
     var phone = phoneOk(String(F.phone || '')) || (/^\+\d{8,15}$/.test(String(F.phone || '').replace(/[\s()-]/g, '')) ? String(F.phone).replace(/[\s()-]/g, '') : null);
     P.err = !first || !last ? 'Please type your first and last name.'
       : !phone ? 'Please check your contact number (e.g. 0412 345 678).'
       : !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email) ? 'Please check your email address.'
+      : suburb.length < 3 ? 'Please type your suburb (pick it from the list).'
       : !F.consent ? 'Please tick the box to agree to the draw terms.' : '';
     if (P.err) { save(); render(); return; }
     P.busy = true; render();
     fetch(API + '/promo', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'enter', first: first, last: last, phone: phone, email: email, consent: true, website: hp ? hp.value : '' }) })
+      body: JSON.stringify({ action: 'enter', first: first, last: last, phone: phone, email: email, suburb: suburb, consent: true, website: hp ? hp.value : '' }) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (x) {
         P.busy = false;
@@ -1305,11 +1332,11 @@
     if (back && back.play && !P.done) P.done = back;
     if (P.done) {
       save();
-      return say(['Welcome back, ' + P.done.first + '! You’re already in this week’s draw. 🎁', 'Top 3 scores each week win MBS vouchers: 🥇 $50, 🥈 $30, 🥉 $20.'],
+      return say(['Welcome back, ' + P.done.first + '! This device remembers you’re in the draw (' + P.done.id + '). 🎁', 'Not ' + P.done.first + '? Tap “Not me” to enter yourself. You can play once a day with 3 lives; top 3 each week win 🥇 $50, 🥈 $30, 🥉 $20.'],
         [{ label: '▶ Play Wonder Bird', act: 'promo_play', primary: true }, { label: 'Not me: enter someone else', act: 'promo_new' }, { label: 'Main menu', act: 'exit_expert' }]);
     }
-    say(['🎁 Fancy winning a discount on your next job?', 'Play our Wonder Bird game. The top 3 scores each week (Monday to Sunday) win an MBS voucher: 🥇 $50, 🥈 $30 and 🥉 $20.',
-      'To enter, I just need your first and last name, a contact number and your email, so we can get your voucher to you if you win.'], [], function () {
+    say(['🎁 Fancy winning a discount on your next job?', 'Play our Wonder Bird game. You can play once a day with 3 lives (and you’re welcome to play again the next day). Your best play of the week counts. The top 3 scores each week (Monday to Sunday) win an MBS voucher: 🥇 $50, 🥈 $30 and 🥉 $20.',
+      'To enter, I just need your first and last name, a contact number, your email and your suburb, so we can get your voucher to you if you win.'], [], function () {
       S.log.push({ who: 'promo' }); save(); render();
       setTimeout(function () { var i = list.querySelector('.fx-promo-form input'); if (i) i.focus(); }, 60);
     });

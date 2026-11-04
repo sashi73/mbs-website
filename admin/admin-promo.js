@@ -82,12 +82,12 @@
 
   function playersTab(T, players) {
     var q = P.q.toLowerCase().trim();
-    var rows = players.filter(function (p) { return !q || (p.id + ' ' + p.first + ' ' + p.last + ' ' + p.email + ' ' + p.phone).toLowerCase().indexOf(q) >= 0; });
+    var rows = players.filter(function (p) { return !q || (p.id + ' ' + p.first + ' ' + p.last + ' ' + p.email + ' ' + p.phone + ' ' + (p.suburb || '')).toLowerCase().indexOf(q) >= 0; });
     T.innerHTML = '<div class="row" style="margin-bottom:10px"><input id="wbQ" type="search" placeholder="Find a name, email or phone…" value="' + esc(P.q) + '" style="max-width:320px"><span class="sp"></span><span class="muted">' + rows.length + ' of ' + players.length + '</span></div>' +
-      (rows.length ? '<div class="wb-scroll"><table class="sc-table wb-tbl"><thead><tr><th>Player</th><th>Name</th><th>Contact number</th><th>Email</th><th>Joined</th><th class="num">Plays</th><th class="num">Best ever</th><th>Last played</th><th>Vouchers</th></tr></thead><tbody>' +
+      (rows.length ? '<div class="wb-scroll"><table class="sc-table wb-tbl"><thead><tr><th>Player</th><th>Name</th><th>Contact number</th><th>Email</th><th>Suburb</th><th>Joined</th><th class="num">Plays</th><th class="num">Best ever</th><th>Last played</th><th>Vouchers</th></tr></thead><tbody>' +
         rows.map(function (p) {
           return '<tr><td class="wb-id">' + esc(p.id) + '</td><td><b>' + esc(p.first + ' ' + p.last) + '</b></td><td><a href="tel:' + esc(p.phone) + '">' + esc(p.phone) + '</a></td><td><a href="mailto:' + esc(p.email) + '">' + esc(p.email) + '</a></td>' +
-            '<td>' + esc(day(p.created)) + '</td><td class="num">' + esc(p.plays || 0) + '</td><td class="num">' + esc((p.top || 0).toLocaleString('en-AU')) + '</td><td>' + esc(day(p.lastPlayed)) + '</td>' +
+            '<td>' + esc(p.suburb || '') + '</td><td>' + esc(day(p.created)) + '</td><td class="num">' + esc(p.plays || 0) + '</td><td class="num">' + esc((p.top || 0).toLocaleString('en-AU')) + '</td><td>' + esc(day(p.lastPlayed)) + '</td>' +
             '<td>' + (p.vouchers || []).map(function (v) { return '<span class="chip wb-st-' + esc(v.status) + '" title="' + esc(v.code + ' · ' + v.week) + '">$' + v.amount + '</span>'; }).join(' ') + '</td></tr>';
         }).join('') + '</tbody></table></div>' : '<div class="empty">' + (players.length ? 'No player matches.' : 'Nobody has entered yet. Visitors enter from “🎁 Win $50” on the website.') + '</div>');
     var i = $('#wbQ'); i.oninput = function () { P.q = i.value; var pos = i.selectionStart; playersTab(T, players); var j = $('#wbQ'); j.focus(); j.setSelectionRange(pos, pos); };
@@ -133,9 +133,9 @@
 
   function csv(players, vAll) {
     var cell = function (x) { x = String(x == null ? '' : x); return /[",\r\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
-    var L = [['Player', 'First name', 'Last name', 'Contact number', 'Email', 'Joined', 'Plays', 'Best ever score', 'Best this week (' + P.week + ')', 'Last played', 'Vouchers won', 'Voucher numbers']];
+    var L = [['Player', 'First name', 'Last name', 'Contact number', 'Email', 'Suburb', 'Joined', 'Plays', 'Best ever score', 'Best this week (' + P.week + ')', 'Last played', 'Vouchers won', 'Voucher numbers']];
     players.forEach(function (p) {
-      L.push([p.id, p.first, p.last, p.phone, p.email, day(p.created), p.plays || 0, p.top || 0, (p.best || {})[P.week] != null ? p.best[P.week] : '', day(p.lastPlayed), (p.vouchers || []).length,
+      L.push([p.id, p.first, p.last, p.phone, p.email, p.suburb || '', day(p.created), p.plays || 0, p.top || 0, (p.best || {})[P.week] != null ? p.best[P.week] : '', day(p.lastPlayed), (p.vouchers || []).length,
         (p.vouchers || []).map(function (v) { return v.code + ' ($' + v.amount + ', ' + v.week + ', ' + (ST[v.status] || v.status) + (v.job ? ' on ' + v.job : '') + ')'; }).join('; ')]);
     });
     var t = '﻿' + L.map(function (r) { return r.map(cell).join(','); }).join('\r\n') + '\r\n';

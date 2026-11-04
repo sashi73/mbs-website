@@ -45,7 +45,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await pg.waitForSelector('.fx-panel.open .fx-promo-form', { timeout: 15000 });
     const talk = await pg.textContent('.fx-panel');
     ok('Chat', 'clicking it opens Mr. Fixit, who explains the $50 / $30 / $20 weekly vouchers for the top 3', /\$50/.test(talk) && /\$30/.test(talk) && /\$20/.test(talk) && /top 3/i.test(talk) && /Monday to Sunday/.test(talk));
-    ok('Chat', 'and asks for first name, last name, contact number and email', ['first', 'last', 'phone', 'email'].every((n) => talk && 1) && (await pg.locator('.fx-promo-form input[name=first], .fx-promo-form input[name=last], .fx-promo-form input[name=phone], .fx-promo-form input[name=email]').count()) === 4);
+    ok('Chat', 'and asks for first name, last name, contact number, email and suburb', (await pg.locator('.fx-promo-form input[name=first], .fx-promo-form input[name=last], .fx-promo-form input[name=phone], .fx-promo-form input[name=email], .fx-promo-form input[name=suburb]').count()) === 5 && /once a day with 3 lives/.test(talk));
     await pg.click('.fx-promo-go'); await sleep(150);
     ok('Checks', 'empty form: asks for the names first', /first and last name/.test(await pg.textContent('.fx-perr')));
     await pg.fill('.fx-promo-form input[name=first]', 'Priya'); await pg.fill('.fx-promo-form input[name=last]', 'Nair');
@@ -53,6 +53,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await pg.click('.fx-promo-go'); await sleep(150);
     ok('Checks', 'a bad contact number is caught', /contact number/.test(await pg.textContent('.fx-perr')));
     await pg.fill('.fx-promo-form input[name=phone]', '0412 345 678'); await pg.click('.fx-promo-go'); await sleep(150);
+    ok('Checks', 'the suburb is needed', /suburb/.test(await pg.textContent('.fx-perr')));
+    await pg.click('.fx-promo-form input[name=suburb]'); await pg.keyboard.type('Box'); await pg.waitForSelector('.fx-sugg-i');
+    const sug = await pg.$$eval('.fx-sugg-i', (b) => b.map((x) => x.textContent));
+    ok('Suburb', 'after 3 letters, matching suburbs pop up to pick from', sug.length > 0 && sug.some((x) => /^Box Hill 2765$/.test(x)), sug);
+    await pg.click('.fx-sugg-i:has-text("Box Hill 2765")');
+    ok('Suburb', 'picking one fills it in', (await pg.inputValue('.fx-promo-form input[name=suburb]')) === 'Box Hill 2765');
+    await pg.click('.fx-promo-go'); await sleep(150);
     ok('Checks', 'the terms box must be ticked (it links to the draw terms)', /tick the box/.test(await pg.textContent('.fx-perr')) && (await pg.getAttribute('.fx-pc a', 'href')) === '/privacy.html#vouchers');
     await pg.check('.fx-promo-form input[name=consent]'); await pg.click('.fx-promo-go');
     await pg.waitForSelector('.fx-promo-play', { timeout: 15000 });
@@ -63,20 +70,20 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Entry', 'the Play button takes them to the Wonder Bird page on the site', /\/wonderbird\.html/.test(pg.url()));
     await pg.goto(`${BASE}/services.html`, { waitUntil: 'networkidle' });
     const rec = await PR.get('WB-000001');
-    ok('Saved', 'their details are saved in the separate draw table (not as a customer)', rec && rec.first === 'Priya' && rec.last === 'Nair' && rec.phone === '0412 345 678' && rec.email === 'priya.nair@example.com' && rec.consent && rec.consentAt > 0 && !(await import(path.join(SITE, 'netlify/lib/kv.mjs')).then((kv) => kv.get('customers'))), rec);
+    ok('Saved', 'their details are saved in the separate draw table (not as a customer)', rec && rec.first === 'Priya' && rec.last === 'Nair' && rec.phone === '0412 345 678' && rec.email === 'priya.nair@example.com' && rec.suburb === 'Box Hill 2765' && rec.consent && rec.consentAt > 0 && !(await import(path.join(SITE, 'netlify/lib/kv.mjs')).then((kv) => kv.get('customers'))), rec);
     // coming back
     await pg.reload({ waitUntil: 'networkidle' });
     await pg.click('.menu a.nav-win'); await pg.waitForSelector('.fx-chip:has-text("Not me")');
     ok('Entry', 'back on the same device: "Welcome back, Priya" and straight to Play', /Welcome back, Priya/.test(await pg.textContent('.fx-panel')));
 
     // the server checks too
-    let r = await post({ action: 'enter', first: 'A', last: 'B', phone: '0412345678', email: 'bad', consent: true });
+    let r = await post({ action: 'enter', first: 'A', last: 'B', phone: '0412345678', email: 'bad', suburb: 'Box Hill 2765', consent: true });
     ok('Server', 'refuses a bad email', r.status === 400 && /email/.test(r.j.error));
-    r = await post({ action: 'enter', first: 'A', last: 'B', phone: '0412345678', email: 'a@b.com' });
+    r = await post({ action: 'enter', first: 'A', last: 'B', phone: '0412345678', email: 'a@b.com', suburb: 'Box Hill 2765' });
     ok('Server', 'refuses an entry without agreeing to the terms', r.status === 400);
-    r = await post({ action: 'enter', first: 'Bot', last: 'Bot', phone: '0412345678', email: 'bot@spam.com', consent: true, website: 'http://spam' });
+    r = await post({ action: 'enter', first: 'Bot', last: 'Bot', phone: '0412345678', email: 'bot@spam.com', suburb: 'Box Hill 2765', consent: true, website: 'http://spam' });
     ok('Server', 'a bot filling the hidden field is quietly ignored', r.status === 200 && !r.j.id && !Object.values((await PR.index()).players).some((p) => p.email === 'bot@spam.com'));
-    r = await post({ action: 'enter', first: 'Priya', last: 'Nair-Smith', phone: '0412 345 678', email: 'PRIYA.NAIR@example.com', consent: true });
+    r = await post({ action: 'enter', first: 'Priya', last: 'Nair-Smith', phone: '0412 345 678', email: 'PRIYA.NAIR@example.com', suburb: 'Box Hill 2765', consent: true });
     ok('Server', 'the same email again gets the same player back (details updated), not a second entry', r.j.id === 'WB-000001' && r.j.again && Object.keys((await PR.index()).players).length === 1);
 
     // scores from the game
@@ -86,11 +93,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     ok('Scores', 'a wrong token can\'t start a run', r.status === 401);
     r = await post({ action: 'score', id: 'WB-000001', token: tok, score: 999999 });
     ok('Scores', 'a typed-in score is not accepted any more (scores come from replaying the run)', r.status === 400);
+    { const pp = await PR.get('WB-000001'); pp.runs = []; await PR.put(pp); }   // opening the game page above already used today's play
     const st1 = await post({ action: 'start', id: 'WB-000001', token: tok });
     { const pp = await PR.get('WB-000001'); pp.runs.find((x) => x.id === st1.j.run).at -= 15 * 60e3; await PR.put(pp); }
     const att1 = BOT.playRun(st1.j.seed, 2), exp1 = CORE.scoreRun(st1.j.seed, att1).score;
     r = await post({ action: 'run', id: 'WB-000001', token: tok, run: st1.j.run, attempts: att1 });
     ok('Scores', 'the game sends its run and the server scores it', r.status === 200 && r.j.score === exp1 && r.j.best === exp1 && r.j.rank === 1, r.j);
+    r = await post({ action: 'start', id: 'WB-000001', token: tok });
+    ok('Scores', 'one play a day: no second play today', r.status === 403 && /tomorrow/.test(r.j.error));
+    { const pp = await PR.get('WB-000001'); pp.runs.find((x) => x.id === st1.j.run).day = '2000-01-01'; await PR.put(pp); }   // pretend that play was yesterday
     const st2 = await post({ action: 'start', id: 'WB-000001', token: tok });
     { const pp = await PR.get('WB-000001'); pp.runs.find((x) => x.id === st2.j.run).at -= 15 * 60e3; await PR.put(pp); }
     r = await post({ action: 'run', id: 'WB-000001', token: tok, run: st2.j.run, attempts: BOT.playRun(st2.j.seed, 1) });
@@ -101,7 +112,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const now = Date.now(), lastWk = PR.weekOf(now - 7 * 864e5), thisWk = PR.weekOf(now);
     const people = [['Priya', 'Nair', 3000], ['Tom', 'Lee', 5200], ['Mia', 'Wong', 4100], ['Sam', 'Ito', 900], ['Zoe', 'Park', 2500]];
     for (const [first, last, score] of people) {
-      const x = first === 'Priya' ? { player: await PR.get('WB-000001') } : await PR.register({ first, last, phone: '0400 000 00' + people.findIndex((p) => p[0] === first), email: first.toLowerCase() + '@example.com', consent: true });
+      const x = first === 'Priya' ? { player: await PR.get('WB-000001') } : await PR.register({ first, last, phone: '0400 000 00' + people.findIndex((p) => p[0] === first), email: first.toLowerCase() + '@example.com', suburb: 'Box Hill 2765', consent: true });
       const p = x.player; p.scores = (p.scores || []).concat([{ at: now - 7 * 864e5, week: lastWk, score, level: 1 }]); await PR.put(p);
     }
     const lb = await PR.leaderboard(lastWk, 10);

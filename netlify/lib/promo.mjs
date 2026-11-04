@@ -17,7 +17,10 @@ const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
 const out = (status, body) => new Response(JSON.stringify(body), { status, headers: H });
 
 export const PRIZES = [50, 30, 20];   // 1st, 2nd, 3rd of the week
-export const VALID_DAYS = 90;          // a voucher can be used for 3 months
+export const VALID_DAYS = 90;
+export const PLAYS_PER_DAY = 1;       // each person (one phone number or email) plays once a day, with 3 lives (resets at midnight Sydney time); the best play of the week counts
+export const dayOf = (t = Date.now()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t));
+const digits = (p) => String(p || '').replace(/\D/g, '').replace(/^61/, '0');          // a voucher can be used for 3 months
 
 // the week a moment falls in, Sydney time: "2026-W45" (ISO week, Monday to Sunday)
 export function weekOf(t = Date.now()) {
@@ -40,8 +43,8 @@ const emailOk = (e) => /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(String(e || ''));
 const summary = (p) => {
   const best = {}, bestAt = {}, lvl = {};
   for (const s of p.scores || []) if (best[s.week] == null || s.score > best[s.week]) { best[s.week] = s.score; bestAt[s.week] = s.at; lvl[s.week] = s.level || 0; }
-  return { id: p.id, first: p.first, last: p.last, phone: p.phone, email: p.email, created: p.created, lastPlayed: p.lastPlayed || 0, plays: (p.scores || []).length,
-    best, bestAt, lvl, top: Math.max(0, ...Object.values(best)), vouchers: (p.vouchers || []).map((v) => ({ code: v.code, week: v.week, place: v.place, amount: v.amount, status: v.status, expires: v.expires, job: v.job || '' })) };
+  return { id: p.id, first: p.first, last: p.last, phone: p.phone, email: p.email, suburb: p.suburb || '', created: p.created, lastPlayed: p.lastPlayed || 0, plays: (p.scores || []).length,
+    best, bestAt, lvl, runsWk: (p.runs || []).reduce((m, r) => { m[r.week] = (m[r.week] || 0) + 1; return m; }, {}), top: Math.max(0, ...Object.values(best)), vouchers: (p.vouchers || []).map((v) => ({ code: v.code, week: v.week, place: v.place, amount: v.amount, status: v.status, expires: v.expires, job: v.job || '' })) };
 };
 export async function put(p) {
   await kv.set('promo:' + p.id, p);
@@ -53,19 +56,21 @@ export async function get(id) { return /^WB-\d{6}$/.test(id || '') ? kv.get('pro
 
 // a visitor enters the draw (the same email again gets their own entry back, details updated)
 export async function register(f) {
-  const first = str(f.first, 60), last = str(f.last, 60), phone = str(f.phone, 30), email = str(f.email, 160).toLowerCase();
+  const first = str(f.first, 60), last = str(f.last, 60), phone = str(f.phone, 30), email = str(f.email, 160).toLowerCase(), suburb = str(f.suburb, 60);
   if (!first || !last) return { error: 'Please give your first and last name.' };
   if (!phoneOk(phone)) return { error: 'Please check your contact number (e.g. 04xx xxx xxx).' };
   if (!emailOk(email)) return { error: 'Please check your email address.' };
+  if (suburb.length < 3) return { error: 'Please type your suburb.' };
   if (!f.consent) return { error: 'Please tick the box to agree to the voucher draw terms.' };
-  const hit = Object.values((await index()).players || {}).find((x) => x.email === email);
+  // one person = one phone number or one email: either one finds the same player (and the same 3 plays a week)
+  const hit = Object.values((await index()).players || {}).find((x) => x.email === email || digits(x.phone) === digits(phone));
   let p;
   if (hit) {
     p = await get(hit.id);
-    Object.assign(p, { first, last, phone, consentAt: Date.now(), visits: (p.visits || 1) + 1, updated: Date.now() });
+    Object.assign(p, { suburb: p.suburb || suburb, consentAt: Date.now(), visits: (p.visits || 1) + 1, updated: Date.now() });   // contact details stay as first given
   } else {
     const n = await kv.update('promo-seq', (x) => ({ n: ((x && x.n) || 0) + 1 }), () => ({ n: 0 }));
-    p = { id: 'WB-' + String(n.n).padStart(6, '0'), first, last, phone, email, consent: true, consentAt: Date.now(), source: str(f.source, 40) || 'website',
+    p = { id: 'WB-' + String(n.n).padStart(6, '0'), first, last, phone, email, suburb, consent: true, consentAt: Date.now(), source: str(f.source, 40) || 'website',
       token: randomBytes(16).toString('hex'), created: Date.now(), updated: Date.now(), visits: 1, scores: [], vouchers: [] };
   }
   await put(p);
@@ -79,11 +84,13 @@ async function player(f) {
 export async function startRun(f) {
   const p = await player(f); if (!p) return { error: 'Unknown player', code: 401 };
   const now = Date.now();
-  p.runs = (p.runs || []).filter((r) => now - r.at < 24 * 3600e3);
-  if (p.runs.filter((r) => now - r.at < 3600e3).length >= 60) return { error: 'That is a lot of runs. Take a break and try again soon.', code: 429 };
-  const run = { id: randomBytes(6).toString('hex'), seed: randomBytes(8).toString('hex'), at: now, week: weekOf(now), score: 0, cleared: 0 };
-  p.runs = p.runs.concat([run]).slice(-80); await kv.set('promo:' + p.id, p);
-  return { run: run.id, seed: run.seed, week: run.week };
+  const week = weekOf(now), day = dayOf(now);
+  p.runs = (p.runs || []).filter((r) => now - r.at < 21 * 864e5);
+  const used = p.runs.filter((r) => (r.day || dayOf(r.at)) === day).length;
+  if (used >= PLAYS_PER_DAY) return { error: 'You’ve had your play for today. You’re welcome to play again tomorrow.', code: 403, playsLeft: 0 };
+  const run = { id: randomBytes(6).toString('hex'), seed: randomBytes(8).toString('hex'), at: now, week, day, score: 0, cleared: 0 };
+  p.runs = p.runs.concat([run]); await put(p);
+  return { run: run.id, seed: run.seed, week, play: used + 1, playsLeft: PLAYS_PER_DAY - used - 1 };
 }
 // the game sends the run so far (after each level and at the end). The server replays it and keeps the score.
 export async function submitRun(f) {
@@ -108,7 +115,7 @@ export async function publicBoard(f) {
   let me = null;
   if (f.id && f.token) {
     const p = await player(f);
-    if (p) { const i = all.findIndex((x) => x.id === p.id); me = { name: p.first, rank: i + 1, best: i >= 0 ? all[i].score : 0, toPrize: i >= 3 && all[2] ? all[2].score - all[i].score + 1 : 0, third: all[2] ? all[2].score : 0 }; }
+    if (p) { const i = all.findIndex((x) => x.id === p.id); const today = dayOf(); me = { name: p.first, playsLeft: Math.max(0, PLAYS_PER_DAY - (p.runs || []).filter((r) => (r.day || dayOf(r.at)) === today).length), plays: PLAYS_PER_DAY, rank: i + 1, best: i >= 0 ? all[i].score : 0, toPrize: i >= 3 && all[2] ? all[2].score - all[i].score + 1 : 0, third: all[2] ? all[2].score : 0 }; }
   }
   const r = weekRange(week), ends = Date.parse(r.to + 'T23:59:59+11:00');
   return { week, range: r, endsIn: Math.max(0, ends - Date.now()), prizes: PRIZES, players: all.length, top, me };

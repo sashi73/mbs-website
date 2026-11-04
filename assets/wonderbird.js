@@ -27,7 +27,8 @@ function readMe() {
   me = m ? { id: m[1], token: m[2], first: x.first || '' } : null;
 }
 readMe();
-window.addEventListener('mbs:wb-entered', () => { readMe(); refreshBoard(); if (G.state !== 'flight') newRun(); toast('You’re in the draw, ' + (me ? me.first : '') + '! Your runs now count.'); });
+const PREVIEW = Math.max(0, Math.min(99, parseInt(new URLSearchParams(location.search).get('level') || '0', 10) || 0));
+window.addEventListener('mbs:wb-entered', () => { readMe(); G.playsLeft = null; refreshBoard(); if (G.state !== 'flight') newRun(); toast('You’re in the draw, ' + (me ? me.first : '') + '! Your runs now count.'); });
 function post(body) {
   return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then((r) => r.json().then((j) => (r.ok ? j : Promise.reject(new Error(j.error || 'Error ' + r.status)))));
@@ -44,12 +45,23 @@ try { G.best = Number(localStorage.getItem('mbsWonderBird.best') || 0); } catch 
 
 function newRun() {
   Object.assign(G, { lives: C.START_LIVES, score: 0, cleared: 0, flaps: 0, attempts: [], run: null, seed: null, award: null, msg: '' });
+  clearTimeout(G.homeT); G.home = 0;
+  if (me && G.playsLeft === 0) { G.state = 'locked'; goHome(10); hud(); return; }
   if (me) {
     G.pending = true; G.state = 'ready';
-    post({ action: 'start', id: me.id, token: me.token }).then((r) => { G.run = r.run; G.seed = r.seed; G.pending = false; initLevel(1); })
-      .catch((e) => { G.pending = false; G.seed = 'guest-' + Math.random().toString(36).slice(2); G.run = null; G.msg = 'Offline: this run won’t count (' + e.message + ')'; initLevel(1); });
-  } else { G.seed = 'guest-' + Math.random().toString(36).slice(2); G.run = null; initLevel(1); }
+    post({ action: 'start', id: me.id, token: me.token }).then((r) => { G.run = r.run; G.seed = r.seed; G.play = r.play; G.playsLeft = r.playsLeft; G.pending = false; initLevel(1); hud(); })
+      .catch((e) => {
+        G.pending = false;
+        if (/play for today/.test(e.message)) { G.playsLeft = 0; G.state = 'locked'; goHome(10); hud(); return; }
+        G.seed = 'guest-' + Math.random().toString(36).slice(2); G.run = null; G.msg = 'Offline: this play won’t count (' + e.message + ')'; initLevel(1);
+      });
+  } else { G.seed = 'guest-' + Math.random().toString(36).slice(2); G.run = null; initLevel(PREVIEW || 1); }   // a guest can preview a level with ?level=N (never counts)
   hud();
+}
+// after a play ends (or with no plays left) the page goes back to the MBS website, unless they play their next go
+function goHome(sec) {
+  clearTimeout(G.homeT); G.home = Date.now() + sec * 1000;
+  G.homeT = setTimeout(() => { if (G.home && Date.now() >= G.home - 50) location.href = 'index.html'; }, sec * 1000);
 }
 function initLevel(n) {
   G.cfg = C.levelConfig(n); G.hero = heroFor(n); G.mood = 'normal'; G.moodT = 0; G.bubble = null;
@@ -110,7 +122,7 @@ function crash() {
   endAttempt(); AU.sfx.crash(); G.shake = 10; G.lives--; mood('ouch', 99999, ['Ouch!', 'My nose!', 'Who put that there?!', 'Oof!'][G.t % 4]);
   const p = G.S.pilot;
   for (let i = 0; i < 14; i++) G.feathers.push({ x: p.x, y: p.y, vx: (Math.random() - 0.5) * 4, vy: -Math.random() * 3, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.2, life: 70 + Math.random() * 40, c: ['#2f9e44', '#1c7ed6', '#f76707', '#fab005'][i % 4] });
-  if (G.lives <= 0) { G.state = 'over'; submit(true); AU.say('over'); setTimeout(() => { if (!sideShown()) openPop('board'); }, 1400); } else G.state = 'crashed';
+  if (G.lives <= 0) { G.state = 'over'; if (me && G.run && G.playsLeft != null) G.playsLeft = Math.max(0, G.playsLeft); submit(true); AU.say('over'); goHome(me ? 8 : 12); } else G.state = 'crashed';
   hud();
 }
 function cleared() {
@@ -119,7 +131,7 @@ function cleared() {
   G.award = C.scoreFrom(G.cfg, st); G.last = st;
   G.score += G.award.total; G.cleared++;
   AU.sfx.win(); mood('happy', 99999, ['Woo-hoo!', 'Too easy!', pickLine()][G.t % 3]);
-  if (G.cfg.n >= C.TOTAL_LEVELS) { G.state = 'won'; submit(true); } else { G.state = 'levelup'; submit(false); AU.say('clear'); }
+  if (G.cfg.n >= C.TOTAL_LEVELS) { G.state = 'won'; submit(true); goHome(15); } else { G.state = 'levelup'; submit(false); AU.say('clear'); }
   if (G.score > G.best) { G.best = G.score; try { localStorage.setItem('mbsWonderBird.best', String(G.best)); } catch (e) {} }
   hud();
 }
@@ -145,7 +157,8 @@ function press(p) {
   else if (G.state === 'flight') flap();
   else if (G.state === 'crashed') initLevel(G.cfg.n);
   else if (G.state === 'levelup') initLevel(G.cfg.n + 1);
-  else if (G.state === 'over' || G.state === 'won') newRun();
+  else if ((G.state === 'over' || G.state === 'won') && !me) newRun();
+  else if (G.state === 'over' || G.state === 'won' || G.state === 'locked') location.href = 'index.html';
 }
 function drag(p) {
   if (!G.dragging) return;
@@ -177,22 +190,43 @@ window.addEventListener('keyup', (e) => {
 document.addEventListener('visibilitychange', () => AU.pause(document.hidden));
 
 /* ---------------- the look: natural light, real materials ---------------- */
-const LIGHT = [
+const LIGHT = [   // sunrise, morning, afternoon, sunset, twilight, midnight
+  { sky: ['#34406e', '#e3968a', '#ffdca6'], sun: { x: 170, y: 368, r: 40, c: '#ffe2ac', glow: 'rgba(255,170,110,0.6)' }, haze: [226, 176, 150], far: [120, 128, 120], near: [74, 92, 64], ground: ['#4d6a36', '#324a22'], stone: 0.88, tint: 'rgba(255,150,100,0.10)', cloud: [255, 212, 190], stars: 0 },
   { sky: ['#3f78bd', '#8fbde6', '#f4e3c6'], sun: { x: 655, y: 92, r: 30, c: '#fff6da', glow: 'rgba(255,240,200,0.55)' }, haze: [184, 205, 224], far: [126, 150, 128], near: [83, 112, 72], ground: ['#5c7f3f', '#3d5a2a'], stone: 1, tint: null, cloud: [255, 255, 255], stars: 0 },
+  { sky: ['#2a68bb', '#78ade6', '#d9eaf6'], sun: { x: 430, y: 52, r: 27, c: '#fffbea', glow: 'rgba(255,252,235,0.5)' }, haze: [200, 216, 232], far: [132, 156, 132], near: [88, 118, 74], ground: ['#62853f', '#40602b'], stone: 1.06, tint: null, cloud: [255, 255, 255], stars: 0 },
   { sky: ['#232f58', '#a4566a', '#f3a55c'], sun: { x: 560, y: 352, r: 44, c: '#ffd59a', glow: 'rgba(255,150,80,0.6)' }, haze: [196, 128, 120], far: [94, 72, 88], near: [60, 52, 64], ground: ['#3a2f30', '#231c1e'], stone: 0.8, tint: 'rgba(255,120,50,0.13)', cloud: [255, 196, 170], stars: 0 },
+  { sky: ['#0f1533', '#35305f', '#86597a'], sun: { x: 620, y: 452, r: 14, c: '#ffb48c', glow: 'rgba(210,120,150,0.35)' }, haze: [96, 84, 124], far: [56, 54, 80], near: [36, 36, 56], ground: ['#232236', '#15141f'], stone: 0.58, tint: 'rgba(70,45,120,0.22)', cloud: [170, 140, 185], stars: 0.45 },
   { sky: ['#02050d', '#0b1530', '#1e2c4f'], sun: { x: 630, y: 82, r: 20, c: '#f4f1e6', glow: 'rgba(200,215,255,0.22)', moon: true }, haze: [40, 52, 82], far: [28, 36, 56], near: [18, 24, 40], ground: ['#151b2b', '#0b0f19'], stone: 0.45, tint: 'rgba(20,35,90,0.28)', cloud: [120, 135, 170], stars: 1 }
 ];
 const rgb = (a, k = 1, al = 1) => `rgba(${Math.round(a[0] * k)},${Math.round(a[1] * k)},${Math.round(a[2] * k)},${al})`;
+// where each wonder stands: the land colours change with it (lit by the time of day)
+const BIOME_OF = { 'Giza Pyramids': 'desert', 'Great Sphinx': 'desert', 'Petra': 'desert', 'Persepolis': 'desert', 'Shibam Towers': 'desert', 'Burj Khalifa': 'desert', 'Mesa Verde': 'desert', 'Cappadocia Spires': 'desert',
+  'Uluru': 'outback', 'Sydney Opera House': 'water', 'Sydney Harbour Bridge': 'water', 'Golden Gate Bridge': 'water', 'Mount Fuji': 'snow', 'Potala Palace': 'snow' };
+const BIOMES = {
+  green: { far: [126, 150, 128], near: [83, 112, 72], ground: [92, 127, 63] },
+  desert: { far: [214, 180, 128], near: [196, 156, 98], ground: [204, 164, 104], dunes: true },
+  outback: { far: [196, 120, 74], near: [172, 92, 52], ground: [180, 96, 54], dunes: true },
+  water: { far: [104, 132, 120], near: [52, 104, 140], ground: [44, 88, 120], water: true },
+  snow: { far: [150, 168, 182], near: [96, 122, 98], ground: [88, 118, 76] }
+};
+const TIME_K = [{ k: 0.86, mix: [255, 150, 110, 0.18] }, { k: 1, mix: null }, { k: 1.05, mix: null }, { k: 0.78, mix: [255, 120, 70, 0.22] }, { k: 0.5, mix: [80, 60, 140, 0.3] }, { k: 0.34, mix: [40, 60, 130, 0.35] }];
+function landCol(col, time) { const t = TIME_K[time]; let c = col.map((v) => v * t.k); if (t.mix) c = c.map((v, i) => v * (1 - t.mix[3]) + t.mix[i] * t.mix[3] * t.k * 1.4); return c; }
+// the real colours of some wonders (white sails, orange bridge, red rock…)
+const WCOL = { 'Sydney Opera House': [238, 234, 222], 'Taj Mahal': [240, 234, 224], 'Golden Gate Bridge': [196, 74, 40], 'Sydney Harbour Bridge': [112, 118, 126], 'Eiffel Tower': [116, 96, 76],
+  'Uluru': [196, 92, 52], 'Burj Khalifa': [176, 190, 206], 'Colosseum': [208, 182, 142], 'Petra': [196, 120, 92], 'Great Sphinx': [214, 180, 128], 'Stonehenge': [150, 150, 140], 'Hagia Sophia': [204, 170, 150],
+  'Saint Basil Cathedral': [196, 80, 70], 'Tower of Pisa': [236, 230, 216], 'Angkor Wat': [140, 132, 112], 'Borobudur': [120, 116, 104], 'Chichen Itza': [190, 176, 150], 'Alhambra': [200, 140, 100] };
 let scene = null;
 function off(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 
 function makeScene(cfg) {
-  const L = LIGHT[cfg.time], rnd = C.mulberry32(C.hashU32('scene' + cfg.n));
+  const L0 = LIGHT[cfg.time], rnd = C.mulberry32(C.hashU32('scene' + cfg.n)), bio = BIOMES[BIOME_OF[cfg.wonder] || 'green'];
+  const L = Object.assign({}, L0, { far: bio === BIOMES.green ? L0.far : landCol(bio.far, cfg.time), near: bio === BIOMES.green ? L0.near : landCol(bio.near, cfg.time),
+    ground: bio === BIOMES.green ? L0.ground : [rgb(landCol(bio.ground, cfg.time)), rgb(landCol(bio.ground, cfg.time), 0.7)], bio });
   // sky, sun or moon, stars
   const sky = off(W, H), s = sky.getContext('2d');
   const g = s.createLinearGradient(0, 0, 0, H); g.addColorStop(0, L.sky[0]); g.addColorStop(0.62, L.sky[1]); g.addColorStop(1, L.sky[2]);
   s.fillStyle = g; s.fillRect(0, 0, W, H);
-  if (L.stars) for (let i = 0; i < 160; i++) { s.fillStyle = `rgba(255,255,255,${0.2 + rnd() * 0.7})`; const r = rnd() < 0.08 ? 1.4 : 0.7; s.beginPath(); s.arc(rnd() * W, rnd() * H * 0.7, r, 0, 7); s.fill(); }
+  if (L.stars) for (let i = 0; i < 160 * L.stars; i++) { s.fillStyle = `rgba(255,255,255,${0.2 + rnd() * 0.7})`; const r = rnd() < 0.08 ? 1.4 : 0.7; s.beginPath(); s.arc(rnd() * W, rnd() * H * 0.7, r, 0, 7); s.fill(); }
   const su = L.sun, gl = s.createRadialGradient(su.x, su.y, su.r * 0.6, su.x, su.y, su.r * 6);
   gl.addColorStop(0, su.glow); gl.addColorStop(1, 'rgba(255,255,255,0)'); s.fillStyle = gl; s.fillRect(0, 0, W, H);
   const core = s.createRadialGradient(su.x, su.y, 0, su.x, su.y, su.r * 1.6); core.addColorStop(0, '#ffffff'); core.addColorStop(0.55, su.c); core.addColorStop(1, 'rgba(255,255,255,0)');
@@ -200,23 +234,31 @@ function makeScene(cfg) {
   if (su.moon) { s.fillStyle = 'rgba(180,185,200,0.35)'; [[-6, -5, 5], [7, 4, 4], [-2, 9, 3]].forEach(([x, y, r]) => { s.beginPath(); s.arc(su.x + x, su.y + y, r, 0, 7); s.fill(); }); }
   // the wonder, far away in the haze
   const won = off(W, H), w = won.getContext('2d');
-  w.fillStyle = rgb(L.far); drawWonder(w, cfg, L);
+  w.fillStyle = rgb(WCOL[cfg.wonder] ? landCol(WCOL[cfg.wonder], cfg.time) : L.far); if (cfg.style === 'pyramid') drawGiza(w, cfg, L); else drawWonder(w, cfg, WCOL[cfg.wonder] ? Object.assign({}, L, { far: landCol(WCOL[cfg.wonder], cfg.time) }) : L);
   w.globalCompositeOperation = 'source-atop';
   const lit = w.createLinearGradient(L.sun.x, 0, L.sun.x - 700, 0); lit.addColorStop(0, rgb(L.cloud, 1, L.stars ? 0.08 : 0.28)); lit.addColorStop(0.5, 'rgba(0,0,0,0)'); lit.addColorStop(1, 'rgba(0,0,0,0.22)');
   w.fillStyle = lit; w.fillRect(0, 0, W, H);
-  if (cfg.style === 'pyramid') { w.fillStyle = 'rgba(0,0,0,0.18)'; w.beginPath(); w.moveTo(W / 2 + 40, H - 290); w.lineTo(W / 2 + 190, H - 60); w.lineTo(W / 2 + 60, H - 60); w.closePath(); w.fill(); }
   w.globalCompositeOperation = 'source-over';
-  const hz = w.createLinearGradient(0, 0, 0, H); hz.addColorStop(0, rgb(L.haze, 1, 0.0)); hz.addColorStop(1, rgb(L.haze, 1, 0.55));
+  const hz = w.createLinearGradient(0, 0, 0, H); hz.addColorStop(0, rgb(L.haze, 1, 0.0)); hz.addColorStop(1, rgb(L.haze, 1, cfg.style === 'pyramid' ? 0.3 : 0.55));
   w.globalCompositeOperation = 'source-atop'; w.fillStyle = hz; w.fillRect(0, 0, W, H); w.globalCompositeOperation = 'source-over';
   // two rows of hills (seamless every 1600 px)
   const hills = [0, 1].map((k) => {
-    const c = off(1600, H), h = c.getContext('2d'), base = H - (k ? 34 : 70), amp = k ? 26 : 46, ph = rnd() * 6;
+    const c = off(1600, H), h = c.getContext('2d'), base = H - (k ? 34 : 70), amp = (k ? 26 : 46) * (bio.dunes ? 0.7 : 1), ph = rnd() * 6;
+    if (k && bio.water) {   // a harbour instead of near hills: water with light on it
+      const wg = h.createLinearGradient(0, H - 60, 0, H); wg.addColorStop(0, rgb(L.near, 1.15)); wg.addColorStop(1, rgb(L.near, 0.55));
+      h.fillStyle = wg; h.fillRect(0, H - 60, 1600, 60);
+      for (let i = 0; i < 220; i++) { const x = rnd() * 1600, y = H - 58 + Math.pow(rnd(), 1.6) * 56; h.fillStyle = rgb(L.cloud, 1, 0.08 + rnd() * 0.22); h.fillRect(x, y, 6 + rnd() * 26, 1); }
+      return c;
+    }
     const col = k ? L.near : L.far, gg = h.createLinearGradient(0, base - amp * 2, 0, H);
     gg.addColorStop(0, rgb(col, k ? 1 : 1.05)); gg.addColorStop(1, rgb(col, 0.7));
     h.fillStyle = gg; h.beginPath(); h.moveTo(0, H);
     for (let x = 0; x <= 1600; x += 8) h.lineTo(x, base - amp * (0.55 * Math.sin(x / 1600 * Math.PI * 2 * 3 + ph) + 0.3 * Math.sin(x / 1600 * Math.PI * 2 * 7 + ph * 2) + 0.15 * Math.sin(x / 1600 * Math.PI * 2 * 17)));
     h.lineTo(1600, H); h.closePath(); h.fill();
-    if (k) for (let i = 0; i < 260; i++) { const x = rnd() * 1600, y = base + 6 + rnd() * 30; h.fillStyle = rgb(col, 0.8 + rnd() * 0.4, 0.5); h.beginPath(); h.arc(x, y, 1 + rnd() * 3, 0, 7); h.fill(); }   // shrubs
+    if (bio.dunes) {   // wind ripples on the sand, light on the crests
+      for (let i = 0; i < 520; i++) { const x = rnd() * 1600, y = base - amp * 0.6 + rnd() * (H - base + amp); h.strokeStyle = rgb(col, rnd() < 0.5 ? 1.18 : 0.82, 0.25); h.lineWidth = 1; h.beginPath(); h.moveTo(x, y); h.quadraticCurveTo(x + 9, y - 2, x + 18 + rnd() * 10, y); h.stroke(); }
+      h.globalCompositeOperation = 'source-atop'; const sh = h.createLinearGradient(0, base - amp, 0, base + amp); sh.addColorStop(0, rgb(L.cloud, 1, 0.18)); sh.addColorStop(1, 'rgba(0,0,0,0)'); h.fillStyle = sh; h.fillRect(0, 0, 1600, H); h.globalCompositeOperation = 'source-over';
+    } else if (k) for (let i = 0; i < 260; i++) { const x = rnd() * 1600, y = base + 6 + rnd() * 30; h.fillStyle = rgb(col, 0.8 + rnd() * 0.4, 0.5); h.beginPath(); h.arc(x, y, 1 + rnd() * 3, 0, 7); h.fill(); }   // shrubs
     return c;
   });
   // clouds: soft, lit from above
@@ -233,7 +275,7 @@ function makeScene(cfg) {
   }
   // soft focus on the far layers (depth)
   const soft = (src, px) => { const c = off(src.width, src.height), x = c.getContext('2d'); try { x.filter = 'blur(' + px + 'px)'; } catch (e) {} x.drawImage(src, 0, 0); return x.filter && x.filter !== 'none' ? c : src; };
-  const wonSoft = soft(won, 1.2), hillsSoft = [soft(hills[0], 0.8), hills[1]];
+  const wonSoft = soft(won, cfg.style === 'pyramid' ? 0.35 : 1.2), hillsSoft = [soft(hills[0], 0.8), hills[1]];
   // light rays from the sun (not at night)
   const rays = off(W, H), ry = rays.getContext('2d');
   if (!L.stars) {
@@ -248,7 +290,8 @@ function makeScene(cfg) {
   const fg = off(2400, H), f = fg.getContext('2d');
   try { f.filter = 'blur(2.5px)'; } catch (e) {}
   const leafCol = rgb(L.near, 0.35);
-  for (let i = 0; i < 26; i++) {   // grass tufts along the bottom
+  if (bio.dunes || bio.water) for (let i = 0; i < 18; i++) { const x = rnd() * 2400; f.fillStyle = rgb(L.near, 0.45); f.beginPath(); f.ellipse(x, H - 2, 10 + rnd() * 26, 6 + rnd() * 10, 0, Math.PI, 0); f.fill(); }
+  else for (let i = 0; i < 26; i++) {   // grass tufts along the bottom
     const x = rnd() * 2400; f.fillStyle = leafCol;
     for (let k = 0; k < 9; k++) { const bx = x + k * 4 - 18, hgt = 22 + rnd() * 38, lean = (rnd() - 0.5) * 18; f.beginPath(); f.moveTo(bx - 3, H); f.quadraticCurveTo(bx + lean * 0.4, H - hgt * 0.6, bx + lean, H - hgt); f.quadraticCurveTo(bx + lean * 0.4 + 2, H - hgt * 0.5, bx + 3, H); f.fill(); }
   }
@@ -259,6 +302,36 @@ function makeScene(cfg) {
   if (L.tint) { v.globalCompositeOperation = 'source-over'; v.fillStyle = L.tint.replace(/[\d.]+\)$/, '0.08)'); v.fillRect(0, 0, W, H); }
   const motes = Array.from({ length: 34 }, () => ({ x: rnd() * W, y: rnd() * H, r: 0.6 + rnd() * 1.6, s: 0.15 + rnd() * 0.5, p: rnd() * 6 }));
   return { L, sky, won: wonSoft, hills: hillsSoft, clouds, rays, fg, vig, motes, drift: 0, pillars: new Map() };
+}
+
+// Giza: the three pyramids with sunlit and shaded faces, stone courses, the smooth cap on Khafre, small queens' pyramids
+// and the Sphinx, standing on the sand
+function drawGiza(c, cfg, L) {
+  const sand = landCol([222, 186, 128], cfg.time), sunRight = L.sun.x > W / 2, base = H - 62;
+  const pyr = (cx, hw, ht, cap) => {
+    const ax = cx + hw * 0.08, ay = base - ht, mid = cx + hw * (sunRight ? 0.22 : -0.22);
+    const faces = [[cx - hw, mid, sunRight ? 0.62 : 1.04], [mid, cx + hw, sunRight ? 1.04 : 0.62]];
+    for (const [x0, x1, k] of faces) {
+      c.save(); c.beginPath(); c.moveTo(x0, base); c.lineTo(ax, ay); c.lineTo(x1, base); c.closePath(); c.clip();
+      const g = c.createLinearGradient(0, ay, 0, base); g.addColorStop(0, rgb(sand, k * 1.06)); g.addColorStop(1, rgb(sand, k * 0.9)); c.fillStyle = g; c.fillRect(cx - hw - 2, ay - 2, hw * 2 + 4, ht + 4);
+      for (let y = ay + 3; y < base; y += 3.2) { c.fillStyle = `rgba(60,40,20,${0.08 + ((y * 7) % 5) * 0.012})`; c.fillRect(cx - hw, y, hw * 2, 0.7); }   // stone courses
+      for (let i = 0; i < ht * 1.4; i++) { c.fillStyle = `rgba(${i % 2 ? '70,45,20' : '255,240,210'},0.07)`; c.fillRect(cx - hw + ((i * 37) % (hw * 2)), ay + ((i * 53) % ht), 2, 1.5); }   // worn stones
+      if (cap) { c.fillStyle = rgb(sand, k * 1.12); c.beginPath(); c.moveTo(ax - ht * 0.14, ay + ht * 0.16); c.lineTo(ax, ay); c.lineTo(ax + ht * 0.14, ay + ht * 0.16); c.fill(); }   // Khafre's remaining casing
+      c.restore();
+    }
+    c.strokeStyle = 'rgba(40,25,10,0.25)'; c.lineWidth = 0.8; c.beginPath(); c.moveTo(mid, base); c.lineTo(ax, ay); c.stroke();
+  };
+  pyr(W / 2 + 230, 70, 92);            // Menkaure, furthest
+  [[W / 2 + 330, 16, 20], [W / 2 + 362, 13, 16], [W / 2 + 390, 11, 13]].forEach(([x, hw, ht]) => pyr(x, hw, ht));   // queens' pyramids
+  pyr(W / 2 + 70, 150, 205, true);     // Khafre
+  pyr(W / 2 - 150, 165, 222);          // Khufu, the Great Pyramid
+  // the Sphinx, low in front
+  const sx = W / 2 - 330, sb = base + 2, sk = rgb(sand, 0.8), sl = rgb(sand, 1.02);
+  c.fillStyle = sk; c.beginPath(); c.moveTo(sx, sb); c.lineTo(sx + 6, sb - 14); c.lineTo(sx + 70, sb - 16); c.lineTo(sx + 78, sb - 26); c.quadraticCurveTo(sx + 86, sb - 40, sx + 96, sb - 34); c.lineTo(sx + 100, sb - 20); c.lineTo(sx + 118, sb - 6); c.lineTo(sx + 120, sb); c.fill();
+  c.fillStyle = sl; c.fillRect(sx + 10, sb - 15, 58, 4); c.fillRect(sx + 98, sb - 5, 22, 3);
+  // sand in front, softly lit
+  const sg = c.createLinearGradient(0, base - 10, 0, H); sg.addColorStop(0, rgb(sand, 1.02)); sg.addColorStop(1, rgb(sand, 0.8));
+  c.fillStyle = sg; c.beginPath(); c.moveTo(0, base + 6); for (let x = 0; x <= W; x += 20) c.lineTo(x, base + 4 + Math.sin(x / 90) * 4); c.lineTo(W, H); c.lineTo(0, H); c.fill();
 }
 
 // the wonders, as far-off silhouettes (shapes from the original Wonders Flight)
@@ -396,13 +469,13 @@ function draw() {
   ctx.drawImage(scene.sky, 0, 0, W, H);
   ctx.globalAlpha = 0.85 + Math.sin(G.t * 0.01) * 0.15; ctx.drawImage(scene.rays, 0, 0, W, H); ctx.globalAlpha = 1;
   for (const c of scene.clouds) { const x = ((c.x - scene.drift * c.k) % 1500 + 1500) % 1500 - 300; ctx.drawImage(c.c, x, c.y); }
-  ctx.drawImage(scene.won, -((scene.drift * 0.04) % 400), 0, W, H);
+  ctx.drawImage(scene.won, -Math.min(120, scene.drift * 0.02), 0, W, H);
   scene.hills.forEach((h, k) => { const x = -((scene.drift * (k ? 0.45 : 0.18)) % 1600); ctx.drawImage(h, x, 0); ctx.drawImage(h, x + 1600, 0); });
   if (G.S && (G.state === 'sling' || G.state === 'ready')) drawSling(false);
   if (S) drawPillars();
   if (S) for (const o of S.obstacles) for (const pk of o.pickups) { if (pk.taken) continue; const px = o.x + o.width / 2 + pk.dx, py = o.top + cfg.gap / 2 + pk.dy; if (px > -30 && px < W + 30) drawPickup(pk.type, px, py); }
   // ground strip
-  const gg = ctx.createLinearGradient(0, H - 12, 0, H); gg.addColorStop(0, L.ground[0]); gg.addColorStop(1, L.ground[1]); ctx.fillStyle = gg; ctx.fillRect(0, H - 12, W, 12);
+  const gg = ctx.createLinearGradient(0, H - 12, 0, H); gg.addColorStop(0, scene.L.ground[0]); gg.addColorStop(1, scene.L.ground[1]); ctx.fillStyle = gg; ctx.fillRect(0, H - 12, W, 12);
   if (S && S.stab > 0) {
     const p = S.pilot, pu = 1 + Math.sin(G.t * 0.2) * 0.07;
     ctx.strokeStyle = 'rgba(242,217,139,0.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(p.x, p.y, 32 * pu, 26 * pu, 0, 0, 7); ctx.stroke();
@@ -448,11 +521,16 @@ function draw() {
     panel('Level ' + cfg.n + ' cleared', [{ t: '+' + fmt(a.total) + ' points · ' + (G.last ? G.last.presses : 0) + ' flaps (par ' + cfg.par + ')' + (a.glideBonus ? ' · glide bonus!' : ''), c: '#a9e34b' },
       { t: 'Run score ' + fmt(G.score) + (me ? (G.rank ? '   ·   #' + G.rank + ' this week' : '') : '   ·   guest (not counted)'), c: '#F2D98B' }, { t: 'Tap or press Space for level ' + (cfg.n + 1), c: '#B9B3A6' }]);
   } else if (G.state === 'over' || G.state === 'won') {
-    const b = G.board, lines = [{ t: 'Final score ' + fmt(G.score) + ' · ' + G.cleared + (G.cleared === 1 ? ' level' : ' levels'), c: '#F2D98B' }];
-    if (!me) lines.push({ t: 'Enter the weekly draw (🎁 Win $50) so your score counts', c: '#a9e34b' });
-    else if (b && b.me && b.me.rank) lines.push({ t: 'Your best this week: ' + fmt(b.me.best) + ' · #' + b.me.rank + (b.me.rank > 3 && b.me.toPrize ? ' · ' + fmt(b.me.toPrize) + ' to a voucher' : b.me.rank <= 3 ? ' · on the podium!' : ''), c: '#a9e34b' });
-    lines.push({ t: 'Tap or press Space to fly again', c: '#B9B3A6' });
+    const b = G.board, secs = Math.max(0, Math.ceil((G.home - Date.now()) / 1000));
+    const lines = [{ t: 'Score ' + fmt(G.score) + ' · ' + G.cleared + (G.cleared === 1 ? ' level' : ' levels') + '', c: '#F2D98B' }];
+    if (!me) lines.push({ t: 'Practice only: enter the draw so your plays count', c: '#a9e34b' });
+    else if (b && b.me && b.me.rank) lines.push({ t: 'Best this week: ' + fmt(b.me.best) + ' · #' + b.me.rank + (b.me.rank > 3 && b.me.toPrize ? ' · ' + fmt(b.me.toPrize) + ' to a voucher' : b.me.rank <= 3 ? ' · on the podium!' : ''), c: '#a9e34b' });
+    lines.push(me ? { t: 'That was your play for today. Come back tomorrow! Back to the site in ' + secs + 's', c: '#B9B3A6' } : { t: 'Tap to play again · back to the site in ' + secs + 's', c: '#B9B3A6' });
     panel(G.state === 'won' ? 'All 99 wonders flown!' : 'Out of lives', lines, G.state === 'won' ? '#a9e34b' : '#ff8a7a');
+  } else if (G.state === 'locked') {
+    const b = G.board, secs = Math.max(0, Math.ceil((G.home - Date.now()) / 1000));
+    panel('You’ve had today’s play', [{ t: b && b.me && b.me.rank ? 'Your best this week: ' + fmt(b.me.best) + ' · #' + b.me.rank : 'Thanks for playing!', c: '#F2D98B' },
+      { t: 'You’re welcome to play again tomorrow. Good luck in the draw!', c: '#a9e34b' }, { t: 'Back to the MBS website in ' + secs + 's (tap to go now)', c: '#B9B3A6' }]);
   }
   if (G.msg) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, H - 26, W, 26); ctx.fillStyle = '#ffd8a8'; ctx.font = '600 12px Manrope, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(G.msg, W / 2, H - 9); ctx.textAlign = 'left'; }
 }
@@ -469,7 +547,7 @@ function hud() {
 }
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function refreshBoard() {
-  return post(Object.assign({ action: 'board' }, me ? { id: me.id, token: me.token } : {})).then((b) => { G.board = b; if (b.me && b.me.rank) G.rank = b.me.rank; renderBoard(); }).catch(() => { if (!G.board) document.querySelectorAll('.wb-board-box').forEach((x) => { x.innerHTML = '<h2 class="wb-bh-h">This week’s leaders</h2><p class="wb-small">The leaderboard can’t be reached right now. Your game still works; try again in a minute.</p>'; }); });
+  return post(Object.assign({ action: 'board' }, me ? { id: me.id, token: me.token } : {})).then((b) => { G.board = b; if (b.me && b.me.rank) G.rank = b.me.rank; if (b.me && G.playsLeft == null) { G.playsLeft = b.me.playsLeft; if (G.playsLeft === 0 && G.state !== 'flight') { G.state = 'locked'; goHome(10); } hud(); } renderBoard(); }).catch(() => { if (!G.board) document.querySelectorAll('.wb-board-box').forEach((x) => { x.innerHTML = '<h2 class="wb-bh-h">This week’s leaders</h2><p class="wb-small">The leaderboard can’t be reached right now. Your game still works; try again in a minute.</p>'; }); });
 }
 function left(ms) { const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 6e4); return d ? d + 'd ' + h + 'h' : h ? h + 'h ' + m + 'm' : m + 'm'; }
 function renderBoard() {
@@ -480,6 +558,7 @@ function renderBoard() {
     : '<li class="empty">No scores yet this week. Be the first!</li>';
   let mine = '';
   if (me && b.me) mine = b.me.rank ? '<p class="wb-mine">You: <b>#' + b.me.rank + '</b> · best ' + fmt(b.me.best) + (b.me.rank > 3 && b.me.toPrize ? ' · <b>' + fmt(b.me.toPrize) + '</b> more to reach the $20 spot' : b.me.rank <= 3 ? ' · you’re on the podium. Hold on to it!' : '') + '</p>' : '<p class="wb-mine">No score yet this week. Clear a level to get on the board.</p>';
+  if (me && b.me) mine += '<p class="wb-mine wb-plays">🎮 ' + (b.me.playsLeft ? '<b>Today’s play is ready</b> · 3 lives' : '<b>Today’s play is used</b> · play again tomorrow') + '</p>';
   else if (!me) mine = '<p class="wb-mine">Guest scores aren’t saved. <button type="button" class="wb-link" data-win>Enter the draw</button> to get on the board.</p>';
   const html = '<div class="wb-bh"><h2>This week’s leaders</h2><span class="wb-ends" title="Week ends Sunday midnight, Sydney time">Ends in ' + left(b.endsIn) + '</span></div><ol class="wb-list">' + rows + '</ol>' + mine +
     '<p class="wb-small">' + fmt(b.players) + ' player' + (b.players === 1 ? '' : 's') + ' this week · top 3 win MBS vouchers: $50, $30, $20</p>';
