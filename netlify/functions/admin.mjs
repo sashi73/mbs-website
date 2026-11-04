@@ -41,6 +41,7 @@ const projectOf = async (code) => { const j = await J.find(code); return j && (a
 import { bomPost } from '../lib/bom.mjs';
 import { promoPost } from '../lib/promo.mjs';
 import { prlPost } from '../lib/payroll.mjs';
+import { lvPost } from '../lib/leave.mjs';
 import * as ACC from '../lib/accounts.mjs';
 
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' };
@@ -314,7 +315,7 @@ async function handle(req, context) {
       }
       case 'log': return out(200, { log: await A.auditLog() });
       default: {
-        const a = (await acctPost(action, body, { who, by })) || (await sqlPost(action, body, { who, by })) || (await planPost(action, body, { who, by, audit: A.audit })) || (await invPost(action, body, { who, by, audit: A.audit })) || (await custPost(action, body, { who, by, audit: A.audit })) || (await planQuotePost(action, body, { who, by, audit: A.audit })) || (await subPost(action, body, { who, by, audit: A.audit })) || (await intelPost(action, body, { who, by, audit: A.audit })) || (await swmsPost(action, body, { who, by, audit: A.audit })) || (await commsPost(action, body, { who, by, audit: A.audit })) || (await reportPost(action, body, { who, by, audit: A.audit })) || (await PPL.pplPost(action, body, { who, by, audit: A.audit, unlogin: U.removeForPerson })) || (await bomPost(action, body, { who, by, audit: A.audit })) || (await promoPost(action, body, { who, by, audit: A.audit })) || (await prlPost(action, body, { who, by, audit: A.audit, A: ACC, SUB })) || (await U.userPost(action, action === 'userGuestLoad' ? { ...body, test: PPL.isTest() } : body, { ctx, audit: A.audit, person: PPL.get, sub: SUB.getSub, project: projectOf }));
+        const a = (await acctPost(action, body, { who, by })) || (await sqlPost(action, body, { who, by })) || (await planPost(action, body, { who, by, audit: A.audit })) || (await invPost(action, body, { who, by, audit: A.audit })) || (await custPost(action, body, { who, by, audit: A.audit })) || (await planQuotePost(action, body, { who, by, audit: A.audit })) || (await subPost(action, body, { who, by, audit: A.audit })) || (await intelPost(action, body, { who, by, audit: A.audit })) || (await swmsPost(action, body, { who, by, audit: A.audit })) || (await commsPost(action, body, { who, by, audit: A.audit })) || (await reportPost(action, body, { who, by, audit: A.audit })) || (await PPL.pplPost(action, body, { who, by, audit: A.audit, unlogin: U.removeForPerson })) || (await bomPost(action, body, { who, by, audit: A.audit })) || (await promoPost(action, body, { who, by, audit: A.audit })) || (await prlPost(action, body, { who, by, audit: A.audit, A: ACC, SUB })) || (await lvPost(action, body, { who, by, audit: A.audit, ctx })) || (await U.userPost(action, action === 'userGuestLoad' ? { ...body, test: PPL.isTest() } : body, { ctx, audit: A.audit, person: PPL.get, sub: SUB.getSub, project: projectOf }));
         return a || bad('Unknown action');
       }
     }

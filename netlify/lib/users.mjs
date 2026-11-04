@@ -55,7 +55,9 @@ export function need(action) {
   else if (/^(inv|sup)[A-Z]/.test(a)) mod = 'stock';
   else if (/^sub[A-Z]/.test(a)) mod = 'subbies';
   else if (/^ppl[A-Z]/.test(a)) mod = 'people';
-  else if (/^prl[A-Z]/.test(a)) return { mod: 'people', level: 'edit' };   // v107: payroll is people's pay: edit access only, even to look
+  else if (/^prl[A-Z]/.test(a)) return { mod: 'people', level: 'edit' };
+  else if (/^lv(Mine|Request|Cancel)$/.test(a)) return null;   // v108: anyone signed in asks for their own leave
+  else if (/^lv[A-Z]/.test(a)) return { mod: 'people', level: 'edit' };   // managers approve and see everyone's   // v107: payroll is people's pay: edit access only, even to look
   else if (/^user[A-Z]/.test(a)) mod = 'users';
   else if (/^(sql[A-Z]|data[A-Z]|stores$|rebuildIndex$|log$|aiPing$)/.test(a)) mod = 'data';
   else mod = 'users';   // anything not listed: administrators only

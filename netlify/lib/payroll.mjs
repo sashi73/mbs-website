@@ -93,7 +93,10 @@ export function withholding(gross, pr, weeks = 1) {
 
 /* ---------------- pay profiles ---------------- */
 export const EMPLOY = ['Full-time', 'Part-time', 'Casual'];
-export const LEAVE = [['', 'None'], ['annual', 'Annual leave'], ['personal', 'Personal / carer\'s leave'], ['rdo', 'RDO taken'], ['unpaid', 'Unpaid leave']];
+export const LEAVE = [['', 'None'], ['annual', 'Annual leave'], ['personal', 'Personal / carer\'s leave'], ['compassionate', 'Compassionate leave'], ['fdv', 'Confidential paid leave'], ['rdo', 'RDO taken'],
+  ['lsl', 'Long service leave (paid by the scheme)'], ['parental', 'Parental leave (unpaid)'], ['community', 'Community service (unpaid)'], ['unpaid', 'Unpaid leave']];
+// paid by MBS at the ordinary rate; the rest are unpaid by MBS (long service in NSW building is paid by the portable scheme)
+const PAID_LEAVE = ['annual', 'personal', 'compassionate', 'fdv', 'rdo'];
 const defProfile = (p) => ({ pid: p.id, classification: p.trade ? 'CW3' : 'CW1a', tool: '', hourly: 0, employment: EMPLOY.includes(p.employment) ? p.employment : 'Full-time', residency: 'resident', tft: true, noTfn: false, stsl: false, medicare: 'none',
   balances: { annual: 0, personal: 0, rdo: 0 }, active: true, updated: 0 });
 export async function profile(pid) { const p = await PPL.get(pid); if (!p) return null; const x = await kv.get('prl:prof:' + pid); return { ...defProfile(p), ...(x || {}), name: p.name, role: p.role, trade: p.trade }; }
@@ -119,6 +122,7 @@ export function baseRate(pr, S) {
 /* ---------------- timesheets ---------------- */
 // days: { 'YYYY-MM-DD': { hours, job, fares, leave, leaveHours, note } }
 const tsKey = (pid, week) => 'prl:ts:' + pid + ':' + week;
+export { tsKey, PAID_LEAVE };
 export async function timesheet(pid, week) { week = mondayOf(ymd(week) || new Date().toISOString().slice(0, 10)); return (await kv.get(tsKey(pid, week))) || { pid, week, days: {}, status: 'draft' }; }
 async function saveTimesheet(f, by) {
   const pid = str(f.pid, 10), week = mondayOf(ymd(f.week) || ''); if (!week) return { error: 'Pick a week' };
@@ -171,12 +175,15 @@ export function calcWeek(ts, pr, S) {
       }
       if (e.fares !== false && S.fares) add('fares', 'Fares and travel allowance', 0, 1, job, false, S.fares);
     } else if (ph && wd >= 1 && wd <= 5 && !casual) add('phoff', 'Public holiday (not worked)', 7.6, 1, undefined, true);
-    if (e.leave && e.leaveHours && !casual) {
+    // family and domestic violence leave: paid to everyone (casuals too), and the payslip must not name it (Fair Work rules)
+    if (e.leave === 'fdv' && e.leaveHours) add('ord', casual ? 'Ordinary hours (incl. 25% casual loading)' : 'Ordinary hours', e.leaveHours, casual ? 1.25 : 1, undefined, true);
+    if (e.leave && e.leaveHours && !casual && e.leave !== 'fdv') {
       const lh = e.leaveHours;
       if (e.leave === 'annual') { add('al', 'Annual leave', lh, 1, undefined, true); add('all', 'Annual leave loading (' + S.loading + '%)', lh, S.loading / 100, undefined, true); taken.annual = r2(taken.annual + lh); }
       if (e.leave === 'personal') { add('pl', 'Personal / carer’s leave', lh, 1, undefined, true); taken.personal = r2(taken.personal + lh); }
       if (e.leave === 'rdo') { add('rdo', 'RDO taken', lh, 1, undefined, true); taken.rdo = r2(taken.rdo + lh); }
-      if (e.leave !== 'unpaid' && e.leave !== 'rdo') { acc.annual += lh * 152 / 1976; acc.personal += lh * 76 / 1976; }
+      if (e.leave === 'compassionate') add('cl', 'Compassionate leave', lh, 1, undefined, true);
+      if (PAID_LEAVE.includes(e.leave) && e.leave !== 'rdo') { acc.annual += lh * 152 / 1976; acc.personal += lh * 76 / 1976; }
     }
   }
   const gross = r2(Object.values(lines).reduce((s, l) => s + l.amount, 0));
