@@ -152,10 +152,21 @@ function submit(final) {
 
 /* ---------------- input ---------------- */
 function posOf(e) { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) }; }
+// v106: touch made easier. Pull back from anywhere on the screen (not only on the pilot), the pull is amplified so a short
+// swipe is enough, a quick tap launches with a good default shot, and every touch anywhere on the game flaps straight away.
+const TOUCH = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+const GAIN = TOUCH ? 1.6 : 1;
+let lastStateAt = 0, stateWas = '';
 function press(p) {
-  AU.unlock();
-  if (G.state === 'sling') { const b = G.S.pilot; if (Math.hypot(p.x - b.x, p.y - b.y) < 70) { G.dragging = true; G.charging = false; G.pull = 0; } }
+  AU.unlock(); goFull();
+  if (G.state !== stateWas) { stateWas = G.state; lastStateAt = performance.now(); }
+  const settled = performance.now() - lastStateAt > 350;   // an overlay that has only just appeared ignores a stray tap
+  if (G.state === 'sling') {
+    const b = G.S.pilot;
+    if (TOUCH || Math.hypot(p.x - b.x, p.y - b.y) < 90) { G.dragging = true; G.dragFrom = p; G.dragMoved = 0; G.charging = false; G.pull = 0; }
+  }
   else if (G.state === 'flight') flap();
+  else if (!settled) return;
   else if (G.state === 'crashed') initLevel(G.cfg.n);
   else if (G.state === 'levelup') initLevel(G.cfg.n + 1);
   else if ((G.state === 'over' || G.state === 'won') && (!me || G.playsLeft > 0)) newRun();   // guests, and everyone on a free-play day
@@ -163,14 +174,50 @@ function press(p) {
 }
 function drag(p) {
   if (!G.dragging) return;
-  const dx = p.x - C.SLING.x, dy = p.y - C.SLING.y, d = Math.hypot(dx, dy), b = G.S.pilot;
-  if (d > C.MAX_PULL) { const a = Math.atan2(dy, dx); b.x = C.SLING.x + Math.cos(a) * C.MAX_PULL; b.y = C.SLING.y + Math.sin(a) * C.MAX_PULL; } else { b.x = p.x; b.y = p.y; }
+  const f = G.dragFrom || C.SLING;
+  let dx = (p.x - f.x) * GAIN, dy = (p.y - f.y) * GAIN;
+  G.dragMoved = Math.max(G.dragMoved || 0, Math.hypot(p.x - f.x, p.y - f.y));
+  const d = Math.hypot(dx, dy), b = G.S.pilot;
+  if (d > C.MAX_PULL) { dx *= C.MAX_PULL / d; dy *= C.MAX_PULL / d; }
+  b.x = C.SLING.x + dx; b.y = C.SLING.y + dy;
 }
-function release() { if (G.state !== 'sling' || !G.dragging) return; G.dragging = false; launch(C.SLING.x - G.S.pilot.x, C.SLING.y - G.S.pilot.y); }
-canvas.addEventListener('pointerdown', (e) => { e.preventDefault(); try { canvas.setPointerCapture(e.pointerId); } catch (x) {} press(posOf(e)); });
-canvas.addEventListener('pointermove', (e) => { if (G.dragging) { e.preventDefault(); drag(posOf(e)); } });
-canvas.addEventListener('pointerup', (e) => { e.preventDefault(); release(); });
-canvas.addEventListener('pointercancel', release);
+function release() {
+  if (G.state !== 'sling' || !G.dragging) return;
+  G.dragging = false;
+  const b = G.S.pilot;
+  if ((G.dragMoved || 0) < 10 || C.SLING.x - b.x < 12) {   // a tap (or a pull the wrong way): a good default shot
+    b.x = C.SLING.x - 62; b.y = C.SLING.y + 22;
+  }
+  launch(C.SLING.x - b.x, C.SLING.y - b.y);
+}
+// the whole game area takes touches (in full screen that is the whole screen)
+const stage = document.getElementById('wbStage') || canvas;
+const clampP = (p) => ({ x: Math.max(0, Math.min(W, p.x)), y: Math.max(0, Math.min(H, p.y)) });
+stage.addEventListener('pointerdown', (e) => { if (e.target.closest && e.target.closest('button,a')) return; e.preventDefault(); try { stage.setPointerCapture(e.pointerId); } catch (x) {} press(clampP(posOf(e))); }, { passive: false });
+stage.addEventListener('pointermove', (e) => { if (G.dragging) { e.preventDefault(); drag(clampP(posOf(e))); } }, { passive: false });
+stage.addEventListener('pointerup', (e) => { e.preventDefault(); release(); });
+stage.addEventListener('pointercancel', release);
+stage.addEventListener('touchstart', (e) => { if (!(e.target.closest && e.target.closest('button,a'))) e.preventDefault(); }, { passive: false });   // no double-tap zoom or scrolling while playing
+stage.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// phones: turned sideways, the game takes the whole screen (real full screen where the browser allows it)
+const landscapeQ = window.matchMedia ? matchMedia('(orientation: landscape)') : null;
+function goFull() {
+  if (!TOUCH || !landscapeQ || !landscapeQ.matches || document.fullscreenElement) return;
+  const el = document.documentElement;
+  try { const r = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : el.webkitRequestFullscreen && el.webkitRequestFullscreen(); if (r && r.catch) r.catch(() => {}); } catch (x) {}
+  try { screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {}); } catch (x) {}
+}
+function layout() {
+  const land = landscapeQ && landscapeQ.matches;
+  document.body.classList.toggle('wb-touch', TOUCH);
+  document.body.classList.toggle('wb-land', !!(TOUCH && land));
+  document.body.classList.toggle('wb-port', !!(TOUCH && !land));
+  setTimeout(fit, 50);
+}
+if (landscapeQ) (landscapeQ.addEventListener ? landscapeQ.addEventListener('change', layout) : landscapeQ.addListener(layout));
+window.addEventListener('resize', layout); layout();
+$('#wbExit') && ($('#wbExit').onclick = (e) => { e.stopPropagation(); try { if (document.fullscreenElement) document.exitFullscreen(); } catch (x) {} location.href = 'index.html'; });
 window.addEventListener('keydown', (e) => {
   if (e.target && /INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName)) return;
   if ($('.fx-panel.open') || $('.wb-pop.open')) return;   // chatting to Mr. Fixit or reading a panel

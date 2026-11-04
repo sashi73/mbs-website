@@ -902,3 +902,21 @@ body.wb-page{visibility:visible;min-height:100dvh;display:flex;flex-direction:co
 .vc-card dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}
 .vc-card dt{color:#9C968A;font-size:13px} .vc-card dd{margin:0;color:#fff;font-weight:700}
 .vc-note{margin-top:24px;font-size:14px;color:#9C968A}
+/* v106: phones. Sideways = the game fills the whole screen; upright = a hint to turn the phone */
+.wb-exit,.wb-turn{display:none}
+.wb-stage{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body.wb-land{overflow:hidden;height:100dvh}
+body.wb-land .wb-bar,body.wb-land .wb-side-col,body.wb-land .wb-who,body.wb-land .wb-main::after{display:none!important}
+body.wb-land .wb-main{padding:0}
+body.wb-land .wb-stage{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;aspect-ratio:auto;border-radius:0;box-shadow:none;display:flex;align-items:center;justify-content:center;background:#000;z-index:40}
+body.wb-land .wb-stage canvas{width:min(100vw,calc(100dvh * 16 / 9));height:auto;aspect-ratio:16/9}
+body.wb-land .wb-hud{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));bottom:6px}
+body.wb-land .wb-hud span{padding:3px 8px}
+body.wb-land .wb-exit{display:block;position:absolute;top:max(8px,env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));z-index:3;height:30px;padding:0 12px;border-radius:999px;border:1px solid rgba(212,175,55,.6);background:rgba(10,10,10,.6);color:var(--gold-hi);font:inherit;font-size:12px;font-weight:800}
+body.wb-port .wb-turn{display:flex;position:absolute;left:50%;top:10px;transform:translateX(-50%);align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(10,10,10,.7);color:#F2D98B;font-size:12px;font-weight:800;white-space:nowrap;pointer-events:none;animation:wbTurn 2.4s ease-in-out infinite}
+body.wb-port .wb-turn span{font-size:16px}
+@keyframes wbTurn{0%,100%{opacity:.95}50%{opacity:.55}}
+body.wb-port .wb-main::after{display:none}
+body.wb-land .fx-panel{z-index:1000}
+body.wb-land .wb-exit2{left:auto;right:calc(max(8px,env(safe-area-inset-right)) + 40px);width:32px;padding:0}
+body.wb-land .wb-exit3{left:auto;right:max(8px,env(safe-area-inset-right));width:32px;padding:0}

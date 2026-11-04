@@ -125,14 +125,34 @@ const SHOTS = process.env.WB_SHOTS || os.tmpdir();
     await q.goto(`${BASE}/services.html`, { waitUntil: 'networkidle' }); await q.click('.menu a.nav-win'); await q.waitForSelector('.fx-panel.open .fx-promo-form');
     ok('Site', '"🎁 Win $50" in the site menu still opens Mr. Fixit to enter first', true);
 
-    // phone, sideways
+    // phone, sideways: the game fills the screen; touch is easy
     const ph = await br.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }); const m = await ph.newPage();
+    m.on('pageerror', (e) => errors.push('phone: ' + e.message));
     await m.goto(`${BASE}/wonderbird.html`, { waitUntil: 'networkidle' }); await sleep(500); await m.click('#wbPop-help .wb-go'); await sleep(300);
-    const fits = await m.evaluate(() => { const c = document.getElementById('wbCanvas').getBoundingClientRect(); return c.bottom <= innerHeight + 1 && c.right <= innerWidth + 1 && document.documentElement.scrollWidth <= innerWidth + 1; });
-    ok('Phone', 'on a phone turned sideways the whole game fits on screen', fits);
-    await m.click('.wb-tools [data-pop=board]'); await m.waitForSelector('#wbPop-board.open #wbBoard');
-    ok('Phone', 'on a small screen the leaderboard is a 🏆 button that slides in', await m.isVisible('#wbPop-board.open'));
+    const fs1 = await m.evaluate(() => { const st = document.getElementById('wbStage').getBoundingClientRect(), c = document.getElementById('wbCanvas').getBoundingClientRect(); return { full: document.body.classList.contains('wb-land') && st.width >= innerWidth - 1 && st.height >= innerHeight - 1, bar: getComputedStyle(document.querySelector('.wb-bar')).display, fits: c.bottom <= innerHeight + 1 && c.right <= innerWidth + 1, h: c.height }; });
+    ok('Phone', 'turned sideways, the game takes the whole screen (no bar, no side panel)', fs1.full && fs1.bar === 'none' && fs1.fits && fs1.h >= 389, fs1);
+    ok('Phone', 'with small buttons to go back to the site, the leaderboard and how to play', await m.isVisible('#wbExit') && await m.isVisible('#wbBoardBtn'));
+    const top = await m.evaluate(() => { const c = document.getElementById('wbCanvas').getBoundingClientRect(), e = document.elementFromPoint(c.left + c.width * 0.7, c.top + c.height * 0.45); return e && (e.id || e.className); });
+    const mc = await ph.newCDPSession(m), mt = async (x, y) => { await mc.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] }); await mc.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); };
+    await mt(600, 200); await sleep(250);
+    ok('Phone', 'a quick tap anywhere launches with a good shot (nothing covers the game)', (await m.evaluate(() => window.WonderBird.state().state)) === 'flight', top);
+    const y0 = await m.evaluate(() => window.WonderBird.peek().vy); await mt(700, 60); await sleep(30);
+    const y1 = await m.evaluate(() => window.WonderBird.peek().vy);
+    ok('Phone', 'a tap anywhere on the screen flaps straight away', y1 < 0 && y1 <= y0, [y0, y1]);
     await m.screenshot({ path: path.join(SHOTS, 'wb-phone.png') });
+    await m.click('#wbBoardBtn'); await m.waitForSelector('#wbPop-board.open #wbBoard');
+    ok('Phone', 'the 🏆 button slides the leaderboard in', await m.isVisible('#wbPop-board.open'));
+    const pt = await br.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }); const pp = await pt.newPage();
+    await pp.goto(`${BASE}/wonderbird.html`, { waitUntil: 'networkidle' }); await sleep(400);
+    ok('Phone', 'held upright, it asks them to turn the phone sideways', await pp.isVisible('.wb-turn'));
+    // a drag from anywhere pulls the slingshot back
+    const d2 = await br.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }); const q2 = await d2.newPage();
+    await q2.goto(`${BASE}/wonderbird.html`, { waitUntil: 'networkidle' }); await sleep(400); await q2.click('#wbPop-help .wb-go'); await sleep(300);
+    const cdp = await d2.newCDPSession(q2), tp = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+    await tp('touchStart', 500, 200); await tp('touchMove', 470, 210); await tp('touchMove', 440, 220);
+    const pulled = await q2.evaluate(() => window.WonderBird.peek().y); await tp('touchEnd');
+    await sleep(200);
+    ok('Phone', 'a short swipe from anywhere pulls the slingshot back, and letting go launches', pulled > 300 && (await q2.evaluate(() => window.WonderBird.state().state)) === 'flight', pulled);
     ok('Console', 'no JavaScript errors', errors.length === 0, errors.join(' | '));
     await br.close(); br = null;
   } catch (e) { try { if (br) await br.close(); } catch {} ok('Run', 'test run completed', false, e.stack.split('\n').slice(0, 4).join(' / ') + ' ERRORS: ' + errorsAll.join(' | ') + ' LOG: ' + log.slice(-600)); }
