@@ -4,6 +4,7 @@
 // runs checked and scored by the server and go on the weekly leaderboard: 1st $50, 2nd $30, 3rd $20 MBS vouchers.
 import * as C from './wb-core.mjs';
 import * as AU from './wb-audio.mjs';
+import { heroFor, drawHero } from './wb-heroes.mjs';
 
 const { W, H } = C;
 const $ = (s) => document.querySelector(s);
@@ -36,6 +37,7 @@ function post(body) {
 const G = {
   state: 'ready', cfg: C.levelConfig(1), S: null, lives: C.START_LIVES, score: 0, cleared: 0, flaps: 0,
   run: null, seed: null, attempts: [], cur: null, pending: false, award: null, last: null, best: 0, rank: 0, board: null,
+  hero: heroFor(1), mood: 'normal', moodT: 0, bubble: null, spin: 0,
   charging: false, pull: 0, aim: 25 * Math.PI / 180, dragging: false, t: 0, flapPulse: 0, wing: 0, sparks: [], feathers: [], shake: 0, msg: ''
 };
 try { G.best = Number(localStorage.getItem('mbsWonderBird.best') || 0); } catch (e) {}
@@ -50,7 +52,7 @@ function newRun() {
   hud();
 }
 function initLevel(n) {
-  G.cfg = C.levelConfig(n);
+  G.cfg = C.levelConfig(n); G.hero = heroFor(n); G.mood = 'normal'; G.moodT = 0; G.bubble = null;
   G.cur = { level: G.cfg.n, launch: null, flaps: [] };
   G.S = C.newWorld(G.cfg, C.saltFor(G.seed, G.attempts.length));
   G.state = 'sling'; G.charging = false; G.pull = 0; G.dragging = false; G.sparks = []; G.feathers = []; G.pendingFlap = false;
@@ -67,10 +69,21 @@ function launch(dx, dy) {
   G.state = 'flight'; AU.setFlying(true); AU.sfx.launch();
   if (G.cfg.n === 1 && G.attempts.length === 0) AU.say('start');
 }
+function mood(m, frames, text) { G.mood = m; G.moodT = frames; if (text) G.bubble = { text, life: 80 }; }
+function pickLine() { const L = G.hero.line; return L[Math.floor(Math.random() * L.length)]; }
+// worried when the stonework is close, or falling fast
+function autoMood() {
+  if (G.moodT > 0) { G.moodT--; return G.mood; }
+  if (G.state !== 'flight' || !G.S) return 'normal';
+  const p = G.S.pilot, o = G.S.obstacles.find((x) => x.x + x.width > p.x - p.radius && x.x < p.x + 90);
+  if (p.vy > 6.5 || p.y < 30 || p.y > C.H - 40) return 'worried';
+  if (o && (p.y - o.top < 26 || o.top + G.cfg.gap - p.y < 26)) return 'worried';
+  return 'normal';
+}
 function flap() { if (G.state !== 'flight') return; G.pendingFlap = true; G.flapPulse = 1; G.wing = 1; AU.sfx.flap(); }
 
 function step() {
-  G.t++; G.flapPulse *= 0.88; G.wing *= 0.9; G.shake *= 0.85;
+  G.t++; G.flapPulse *= 0.88; G.spin += 0.25 + G.wing * 0.8; G.curMood = autoMood(); if (G.bubble && --G.bubble.life <= 0) G.bubble = null; G.wing *= 0.9; G.shake *= 0.85;
   for (let i = G.sparks.length - 1; i >= 0; i--) { const s = G.sparks[i]; s.y -= 0.8; if (--s.life <= 0) G.sparks.splice(i, 1); }
   for (let i = G.feathers.length - 1; i >= 0; i--) { const f = G.feathers[i]; f.vy += 0.05; f.x += f.vx; f.y += f.vy; f.r += f.vr; if (--f.life <= 0) G.feathers.splice(i, 1); }
   scene.drift += G.state === 'flight' ? G.S.speed : 0.6;
@@ -84,9 +97,9 @@ function step() {
   if (f) { G.cur.flaps.push(G.S.frame); G.flaps++; }
   for (const e of evs) {
     if (e.t === 'pick') {
-      if (e.kind === 'coin') { G.sparks.push({ x: e.x, y: e.y, life: 45, text: '+' + C.COIN_POINTS, col: '#F2D98B' }); AU.sfx.coin(); }
-      else if (e.kind === 'gem') { G.sparks.push({ x: e.x, y: e.y, life: 60, text: '+' + C.GEM_POINTS, col: '#8fd3ff' }); AU.sfx.gem(); }
-      else { G.sparks.push({ x: e.x, y: e.y, life: 80, text: 'MR. FIXIT AUTOPILOT', col: '#F2D98B' }); AU.sfx.stab(); }
+      if (e.kind === 'coin') { G.sparks.push({ x: e.x, y: e.y, life: 45, text: '+' + C.COIN_POINTS, col: '#F2D98B' }); AU.sfx.coin(); mood('happy', 30, Math.random() < 0.18 ? pickLine() : null); }
+      else if (e.kind === 'gem') { G.sparks.push({ x: e.x, y: e.y, life: 60, text: '+' + C.GEM_POINTS, col: '#8fd3ff' }); AU.sfx.gem(); mood('wow', 55, ['Ooh, shiny!', 'A gem!', 'Jackpot!'][G.t % 3]); }
+      else { G.sparks.push({ x: e.x, y: e.y, life: 80, text: 'MR. FIXIT AUTOPILOT', col: '#F2D98B' }); AU.sfx.stab(); mood('wow', 60, 'Mr. Fixit!'); }
     } else if (e.t === 'stabEnd') AU.sfx.stabEnd();
   }
   if (evs.length) hud();
@@ -94,10 +107,10 @@ function step() {
 }
 function endAttempt() { G.attempts.push(G.cur); AU.setFlying(false); }
 function crash() {
-  endAttempt(); AU.sfx.crash(); G.shake = 10; G.lives--;
+  endAttempt(); AU.sfx.crash(); G.shake = 10; G.lives--; mood('ouch', 99999, ['Ouch!', 'My nose!', 'Who put that there?!', 'Oof!'][G.t % 4]);
   const p = G.S.pilot;
   for (let i = 0; i < 14; i++) G.feathers.push({ x: p.x, y: p.y, vx: (Math.random() - 0.5) * 4, vy: -Math.random() * 3, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.2, life: 70 + Math.random() * 40, c: ['#2f9e44', '#1c7ed6', '#f76707', '#fab005'][i % 4] });
-  if (G.lives <= 0) { G.state = 'over'; submit(true); AU.say('over'); setTimeout(() => openPop('board'), 1400); } else G.state = 'crashed';
+  if (G.lives <= 0) { G.state = 'over'; submit(true); AU.say('over'); setTimeout(() => { if (!sideShown()) openPop('board'); }, 1400); } else G.state = 'crashed';
   hud();
 }
 function cleared() {
@@ -105,7 +118,7 @@ function cleared() {
   const st = C.replay({ level: G.cfg.n, salt: C.saltFor(G.seed, G.attempts.length - 1), launch: G.cur.launch, flaps: G.cur.flaps });   // only checked numbers count
   G.award = C.scoreFrom(G.cfg, st); G.last = st;
   G.score += G.award.total; G.cleared++;
-  AU.sfx.win();
+  AU.sfx.win(); mood('happy', 99999, ['Woo-hoo!', 'Too easy!', pickLine()][G.t % 3]);
   if (G.cfg.n >= C.TOTAL_LEVELS) { G.state = 'won'; submit(true); } else { G.state = 'levelup'; submit(false); AU.say('clear'); }
   if (G.score > G.best) { G.best = G.score; try { localStorage.setItem('mbsWonderBird.best', String(G.best)); } catch (e) {} }
   hud();
@@ -343,49 +356,6 @@ function drawPickup(type, x, y) {
   ctx.restore();
 }
 
-// a rainbow lorikeet, painted rather than cartooned
-function drawBird(x, y, angle, scale) {
-  const flapA = G.state === 'flight' ? Math.sin(G.t * (0.25 + G.wing * 0.5)) * (0.25 + G.wing * 0.9) : Math.sin(G.t * 0.06) * 0.08;
-  ctx.save(); ctx.translate(x, y); ctx.rotate(angle); ctx.scale(scale, scale);
-  // shadow-side wing
-  wing(-0.35 - flapA, '#1f6b2c', '#13461c');
-  // tail
-  ctx.fillStyle = '#2b8a3e'; ctx.beginPath(); ctx.moveTo(-10, 2); ctx.quadraticCurveTo(-28, 4, -36, 10); ctx.quadraticCurveTo(-26, 9, -10, 8); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#e8c547'; ctx.beginPath(); ctx.moveTo(-14, 6); ctx.quadraticCurveTo(-28, 9, -34, 12); ctx.quadraticCurveTo(-24, 11, -12, 9); ctx.closePath(); ctx.fill();
-  // body
-  let g = ctx.createLinearGradient(0, -12, 0, 12); g.addColorStop(0, '#3fa34d'); g.addColorStop(0.5, '#2f8f3c'); g.addColorStop(1, '#1d5f28');
-  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 1, 15, 10.5, 0, 0, 7); ctx.fill();
-  // chest: red-orange into yellow, then blue belly
-  g = ctx.createLinearGradient(4, -4, 10, 10); g.addColorStop(0, '#f03e3e'); g.addColorStop(0.55, '#fd7e14'); g.addColorStop(1, '#fcc419');
-  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(6, 2, 8, 7.5, 0.3, 0, 7); ctx.fill();
-  ctx.fillStyle = '#3b5bdb'; ctx.beginPath(); ctx.ellipse(1, 8, 8, 3.4, 0.1, 0, 7); ctx.fill();
-  // head: violet-blue, green collar
-  ctx.fillStyle = '#94d82d'; ctx.beginPath(); ctx.ellipse(10, -5, 6.5, 5, -0.2, 0, 7); ctx.fill();
-  g = ctx.createRadialGradient(14, -10, 1, 13, -7, 8.5); g.addColorStop(0, '#748ffc'); g.addColorStop(1, '#2b3a9e');
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(13, -7, 7.6, 0, 7); ctx.fill();
-  // beak: coral red, hooked
-  ctx.fillStyle = '#e8590c'; ctx.beginPath(); ctx.moveTo(18.5, -9); ctx.quadraticCurveTo(26, -8.5, 24.5, -3); ctx.quadraticCurveTo(22, -4.5, 19, -3.5); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.moveTo(19.5, -8.4); ctx.quadraticCurveTo(23.5, -8.4, 24, -6.5); ctx.lineTo(20, -7.4); ctx.fill();
-  // eye: dark with an orange ring and a catch-light
-  ctx.fillStyle = '#ff922b'; ctx.beginPath(); ctx.arc(15.3, -9, 2.4, 0, 7); ctx.fill();
-  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(15.6, -9, 1.5, 0, 7); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(16.1, -9.6, 0.55, 0, 7); ctx.fill();
-  // near wing, over the body
-  wing(0.2 + flapA, '#37b24d', '#1e7a2e', true);
-  ctx.restore();
-  function wing(a, c1, c2, near) {
-    ctx.save(); ctx.translate(-2, -3); ctx.rotate(-a);
-    const gw = ctx.createLinearGradient(0, -4, -24, 4); gw.addColorStop(0, c1); gw.addColorStop(1, c2);
-    ctx.fillStyle = gw; ctx.beginPath(); ctx.moveTo(6, -2); ctx.quadraticCurveTo(-6, -12, -26, -6); ctx.quadraticCurveTo(-18, 2, -2, 5); ctx.closePath(); ctx.fill();
-    if (near) {
-      ctx.strokeStyle = 'rgba(10,40,15,0.45)'; ctx.lineWidth = 0.8;
-      for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(-6 - i * 4, -4 - i * 0.6); ctx.lineTo(-12 - i * 4, 1 + i * 0.3); ctx.stroke(); }
-      if (a > 0.5) { ctx.fillStyle = 'rgba(250,176,5,0.85)'; ctx.beginPath(); ctx.moveTo(-4, 1); ctx.quadraticCurveTo(-12, 3, -18, 1); ctx.quadraticCurveTo(-10, 6, -2, 4); ctx.fill(); }   // yellow underwing flash
-    }
-    ctx.restore();
-  }
-}
-
 function drawSling(front) {
   const sx = C.SLING.x, sy = C.SLING.y, p = G.S.pilot;
   if (!front) {
@@ -442,7 +412,14 @@ function draw() {
   if (S) {
     const p = S.pilot;
     if (G.state === 'flight') { ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1.2; for (let i = 0; i < 3; i++) { const yy = p.y - 6 + i * 6; ctx.beginPath(); ctx.moveTo(p.x - 30 - i * 6, yy); ctx.lineTo(p.x - 60 - i * 10 - S.speed * 4, yy); ctx.stroke(); } }
-    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 6; drawBird(p.x, p.y, p.angle || 0, 1.22 + G.flapPulse * 0.05); ctx.restore();
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 6; ctx.translate(p.x, p.y); ctx.rotate((p.angle || 0) * 0.7); const sc = 1.32 + G.flapPulse * 0.06; ctx.scale(sc, sc); drawHero(ctx, G.hero, G.curMood, G.t, G.wing, { spin: G.spin }); ctx.restore();
+  }
+  if (S && G.bubble) {
+    const p = S.pilot, txt = G.bubble.text; ctx.font = '800 13px Manrope, sans-serif';
+    const w = ctx.measureText(txt).width + 18, bx = Math.min(W - w - 6, p.x + 16), by = Math.max(6, p.y - 58);
+    ctx.globalAlpha = Math.min(1, G.bubble.life / 15); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, w, 26, 13) : ctx.rect(bx, by, w, 26); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(bx + 12, by + 25); ctx.lineTo(bx + 6, by + 34); ctx.lineTo(bx + 22, by + 25); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.fillText(txt, bx + 9, by + 18); ctx.globalAlpha = 1;
   }
   if (G.state === 'sling') { drawSling(true); if (G.dragging || G.charging) drawAim(); }
   for (const f of G.feathers) { ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.r); ctx.globalAlpha = Math.min(1, f.life / 40); ctx.fillStyle = f.c; ctx.beginPath(); ctx.ellipse(0, 0, 6, 2, 0, 0, 7); ctx.fill(); ctx.restore(); }
@@ -457,7 +434,7 @@ function draw() {
     ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(0,0,0,0.42)'; ctx.fillRect(W / 2 - 230, 14, 460, 52);
     ctx.fillStyle = '#F2D98B'; ctx.font = '900 20px Archivo, sans-serif'; ctx.fillText(('Level ' + cfg.n + ' · ' + cfg.title).toUpperCase(), W / 2, 37);
     ctx.fillStyle = '#EDEAE3'; ctx.font = '600 13px Manrope, sans-serif';
-    ctx.fillText(G.cfg.n === 1 && !G.attempts.length ? 'Drag the bird back and let go · then tap to flap' : cfg.gates + ' gates · par ' + cfg.par + ' flaps · glide for a bonus', W / 2, 57);
+    ctx.fillText('Pilot: ' + G.hero.name + ' · ' + (G.cfg.n === 1 && !G.attempts.length ? 'drag back, let go, then tap to flap' : cfg.gates + ' gates · par ' + cfg.par + ' flaps'), W / 2, 57);
     ctx.textAlign = 'left';
   }
   if (G.state === 'sling' && G.charging) {
@@ -492,11 +469,11 @@ function hud() {
 }
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function refreshBoard() {
-  return post(Object.assign({ action: 'board' }, me ? { id: me.id, token: me.token } : {})).then((b) => { G.board = b; if (b.me && b.me.rank) G.rank = b.me.rank; renderBoard(); }).catch(() => {});
+  return post(Object.assign({ action: 'board' }, me ? { id: me.id, token: me.token } : {})).then((b) => { G.board = b; if (b.me && b.me.rank) G.rank = b.me.rank; renderBoard(); }).catch(() => { if (!G.board) document.querySelectorAll('.wb-board-box').forEach((x) => { x.innerHTML = '<h2 class="wb-bh-h">This week’s leaders</h2><p class="wb-small">The leaderboard can’t be reached right now. Your game still works; try again in a minute.</p>'; }); });
 }
 function left(ms) { const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 6e4); return d ? d + 'd ' + h + 'h' : h ? h + 'h ' + m + 'm' : m + 'm'; }
 function renderBoard() {
-  const b = G.board, box = $('#wbBoard'); if (!box || !b) return;
+  const b = G.board, boxes = document.querySelectorAll('.wb-board-box'); if (!boxes.length || !b) return;
   const medal = ['🥇', '🥈', '🥉'];
   const rows = b.top.length ? b.top.map((x) => '<li class="' + (x.me ? 'me ' : '') + (x.rank <= 3 ? 'pod' : '') + '"><span class="r">' + (medal[x.rank - 1] || x.rank) + '</span><span class="n">' + esc(x.name) + '</span>' +
     '<span class="l">L' + esc(x.level) + '</span><span class="s">' + fmt(x.score) + '</span>' + (x.prize ? '<span class="p">$' + x.prize + '</span>' : '<span class="p"></span>') + '</li>').join('')
@@ -504,8 +481,9 @@ function renderBoard() {
   let mine = '';
   if (me && b.me) mine = b.me.rank ? '<p class="wb-mine">You: <b>#' + b.me.rank + '</b> · best ' + fmt(b.me.best) + (b.me.rank > 3 && b.me.toPrize ? ' · <b>' + fmt(b.me.toPrize) + '</b> more to reach the $20 spot' : b.me.rank <= 3 ? ' · you’re on the podium. Hold on to it!' : '') + '</p>' : '<p class="wb-mine">No score yet this week. Clear a level to get on the board.</p>';
   else if (!me) mine = '<p class="wb-mine">Guest scores aren’t saved. <button type="button" class="wb-link" data-win>Enter the draw</button> to get on the board.</p>';
-  box.innerHTML = '<div class="wb-bh"><h2>This week’s leaders</h2><span class="wb-ends" title="Week ends Sunday midnight, Sydney time">Ends in ' + left(b.endsIn) + '</span></div><ol class="wb-list">' + rows + '</ol>' + mine +
+  const html = '<div class="wb-bh"><h2>This week’s leaders</h2><span class="wb-ends" title="Week ends Sunday midnight, Sydney time">Ends in ' + left(b.endsIn) + '</span></div><ol class="wb-list">' + rows + '</ol>' + mine +
     '<p class="wb-small">' + fmt(b.players) + ' player' + (b.players === 1 ? '' : 's') + ' this week · top 3 win MBS vouchers: $50, $30, $20</p>';
+  boxes.forEach((x) => { x.innerHTML = html; });
 }
 let toastT;
 function toast(t) { const e = $('#wbToast'); if (!e) return; e.textContent = t; e.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('show'), 3600); }
@@ -534,6 +512,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('.wb-pop.open')) closePop(); });
 try { if (!localStorage.getItem('mbsWonderBird.seenHelp')) { openPop('help'); localStorage.setItem('mbsWonderBird.seenHelp', '1'); } } catch (e) {}
 const paused = () => !!$('.wb-pop.open');
+function sideShown() { const sd = $('#wbSide'); return !!sd && getComputedStyle(sd).display !== 'none'; }
 
 /* ---------------- sharp on any screen, steady 60 steps a second ---------------- */
 function fit() {

@@ -38,7 +38,7 @@ function osc(type, f, t, end, dest, detune) { const o = A.c.createOscillator(); 
 function bass(n, t, dur) {
   const g = A.c.createGain(), f = A.c.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 6;
   f.frequency.setValueAtTime(1100, t); f.frequency.exponentialRampToValueAtTime(180, t + 0.18);
-  g.connect(A.music); f.connect(g); env(g, t, 0.005, 0.5, 0.12, 0.18, 0.06, t + dur * 0.9);
+  g.connect(A.music); f.connect(g); env(g, t, 0.003, 0.62, 0.09, 0.14, 0.04, t + dur * 0.75);
   osc('sawtooth', midi(n), t, t + dur, f); osc('square', midi(n - 12), t, t + dur, f);
 }
 function hat(t, open, lvl) {
@@ -78,6 +78,19 @@ function strings(notes, t, dur) {
   notes.forEach((n) => [-6, 6].forEach((d) => osc('sawtooth', midi(n), t, t + dur, f, d)));
 }
 
+function fuse(t, dur) {   // a lit fuse: crackling, hissing noise that sweeps up
+  const s = A.c.createBufferSource(); s.buffer = A.noise; s.loop = true;
+  const f = A.c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.8; f.frequency.setValueAtTime(2500, t); f.frequency.exponentialRampToValueAtTime(7000, t + dur);
+  const g = A.c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.12, t + 0.2); g.gain.setValueAtTime(0.12, t + dur - 0.1); g.gain.linearRampToValueAtTime(0.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(A.music); s.start(t); s.stop(t + dur + 0.1);
+  for (let k = 0; k < dur * 22; k++) { const tt = t + Math.random() * dur; hat(tt, false, 0.03 + Math.random() * 0.05); }   // crackles
+}
+function trill(n, t, dur) {   // fast flute trill, then hold the note
+  const e = eighth() / 3, half = dur * 0.5;
+  for (let x = 0, k = 0; x < half; x += e, k++) flute(k % 2 ? n + 2 : n, t + x, e * 1.1);
+  flute(n, t + half, dur - half);
+}
+
 /* ---------------- the score ----------------
    5/4, ten eighth notes a bar, grouped 2+3+2+3. D minor.
    Sections: intro (2 bars) → A (8 bars, flute tune) → B (4 bars, brass and strings, "Mister Fixit!") → A' (8 bars, tune an octave down
@@ -103,19 +116,24 @@ function sectionAt(bar) {
   for (const [name, n] of FORM) { if (b < n) return [name, b]; b -= n; }
   return ['A', 0];
 }
-const eighth = () => 60 / Math.min(176, 150 + (ST.level - 1) * 0.6) / 2;
+const eighth = () => 60 / Math.min(184, 164 + (ST.level - 1) * 0.5) / 2;
 
 function playStep(t) {
   const pos = ST.step % 10, bar = ST.bar, [sec, sb] = sectionAt(bar), e = eighth(), busy = ST.level >= 3;
   const shift = sec === 'B' ? B_BASS[sb % 4] : 0;
   for (const [p, n, l] of BASS) if (p === pos) bass(n + shift, t, l * e);
-  hat(t, pos === 9 && busy, [0, 2, 5, 7].includes(pos) ? 0.1 : 0.05);
+  if (bar === 0 && pos === 0) fuse(t, e * 20);                       // the fuse is lit
+  hat(t, pos === 9, [0, 2, 5, 7].includes(pos) ? 0.11 : 0.05);
+  hat(t + e / 2, false, 0.03);                                        // the off-beat tick keeps it nervous
   if (pos === 5 || pos === 0 && sec !== 'intro') rim(t);
-  if (busy && (pos === 3 || pos === 8)) bongo(t, true);
-  if (busy && pos === 9) bongo(t, false);
+  if ([1, 3, 6, 8].includes(pos)) bongo(t, true);                    // bongos from the start
+  if (pos === 4 || pos === 9) bongo(t, false);
+  if (busy && pos === 7) bongo(t + e / 2, true);
   if (sec === 'A' || sec === 'A2') {
     const at = sb * 10 + pos;
-    for (const [p, n, l] of TUNE) if (p === at) flute(sec === 'A2' ? n - 12 : n, t, l * e);
+    for (const [p, n, l] of TUNE) if (p === at) (l >= 3 ? trill : flute)(sec === 'A2' ? n - 12 : n, t, l * e);
+    if (pos === 0 && sb % 2 === 0) strings([50, 57], t, e * 20);
+    if ((sb === 3 || sb === 7) && [4, 6, 8].includes(pos)) { const k = [4, 6, 8].indexOf(pos); stab([74 - k * 2, 77 - k * 2, 81 - k * 2], t, e * 0.9, 0.13); }   // brass answers the flute
     if (sec === 'A2' && pos === 0 && sb % 2 === 0) stab([62, 65, 69], t, e * 1.5, 0.09);
   }
   if (sec === 'B') {
