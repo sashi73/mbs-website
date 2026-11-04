@@ -41,6 +41,7 @@ export async function payslipPdf(run, l) {
   sum('Gross pay', money(l.gross), true);
   sum('PAYG tax withheld', '-' + money(l.tax));
   if (l.stsl) sum('HELP / study loan (STSL)', '-' + money(l.stsl));
+  y -= 10;
   page.drawRectangle({ x: cols[2] - 70, y: y - 6, width: W - M - cols[2] + 70, height: 24, color: rgb(0.08, 0.08, 0.08) });
   T('NET PAY', cols[2] - 60, y + 2, 11, bold, rgb(1, 1, 1)); R(money(l.net), cols[3] - 6, y + 2, 12, bold, GOLD);
   y -= 40;
