@@ -36,6 +36,8 @@ a{color:var(--gold)}
   background:var(--grad-text);-webkit-background-clip:text;background-clip:text;color:transparent;
 }
 .eyebrow{font-size:12px;font-weight:700;letter-spacing:.24em;text-transform:uppercase;color:var(--gold)}
+/* v32f: eyebrow carried inside the H1 so the brand name is part of the main heading (SEO) */
+.h1-kicker{display:block;font-family:'Manrope',system-ui,-apple-system,sans-serif;font-stretch:100%;line-height:1.5;margin:0 0 22px}
 .lead{font-size:18px;line-height:1.65;color:#D6D2CA;margin:0}
 .muted{color:var(--muted)}
 
