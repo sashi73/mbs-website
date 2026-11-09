@@ -102,16 +102,6 @@
   to = "/404.html"
   status = 404
   force = true
-[[redirects]]
-  from = "/version.txt"
-  to = "/404.html"
-  status = 404
-  force = true
-[[redirects]]
-  from = "/wipe-test-jobs.ps1"
-  to = "/404.html"
-  status = 404
-  force = true
 
 # Security headers for every page (added v20h)
 [[headers]]
