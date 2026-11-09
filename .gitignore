@@ -5,3 +5,7 @@ node_modules/
 .netlify/
 leads/
 data/
+
+# never commit secrets
+*secret*.txt
+*Secret*.txt
