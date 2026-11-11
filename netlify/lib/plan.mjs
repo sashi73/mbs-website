@@ -776,14 +776,21 @@ export async function planPost(action, body, { who, by, audit }) {
     if (audit) await audit(who, `Project ${core}: phase ${ph === 'auto' ? 'set to automatic' : 'moved to ' + ph}`);
     return out(200, { ok: true });
   }
+  if (action === 'planBomSet') {   // GKH Project Champ: switch the Bill of Materials on or off for a project
+    if (!core || !(await J.find(core))) return out(404, { error: 'Project not found' });
+    const on = !!body.on;
+    await kv.update('champ-opts', (cur) => { const off = { ...((cur && cur.bomOff) || {}) }; if (on) delete off[core]; else off[core] = true; return { ...(cur || {}), bomOff: off }; }, () => ({ bomOff: {} }));
+    if (audit) await audit(who, `Project ${core}: Bill of Materials ${on ? 'on' : 'off'}`);
+    return out(200, { ok: true, bom: on });
+  }
   if (action === 'planGet') {
     const job = await J.find(core);
     if (!job) return out(404, { error: 'Job not found' });
-    const [remsAll, idx, plan] = await Promise.all([J.reminders(), kv.get('acct-index').catch(() => null), get(job.core)]);
+    const [remsAll, idx, plan, champ] = await Promise.all([J.reminders(), kv.get('acct-index').catch(() => null), get(job.core), kv.get('champ-opts').catch(() => null)]);
     const rems = remsAll.filter((r) => r.core === job.core).map((r) => ({ ...r, when: whenText(r.at) }));
     let costs = 0;
     try { costs = r2(Object.values((idx && idx.expenses) || {}).filter((e) => e.core === job.core).reduce((a, e) => a + (e.inc - e.gst), 0)); } catch {}
-    return out(200, { plan, job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), phone: job.phone || '', email: job.email || '', scope: jobScope(job), urgency: job.urgency || '', emergency: isEmergency(job) }, reminders: rems, expensesEx: costs, test: isTestSite(), bench: plan ? benchTarget(plan, job) : null });
+    return out(200, { champ: { bom: !(((champ && champ.bomOff) || {})[job.core]) }, plan, job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), phone: job.phone || '', email: job.email || '', scope: jobScope(job), urgency: job.urgency || '', emergency: isEmergency(job) }, reminders: rems, expensesEx: costs, test: isTestSite(), bench: plan ? benchTarget(plan, job) : null });
   }
   if (action === 'planSave') {
     if (!core || !(await J.find(core))) return out(404, { error: 'Job not found' });

@@ -41,6 +41,8 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     const body = await p.textContent('body');
     ok('Site', `${f} loads (${r.status()})`, r.status() === 200 && body.includes(text));
   }
+  await p.goto(`${BASE}/login.html`);
+  ok('Site', 'login page hides the project-code box', !(await p.isVisible('#loginProj')));
   await p.goto(`${BASE}/index.html`);
   const nav = await p.$$eval('header .menu a', (as) => as.map((a) => a.getAttribute('href')));
   ok('Site', 'menu has the 5 pages', JSON.stringify(nav) === JSON.stringify(['index.html', 'features.html', 'agile.html', 'industries.html', 'contact.html']), nav.join(','));
@@ -115,6 +117,17 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.click('[data-tab=summary]'); await p.waitForSelector('.cs-tiles', { timeout: 8000 }).catch(() => {});
   const st = await p.textContent('#view');
   ok('Portfolio', 'Summary shows tiles, phases and the health table', st.includes('Total budget') && st.includes('Projects by PMBOK phase') && st.includes('ERP rollout') && st.includes('Head office fit-out'));
+
+  // ---- BOM on/off slider ----
+  await p.goto(`${BASE}/admin/#plan/${core}/overview`); await p.reload(); await p.waitForSelector('#bomSwitch', { timeout: 8000 }).catch(() => {});
+  ok('BOM', 'BOM tab and slider shown (on by default)', (await p.isChecked('#bomSwitch').catch(() => false)) && (await p.$$('[data-tab=bom],[data-ptab=bom]')).length + ((await p.content()).includes('🧱 BOM</') ? 1 : 0) > 0);
+  await p.click('.bom-switch'); await sleep(1500);
+  r = await api('planGet', { core });
+  ok('BOM', 'switching the slider off is saved', (await r.json()).champ.bom === false);
+  ok('BOM', 'BOM tab is hidden when off', !(await p.$$eval('.ptabs a, .ptabs button, [data-tab]', (as) => as.some((a) => /BOM/.test(a.textContent)))));
+  await p.click('.bom-switch'); await sleep(1500);
+  r = await api('planGet', { core });
+  ok('BOM', 'switching it back on is saved', (await r.json()).champ.bom === true);
 
   // ---- logout → login page ----
   await p.goto(`${BASE}/admin/#projects`); await sleep(1000);

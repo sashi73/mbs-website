@@ -71,3 +71,4 @@
 .c-login-card .note{margin:0;font-size:12px;color:#8A857A;text-align:center}
 .c-login-card .back{text-align:center;font-size:13px;color:#A39E92;text-decoration:none}
 .btn-block{width:100%;justify-content:center}
+.c-login-card [hidden]{display:none!important}
