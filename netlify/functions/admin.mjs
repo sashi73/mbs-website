@@ -23,23 +23,22 @@ import * as U from '../lib/users.mjs';
 import * as PPL from '../lib/people.mjs';
 import * as SUB from '../lib/subbies.mjs';
 // v91: who may sign in: a person in People, or a sub-contractor in Subbies
-const canIn = (pid, u) => (u && u.kind === 'google' ? PPL.isTest() && !!env('GOOGLE_CLIENT_ID').trim() : u && u.kind === 'subbie' ? SUB.canLogin(u.subId) : PPL.canLogin(pid));   // v97: Google sign-ins only while the test site has it on
+const canIn = (pid, u) => (u && u.kind === 'google' ? !!env('GOOGLE_CLIENT_ID').trim() : u && u.kind === 'subbie' ? SUB.canLogin(u.subId) : PPL.canLogin(pid));   // v97: Google sign-ins only while the test site has it on
 // v97: "Sign in with Google" on the test site. The Google ID token is checked with Google (tokeninfo): our client ID, a verified
 // email, not expired. GOOGLE_ALLOWED (optional) limits it to some emails or @domains.
 async function googleVerify(cred) {
-  const id = env('GOOGLE_CLIENT_ID').trim(); if (!id || !PPL.isTest()) return { error: 'Sign in with Google is not available here.', code: 403 };
+  const id = env('GOOGLE_CLIENT_ID').trim(); if (!id) return { error: 'Sign in with Google is not available here.', code: 403 };
   if (!/^[\w-]+\.[\w-]+\.[\w-]+$/.test(String(cred || ''))) return { error: 'Google sign-in failed. Try again.' };
   let t;
   try { const r = await fetch((env('GOOGLE_TOKENINFO_URL').trim() || 'https://oauth2.googleapis.com/tokeninfo') + '?id_token=' + encodeURIComponent(cred), { signal: AbortSignal.timeout(8000) }); if (!r.ok) return { error: 'Google did not accept that sign-in. Try again.' }; t = await r.json(); }
   catch { return { error: 'Could not reach Google to check the sign-in. Try again.' }; }
   if (t.aud !== id || !['accounts.google.com', 'https://accounts.google.com'].includes(t.iss) || !(t.email_verified === true || t.email_verified === 'true') || Number(t.exp) * 1000 < Date.now()) return { error: 'Google sign-in failed. Try again.' };
   const email = String(t.email || '').toLowerCase(), allow = env('GOOGLE_ALLOWED').split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean);
-  if (allow.length && !allow.some((a) => (a.startsWith('@') ? email.endsWith(a) : email === a))) return { error: 'This Google account is not allowed on this site. Ask MBS for access.', code: 403 };
+  if (allow.length && !allow.some((a) => (a.startsWith('@') ? email.endsWith(a) : email === a))) return { error: 'This Google account is not allowed on this site. Ask GKH for access.', code: 403 };
   return { email, name: String(t.name || '').slice(0, 100) };
 }
 const projectOf = async (code) => { const j = await J.find(code); return j && (await getPlan(j.core)) ? { core: j.core, ref: J.refFor(j), name: j.name } : null; };
 import { bomPost } from '../lib/bom.mjs';
-import { promoPost } from '../lib/promo.mjs';
 import { prlPost } from '../lib/payroll.mjs';
 import { lvPost } from '../lib/leave.mjs';
 import * as ACC from '../lib/accounts.mjs';
@@ -69,6 +68,7 @@ export default async (req, context) => {
 async function handle(req, context) {
   A.setDefer(context && typeof context.waitUntil === 'function' ? (p) => context.waitUntil(p) : null);
   try {
+    await A.ensureSecret();   // Project Champ: the key that signs sessions
     const url = new URL(req.url);
 
     // ---------- downloads (GET, cookie only) ----------
@@ -108,13 +108,6 @@ async function handle(req, context) {
         const buf = await PS.payslipPdf(run, l);
         return new Response(buf, { status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `${url.searchParams.get('view') ? 'inline' : 'attachment'}; filename="Payslip-${run.id}-${l.name.replace(/[^A-Za-z0-9]+/g, '-')}.pdf"`, 'Cache-Control': 'no-store' } });
       }
-      if (action === 'voucherPdf') {   // v105: a Wonder Bird voucher as a PDF
-        const PRm = await import('../lib/promo.mjs'), VP = await import('../lib/voucher-pdf.mjs');
-        const p = await PRm.get(url.searchParams.get('id') || ''), v = p && (p.vouchers || []).find((x) => x.code === url.searchParams.get('code'));
-        if (!v) return bad('Voucher not found', 404);
-        const buf = await VP.voucherPdf(p, v, url.origin);
-        return new Response(buf, { status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `${url.searchParams.get('view') ? 'inline' : 'attachment'}; filename="${v.code}-${(p.first + '-' + p.last).replace(/[^A-Za-z0-9-]+/g, '')}.pdf"`, 'Cache-Control': 'no-store' } });
-      }
       const g = await acctGet(action, url);
       return g || bad('Unknown request', 404);
     }
@@ -127,7 +120,7 @@ async function handle(req, context) {
 
     // ---------- login / logout ----------
     if (action === 'login') {
-      if (!A.adminReady()) return bad('The admin console is not set up yet: add ADMIN_USERNAME and ADMIN_PASSWORD in Netlify.', 503);
+      if (!A.adminReady()) return bad('The admin console is not set up yet: the session key could not be made.', 503);
       const ip = A.clientIp(req);
       const { wait, had } = await A.loginCheck(ip);
       if (wait) return bad(`Too many wrong attempts. Try again in ${wait} minute${wait > 1 ? 's' : ''}.`, 429);
@@ -153,12 +146,12 @@ async function handle(req, context) {
         await A.audit(usr.username, 'Logged in (' + usr.role + (pc ? ', project ' + pc : '') + ')');
         return out(200, { ok: true, user: usr.username, name: usr.name, mustChange: !!usr.mustChange, project: pc }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(usr.username, Date.now(), { uid: usr.id, v: usr.ver || 0, pc })) });
       }
-      const user = env('ADMIN_USERNAME').trim();
+      const user = A.ownerName();
       await A.audit(user, 'Logged in');
       return out(200, { ok: true, user }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(user)) });
     }
     if (action === 'logout') return out(200, { ok: true }, { 'Set-Cookie': A.clearCookie(req) });
-    if (action === 'loginOptions') return out(200, { google: PPL.isTest() && env('GOOGLE_CLIENT_ID').trim() ? env('GOOGLE_CLIENT_ID').trim() : '' });   // v97: the sign-in page asks
+    if (action === 'loginOptions') return out(200, { google: env('GOOGLE_CLIENT_ID').trim() });   // v97: the sign-in page asks
     if (action === 'loginGoogle') {   // v97
       if (!A.adminReady()) return bad('The admin console is not set up yet.', 503);
       const ip = A.clientIp(req), { wait } = await A.loginCheck(ip);
@@ -168,7 +161,7 @@ async function handle(req, context) {
       const u = await U.googleUser(g.email, g.name, 'Google sign-in');
       if (!u) return bad('Google sign-in failed. Try again.', 401);
       if (u.clash) return bad('This email already has a staff login: sign in with your username and password.', 409);
-      if (u.disabled) return bad('Your Google sign-in has been switched off. Ask MBS.', 403);
+      if (u.disabled) return bad('Your Google sign-in has been switched off. Ask GKH.', 403);
       await A.audit(u.username, 'Signed in with Google (view only)');
       return out(200, { ok: true, user: u.username, name: u.name }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(u.username, Date.now(), { uid: u.id, v: u.ver || 0 })) });
     }
@@ -274,6 +267,19 @@ async function handle(req, context) {
         return out(200, { period: per.name, from: per.from, report: J.report(await J.all(), per.from, per.to) });
       }
 
+      // ---------- GKH Project Champ: a new project without the CRM ----------
+      case 'planNewProject': {
+        const pname = clean(body.name, 120), client = clean(body.client, 120);
+        if (!pname || !client) return bad('A project name and a client are needed');
+        const core = await J.nextCore('P');
+        await J.create({ core, name: client, phone: clean(body.phone, 40), email: clean(body.email, 160), suburb: clean(body.site, 80), service: pname,
+          summary: clean(body.summary, 1500), source: 'Project Champ' }, by);
+        const r = await J.setStage(core, 'won', by, {});
+        const job = (r && r.job) || (await J.find(core));
+        await A.audit(who, `${J.refFor(job)}: project created (${pname})`);
+        return out(200, { core, ref: J.refFor(job) });
+      }
+
       // ---------- data explorer ----------
       case 'stores': {
         const res = [];
@@ -315,7 +321,7 @@ async function handle(req, context) {
       }
       case 'log': return out(200, { log: await A.auditLog() });
       default: {
-        const a = (await acctPost(action, body, { who, by })) || (await sqlPost(action, body, { who, by })) || (await planPost(action, body, { who, by, audit: A.audit })) || (await invPost(action, body, { who, by, audit: A.audit })) || (await custPost(action, body, { who, by, audit: A.audit })) || (await planQuotePost(action, body, { who, by, audit: A.audit })) || (await subPost(action, body, { who, by, audit: A.audit })) || (await intelPost(action, body, { who, by, audit: A.audit })) || (await swmsPost(action, body, { who, by, audit: A.audit })) || (await commsPost(action, body, { who, by, audit: A.audit })) || (await reportPost(action, body, { who, by, audit: A.audit })) || (await PPL.pplPost(action, body, { who, by, audit: A.audit, unlogin: U.removeForPerson })) || (await bomPost(action, body, { who, by, audit: A.audit })) || (await promoPost(action, body, { who, by, audit: A.audit })) || (await prlPost(action, body, { who, by, audit: A.audit, A: ACC, SUB })) || (await lvPost(action, body, { who, by, audit: A.audit, ctx })) || (await U.userPost(action, action === 'userGuestLoad' ? { ...body, test: PPL.isTest() } : body, { ctx, audit: A.audit, person: PPL.get, sub: SUB.getSub, project: projectOf }));
+        const a = (await acctPost(action, body, { who, by })) || (await sqlPost(action, body, { who, by })) || (await planPost(action, body, { who, by, audit: A.audit })) || (await invPost(action, body, { who, by, audit: A.audit })) || (await custPost(action, body, { who, by, audit: A.audit })) || (await planQuotePost(action, body, { who, by, audit: A.audit })) || (await subPost(action, body, { who, by, audit: A.audit })) || (await intelPost(action, body, { who, by, audit: A.audit })) || (await swmsPost(action, body, { who, by, audit: A.audit })) || (await commsPost(action, body, { who, by, audit: A.audit })) || (await reportPost(action, body, { who, by, audit: A.audit })) || (await PPL.pplPost(action, body, { who, by, audit: A.audit, unlogin: U.removeForPerson })) || (await bomPost(action, body, { who, by, audit: A.audit })) || (await prlPost(action, body, { who, by, audit: A.audit, A: ACC, SUB })) || (await lvPost(action, body, { who, by, audit: A.audit, ctx })) || (await U.userPost(action, action === 'userGuestLoad' ? { ...body, test: PPL.isTest() } : body, { ctx, audit: A.audit, person: PPL.get, sub: SUB.getSub, project: projectOf }));
         return a || bad('Unknown action');
       }
     }

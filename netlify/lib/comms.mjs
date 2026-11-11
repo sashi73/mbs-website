@@ -70,7 +70,7 @@ export async function create(body) {
 // ---------- AI: what the meeting means for the plan ----------
 const AREAS = ['scope', 'time', 'cost', 'quality', 'risk', 'issues', 'stakeholders'];
 const LEVELS = ['None', 'Low', 'Medium', 'High'];
-const SYSTEM = 'You are an experienced construction project manager (PMBOK, PRINCE2) for Modern Building Solutions, a Sydney (NSW) builder. ' +
+const SYSTEM = 'You are an experienced construction project manager (PMBOK, PRINCE2) for teams using GKH Project Champ (construction, facilities, IT and business projects). ' +
   'You get the project plan (tasks numbered n, days, start/finish, links "after", the critical path, costs), the scope, risks, issues and stakeholders, and the TRANSCRIPT of one project meeting. ' +
   'Work out what the meeting means for the project, thoroughly and practically. Rules: ' +
   '1) Only use what was actually said in the meeting; do not invent. If something is unclear, say so in the summary. ' +

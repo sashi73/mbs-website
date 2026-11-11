@@ -50,7 +50,7 @@ export function clean(d = {}, old = {}) {
   };
 }
 
-const SYS = 'You are a NSW construction WHS adviser writing a Safe Work Method Statement (SWMS) under the Work Health and Safety Regulation 2017 (NSW), Part 6.3, for Modern Building Solutions (the PCBU and principal contractor). ' +
+const SYS = 'You are a NSW construction WHS adviser writing a Safe Work Method Statement (SWMS) under the Work Health and Safety Regulation 2017 (NSW), Part 6.3, for the PCBU and principal contractor named on the project. ' +
   'From the project plan, work out which HIGH-RISK CONSTRUCTION WORK categories apply (codes a-r from the list given; only those that really apply), then write the job steps in order: one step per task or main sub-step of the plan that has a real hazard (skip office tasks like "quote accepted" and "invoice"). ' +
   'For each step: the hazards (short, specific: e.g. fall from ladder, silica dust from cutting tiles, live wires, manual handling of 20 kg bags), the risk before controls (Low|Medium|High|Extreme), the control measures using the hierarchy of controls (eliminate, substitute, isolate, engineering, administrative, PPE; "- " lines, specific to this job, naming the Australian Standard or code of practice where useful), the risk after controls, and who is responsible (a role, e.g. Site supervisor, Tiler, Licensed electrician). ' +
   'Also: PPE needed, plant and equipment with pre-start checks, licences / tickets / training needed (e.g. white card, high-risk work licence, working at heights), emergency arrangements (first aid, assembly point, nearest hospital emergency department: say "check nearest" if unsure), how the SWMS is implemented, monitored and reviewed, and how workers are consulted. ' +

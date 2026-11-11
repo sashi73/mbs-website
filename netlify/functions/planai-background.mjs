@@ -18,9 +18,10 @@ export default async (req) => {
   let id = '';
   try {
     if (req.method !== 'POST' || req.headers.get('x-mbs-admin') !== '1') return new Response('', { status: 403 });
+    await A.ensureSecret();
     const session = A.readSession(req);
     if (!session) return new Response('', { status: 401 });
-    const ctx = await U.context(session, '', (pid, u) => (u && u.kind === 'google' ? PPL.isTest() : u && u.kind === 'subbie' ? SUB.canLogin(u.subId) : PPL.canLogin(pid)));   // v86: Users & access
+    const ctx = await U.context(session, '', (pid, u) => (u && u.kind === 'google' ? !!String(process.env.GOOGLE_CLIENT_ID || '').trim() : u && u.kind === 'subbie' ? SUB.canLogin(u.subId) : PPL.canLogin(pid)));   // v86: Users & access
     if (!ctx) return new Response('', { status: 401 });
     let body = {};
     try { body = await req.json(); } catch { return new Response('', { status: 400 }); }

@@ -4,83 +4,61 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>MBS Console</title>
-<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<title>GKH Project Champ · Console</title>
+<link rel="icon" href="../assets/gkh-globe.webp" type="image/webp">
+<link rel="stylesheet" href="champ.css?v=1">
+<link rel="stylesheet" href="../assets/champ-theme.css?v=1">
+<script src="../assets/champ-theme.js?v=1"></script>
 <link rel="stylesheet" href="admin.css?v=109">
 </head>
-<body>
+<body class="champ-console">
 
 <!-- ============ LOGIN ============ -->
 <section class="login" id="login" hidden>
   <form class="login-card" id="loginForm" autocomplete="on">
-    <img src="../assets/mbs-logo.svg" alt="Modern Building Solutions" class="login-logo" width="190" height="93">
-    <h1>MBS Console</h1>
-    <p class="muted">Staff, admin and sub-contractors.</p>
+    <img src="../assets/gkh-globe.webp" alt="Global Knowledge House" class="login-logo gkh-globe" width="112" height="112">
+    <h1>Project Champ</h1>
+    <p class="gkh-tag">GKH · AI-Powered Project Management</p>
     <label>Username<input name="username" autocomplete="username" required autofocus></label>
     <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
-    <label id="loginProj" hidden>Project code <small class="muted">(sub-contractors: the code MBS gave you)</small><input name="project" autocomplete="off" placeholder="e.g. J261103-000002"></label>
+    <label id="loginProj" hidden>Project code <small class="muted">(sub-contractors: the code you were given)</small><input name="project" autocomplete="off" placeholder="e.g. J261103-000002"></label>
     <p class="login-msg" id="loginMsg" role="alert"></p>
     <button class="btn btn-gold btn-block" type="submit">Sign in</button>
-    <div id="gsiBox" class="gsi-box" hidden><div class="gsi-or"><span>or</span></div><div id="gsiBtn"></div><p class="muted gsi-note">Test site: signing in with Google gives view-only access.</p></div>
-    <a class="back" href="../index.html">← Back to the website</a>
+    <div id="gsiBox" class="gsi-box" hidden><div class="gsi-or"><span>or</span></div><div id="gsiBtn"></div><p class="muted gsi-note">Signing in with Google gives view-only access until an administrator upgrades it.</p></div>
+    <a class="back" href="../index.html">← Back to Project Champ</a>
   </form>
 </section>
 
 <!-- ============ APP ============ -->
 <div class="app" id="app" hidden>
   <aside class="side" id="side">
-    <div class="side-top"><a class="side-brand" href="#dashboard"><img src="../assets/mbs-logo.svg" alt="MBS" width="104" height="51"><span>Console</span></a><button class="side-close" id="sideClose" type="button" aria-label="Close menu">✕</button></div>
+    <div class="side-top"><a class="side-brand" href="#portfolio"><img src="../assets/gkh-globe.webp" alt="" class="gkh-globe" width="46" height="46"><span>Project Champ<small>by GKH</small></span></a><button class="side-close" id="sideClose" type="button" aria-label="Close menu">✕</button></div>
     <button class="side-fold" id="sideFold" type="button" aria-label="Hide the menu" title="Hide the menu (or swipe left). Press [ to switch.">‹</button>
     <nav class="side-nav" aria-label="Console">
-      <p class="side-h">CRM</p>
-      <a href="#dashboard" data-nav="dashboard"><i>▦</i>Dashboard</a>
-      <a href="#myleave" data-nav="myleave" hidden><i>🌴</i>My leave</a>
-      <a href="#jobs" data-nav="jobs"><i>☰</i>Jobs</a>
-      <a href="#customers" data-nav="customers"><i>👥</i>Customers</a>
-      <a href="#new" data-nav="new"><i>＋</i>New job</a>
-      <a href="#reminders" data-nav="reminders"><i>⏰</i>Reminders</a>
-      <a href="#wonderbird" data-nav="wonderbird"><i>🎁</i>Wonder Bird draw</a>
-      <a href="#projects" data-nav="projects"><i>📅</i>Projects</a>
-      <p class="side-h">Accounts</p>
-      <a href="#quotes" data-nav="quotes"><i>📝</i>Quotes</a>
-      <a href="#invoices" data-nav="invoices"><i>🧾</i>Invoices</a>
-      <a href="#expenses" data-nav="expenses"><i>💳</i>Expenses</a>
-      <a href="#accounts" data-nav="accounts"><i>📒</i>Accounting &amp; BAS</a>
-      <p class="side-h">Stock</p>
-      <a href="#inventory" data-nav="inventory"><i>📦</i>Inventory</a>
-      <a href="#inventory/suppliers" data-nav="suppliers"><i>🏭</i>Suppliers</a>
-      <p class="side-h">Sub-contractors</p>
-      <a href="#subs" data-nav="subs"><i>👷</i>Subbies</a>
-      <a href="#subs/compliance" data-nav="subscomp"><i>🛡</i>Licences &amp; insurance</a>
-      <p class="side-h">People</p>
-      <a href="#people" data-nav="people"><i>🧑‍🔧</i>Employees &amp; contractors</a>
-      <a href="#people/compliance" data-nav="peoplecomp"><i>🎫</i>Tickets &amp; licences</a>
-      <a href="#people/workload" data-nav="peoplework"><i>📅</i>Workload</a>
-      <a href="#payroll" data-nav="payroll"><i>💵</i>Payroll</a>
-      <a href="#leave" data-nav="leave"><i>🌴</i>Leave</a>
-      <p class="side-h">Data &amp; Reports</p>
-      <a href="#sql/ask" data-nav="ask"><i>✨</i>Ask AI (plain English)</a>
-      <a href="#sql" data-nav="sql"><i>🧮</i>SQL wizard &amp; reports</a>
-      <a href="#data" data-nav="data"><i>🗄</i>Data explorer</a>
-      <a href="#activity" data-nav="activity"><i>🕘</i>Activity log</a>
+      <p class="side-h">Portfolio</p>
+      <a href="#portfolio/summary" data-nav="psummary"><i>📊</i>Summary</a>
+      <a href="#portfolio/board" data-nav="pboard"><i>▦</i>Pipeline board</a>
+      <p class="side-h">Projects</p>
+      <a href="#projects" data-nav="projects"><i>📅</i>All projects</a>
+      <a href="#projects/new" data-nav="projnew"><i>＋</i>New project</a>
       <p class="side-h">Admin</p>
       <a href="#users" data-nav="users"><i>🔐</i>Users &amp; access</a>
-      <p class="side-h">Coming soon</p>
-      <a href="#analytics" data-nav="analytics"><i>✨</i>Analytics &amp; AI</a>
+      <a href="#activity" data-nav="activity"><i>🕘</i>Activity log</a>
     </nav>
     <div class="side-foot">
       <span class="who-box"><button class="who link" id="who" type="button"></button><small class="who-role" id="whoRole"></small></span>
-      <small class="ver" title="Console version">v109</small>
+      <small class="ver" title="Project Champ version">PC 1.0</small>
       <button class="link" id="logout" type="button">Sign out</button>
     </div>
   </aside>
   <div class="backdrop" id="backdrop"></div>
   <div class="main">
+    <div class="gkh-bar" role="banner"><img src="../assets/gkh-globe.webp" alt="" class="gkh-globe" width="40" height="40"><b>GKH Project Champ</b><span>AI-Powered Project Management</span><small>Powered by Global Knowledge House</small></div>
     <header class="top">
       <button class="menu-btn" id="menuBtn" type="button" aria-label="Menu">☰</button>
-      <h1 id="title">Dashboard</h1>
-      <form class="top-search" id="topSearch" role="search"><input id="q" placeholder="Search name, phone, suburb or job number…" aria-label="Search jobs"></form>
-      <a class="btn btn-gold btn-sm top-new" href="#new">＋ New job</a>
+      <h1 id="title">Portfolio</h1>
+      <form class="top-search" id="topSearch" role="search" hidden><input id="q" placeholder="Search name, phone, suburb or job number…" aria-label="Search jobs"></form>
+      <a class="btn btn-gold btn-sm top-new" href="#projects/new">＋ New project</a>
     </header>
     <main class="view" id="view" tabindex="-1"></main>
   </div>
@@ -93,6 +71,7 @@
 <script src="admin-acct.js?v=109"></script>
 <script src="admin-sql.js?v=109"></script>
 <script src="admin-plan.js?v=109"></script>
+<script src="admin-champ.js?v=1"></script>
 <script src="admin-inv.js?v=109"></script>
 <script src="admin-board.js?v=109"></script>
 <script src="admin-cust.js?v=109"></script>
@@ -101,7 +80,6 @@
 <script src="admin-report.js?v=109"></script>
 <script src="admin-people.js?v=109"></script>
 <script src="admin-users.js?v=109"></script>
-<script src="admin-promo.js?v=109"></script>
 <script src="admin-payroll.js?v=109"></script>
 <script src="admin-leave.js?v=109"></script>
 </body>

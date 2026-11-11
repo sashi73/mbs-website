@@ -1,7 +1,6 @@
 // MBS admin console (CRM): login, sessions and data tools. Runs on Netlify, data in Netlify Blobs.
-// The username and password live ONLY in Netlify environment variables (ADMIN_USERNAME, ADMIN_PASSWORD),
-// never in the code or in GitHub.
-import { createHmac, createHash, timingSafeEqual } from 'node:crypto';
+// GKH Project Champ: see ownerName() / ensureSecret() below for how the Owner login works.
+import { createHmac, createHash, timingSafeEqual, scryptSync, randomBytes } from 'node:crypto';
 import { env } from './shared.mjs';
 import * as J from './jobs.mjs';
 import * as kv from './kv.mjs';
@@ -23,9 +22,23 @@ export async function store(name) {
 const COOKIE = 'mbs_admin';
 const HOURS = 12;
 const b64 = (s) => Buffer.from(s).toString('base64url');
-export function adminReady() { return !!(env('ADMIN_USERNAME') && env('ADMIN_PASSWORD')); }
+// GKH Project Champ: the Owner login works out of the box (username sashi73). The password is kept here only as a
+// scrypt hash. ADMIN_USERNAME / ADMIN_PASSWORD in Netlify replace it. The key that signs sessions is never in the code:
+// ADMIN_SESSION_SECRET if set, otherwise a random key made once and kept in this site's private Blobs store.
+const DEF_USER = 'sashi73', DEF_SALT = 'gkh-project-champ', DEF_HASH = '1d3f02006766172d3efb6f7fabf8f7290712cb2dab379ded9da402020214be57';
+const envOwner = () => !!(env('ADMIN_USERNAME') && env('ADMIN_PASSWORD'));
+export const ownerName = () => (envOwner() ? env('ADMIN_USERNAME').trim() : DEF_USER);
+let secret = '';
+export async function ensureSecret() {
+  if (secret) return secret;
+  const e = env('ADMIN_SESSION_SECRET').trim(); if (e) return (secret = e);
+  const s = await store(ADMIN); let v = await s.get('session-key', { type: 'json' });
+  if (!v || !v.k) { v = { k: randomBytes(32).toString('hex'), at: Date.now() }; await s.setJSON('session-key', v); v = (await s.get('session-key', { type: 'json' })) || v; }
+  return (secret = v.k);
+}
+export function adminReady() { return !!secret; }
 function key() {   // changing the username or password signs everyone out
-  return createHash('sha256').update(`mbs-admin|${env('ADMIN_USERNAME')}|${env('ADMIN_PASSWORD')}|${env('ADMIN_SESSION_SECRET')}`).digest();
+  return createHash('sha256').update(`champ-admin|${ownerName()}|${envOwner() ? env('ADMIN_PASSWORD') : DEF_HASH}|${secret}`).digest();
 }
 const sign = (body) => createHmac('sha256', key()).update(body).digest('base64url');
 function same(a, b) {
@@ -34,8 +47,8 @@ function same(a, b) {
 }
 export function checkPassword(user, pass) {
   if (!adminReady()) return false;
-  const u = same(String(user || '').trim().toLowerCase(), env('ADMIN_USERNAME').trim().toLowerCase());
-  const p = same(String(pass || ''), env('ADMIN_PASSWORD'));
+  const u = same(String(user || '').trim().toLowerCase(), ownerName().toLowerCase());
+  const p = envOwner() ? same(String(pass || ''), env('ADMIN_PASSWORD')) : same(scryptSync(String(pass || ''), DEF_SALT, 32).toString('hex'), DEF_HASH);
   return u && p;
 }
 export function makeSession(user, now = Date.now(), extra = {}) {   // v86: extra = { uid, v } for a user from Users & access (the Owner has none)

@@ -140,6 +140,7 @@ const NEEDS = [
   ['assets/style.css', '.creds-grid'],
   ['assets/badges/iso-9001.png', '']
 ];
+NEEDS.length = 0;   // GKH Project Champ: the MBS freshness checks don't apply to this build
 async function notFound(res) {
   try { res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' }).end(await readFile(join(ROOT, '404.html'))); }
   catch { res.writeHead(404).end('Not found'); }
@@ -152,7 +153,7 @@ async function oldFiles() {
   return [...out];
 }
 
-const FUNCTIONS = { chat: './netlify/functions/chat.mjs', lead: './netlify/functions/lead.mjs', tts: './netlify/functions/tts.mjs', visits: './netlify/functions/visits.mjs', admin: './netlify/functions/admin.mjs', 'planai-background': './netlify/functions/planai-background.mjs', promo: './netlify/functions/promo.mjs' };
+const FUNCTIONS = { admin: './netlify/functions/admin.mjs', 'planai-background': './netlify/functions/planai-background.mjs' };
 
 // Per-visitor limits, so nobody can run up AI costs or flood staff with fake enquiries once the site is public.
 // [requests allowed, per this many minutes]. Change in .env, e.g. LIMIT_CHAT=60/10

@@ -516,6 +516,7 @@ export function workFrom(text) {   // "Customer Sashi from Box Hill has asked ab
   return out;
 }
 export function jobTitle(j) {   // the work itself, from the customer's words or the enquiry brief; the service name if there's nothing better
+  if (j.source === 'Project Champ' && tidy(j.service)) return tidy(j.service);   // GKH Project Champ: the name typed for the project
   let s = tidy(j.service);
   const w = workFrom(j.details) || workFrom(j.summary);
   if (w && (vague(s) || s.length > 60 || w.length > s.length + 8)) s = w;
@@ -741,6 +742,40 @@ export async function planPost(action, body, { who, by, audit }) {
     const plans = planList.filter((p) => !only || only.includes(p.core)).map((p) => ({ core: p.core, name: p.name, ref: jobs[p.core] ? jobs[p.core].ref : p.core, customer: jobs[p.core] ? jobs[p.core].name : '', updated: p.updated, ...rollup(p, body.today || today) }));
     return out(200, { plans: plans.sort((a, b) => (b.updated || 0) - (a.updated || 0)) });
   }
+  // ---------- GKH Project Champ: portfolio Summary and Pipeline board, by the PMBOK life cycle ----------
+  // Initiation: no plan yet. Planning: a plan, no work done and not started. Execution: work under way (under 80%).
+  // Monitoring & Evaluation: 80% or more done (testing, acceptance, evaluation). Closing: every task done, or the project is completed.
+  // Moving a card on the board pins its phase (kept in "champ-phases"); "Automatic" un-pins it.
+  if (action === 'planPipelineList') {
+    const day = body.today || new Date().toISOString().slice(0, 10);
+    const [jobList, plans, pins] = await Promise.all([J.all(), list(), kv.get('champ-phases').catch(() => null)]);
+    const jobs = Object.fromEntries(jobList.map((j) => [j.core, j])), pin = (pins && pins.map) || {};
+    const only = Array.isArray(body.onlyCores) ? body.onlyCores : null;
+    const auto = (r, j) => { if (!r) return 'init'; if (j && ['completed', 'invoiced', 'paid'].includes(j.stage)) return 'close';
+      if (r.total && r.done >= r.total) return 'close'; if (r.pct >= 80) return 'monitor'; if (r.pct > 0 || r.done > 0 || (r.start && r.start < day && r.total)) return 'exec'; return 'plan'; };
+    const cards = [], seen = new Set();
+    for (const p of plans) {
+      if (only && !only.includes(p.core)) continue;
+      const j = jobs[p.core]; if (j && j.stage === 'lost') continue;
+      const r = rollup(p, day), a = auto(r, j); seen.add(p.core);
+      cards.push({ core: p.core, ref: j ? J.refFor(j) : p.core, name: p.name || (j ? jobTitle(j) : p.core), client: j ? j.name : '', site: j ? j.suburb || '' : '', since: (j && j.created) || 0, updated: p.updated || 0,
+        hasPlan: true, auto: a, phase: pin[p.core] || a, pinned: !!pin[p.core], ...r });
+    }
+    if (!only) for (const j of jobList) {
+      if (seen.has(j.core) || j.stage === 'lost' || !(j.source === 'Project Champ' || J.OPEN.includes(j.stage))) continue;
+      cards.push({ core: j.core, ref: J.refFor(j), name: jobTitle(j), client: j.name || '', site: j.suburb || '', since: j.created || 0, updated: j.updated || 0, hasPlan: false, auto: 'init', phase: pin[j.core] || 'init', pinned: !!pin[j.core],
+        pct: 0, done: 0, total: 0, late: 0, BAC: 0, AC: 0, EV: 0, PV: 0, SPI: null, CPI: null, start: '', finish: '', openRisks: 0, highRisks: 0, openIssues: 0 });
+    }
+    return out(200, { cards, today: day, at: Date.now() });
+  }
+  if (action === 'planPhaseSet') {
+    const PH = ['init', 'plan', 'exec', 'monitor', 'close'], ph = String(body.phase || '');
+    if (!core || !(await J.find(core))) return out(404, { error: 'Project not found' });
+    if (ph !== 'auto' && !PH.includes(ph)) return out(400, { error: 'Unknown phase' });
+    await kv.update('champ-phases', (cur) => { const m = { ...((cur && cur.map) || {}) }; if (ph === 'auto') delete m[core]; else m[core] = ph; return { map: m }; }, () => ({ map: {} }));
+    if (audit) await audit(who, `Project ${core}: phase ${ph === 'auto' ? 'set to automatic' : 'moved to ' + ph}`);
+    return out(200, { ok: true });
+  }
   if (action === 'planGet') {
     const job = await J.find(core);
     if (!job) return out(404, { error: 'Job not found' });
@@ -766,7 +801,7 @@ export async function planPost(action, body, { who, by, audit }) {
   if (action === 'planJobs') {   // open jobs without a plan, labelled "Customer: what the job is"
     const [list, keys] = await Promise.all([J.all(), kv.keys('plan:')]);
     const planned = new Set(keys.map((k) => k.slice(5)));
-    const open = list.filter((j) => J.OPEN.includes(j.stage) && !planned.has(j.core)).sort((a, b) => b.created - a.created).slice(0, 150);
+    const open = list.filter((j) => (J.OPEN.includes(j.stage) || (j.source === 'Project Champ' && j.stage !== 'lost')) && !planned.has(j.core)).sort((a, b) => b.created - a.created).slice(0, 150);
     const full = await kv.getMany(open.map((j) => 'job:' + j.core));
     return out(200, { jobs: full.filter(Boolean).map((j) => ({ core: j.core, ref: J.refFor(j), name: j.name || 'Customer', suburb: j.suburb || '', title: jobTitle(j), kind: jobKind(j),
       service: j.service || '', stage: j.stage || '', created: j.created || 0, bestTime: j.best_time || '', source: j.source || '', photos: (j.photos || []).length, scope: jobScope(j).slice(0, 1500) })) });

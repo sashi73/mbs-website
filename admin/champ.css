@@ -1,0 +1,59 @@
+/* GKH Project Champ: console branding (the same GKH black-and-gold look as the MBS test console) */
+.gkh-globe{border-radius:50%;animation:gkh-spin 80s linear infinite,gkh-glow 4s ease-in-out infinite}
+@keyframes gkh-spin{to{transform:rotate(360deg)}}
+@keyframes gkh-glow{50%{filter:drop-shadow(0 0 7px rgba(255,190,80,.55))}}
+@media (prefers-reduced-motion:reduce){.gkh-globe{animation:none}}
+
+.login{background:radial-gradient(1000px 600px at 50% -10%,#2A2210 0%,#000 60%)}
+.login-card{background:#050505;border-color:#2A2416}
+.login-card h1{text-align:center}
+.login-logo{width:112px;height:112px;margin:0 auto 2px;display:block}
+.gkh-tag{margin:-6px 0 6px;text-align:center;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:11.5px;color:#E8C04A}
+
+.side-brand{gap:10px}
+.side-brand img{width:46px;height:46px;flex:none}
+.side-brand span{display:grid;gap:2px;font-stretch:normal;font-size:15px;line-height:1.15;letter-spacing:.01em}
+.side-brand span small{font:700 9.5px/1.2 Manrope,system-ui,Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#E8C04A}
+
+.gkh-bar{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;padding:10px 28px;background:linear-gradient(90deg,#000 0%,#0B0B0B 55%,#1A150A 100%);color:#EDEAE3;border-bottom:2px solid #C9A227}
+.gkh-bar img{width:40px;height:40px;flex:none}
+.gkh-bar b{font:800 19px/1.2 Archivo,system-ui,Arial,sans-serif;letter-spacing:.01em;color:#fff}
+.gkh-bar span{font:700 12.5px/1.3 Manrope,system-ui,Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#E8C04A}
+.gkh-bar small{margin-left:auto;font:500 12px/1.3 Manrope,system-ui,Arial,sans-serif;color:#A39E92}
+@media (max-width:700px){.gkh-bar{padding:8px 16px}.gkh-bar small{margin-left:0;flex-basis:100%}}
+
+/* New project form */
+.champ-form{display:grid;gap:14px;max-width:760px}
+.champ-form label{display:grid;gap:6px;font-weight:700}
+.champ-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:640px){.champ-2{grid-template-columns:1fr}}
+.champ-empty{padding:40px 16px;line-height:2}
+
+/* Portfolio: Summary and Pipeline board (PMBOK life cycle) */
+.cs-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.cs-tabs{display:flex;gap:8px}
+.cs-tabs .btn.on{background:#111;color:#fff;border-color:#111}
+.cs-tagline{font-size:13px}
+.champ-pboard .pcol{flex:1 1 0;min-width:230px}
+.cs-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px}
+.cs-tile{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;display:grid;gap:4px;border-top:4px solid #D6D2C6}
+.cs-tile span{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.cs-tile b{font:800 28px/1.1 'Archivo',sans-serif;font-stretch:85%}
+.cs-tile small{color:var(--muted);font-size:12px}
+.cs-tile.cs-green,.cs-tile.ev-green{border-top-color:#16A34A}.cs-tile.cs-amber,.cs-tile.ev-amber{border-top-color:#F59E0B}.cs-tile.cs-red,.cs-tile.ev-red{border-top-color:#DC2626}
+.cs-grid{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px}
+@media (max-width:980px){.cs-grid{grid-template-columns:1fr}}
+.cs-ph{display:grid;grid-template-columns:200px 1fr 36px 100px;align-items:center;gap:10px;padding:7px 0}
+.cs-phn{display:flex;align-items:center;gap:8px;font-weight:700}.cs-phn i{width:10px;height:10px;border-radius:3px;flex:none}
+.cs-bar{height:14px;background:#F1EEE6;border-radius:999px;overflow:hidden}.cs-bar span{display:block;height:100%;border-radius:999px;min-width:2px}
+.cs-ph b{text-align:right}.cs-ph small{color:var(--muted)}
+@media (max-width:640px){.cs-ph{grid-template-columns:1fr 36px}.cs-bar,.cs-ph small{display:none}}
+.cs-note{font-size:12px;margin:10px 0 0}
+.cs-health{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;margin:6px 0 14px}
+.cs-health div{display:grid;justify-items:center;gap:3px}.cs-health b{font:800 24px/1 'Archivo',sans-serif}.cs-health small{color:var(--muted);font-size:11.5px}
+.cs-stack{display:flex;height:14px;border-radius:999px;overflow:hidden;background:#F1EEE6}
+.cs-rag{display:inline-block;width:12px;height:12px;border-radius:50%}
+.cs-green{background:#16A34A}.cs-amber{background:#F59E0B}.cs-red{background:#DC2626}.cs-grey{background:#B8B3A7}
+.cs-tile.cs-green,.cs-tile.cs-amber,.cs-tile.cs-red{background:var(--card)}
+.cs-chip{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:800;color:#fff;background:var(--pc);white-space:nowrap}
+.ev-green-t{color:#15803D}.ev-amber-t{color:#B45309}.ev-red-t{color:#B91C1C}.ev-grey-t{color:var(--muted)}

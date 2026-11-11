@@ -386,19 +386,41 @@
   }
 
   /* ---------- views ---------- */
-  function projects() {
+  // GKH Project Champ: a project stands on its own (no CRM job needed). The form makes the project record, then opens its plan.
+  function newProjectForm() {
+    var can = !M.allowed || M.allowed('projects', 'edit');
+    if (!can) { V().innerHTML = '<div class="card noaccess"><h2>🔒 View only</h2><p class="muted">Your login can look at projects but not start new ones.</p></div>'; return; }
+    V().innerHTML = '<div class="card champ-new"><div class="card-h"><h2>＋ New project</h2><a class="btn btn-sm" href="#projects">← All projects</a></div>' +
+      '<p class="muted">Give the project a name and a client. Next you pick a template (or a blank plan, or ✨ AI) and Project Champ builds the schedule, Gantt chart, Board, budget, risks and reports.</p>' +
+      '<form id="champNew" class="champ-form">' +
+      '<label>Project name<input name="name" required maxlength="120" placeholder="e.g. Head office fit-out, ERP rollout, Bridge deck repair"></label>' +
+      '<label>Client or sponsor<input name="client" required maxlength="120" placeholder="e.g. Acme Pty Ltd or Internal: Finance"></label>' +
+      '<div class="champ-2"><label>Site or location <small class="muted">(optional)</small><input name="site" maxlength="80" placeholder="e.g. Parramatta NSW"></label>' +
+      '<label>Contact phone <small class="muted">(optional)</small><input name="phone" maxlength="40"></label></div>' +
+      '<label>Contact email <small class="muted">(optional)</small><input name="email" type="email" maxlength="160"></label>' +
+      '<label>What is the project about? <small class="muted">(the AI uses this to draft the plan)</small><textarea name="summary" rows="4" maxlength="1500" placeholder="Objective, scope, constraints, budget, key dates…"></textarea></label>' +
+      '<div class="actions"><button class="btn btn-gold" type="submit">Create project and plan it →</button></div></form></div>';
+    $('#champNew').onsubmit = function (e) {
+      e.preventDefault(); var f = e.target, b = f.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Creating…';
+      api('planNewProject', { name: f.name.value, client: f.client.value, site: f.site.value, phone: f.phone.value, email: f.email.value, summary: f.summary.value })
+        .then(function (r) { toast('Project ' + r.ref + ' created'); location.hash = '#plan/' + r.core; })
+        .catch(function (err) { fail(err); b.disabled = false; b.textContent = 'Create project and plan it →'; });
+    };
+  }
+  function projects(args) {
+    if (args && args[0] === 'new') return newProjectForm();
     return api('planList', { today: today() }).then(function (d) {
       return api('planJobs', {}).then(function (j) {
         var avail = j.jobs;
         V().innerHTML = '<div class="card"><div class="card-h"><h2>Project plans (' + d.plans.length + ')</h2>' +
-          '<div class="row"><select id="newPlanJob" style="width:auto;max-width:min(760px,100%)"><option value="">Plan a job…</option>' + avail.map(function (x) { return '<option value="' + esc(x.core) + '">' + esc(jobLabel(x)) + '</option>'; }).join('') + '</select><button class="btn btn-gold btn-sm" id="newPlanGo">＋ Start a plan</button></div></div><div id="jobPeek" hidden></div>' +
+          '<div class="row">' + (avail.length ? '<select id="newPlanJob" style="width:auto;max-width:min(560px,100%)"><option value="">Plan an existing project…</option>' + avail.map(function (x) { return '<option value="' + esc(x.core) + '">' + esc(jobLabel(x)) + '</option>'; }).join('') + '</select><button class="btn btn-sm" id="newPlanGo">Plan it</button>' : '') + '<a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div></div><div id="jobPeek" hidden></div>' +
           (d.plans.length ? '<div class="table-wrap"><table><thead><tr><th>Project</th><th>Progress</th><th class="hide-sm">Finish</th><th title="Schedule Performance Index: work done ÷ work planned by today">SPI <small class="muted" style="text-transform:none;letter-spacing:0">(time)</small></th><th title="Cost Performance Index: value of work done ÷ actual cost">CPI <small class="muted" style="text-transform:none;letter-spacing:0">(cost)</small></th><th class="hide-sm">Risks</th><th class="hide-sm">Issues</th><th></th></tr></thead><tbody>' +
             d.plans.map(function (p) {
               return '<tr class="click" data-plan="' + esc(p.core) + '"><td><b>' + esc(p.name) + '</b><br><small class="muted"><span class="ref">' + esc(p.ref) + '</span> · ' + esc(p.customer) + '</small></td>' +
                 '<td style="min-width:140px"><div class="pbar"><span style="width:' + p.pct + '%"></span></div><small>' + p.pct + '% · ' + p.done + '/' + p.total + ' tasks' + (p.late ? ' · <b style="color:#C2410C">' + p.late + ' late</b>' : '') + '</small></td>' +
                 '<td class="hide-sm">' + esc(prettyY(p.finish)) + '</td><td class="evcell">' + evChip('SPI', p.SPI) + '</td><td class="evcell">' + evChip('CPI', p.CPI) + '</td>' +
                 '<td class="hide-sm">' + p.openRisks + (p.highRisks ? ' <b style="color:#C2410C">(' + p.highRisks + ' high)</b>' : '') + '</td><td class="hide-sm">' + p.openIssues + '</td><td><button class="btn btn-sm" data-pdel="' + esc(p.core) + '" data-pname="' + esc(p.name) + '" title="Delete this plan">🗑</button></td></tr>';
-            }).join('') + '</tbody></table></div>' + evLegend() : '<div class="empty">No plans yet. Pick a job above, or open a job and press “Project plan”.</div>') + '</div>';
+            }).join('') + '</tbody></table></div>' + evLegend() : (avail.length ? '<div class="empty champ-empty"><b>' + avail.length + ' project' + (avail.length > 1 ? 's' : '') + ' waiting for a plan.</b><br>Pick one in “Plan an existing project…” above, or <a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div>' : '<div class="empty champ-empty"><b>No projects yet.</b><br>Start your first one: <a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div>')) + '</div>';
         V().querySelectorAll('[data-plan]').forEach(function (tr) { tr.onclick = function () { location.hash = '#plan/' + tr.getAttribute('data-plan'); }; });
         V().querySelectorAll('[data-pdel]').forEach(function (b) {
           b.onclick = function (e) {
@@ -410,8 +432,8 @@
           };
         });
         var byCore = {}; avail.forEach(function (x) { byCore[x.core] = x; });
-        $('#newPlanJob').onchange = function () { var x = byCore[this.value], el = $('#jobPeek'); el.hidden = !x; el.innerHTML = x ? jobPeek(x) : ''; };
-        $('#newPlanGo').onclick = function () { var c = $('#newPlanJob').value; if (!c) return toast('Pick a job first', true); location.hash = '#plan/' + c; };
+        if ($('#newPlanJob')) $('#newPlanJob').onchange = function () { var x = byCore[this.value], el = $('#jobPeek'); el.hidden = !x; el.innerHTML = x ? jobPeek(x) : ''; };
+        if ($('#newPlanGo')) $('#newPlanGo').onclick = function () { var c = $('#newPlanJob').value; if (!c) return toast('Pick a job first', true); location.hash = '#plan/' + c; };
       });
     });
   }
@@ -548,19 +570,19 @@
     var guess = guessType(j.title + ' ' + scope0);
     S.mode = 'type'; S.aiDraft = null; S.aiId = ''; S.aiText = ''; S.tplType = ''; S.aiFinish = ''; S.tplWeek = false; S.coolZero = false; S.datesTouched = false; S.lastDates = '';
     V().innerHTML = '<div class="row" style="margin-bottom:14px"><a class="btn btn-sm" href="#job/' + esc(j.core) + '">← ' + esc(j.ref) + '</a><h2 style="font-size:22px">Plan this job: ' + esc(j.name) + ': ' + esc(j.title || j.service || 'Job') + '</h2></div>' +
-      '<div class="card"><h2>1. What the customer wants (scope of work)</h2>' +
+      '<div class="card"><h2>1. What the project must deliver (scope of work)</h2>' +
       '<p class="jobline"><span class="ref">' + esc(j.ref) + '</span> <b>' + esc(j.title || '') + '</b>' + [j.suburb, j.source ? 'from ' + j.source : ''].filter(Boolean).map(function (x) { return ' · ' + esc(x); }).join('') + '</p>' +
-      '<p class="muted" style="margin:0 0 8px">The tasks (WBS) and Gantt chart are built from this, so it is needed. It is filled in from the enquiry and notes: check it and add what is missing (what, where, sizes, materials, access, deadline).</p>' +
+      '<p class="muted" style="margin:0 0 8px">The tasks (WBS) and Gantt chart are built from this, so it is needed. It is filled in from the project description: check it and add what is missing (objective, deliverables, where, constraints, budget, deadline).</p>' +
       '<textarea id="tplScope" rows="5" placeholder="e.g. Bathroom exhaust fan is noisy and has stopped working. Replace it with a quieter fan, duct it outside through the eave, patch and paint the ceiling around it.">' + esc(scope0) + '</textarea></div>' +
       '<div class="card"><h2>2. How do you want to build the plan?</h2>' +
       '<div class="row pdates">' +
         '<label style="display:grid;gap:4px;font-weight:700">Start date<input type="date" id="tplStart" value="' + today() + '" style="width:auto"></label>' +
         '<label style="display:grid;gap:4px;font-weight:700"><span>Finish by <small class="muted" style="font-weight:400">(optional)</small></span><input type="date" id="aiFinish" value="' + esc(S.aiFinish || '') + '" style="width:auto"></label>' +
-        '<label class="qchk emergpick" title="No cooling-off: the work can start straight away, the same day as the site inspection"><input type="checkbox" id="tplEmerg"' + (j.emergency || EMERG.test((j.title || '') + ' ' + scope0) ? ' checked' : '') + '> 🚨 Emergency job <small class="muted">(start straight away; otherwise the work waits for the quote to be accepted plus 3 business days cooling-off)</small></label>' +
+        '<label class="qchk emergpick" title="No cooling-off: the work can start straight away, the same day as the site inspection"><input type="checkbox" id="tplEmerg"' + (j.emergency || EMERG.test((j.title || '') + ' ' + scope0) ? ' checked' : '') + '> 🚨 Urgent start <small class="muted">(start straight away; otherwise the plan allows 3 business days after approval before work starts)</small></label>' +
         '<label class="qchk" title="Tick if the crew can work Saturday and Sunday: the schedule counts every day and finishes sooner"><input type="checkbox" id="tplWeek"' + (S.tplWeek ? ' checked' : '') + '> 📅 Weekends (Sat, Sun) allowed</label>' +
         '<p class="pdates-note">✨ <b>Not sure of the end date?</b> Leave <b>Finish by</b> empty and choose <b>Ask AI to build it</b>: the AI works out the end date for this job. If you set a Finish by date, the plan is checked against it (and ✨ Fit to finish-by can bring it in).</p>' +
       '</div><div class="tpl-grid tmodes">' +
-      [['type', '📋 Pick a job type', CATALOG.length + ' common job types, each with sub-types. Builds tasks, sub-tasks, example costs and risks.'], ['blank', '⬜ Blank plan', 'Two rows to start from. Add your own tasks.'], ['ai', '✨ Ask AI to build it', 'Describe the job; AI works out the tasks, sub-tasks, costs, scope and risks, plus tips to help you plan.']]
+      [['type', '📋 Pick a project type', CATALOG.length + ' ready-made project types, each with sub-types. Builds tasks, sub-tasks, example costs and risks.'], ['blank', '⬜ Blank plan', 'Two rows to start from. Add your own tasks.'], ['ai', '✨ Ask AI to build it', 'Describe the project (any industry); AI works out the tasks, sub-tasks, costs, scope and risks, plus tips to help you plan.']]
         .map(function (m) { return '<button class="tpl tmode' + (S.mode === m[0] ? ' on' : '') + '" data-mode="' + m[0] + '"><b>' + m[1] + '</b><small>' + m[2] + '</small></button>'; }).join('') + '</div>' +
       '<div id="modeBody" style="margin-top:14px"></div>' +
       '<div class="row" style="margin-top:16px;align-items:flex-end"><span class="sp"></span><button class="btn btn-gold" id="tplCreate">Create plan</button></div></div>';
@@ -569,8 +591,8 @@
       var mb = $('#modeBody'), create = $('#tplCreate');
       create.disabled = false; create.textContent = 'Create plan';
       if (S.mode === 'type') {
-        mb.innerHTML = '<label style="display:grid;gap:4px;font-weight:700">Job type<select id="tplType" style="max-width:520px">' + typeOptions(S.tplType || guess) + '</select></label>' +
-          (guess && !S.tplType ? '<small class="muted">Suggested from the enquiry. Change it if it\'s not right.</small>' : '') + '<div id="tplPrev"></div>';
+        mb.innerHTML = '<label style="display:grid;gap:4px;font-weight:700">Project type<select id="tplType" style="max-width:520px">' + typeOptions(S.tplType || guess) + '</select></label>' +
+          (guess && !S.tplType ? '<small class="muted">Suggested from the description. Change it if it\'s not right.</small>' : '') + '<div id="tplPrev"></div>';
         var show = function () { var v = $('#tplType').value; S.tplType = v; $('#tplPrev').innerHTML = v ? previewHtml(newPlan(buildTemplate(v), j, $('#tplStart').value || today(), '')) : ''; };
         $('#tplType').onchange = show; show();
       } else if (S.mode === 'blank') {
@@ -600,7 +622,7 @@
     }
     function aiRun() {
       var desc = $('#aiDescribe').value.trim(), scope = $('#tplScope').value.trim();
-      if ((desc || scope).length < 10) { toast('Describe the job first (what the customer wants done)', true); ($('#aiDescribe').value ? $('#aiDescribe') : $('#tplScope')).focus(); return; }
+      if ((desc || scope).length < 10) { toast('Describe the project first (what it must deliver)', true); ($('#aiDescribe').value ? $('#aiDescribe') : $('#tplScope')).focus(); return; }
       var id = rid(), go = $('#aiGo'), out = $('#aiOut');
       S.aiId = id; S.aiDraft = null; $('#tplCreate').disabled = true; go.disabled = true;
       out.innerHTML = '<p class="ask-think" style="margin:10px 0 0">AI is building the plan… a small job takes 20–60 seconds; a big multi-phase project can take 3–8 minutes (up to 10,000 tokens). You can keep working in another tab.</p>';
@@ -674,9 +696,9 @@
     if (j.emergency && $('#tplEmerg').checked && /emergenc/i.test(j.urgency || '')) toast('🚨 The customer said this is an emergency (in the chat), so Emergency is ticked');
     $('#tplCreate').onclick = function () {
       var scope = $('#tplScope').value.trim(), start = $('#tplStart').value || today(), plan, note;
-      if (scope.length < 10 && !(S.mode === 'ai' && S.aiDraft)) { toast('Write the scope of work first: what the customer wants done', true); $('#tplScope').focus(); return; }
+      if (scope.length < 10 && !(S.mode === 'ai' && S.aiDraft)) { toast('Write the scope of work first: what the project must deliver', true); $('#tplScope').focus(); return; }
       if (S.mode === 'type') {
-        var v = $('#tplType').value; if (!v) { toast('Pick a job type first', true); $('#tplType').focus(); return; }
+        var v = $('#tplType').value; if (!v) { toast('Pick a project type first', true); $('#tplType').focus(); return; }
         plan = newPlan(buildTemplate(v), j, start, scope); note = 'plan created (' + v + ')';
       } else if (S.mode === 'blank') {
         plan = newPlan(TEMPLATES.blank, j, start, scope); plan.name = j.title || j.service || 'Project plan'; note = 'plan created (blank)';
@@ -1727,7 +1749,7 @@
       r.eachCell(function (c) { c.font = { bold: true, color: { argb: WHITE } }; c.fill = fill(INK); c.alignment = { vertical: 'middle', wrapText: true }; c.border = box; });
       return r;
     };
-    var footer = function (ws, rowNo) { var c = ws.getCell(rowNo, 1); c.value = 'Modern Building Solutions · MBS Console · ' + prettyY(t0); c.font = { size: 9, italic: true, color: { argb: GREY } }; };
+    var footer = function (ws, rowNo) { var c = ws.getCell(rowNo, 1); c.value = 'GKH Project Champ · Global Knowledge House · ' + prettyY(t0); c.font = { size: 9, italic: true, color: { argb: GREY } }; };
     var ragFill = function (c) { return fill(c === 'green' ? 'FFDCFCE7' : c === 'amber' ? 'FFFEF3C7' : c === 'red' ? 'FFFDE2D8' : 'FFF1EEE6'); };
     var num = {}; p.tasks.forEach(function (t, i) { num[t.id] = i + 1; });
 
@@ -2547,7 +2569,7 @@
       .concat(c.budget ? [['Contingency (budget less planned cost)', money(Math.round((c.budget - R.BAC) * 100) / 100)]] : []).concat(R.AC ? [['Spent to date', money(R.AC)]] : []) });
     if (o.notes && c.notes) S2.push({ kind: 'text', title: H('Planning notes'), text: c.notes });
     if (o.governance) S2.push({ kind: 'text', title: H('Governance and change control'), text: '- The project manager runs the project day to day and reports progress to the customer (sponsor) and stakeholders.\n- Any change to scope, time, cost, quality, risks or stakeholders is raised as a change request in change control: its impact is assessed, it is reviewed (at a change control meeting where needed) and it is approved and signed by the project manager or project director (and agreed with the customer where it changes the contract) before it is added to the plan and registers.\n- Risks and issues are reviewed at every progress meeting and recorded in the project registers.\n- The work is accepted when the acceptance criteria above are met and the customer signs off.' });
-    var signers = [{ role: 'Customer (sponsor)', name: c.customer || S.job.name || '' }, { role: 'Project manager', name: c.manager || '' }, { role: 'For Modern Building Solutions', name: '' }];
+    var signers = [{ role: 'Customer (sponsor)', name: c.customer || S.job.name || '' }, { role: 'Project manager', name: c.manager || '' }, { role: 'Project sponsor', name: '' }];
     (p.stakeholders || []).filter(function (x) { return x.raci === 'A' && x.name && !signers.some(function (y) { return y.name && y.name.toLowerCase() === x.name.toLowerCase(); }); }).slice(0, 3).forEach(function (x) { signers.push({ role: x.role || 'Accountable stakeholder', name: x.name }); });
     S2.push({ kind: 'sign', title: H('Approval and sign-off'), intro: 'By signing, the parties agree to the scope, schedule, budget and acceptance criteria in this project charter (version ' + v + ', ' + dmy(t0) + ').', rows: signers });
     var topRows = rows.filter(function (x) { return x.t.es; });

@@ -1,9 +1,6 @@
 User-agent: *
 Allow: /
-Disallow: /deploy/
 Disallow: /tools/
 Disallow: /database/
 Disallow: /netlify/
 Disallow: /admin/
-
-Sitemap: https://mbsplc.com.au/sitemap.xml

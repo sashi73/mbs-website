@@ -87,7 +87,7 @@ export function callReminder({ prejob, name, phone, suburb, service, bestTime, s
   const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
   const fold = (line) => line.match(/.{1,73}/g).join('\r\n ');
   const ics = [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Modern Building Solutions//Website//EN', 'METHOD:PUBLISH',
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Global Knowledge House//Project Champ//EN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `UID:${(prejob || 'call-' + start)}@mbsplc.com.au`,
     `DTSTAMP:${gcal(nowMs)}`, `DTSTART:${gcal(start)}`, `DTEND:${gcal(end)}`,

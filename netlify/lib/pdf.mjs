@@ -19,10 +19,10 @@ const safe = (s) => String(s ?? '').replace(/[‘’ʼ]/g, "'").replace(/[“”
 
 export function business() {
   return {
-    name: env('BUSINESS_LEGAL_NAME', 'Modern Building Solutions Pty Ltd'),
-    abn: env('BUSINESS_ABN', '50 159 309 181'), licence: env('BUILDER_LICENCE', '267071C'),
-    phone: env('PUBLIC_PHONE', '0420 494 990'), email: env('PUBLIC_CONTACT_EMAIL', 'mbs.pty.ltd@gmail.com'),
-    web: env('PUBLIC_WEBSITE', 'mbsplc.com.au'), address: env('BUSINESS_ADDRESS', 'Sydney NSW'), slogan: env('BUSINESS_SLOGAN', 'Quality building, repairs and maintenance. Done right, built to last.'),
+    name: env('BUSINESS_LEGAL_NAME', 'Global Knowledge House'),
+    abn: env('BUSINESS_ABN', '38 107 769 345'), licence: env('BUILDER_LICENCE', ''),
+    phone: env('PUBLIC_PHONE', '0493 431 202'), email: env('PUBLIC_CONTACT_EMAIL', 'ceo@gkhconsultancy.com'),
+    web: env('PUBLIC_WEBSITE', 'gkhconsultancy.com'), address: env('BUSINESS_ADDRESS', 'Sydney NSW'), slogan: env('BUSINESS_SLOGAN', 'GKH Project Champ · AI-Powered Project Management'),
     bankName: env('BANK_ACCOUNT_NAME'), bsb: env('BANK_BSB'), account: env('BANK_ACCOUNT_NUMBER')
   };
 }

@@ -56,16 +56,16 @@ function emailHtml(s, message) {
     `<div>${keys.map((k) => chip(rag[k].c, rag[k].label || k)).join('')}</div>` +
     (s.headline ? `<p style="margin:10px 0 6px"><b>${esc(s.headline)}</b></p>` : '') + (pts ? `<ul style="padding-left:18px;margin:6px 0">${pts}</ul>` : '') +
     `<p style="margin:10px 0 0;color:#6B665A;font-size:12.5px">The full report (with the Gantt chart) is attached.</p></div>` +
-    `<p style="color:#8A8577;font-size:12px">Modern Building Solutions</p></div>`;
+    `<p style="color:#8A8577;font-size:12px">GKH Project Champ · Global Knowledge House</p></div>`;
 }
 function emailText(s, message) {
   const rag = s.rag || {};
   return (message ? message + '\n\n' : '') + `${AUD[s.audience] || 'Project report'}: ${s.project && s.project.name}\n${s.type} report · ${s.periodText || ''}\n` +
-    Object.keys(rag).filter((k) => rag[k] && rag[k].c).map((k) => `${rag[k].label || k}: ${RAGN[rag[k].c]}`).join(' · ') + '\n\n' + (s.headline || '') + '\n' + (s.points || []).map((p) => '- ' + p).join('\n') + '\n\nThe full report is attached.\n\nModern Building Solutions';
+    Object.keys(rag).filter((k) => rag[k] && rag[k].c).map((k) => `${rag[k].label || k}: ${RAGN[rag[k].c]}`).join(' · ') + '\n\n' + (s.headline || '') + '\n' + (s.points || []).map((p) => '- ' + p).join('\n') + '\n\nThe full report is attached.\n\nGKH Project Champ';
 }
 
 // ✨ the AI writes the headline and key points for the audience, from the facts in the report
-const SYS = 'You write short, clear project status messages for Modern Building Solutions, a Sydney (NSW) builder. Australian spelling, plain English, no jargon for customers. ' +
+const SYS = 'You write short, clear project status messages for project teams using GKH Project Champ. Australian spelling, plain English, no jargon for customers. ' +
   'You get the audience and the facts of one reporting period (RAG status with reasons, progress, tasks done and coming up, milestones, risks, issues, decisions needed). Write for that audience: ' +
   'CUSTOMER: warm and reassuring but honest; what was done, what is next and what it means for them (access, noise, services off), what we need from them; never mention internal costs, margins or blame. ' +
   'TEAM: direct and practical; this week\'s priorities, who does what, critical tasks, blockers, safety focus, materials; motivate. ' +

@@ -51,9 +51,9 @@
   /* ---------------- login ---------------- */
   function showLogin() { $('#app').hidden = true; $('#login').hidden = false; setTimeout(function () { var u = $('#loginForm [name=username]'); if (u) u.focus(); }, 50); }
   // v86: Users & access: what the signed-in person can use. The menu shows only the modules they have; a page they can't use says so.
-  var NAVMOD = { dashboard: 'crm', jobs: 'crm', customers: 'crm', new: 'crm', reminders: 'crm', wonderbird: 'crm', projects: 'projects', quotes: 'accounts', invoices: 'accounts', expenses: 'accounts', accounts: 'accounts',
+  var NAVMOD = { dashboard: 'crm', jobs: 'crm', customers: 'crm', new: 'crm', reminders: 'crm', wonderbird: 'crm', projects: 'projects', projnew: 'projects', psummary: 'projects', pboard: 'projects', quotes: 'accounts', invoices: 'accounts', expenses: 'accounts', accounts: 'accounts',
     inventory: 'stock', suppliers: 'stock', subs: 'subbies', subscomp: 'subbies', people: 'people', peoplecomp: 'people', peoplework: 'people', payroll: 'people', leave: 'people', ask: 'data', sql: 'data', data: 'data', activity: 'data', analytics: 'data', users: 'users' };
-  var VIEWMOD = { dashboard: 'crm', jobs: 'crm', job: 'crm', new: 'crm', reminders: 'crm', wonderbird: 'crm', reports: 'crm', customers: 'crm', customer: 'crm', projects: 'projects', plan: 'projects', swms: 'projects',
+  var VIEWMOD = { dashboard: 'crm', jobs: 'crm', job: 'crm', new: 'crm', reminders: 'crm', wonderbird: 'crm', reports: 'crm', customers: 'crm', customer: 'crm', projects: 'projects', portfolio: 'projects', plan: 'projects', swms: 'projects',
     quotes: 'accounts', invoices: 'accounts', doc: 'accounts', expenses: 'accounts', accounts: 'accounts', inventory: 'stock', subs: 'subbies', people: 'people', payroll: 'people', leave: 'people', myleave: null, sql: 'data', data: 'data', activity: 'data', analytics: 'data', users: 'users' };
   var LVN = { none: 0, view: 1, edit: 2 };
   function allowed(mod, lv, alt) { var me = window.MBS && window.MBS.me; if (!me || me.owner) return true; var m = me.mods || {}; if (LVN[m[mod]] >= LVN[lv || 'view']) return true; if (me.scope) return false; return (alt || []).some(function (k) { return LVN[m[k]] >= 1; }); }   // v91: a sub-contractor: no support reads
@@ -67,15 +67,15 @@
     document.body.classList.toggle('is-subbie', !!me.scope);   // v91: a sub-contractor signed in to their project
   }
   function firstPage() { var me0 = window.MBS && window.MBS.me; if (me0 && me0.scope) return 'plan/' + me0.scope[0] + '/overview';
-    var order = [['dashboard', 'crm'], ['projects', 'projects'], ['quotes', 'accounts'], ['inventory', 'stock'], ['subs', 'subbies'], ['people', 'people'], ['sql/ask', 'data'], ['users', 'users']];
-    for (var i = 0; i < order.length; i++) if (allowed(order[i][1], 'view')) return order[i][0]; return 'dashboard'; }
+    var order = [['portfolio', 'projects'], ['dashboard', 'crm'], ['quotes', 'accounts'], ['inventory', 'stock'], ['subs', 'subbies'], ['people', 'people'], ['sql/ask', 'data'], ['users', 'users']];
+    for (var i = 0; i < order.length; i++) if (allowed(order[i][1], 'view')) return order[i][0]; return 'portfolio'; }
   function showApp(user) {
     $('#login').hidden = true;
     api('me').then(function (me) {
       applyAccess(me); $('#app').hidden = false;
       if (me.mustChange && window.MBS.users) { view.innerHTML = '<div class="empty">Set your own password to carry on.</div>'; window.MBS.users.changePassword(true); return; }
       if (me.scope) { var h = location.hash.slice(1); if (h.indexOf('plan/' + me.scope[0]) !== 0) { location.hash = '#' + firstPage(); return; } }   // v91: their project only
-      var vmod = VIEWMOD[(location.hash.slice(1) || 'dashboard').split('/')[0]];   // v108: null = any signed-in user (My leave)
+      var vmod = VIEWMOD[(location.hash.slice(1) || 'portfolio').split('/')[0]];   // v108: null = any signed-in user (My leave)
       if (vmod !== null && !allowed(vmod || 'crm', 'view')) { var fp = firstPage(); if (location.hash.slice(1) !== fp) { location.hash = '#' + fp; return; } }
       route();
     }).catch(function () { showLogin(); });
@@ -115,7 +115,7 @@
     }).catch(function () {});
   }
   googleButton();
-  $('#logout').addEventListener('click', function () { api('logout').then(function () { location.hash = ''; showLogin(); }); });
+  $('#logout').addEventListener('click', function () { api('logout').then(function () { location.href = '../login.html'; }); });
   $('#who').addEventListener('click', function () { if (window.MBS.users) window.MBS.users.changePassword(false); });
   var closeMenu = function () { $('#side').classList.remove('open'); };
   $('#menuBtn').addEventListener('click', function () { $('#side').classList.toggle('open'); });
@@ -169,14 +169,14 @@
   var NAVKEY = { job: 'jobs' };
   function route() {
     if ($('#app').hidden) return;
-    var parts = (location.hash.slice(1) || 'dashboard').split('/').map(decodeURIComponent);
-    var name = VIEWS[parts[0]] ? parts[0] : 'dashboard';
+    var parts = (location.hash.slice(1) || 'portfolio').split('/').map(decodeURIComponent);
+    var name = VIEWS[parts[0]] ? parts[0] : 'portfolio';
     if (VIEWMOD[name] && !allowed(VIEWMOD[name], 'view', name === 'job' ? ['projects'] : null)) {   // v86: no access to this module
       $('#title').textContent = TITLES[name]; view.innerHTML = '<div class="card noaccess"><h2>🔒 No access</h2><p class="muted">Your login (' + esc((window.MBS.me || {}).role || '') + ') doesn\'t include this part of the console. Ask an administrator if you need it.</p><p><a class="btn" href="#' + firstPage() + '">Go to my start page</a></p></div>'; return;
     }
     $('#title').textContent = TITLES[name];
-    document.title = TITLES[name] + ' · MBS Console';
-    var navOn = name === 'sql' && parts[1] === 'ask' ? 'ask' : name === 'inventory' && parts[1] === 'suppliers' ? 'suppliers' : (NAVKEY[name] || name);
+    document.title = TITLES[name] + ' · GKH Project Champ';
+    var navOn = name === 'portfolio' ? ((parts[1] || (function () { try { return localStorage.getItem('champTab'); } catch (e) { return ''; } })() || 'board') === 'summary' ? 'psummary' : 'pboard') : name === 'projects' && parts[1] === 'new' ? 'projnew' : name === 'sql' && parts[1] === 'ask' ? 'ask' : name === 'inventory' && parts[1] === 'suppliers' ? 'suppliers' : (NAVKEY[name] || name);
     Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (a) { a.classList.toggle('on', a.getAttribute('data-nav') === navOn); });
     $('#side').classList.remove('open');
     view.innerHTML = '<div class="empty">Loading…</div>';

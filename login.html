@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login · GKH Project Champ</title>
+<meta name="robots" content="noindex">
+<meta name="description" content="Sign in to GKH Project Champ.">
+<style>html,body{background:#0A0A0A;color:#EDEAE3;margin:0}body{visibility:hidden}</style>
+<script>setTimeout(function(){if(document.body)document.body.style.visibility='visible'},2500)</script>
+<link rel="stylesheet" href="assets/style.css?v=42">
+<link rel="stylesheet" href="assets/champ-site.css?v=1">
+<link rel="stylesheet" href="assets/champ-theme.css?v=1">
+<script src="assets/champ-theme.js?v=1"></script>
+<link rel="icon" href="assets/gkh-globe.webp" type="image/webp">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta property="og:title" content="Login · GKH Project Champ">
+<meta property="og:description" content="Sign in to GKH Project Champ.">
+</head>
+<body>
+<div class="topbar"><a href="contact.html">GKH Project Champ · AI-Powered Project Management · Book a demo</a></div>
+<header class="site" id="top">
+  <div class="nav">
+    <a class="brand champ" href="index.html"><img class="gkh-globe" src="assets/gkh-globe.webp" alt="" width="52" height="52"><span>Project Champ<small>by Global Knowledge House</small></span></a>
+    <nav class="menu" aria-label="Main">
+      <a href="index.html">Home</a>
+      <a href="features.html">Features</a>
+      <a href="agile.html">Agile &amp; Waterfall</a>
+      <a href="industries.html">Who it’s for</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <a class="nav-login" href="login.html" aria-label="Login"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Login</span></a>
+    <a class="btn btn-gold btn-sm" href="contact.html"><span>Book a demo</span></a>
+    <button class="burger" type="button" aria-label="Open menu" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+  </div>
+</header>
+<main>
+<section class="c-login">
+  <form class="c-login-card" id="loginForm" autocomplete="on">
+    <img class="logo gkh-globe" src="assets/gkh-globe.webp" alt="Global Knowledge House" width="104" height="104">
+    <h1>Project Champ</h1>
+    <p class="tag">GKH · AI-Powered Project Management</p>
+    <label>Username<input name="username" autocomplete="username" required autofocus></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <label id="loginProj" hidden>Project code <small style="font-weight:400;color:#8A857A">(contractors: the code you were given)</small><input name="project" autocomplete="off"></label>
+    <p class="msg" id="loginMsg" role="alert"></p>
+    <button class="btn btn-gold btn-block" type="submit"><span>Sign in</span></button>
+    <div id="gsiBox" hidden><p class="or">or</p><div class="gsi" id="gsiBtn"></div><p class="note">Google sign-in gives view-only access until an administrator upgrades it.</p></div>
+    <a class="back" href="index.html">← Back to Project Champ</a>
+  </form>
+</section>
+<script>
+(function () {
+  var API = '/.netlify/functions/admin', $ = function (s) { return document.querySelector(s); };
+  function api(action, data) {
+    return fetch(API, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify(Object.assign({ action: action }, data || {})) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ('Error ' + r.status)); return j; }); });
+  }
+  var go = function () { location.href = '/admin/#portfolio'; };
+  api('me').then(go).catch(function () {});   // already signed in: straight to the projects
+  $('#loginForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var f = e.target, msg = $('#loginMsg'), btn = f.querySelector('button'), pj = $('#loginProj');
+    msg.textContent = ''; btn.disabled = true; btn.firstChild.textContent = 'Signing in…';
+    api('login', { username: f.username.value, password: f.password.value, project: pj.hidden ? '' : f.project.value.trim() })
+      .then(function (j) {
+        if (j.needProject) { pj.hidden = false; f.project.required = true; msg.textContent = 'Contractor login: enter your project code.'; f.project.focus(); return; }
+        go();
+      })
+      .catch(function (err) { msg.textContent = err.message; f.password.value = ''; f.password.focus(); })
+      .then(function () { btn.disabled = false; btn.firstChild.textContent = 'Sign in'; });
+  });
+  api('loginOptions').then(function (o) {
+    if (!o.google) return;
+    var s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+    s.onload = function () {
+      google.accounts.id.initialize({ client_id: o.google, ux_mode: 'popup', callback: function (r) {
+        var msg = $('#loginMsg'); msg.textContent = 'Signing in with Google…';
+        api('loginGoogle', { credential: r.credential }).then(go).catch(function (e) { msg.textContent = e.message; });
+      } });
+      google.accounts.id.renderButton($('#gsiBtn'), { theme: 'filled_black', size: 'large', text: 'signin_with', shape: 'pill', width: 300 });
+      $('#gsiBox').hidden = false;
+    };
+    document.head.appendChild(s);
+  }).catch(function () {});
+})();
+</script>
+</main>
+<footer class="site">
+  <div class="fgrid">
+    <div><span class="brand champ"><img class="gkh-globe" src="assets/gkh-globe.webp" alt="" width="52" height="52"><span>Project Champ<small>by Global Knowledge House</small></span></span><p style="margin-top:12px">Plan, run and report every project in one place: Gantt and Kanban, budgets and risks, with AI that does the paperwork.</p></div>
+    <div><h4>Product</h4><a href="features.html">Features</a><a href="agile.html">Agile &amp; Waterfall</a><a href="industries.html">Who it’s for</a><a href="login.html">Login</a></div>
+    <div><h4>Company</h4><a href="contact.html">Contact &amp; demo</a><a href="privacy.html">Privacy</a><a href="https://www.gkhconsultancy.com" rel="noopener">gkhconsultancy.com</a></div>
+    <div><h4>Get in touch</h4><a href="mailto:ceo@gkhconsultancy.com">ceo@gkhconsultancy.com</a><a href="tel:+61493431202">+61 493 431 202</a><p>Sydney · Kuala Lumpur</p></div>
+  </div>
+  <div class="fbar"><span>© <span data-year>2026</span> Global Knowledge House</span><span>Photos: Unsplash</span><span class="fbar-credit">Designed by © Sashi Kumar Sivam · GKH AI Powered Business Intelligence © · ABN 38 107 769 345</span></div>
+</footer>
+<script src="assets/site.js?v=24"></script>
+</body>
+</html>
