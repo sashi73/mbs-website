@@ -1,9 +1,14 @@
-# Netlify settings for the MBS website
+# Netlify settings for GKH Project Champ (from the MBS website)
 [build]
   publish = "."
   # Does nothing on the live site. On the test site (SITE_ENV = test) it adds the TEST badge and blocks Google.
   command = "node tools/site-env.mjs"
   functions = "netlify/functions"
+
+# LLM_MAX_TOKENS is just a number (like 500): it is not a secret, and that number appears all over normal code,
+# so the secrets scanner must not treat it as one (it was blocking every deploy).
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "LLM_MAX_TOKENS,LLM_MODEL,LLM_BASE_URL,AZURE_SPEECH_REGION,VOICE_RATE"
 
 [functions]
   node_bundler = "esbuild"
