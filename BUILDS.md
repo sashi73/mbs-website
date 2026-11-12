@@ -38,4 +38,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 27 | 1.0.27| 2026-11-13 02:29| GKH-Project-Champ| `4b9cd89` | Champ welcome rebuilt: greeting, language by voice or tap, then a typed form (first and last name, phone with country code, email, reason fo |
 | 28 | 1.0.28| 2026-11-13 02:32| GKH-Project-Champ| `2431460` | Champ form: consent tick beside its text |
 | 29 | 1.0.29| 2026-11-13 08:32| GKH-Project-Champ| `e14508f` | Not remembering visitors for now (one switch, CHAMP_REMEMBER, to turn it on later): every new visit starts fresh in English with the greetin |
-| 30 | 1.0.30 | 2026-11-13 08:45 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 30 | 1.0.30| 2026-11-13 08:45| GKH-Project-Champ| `9620768` | Home: 'Ask Champ' section for project questions (answered first, then the welcome); Contact: enquiry form with the PDPA notice and consent,  |
+| 31 | 1.0.31 | 2026-11-13 08:46 | GKH-Project-Champ | _this commit_ | _see git log_ |
