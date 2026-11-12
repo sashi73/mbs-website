@@ -17,7 +17,7 @@
   var ORDER = COLS.map(function (c) { return c[0]; });
   var NAME = {}; COLS.forEach(function (c) { NAME[c[0]] = c[1]; });
   var store = function (k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } };
-  var P = { data: null, q: '', el: null, tab: store('champTab') || 'board', dragging: false };
+  var P = { data: null, q: '', prog: store('champProg') || '', el: null, tab: store('champTab') || 'board', dragging: false };
   var DAY = 864e5;
   var age = function (ms) { return ms ? Math.max(0, Math.floor((Date.now() - ms) / DAY)) : 0; };
   var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -50,6 +50,21 @@
   }
   M.champDelete = delProjects;
 
+  /* ---------------- programs (a group of related projects) ---------------- */
+  function progList() { return (P.data && P.data.programs) || []; }
+  function setProgram(c) {
+    M.modal('<h2>📁 Program for “' + esc(c.name) + '”</h2><p class="muted">A program groups related projects (for example “ERP rollout” or “Head office move”). Ask AI and the Summary can then report on the whole program. Leave it empty to take the project out of its program.</p>' +
+      '<form id="progForm"><label style="display:grid;gap:6px;font-weight:700">Program<input id="progIn" list="progDL" maxlength="80" value="' + esc(c.program || '') + '" placeholder="New or existing program"></label>' +
+      '<datalist id="progDL">' + progList().map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>' +
+      '<div class="actions" style="justify-content:flex-end;margin-top:14px"><button class="btn" type="button" data-close>Cancel</button><button class="btn btn-gold" type="submit">Save</button></div></form>');
+    var f = document.getElementById('progForm'), inp = document.getElementById('progIn'); setTimeout(function () { inp.focus(); inp.select(); }, 30);
+    f.onsubmit = function (e) {
+      e.preventDefault();
+      api('planProgramSet', { core: c.core, program: inp.value }).then(function (r) { M.closeModal(); toast(r.program ? c.name + ' is now in ' + r.program : c.name + ' taken out of its program'); load(); }).catch(fail);
+    };
+  }
+  M.champPrograms = function () { return api('planPipelineList', { today: today() }).then(function (d) { return d.programs || []; }).catch(function () { return []; }); };
+
   /* ---------------- board ---------------- */
   function flags(c) {
     var f = [], w = function (t, l) { f.push('<span class="pflag pf-' + l + '">' + esc(t) + '</span>'); };
@@ -70,6 +85,7 @@
       (c.finish ? '<div class="pc-fin">Finish ' + esc(pretty(c.finish)) + '</div>' : '') + '</div>' : '';
     return '<div class="pcard" data-core="' + esc(c.core) + '" tabindex="0" role="link" title="Open ' + esc(c.ref) + ' (drag it to another phase to move it)">' +
       '<div class="pc-top"><span class="ref">' + esc(c.ref) + '</span><span class="pc-age" title="Days since the project was created">' + (a ? a + 'd' : 'today') + '</span><button class="pc-move" type="button" data-move title="Move to another phase (or drag the card)" aria-label="Move">⇄</button></div>' +
+      (c.program ? '<div class="pc-prog" title="Program">📁 ' + esc(c.program) + '</div>' : '') +
       '<b class="pc-name">' + esc(c.name) + '</b><div class="pc-title">' + esc(c.client) + '</div>' +
       '<div class="pc-meta">' + [c.site ? esc(c.site) : '', c.BAC ? '<b>' + money(c.BAC) + '</b> <small>budget</small>' : ''].filter(Boolean).join(' · ') + '</div>' +
       planBit + '<div class="pc-flags">' + flags(c) + '</div>' +
@@ -88,6 +104,7 @@
     m.className = 'pmenu';
     m.innerHTML = '<b>Move to…</b>' + COLS.filter(function (x) { return x[0] !== c.phase; }).map(function (x) { return '<button type="button" data-to="' + x[0] + '" style="--pc:' + x[2] + '"><i></i>' + esc(x[1]) + '</button>'; }).join('') +
       (c.pinned ? '<button type="button" data-to="auto" style="--pc:#C9A227"><i></i>Automatic (' + esc(NAME[c.auto]) + ')</button>' : '') +
+      (M.allowed('projects', 'edit') && !(M.me && M.me.scope) ? '<button type="button" data-prog style="--pc:#64748B"><i></i>📁 ' + (c.program ? 'Program: ' + esc(c.program) + '…' : 'Put in a program…') + '</button>' : '') +
       (M.allowed('projects', 'edit') && !(M.me && M.me.scope) ? '<hr style="border:0;border-top:1px solid var(--line);margin:4px 0"><button type="button" data-del style="--pc:#DC2626;color:#B91C1C"><i></i>🗑 Delete project…</button>' : '');
     document.body.appendChild(m);
     m.style.top = Math.min(innerHeight - m.offsetHeight - 8, rc.bottom + 4) + 'px'; m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, rc.right - m.offsetWidth)) + 'px';
@@ -95,6 +112,7 @@
     var out = function (e) { if (!m.contains(e.target)) close(); };
     setTimeout(function () { document.addEventListener('pointerdown', out, true); }, 0);
     m.querySelectorAll('[data-to]').forEach(function (b) { b.onclick = function () { close(); moveTo(c, b.getAttribute('data-to')); }; });
+    var pg = m.querySelector('[data-prog]'); if (pg) pg.onclick = function () { close(); setProgram(c); };
     var d = m.querySelector('[data-del]'); if (d) d.onclick = function () { close(); delProjects([c]).then(function (ok) { if (ok) load(); }); };
   }
   function bindDrag(host, byCore) {
@@ -129,7 +147,7 @@
   }
   function filtered() {
     var q = P.q.toLowerCase().trim();
-    return P.data.cards.filter(function (c) { return !q || (c.ref + ' ' + c.name + ' ' + c.client + ' ' + c.site).toLowerCase().indexOf(q) >= 0; });
+    return P.data.cards.filter(function (c) { return (!P.prog || (P.prog === '-' ? !c.program : c.program === P.prog)) && (!q || (c.ref + ' ' + c.name + ' ' + c.client + ' ' + c.site + ' ' + (c.program || '')).toLowerCase().indexOf(q) >= 0); });
   }
   function drawBoard(host) {
     var cards = filtered(), byCore = {};
@@ -181,13 +199,26 @@
         '<td class="hide-sm">' + esc(pretty(c.finish)) + '</td><td>' + (c.SPI == null ? '–' : '<b class="ev-' + evC(c.SPI) + '-t">' + c.SPI.toFixed(2) + '</b>') + '</td><td>' + (c.CPI == null ? '–' : '<b class="ev-' + evC(c.CPI) + '-t">' + c.CPI.toFixed(2) + '</b>') + '</td>' +
         '<td class="hide-sm">' + (c.BAC ? money(c.BAC) : '–') + '</td><td class="hide-sm">' + (c.late ? '<b style="color:#C2410C">' + c.late + '</b>' : '0') + '</td><td class="hide-sm">' + c.openRisks + (c.highRisks ? ' <b style="color:#C2410C">(' + c.highRisks + ' high)</b>' : '') + '</td></tr>';
     }).join('');
+    var progs = {}; cards.forEach(function (c) { var k = c.program || ''; (progs[k] = progs[k] || []).push(c); });
+    var progRows = Object.keys(progs).filter(function (k) { return k; }).sort().map(function (k) {
+      var L = progs[k], s2 = function (f) { return L.reduce(function (a, c) { return a + (c[f] || 0); }, 0); };
+      var pv = s2('PV'), ev = s2('EV'), ac = s2('AC'), sp = pv > 0 ? ev / pv : null, cp = ac > 0 ? ev / ac : null;
+      var red = L.filter(function (c) { return health(c) === 'red'; }).length;
+      return '<tr><td><b>📁 ' + esc(k) + '</b></td><td>' + L.length + '</td><td>' + money(s2('BAC')) + '</td><td class="hide-sm">' + money(ev) + '</td><td class="hide-sm">' + money(ac) + '</td>' +
+        '<td>' + (sp == null ? '–' : '<b class="ev-' + evC(sp) + '-t">' + sp.toFixed(2) + '</b>') + '</td><td>' + (cp == null ? '–' : '<b class="ev-' + evC(cp) + '-t">' + cp.toFixed(2) + '</b>') + '</td>' +
+        '<td>' + s2('late') + '</td><td>' + (red ? '<b style="color:#B91C1C">' + red + '</b>' : '0') + '</td></tr>';
+    }).join('');
+    var progCard = '<div class="card"><div class="card-h"><h2>By program</h2><span class="sp"></span><a class="btn btn-sm" href="#sql/ask">✨ Ask AI about a program</a></div>' + (progRows ?
+      '<div class="table-wrap"><table><thead><tr><th>Program</th><th>Projects</th><th>Budget</th><th class="hide-sm">Earned</th><th class="hide-sm">Spent</th><th>SPI</th><th>CPI</th><th>Late tasks</th><th>At risk</th></tr></thead><tbody>' + progRows + '</tbody></table></div>' +
+      (progs[''] ? '<p class="muted cs-note">' + progs[''].length + ' project' + (progs[''].length === 1 ? '' : 's') + ' not in a program.</p>' : '')
+      : '<p class="muted">No programs yet. Group related projects into a program with ⇄ → “Put in a program…” on the Pipeline board, or when you make a new project.</p>') + '</div>';
     host.innerHTML = '<div class="cs-tiles">' + tiles + '</div>' +
       '<div class="cs-grid"><div class="card"><div class="card-h"><h2>Projects by PMBOK phase</h2></div>' + funnel +
       '<p class="muted cs-note">Initiation: no plan yet · Planning: planned, not started · Execution: under way · Monitoring &amp; Evaluation: 80%+ done · Closing: all done. Move a card on the Pipeline board to change it by hand.</p></div>' +
       '<div class="card"><div class="card-h"><h2>Health</h2></div><div class="cs-health">' +
       ['green', 'amber', 'red', 'grey'].map(function (k) { return '<div><span class="cs-rag cs-' + k + '"></span><b>' + H[k] + '</b><small>' + HN[k] + '</small></div>'; }).join('') +
       '</div><div class="cs-stack">' + ['green', 'amber', 'red', 'grey'].map(function (k) { return H[k] ? '<span class="cs-' + k + '" style="flex:' + H[k] + '" title="' + HN[k] + ': ' + H[k] + '"></span>' : ''; }).join('') + '</div></div></div>' +
-      '<div class="card"><div class="card-h"><h2>Every project, worst first</h2>' + (canDel && n ? '<span class="sp"></span><button class="btn btn-sm btn-danger" id="csDel" disabled>🗑 Delete selected</button>' : '') + '</div>' + (n ? '<div class="table-wrap"><table><thead><tr>' + (canDel ? '<th class="cs-pick"><input type="checkbox" id="csAll" aria-label="Select all"></th>' : '') + '<th></th><th>Project</th><th>Phase</th><th>Progress</th><th class="hide-sm">Finish</th><th>SPI</th><th>CPI</th><th class="hide-sm">Budget</th><th class="hide-sm">Late</th><th class="hide-sm">Risks</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No projects yet. <a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div>') + '</div>';
+      progCard + '<div class="card"><div class="card-h"><h2>Every project, worst first</h2>' + (canDel && n ? '<span class="sp"></span><button class="btn btn-sm btn-danger" id="csDel" disabled>🗑 Delete selected</button>' : '') + '</div>' + (n ? '<div class="table-wrap"><table><thead><tr>' + (canDel ? '<th class="cs-pick"><input type="checkbox" id="csAll" aria-label="Select all"></th>' : '') + '<th></th><th>Project</th><th>Phase</th><th>Progress</th><th class="hide-sm">Finish</th><th>SPI</th><th>CPI</th><th class="hide-sm">Budget</th><th class="hide-sm">Late</th><th class="hide-sm">Risks</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No projects yet. <a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div>') + '</div>';
     host.querySelectorAll('[data-plan]').forEach(function (tr) { tr.onclick = function (e) { if (e.target.closest('.cs-pick')) return; location.hash = '#plan/' + tr.getAttribute('data-plan'); }; });
     var picks = function () { return [].slice.call(host.querySelectorAll('[data-pick]:checked')).map(function (x) { return cards.filter(function (c) { return c.core === x.getAttribute('data-pick'); })[0]; }); };
     var syncDel = function () { var b = host.querySelector('#csDel'), n2 = picks().length; if (b) { b.disabled = !n2; b.textContent = n2 ? '🗑 Delete ' + n2 + ' selected' : '🗑 Delete selected'; } };
@@ -204,6 +235,10 @@
     P.el.querySelector('#pbSum').innerHTML = '<b>' + cards.length + '</b> project' + (cards.length === 1 ? '' : 's') + ' · <b>' + money(b) + '</b> total budget';
     P.el.querySelector('#pbAt').textContent = 'Updated ' + new Date(P.data.at).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' });
     P.el.querySelectorAll('[data-tab]').forEach(function (t) { t.classList.toggle('on', t.getAttribute('data-tab') === P.tab); });
+    var ps = P.el.querySelector('#pbProg'), pl = progList();
+    if (P.prog && P.prog !== '-' && pl.indexOf(P.prog) < 0) { P.prog = ''; store('champProg', ''); }
+    ps.innerHTML = '<option value="">📁 All programs</option>' + pl.map(function (x) { return '<option value="' + esc(x) + '"' + (x === P.prog ? ' selected' : '') + '>📁 ' + esc(x) + '</option>'; }).join('') + (pl.length ? '<option value="-"' + (P.prog === '-' ? ' selected' : '') + '>Not in a program</option>' : '');
+    ps.hidden = !pl.length;
     if (P.tab === 'summary') drawSummary(host); else drawBoard(host);
   }
   function load() {
@@ -220,10 +255,11 @@
     el.innerHTML = '<div class="cs-head"><div class="cs-tabs"><a href="#portfolio/summary" data-tab="summary" class="btn btn-sm">📊 Summary</a><a href="#portfolio/board" data-tab="board" class="btn btn-sm">▦ Pipeline board</a></div>' +
       '<span class="muted cs-tagline">Every project, from initiation to closing (PMBOK life cycle)</span></div>' +
       '<div class="pbtool"><input id="pbQ" type="search" placeholder="Find a project, client or location…" value="' + esc(P.q) + '">' +
-      '<span id="pbSum" class="muted" style="font-size:13px"></span><span class="sp"></span><small class="muted" id="pbAt"></small>' +
+      '<select id="pbProg" aria-label="Program" style="width:auto"></select><span id="pbSum" class="muted" style="font-size:13px"></span><span class="sp"></span><small class="muted" id="pbAt"></small>' +
       '<button class="btn btn-sm" id="pbRefresh">↻ Refresh</button><a class="btn btn-sm" href="#projects/new">＋ New project</a><button class="btn btn-sm btn-gold" id="pbFull">⛶ Full screen</button></div>' +
       '<div id="csBody"><div class="empty">Loading…</div></div>';
     el.querySelector('#pbQ').oninput = function () { P.q = this.value; draw(); };
+    el.querySelector('#pbProg').onchange = function () { P.prog = this.value; store('champProg', P.prog); draw(); };
     el.querySelector('#pbRefresh').onclick = load;
     el.querySelector('#pbFull').onclick = function () { setFull(!document.body.classList.contains('board-full')); };
     return load();

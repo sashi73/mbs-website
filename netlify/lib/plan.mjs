@@ -732,6 +732,37 @@ export async function fitPlanAi({ core, finishBy }, by) {
     risks, critical: [...crit].map((id) => num[id]).filter(Boolean), weekend, rev: p0.rev || 0, tokens: used, today: todayUse };
 }
 
+// GKH Project Champ: every project with its PMBOK phase, health numbers and program (board, Summary and Ask AI).
+// Initiation: no plan yet. Planning: a plan, no work done and not started. Execution: work under way (under 80%).
+// Monitoring & Evaluation: 80% or more done (testing, acceptance, evaluation). Closing: every task done, or the project is completed.
+// Moving a card on the board pins its phase (kept in "champ-phases").
+export const PHASES = { init: 'Initiation', plan: 'Planning', exec: 'Execution', monitor: 'Monitoring & Evaluation', close: 'Closing' };
+export function healthOf(c) {
+  if (!c.hasPlan) return 'grey';
+  if ((c.SPI != null && c.SPI < 0.9) || (c.CPI != null && c.CPI < 0.9) || c.late >= 3 || c.highRisks >= 3) return 'red';
+  if ((c.SPI != null && c.SPI < 1) || (c.CPI != null && c.CPI < 1) || c.late > 0 || c.highRisks > 0) return 'amber';
+  return 'green';
+}
+export async function portfolio(day, only = null) {
+  const [jobList, plans, pins] = await Promise.all([J.all(), list(), kv.get('champ-phases').catch(() => null)]);
+  const jobs = Object.fromEntries(jobList.map((j) => [j.core, j])), pin = (pins && pins.map) || {};
+  const auto = (r, j) => { if (!r) return 'init'; if (j && ['completed', 'invoiced', 'paid'].includes(j.stage)) return 'close';
+    if (r.total && r.done >= r.total) return 'close'; if (r.pct >= 80) return 'monitor'; if (r.pct > 0 || r.done > 0 || (r.start && r.start < day && r.total)) return 'exec'; return 'plan'; };
+  const cards = [], seen = new Set();
+  for (const p of plans) {
+    if (only && !only.includes(p.core)) continue;
+    const j = jobs[p.core]; if (j && j.stage === 'lost') continue;
+    const r = rollup(p, day), a = auto(r, j); seen.add(p.core);
+    cards.push({ core: p.core, ref: j ? J.refFor(j) : p.core, name: p.name || (j ? jobTitle(j) : p.core), client: j ? j.name : '', site: j ? j.suburb || '' : '', program: (j && j.program) || '',
+      since: (j && j.created) || 0, updated: p.updated || 0, hasPlan: true, auto: a, phase: pin[p.core] || a, pinned: !!pin[p.core], ...r });
+  }
+  if (!only) for (const j of jobList) {
+    if (seen.has(j.core) || j.stage === 'lost' || !(j.source === 'Project Champ' || J.OPEN.includes(j.stage))) continue;
+    cards.push({ core: j.core, ref: J.refFor(j), name: jobTitle(j), client: j.name || '', site: j.suburb || '', program: j.program || '', since: j.created || 0, updated: j.updated || 0, hasPlan: false, auto: 'init', phase: pin[j.core] || 'init', pinned: !!pin[j.core],
+      pct: 0, done: 0, total: 0, late: 0, BAC: 0, AC: 0, EV: 0, PV: 0, SPI: null, CPI: null, start: '', finish: '', openRisks: 0, highRisks: 0, openIssues: 0 });
+  }
+  return cards;
+}
 export const MODS = ['bom', 'swms'], MODNAME = { bom: 'Bill of Materials', swms: 'SWMS' };
 // champ-opts: { off: { bom: { core: true }, swms: { … } } } (older builds kept bomOff: { core: true })
 export function modulesOf(opts, core) {
@@ -768,25 +799,16 @@ export async function planPost(action, body, { who, by, audit }) {
   // Moving a card on the board pins its phase (kept in "champ-phases"); "Automatic" un-pins it.
   if (action === 'planPipelineList') {
     const day = body.today || new Date().toISOString().slice(0, 10);
-    const [jobList, plans, pins] = await Promise.all([J.all(), list(), kv.get('champ-phases').catch(() => null)]);
-    const jobs = Object.fromEntries(jobList.map((j) => [j.core, j])), pin = (pins && pins.map) || {};
-    const only = Array.isArray(body.onlyCores) ? body.onlyCores : null;
-    const auto = (r, j) => { if (!r) return 'init'; if (j && ['completed', 'invoiced', 'paid'].includes(j.stage)) return 'close';
-      if (r.total && r.done >= r.total) return 'close'; if (r.pct >= 80) return 'monitor'; if (r.pct > 0 || r.done > 0 || (r.start && r.start < day && r.total)) return 'exec'; return 'plan'; };
-    const cards = [], seen = new Set();
-    for (const p of plans) {
-      if (only && !only.includes(p.core)) continue;
-      const j = jobs[p.core]; if (j && j.stage === 'lost') continue;
-      const r = rollup(p, day), a = auto(r, j); seen.add(p.core);
-      cards.push({ core: p.core, ref: j ? J.refFor(j) : p.core, name: p.name || (j ? jobTitle(j) : p.core), client: j ? j.name : '', site: j ? j.suburb || '' : '', since: (j && j.created) || 0, updated: p.updated || 0,
-        hasPlan: true, auto: a, phase: pin[p.core] || a, pinned: !!pin[p.core], ...r });
-    }
-    if (!only) for (const j of jobList) {
-      if (seen.has(j.core) || j.stage === 'lost' || !(j.source === 'Project Champ' || J.OPEN.includes(j.stage))) continue;
-      cards.push({ core: j.core, ref: J.refFor(j), name: jobTitle(j), client: j.name || '', site: j.suburb || '', since: j.created || 0, updated: j.updated || 0, hasPlan: false, auto: 'init', phase: pin[j.core] || 'init', pinned: !!pin[j.core],
-        pct: 0, done: 0, total: 0, late: 0, BAC: 0, AC: 0, EV: 0, PV: 0, SPI: null, CPI: null, start: '', finish: '', openRisks: 0, highRisks: 0, openIssues: 0 });
-    }
-    return out(200, { cards, today: day, at: Date.now() });
+    const cards = await portfolio(day, Array.isArray(body.onlyCores) ? body.onlyCores : null);
+    const programs = [...new Set(cards.map((c) => c.program).filter(Boolean))].sort();
+    return out(200, { cards, programs, today: day, at: Date.now() });
+  }
+  if (action === 'planProgramSet') {   // put a project in a program, or take it out ('')
+    const program = str(body.program, 80).trim();
+    if (!core || !(await J.find(core))) return out(404, { error: 'Project not found' });
+    await J.setProgram(core, program);
+    if (audit) await audit(who, `Project ${core}: ${program ? 'program set to ' + program : 'taken out of its program'}`);
+    return out(200, { ok: true, program });
   }
   if (action === 'planPhaseSet') {
     const PH = ['init', 'plan', 'exec', 'monitor', 'close'], ph = String(body.phase || '');

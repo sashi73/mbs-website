@@ -63,6 +63,9 @@
 
   /* ---------- templates ---------- */
   var T = [
+    { g: 'Portfolio', n: 'Portfolio health', d: 'Every project with its phase, health, progress, SPI and CPI', sql: "SELECT project_ref, project_name, program, phase, health, pct_complete, spi, cpi, budget, finish\nFROM projects\nORDER BY health, finish" },
+    { g: 'Portfolio', n: 'Programs at a glance', d: 'Projects, budget and earned value per program', sql: "SELECT program, COUNT(*) AS projects_count, SUM(budget) AS budget_total, SUM(earned_value) AS earned_total, SUM(actual_cost) AS spent_total, SUM(late_tasks) AS late_total\nFROM projects\nWHERE program <> ''\nGROUP BY program\nORDER BY budget_total DESC" },
+    { g: 'Portfolio', n: 'Projects by PMBOK phase', d: 'How many projects are in each phase', sql: "SELECT phase, COUNT(*) AS projects_count, SUM(budget) AS budget_total\nFROM projects\nGROUP BY phase" },
     { g: 'Projects', n: 'Tasks due this period', d: 'Plan tasks finishing in the chosen period', sql: "SELECT job, task, resource, finish, pct_complete\nFROM plan_tasks\nWHERE finish BETWEEN '{FROM}' AND '{TO}' AND done = false\nORDER BY finish", c: null, p: true },
     { g: 'Projects', n: 'Late tasks', d: 'Past their finish date and not complete', sql: "SELECT job, task, resource, finish, pct_complete\nFROM plan_tasks\nWHERE late = true\nORDER BY finish", c: null },
     { g: 'Projects', n: 'Planned vs actual cost by job', d: 'Budget against money spent', sql: "SELECT job, SUM(planned_cost) AS planned, SUM(actual_cost) AS actual\nFROM plan_tasks\nGROUP BY job\nORDER BY planned DESC", c: ['bar', 'job', ['planned', 'actual']] },
@@ -128,7 +131,7 @@
 
   /* ---------- page ---------- */
   function page() {
-    V().innerHTML = '<div class="empty">Loading the SQL wizard…</div>';
+    V().innerHTML = '<div class="empty">Loading your project data…</div>';
     return loadLibs().then(function () { return loadData(); }).then(draw);
   }
   function draw() {
@@ -171,7 +174,9 @@
   function panel() {
     var P = $('#sqlPanel');
     if (S.tab === 'templates') {
-      var groups = {}; T.forEach(function (t, i) { (groups[t.g] = groups[t.g] || []).push([t, i]); });
+      // GKH Project Champ: only templates whose tables exist here (the MBS money and customer tables don't)
+      var have = function (t) { var used = (t.sql.match(/\b(?:FROM|JOIN)\s+([a-z_]+)/gi) || []).map(function (x) { return x.split(/\s+/).pop().toLowerCase(); }); return used.every(function (u) { return !!SCHEMA[u]; }); };
+      var groups = {}; T.forEach(function (t, i) { if (have(t)) (groups[t.g] = groups[t.g] || []).push([t, i]); });
       var pr = period();
       P.innerHTML = '<h2>Common reports</h2><p class="muted" style="margin:-6px 0 12px">One click runs it. You can then change it in the editor.</p>' +
         '<div class="period"><b>Period for quick numbers:</b><div class="tabs" style="margin:0">' + [['today', 'Today'], ['week', 'This week'], ['month', 'This month'], ['lastmonth', 'Last month'], ['year', 'This year'], ['fy', 'Financial year'], ['all', 'All time'], ['custom', 'Date range']].map(function (x) {
@@ -202,8 +207,8 @@
 
 
   /* ---------- ✨ AI query: ask in plain English ---------- */
-  var EXAMPLES = ['How many new jobs did I get this month?', 'What is the completion status of each project?', 'Which tasks are late, and who is the lead?', 'How much money is owed to me, and by which invoices?',
-    'Which quotes sent in the last 30 days are still waiting?', 'Jobs won this financial year by trade', 'Top 5 suburbs for enquiries this year', 'Spending by category last month'];
+  var EXAMPLES = ['How healthy is my portfolio?', 'Which projects are at risk, and why?', 'Status of each program: budget, SPI and CPI', 'Which projects are in each PMBOK phase?',
+    'Which tasks are late, and who is the lead?', 'Projects over budget (CPI under 1)', 'High risks across all projects and their owners', 'Projects finishing in the next 60 days'];
   // v49: licence / insurance states stand out (expired in red, due soon in amber, missing in grey)
   function flagCell(c, v) {
     if (/(_state|^compliance)$/.test(c) && typeof v === 'string') { var k = { expired: ['⚠ EXPIRED', 'bad'], due: ['due soon', 'due'], missing: ['missing', 'miss'], ok: ['✓ ok', 'ok'] }[v]; if (k) return '<span class="sq-st sq-' + k[1] + '">' + k[0] + '</span>'; }
@@ -219,12 +224,13 @@
       row_counts: counts, stages: q('SELECT DISTINCT stage AS v FROM jobs', 'v'), quote_status: q('SELECT DISTINCT status AS v FROM quotes', 'v'), invoice_status: q('SELECT DISTINCT status AS v FROM invoices', 'v'),
       expense_categories: q('SELECT DISTINCT category AS v FROM expenses', 'v'), trades: q('SELECT DISTINCT trade AS v FROM jobs', 'v'), sub_trades: q('SELECT DISTINCT trade AS v FROM subcontractors', 'v'), sources: q('SELECT DISTINCT source AS v FROM jobs', 'v'),
       suburbs: q('SELECT suburb AS v, COUNT(*) AS n FROM jobs GROUP BY suburb ORDER BY n DESC LIMIT 40', 'v'), services: q('SELECT service AS v, COUNT(*) AS n FROM jobs GROUP BY service ORDER BY n DESC LIMIT 30', 'v'),
+      programs: q('SELECT DISTINCT program AS v FROM projects', 'v'), phases: ['Initiation', 'Planning', 'Execution', 'Monitoring & Evaluation', 'Closing'], health: ['On track', 'Watch', 'At risk', 'Not planned'],
       plans: plans.slice(0, 40), plan_status: q('SELECT DISTINCT status AS v FROM plan_tasks', 'v'), risk_status: q('SELECT DISTINCT status AS v FROM plan_risks', 'v'), issue_status: q('SELECT DISTINCT status AS v FROM plan_issues', 'v')
     };
   }
   function askPanel(P) {
     P.innerHTML = '<div class="card-h"><h2>✨ AI query</h2><span class="muted" style="font-size:12.5px">Ask in plain English. The AI writes the query; it runs here on your own data.</span></div>' +
-      '<form class="askbar" id="askForm"><input id="askQ" autocomplete="off" maxlength="400" placeholder="e.g. How many new jobs did I get this month?" aria-label="Your question"><button class="btn btn-gold" id="askGo" type="submit">Ask</button></form>' +
+      '<form class="askbar" id="askForm"><input id="askQ" autocomplete="off" maxlength="400" placeholder="e.g. Which projects in the ERP program are behind schedule?" aria-label="Your question"><button class="btn btn-gold" id="askGo" type="submit">Ask</button></form>' +
       '<div class="ask-ex">' + EXAMPLES.map(function (e) { return '<button type="button" class="chipq" data-ex="' + esc(e) + '">' + esc(e) + '</button>'; }).join('') + '</div>' +
       '<div id="askOut"></div><div class="muted" id="askUse" style="font-size:12px;margin-top:8px"></div>' +
       (S.askLog.length ? '<details class="ask-log"><summary>Earlier questions (' + S.askLog.length + ')</summary>' + S.askLog.slice().reverse().map(function (a, i) { return '<button type="button" class="ask-old" data-old="' + (S.askLog.length - 1 - i) + '"><b>' + esc(a.q) + '</b><small>' + esc(a.answer || '') + '</small></button>'; }).join('') + '</details>' : '') +
@@ -561,7 +567,7 @@
     };
   }
 
-  M.addView('sql', 'SQL wizard', function (args) { if (args && ['ask', 'templates', 'wizard', 'editor', 'saved'].indexOf(args[0]) >= 0) S.tab = args[0]; return page(); });
+  M.addView('sql', 'Ask AI & reports', function (args) { if (args && ['ask', 'templates', 'wizard', 'editor', 'saved'].indexOf(args[0]) >= 0) S.tab = args[0]; return page(); });
   window.MBS.sqlState = S;   // for tests
   // other pages (e.g. Customers) can send a question straight to the AI query
   M.askAI = function (q) { S.pendingQ = String(q || ''); S.tab = 'ask'; if (location.hash === '#sql/ask') page(); else location.hash = '#sql/ask'; };

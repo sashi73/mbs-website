@@ -290,7 +290,7 @@ async function handle(req, context) {
         if (!pname || !client) return bad('A project name and a client are needed');
         const core = await J.nextCore('P');
         await J.create({ core, name: client, phone: clean(body.phone, 40), email: clean(body.email, 160), suburb: clean(body.site, 80), service: pname,
-          summary: clean(body.summary, 1500), source: 'Project Champ' }, by);
+          summary: clean(body.summary, 1500), program: clean(body.program, 80), source: 'Project Champ' }, by);
         const r = await J.setStage(core, 'won', by, {});
         const job = (r && r.job) || (await J.find(core));
         if (body.bom === false) await setModule(core, 'bom', false);     // optional modules chosen on the form

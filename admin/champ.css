@@ -78,3 +78,4 @@
 .mod-row .bom-switch{border:0;padding:0;background:none}
 .champ-mods{border:1px solid var(--line);border-radius:12px;padding:10px 14px 12px;display:grid;gap:10px;margin:0}
 .champ-mods legend{font-weight:800;padding:0 6px}
+.pc-prog{font-size:11px;font-weight:800;color:#475569;background:#EEF2F7;border-radius:6px;padding:2px 7px;align-self:flex-start;margin-bottom:2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

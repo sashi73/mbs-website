@@ -395,6 +395,7 @@
       '<form id="champNew" class="champ-form">' +
       '<label>Project name<input name="name" required maxlength="120" placeholder="e.g. Head office fit-out, ERP rollout, Bridge deck repair"></label>' +
       '<label>Client or sponsor<input name="client" required maxlength="120" placeholder="e.g. Acme Pty Ltd or Internal: Finance"></label>' +
+      '<label>Program <small class="muted">(optional: groups related projects, e.g. “ERP rollout”)</small><input name="program" list="champProgDL" maxlength="80" placeholder="New or existing program"><datalist id="champProgDL"></datalist></label>' +
       '<div class="champ-2"><label>Site or location <small class="muted">(optional)</small><input name="site" maxlength="80" placeholder="e.g. Parramatta NSW"></label>' +
       '<label>Contact phone <small class="muted">(optional)</small><input name="phone" maxlength="40"></label></div>' +
       '<label>Contact email <small class="muted">(optional)</small><input name="email" type="email" maxlength="160"></label>' +
@@ -403,9 +404,10 @@
       '<label class="mod-row"><span><b>🧱 Bill of Materials (BOM)</b><small>For projects with materials to buy (construction, fit-outs, installs)</small></span><span class="bom-switch"><input type="checkbox" name="bom" checked><span class="bom-slider"></span></span></label>' +
       '<label class="mod-row"><span><b>🦺 SWMS</b><small>Safe Work Method Statements for high-risk construction work</small></span><span class="bom-switch"><input type="checkbox" name="swms" checked><span class="bom-slider"></span></span></label></fieldset>' +
       '<div class="actions"><button class="btn btn-gold" type="submit">Create project and plan it →</button></div></form></div>';
+    if (M.champPrograms) M.champPrograms().then(function (L) { var dl = document.getElementById('champProgDL'); if (dl) dl.innerHTML = L.map(function (x) { return '<option value="' + esc(x) + '">'; }).join(''); });
     $('#champNew').onsubmit = function (e) {
       e.preventDefault(); var f = e.target, b = f.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Creating…';
-      api('planNewProject', { name: f.name.value, client: f.client.value, site: f.site.value, phone: f.phone.value, email: f.email.value, summary: f.summary.value, bom: f.bom.checked, swms: f.swms.checked })
+      api('planNewProject', { name: f.name.value, client: f.client.value, site: f.site.value, phone: f.phone.value, email: f.email.value, summary: f.summary.value, program: f.program.value, bom: f.bom.checked, swms: f.swms.checked })
         .then(function (r) { toast('Project ' + r.ref + ' created'); location.hash = '#plan/' + r.core; })
         .catch(function (err) { fail(err); b.disabled = false; b.textContent = 'Create project and plan it →'; });
     };

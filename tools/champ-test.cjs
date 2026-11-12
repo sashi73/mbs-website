@@ -22,6 +22,11 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   // a fake DeepSeek: says back which language and page the assistant was told to use
   const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
     const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
+    if (j.response_format && !/strings/.test(j.messages[1].content)) {   // Ask AI: question -> SQL, or rows -> report
+      global.ASK_SYS = sys; global.ASK_USER = j.messages[1].content;
+      const o = /PMO analyst/.test(sys) ? { title: 'Portfolio by program', summary: 'Two programs.', insights: ['ERP has 1 project'], recommendations: ['Review risks'] }
+        : { sql: "SELECT program, COUNT(*) AS projects_count, SUM(budget) AS budget_total FROM projects GROUP BY program", title: 'Projects by program', note: '' };
+      s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }], usage: { prompt_tokens: 10, completion_tokens: 10 } })); }
     if (j.response_format) { const inp = JSON.parse(j.messages[1].content).strings; global.I18N_CALLS = (global.I18N_CALLS || 0) + 1;
       const code = (/into ([^.]+)\./.exec(sys) || [])[1] || '?';
       s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ t: inp.map((x) => '[' + code.slice(0, 5) + '] ' + x) }) } }] })); }
@@ -146,7 +151,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.waitForSelector('#app:not([hidden])', { timeout: 10000 }).catch(() => {});
   await sleep(800);
   const menu = await p.$$eval('.side-nav a:not([hidden])', (as) => as.map((a) => a.textContent.trim()));
-  ok('Console', 'menu shows only the project element (+ admin)', JSON.stringify(menu) === JSON.stringify(['📊Summary', '▦Pipeline board', '📅All projects', '＋New project', '🔐Users & access', '🕘Activity log']), menu.join(' | '));
+  ok('Console', 'menu shows only the project element (+ admin)', JSON.stringify(menu) === JSON.stringify(['📊Summary', '▦Pipeline board', '📅All projects', '＋New project', '✨Ask AI', '📈Reports & data', '🔐Users & access', '🕘Activity log']), menu.join(' | '));
   ok('Console', 'branded GKH Project Champ', (await p.textContent('.gkh-bar')).includes('GKH Project Champ') && (await p.title()).includes('Project Champ'));
   await p.waitForSelector('.pcol', { timeout: 8000 }).catch(() => {});
   ok('Portfolio', 'pipeline board has the 5 PMBOK phases', JSON.stringify(await p.$$eval('.pcol .pcol-h b', (b) => b.map((x) => x.textContent))) === JSON.stringify(['Initiation', 'Planning', 'Execution', 'Monitoring & Evaluation', 'Closing']));
@@ -237,20 +242,40 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Modules', 'New project form: BOM and SWMS switched off at creation', ch.bom === false && ch.swms === false, JSON.stringify(ch));
   await api('planProjectDelete', { core: itCore });
 
-  // ---- Champ chat (console) ----
+  // ---- console: no chat bubble (AI is built in), Ask AI about programs ----
   await p.goto(`${BASE}/admin/#portfolio`); await sleep(800);
-  ok('Chat', 'Ask Champ is in the console too', await p.isVisible('#champChatBtn'));
+  ok('Chat', 'no chat bubble in the dashboard', !(await p.$('#champChatBtn')));
   ok('Theme', 'light/dark slider in the console top bar', await p.isVisible('.top #champQuick'));
-  await p.evaluate(() => window.ChampChat.ask('How do I baseline?')); await sleep(1500);
-  ok('Chat', 'console chat answers with console help', (await p.textContent('.cc-log')).includes('where=console'));
-  await p.click('.cc-x');
+  r = await api('planProgramSet', { core, program: 'Head office move' });
+  ok('Program', 'a project can be put in a program', r.ok());
+  r = await api('planPipelineList', { today: new Date().toISOString().slice(0, 10) }); const pl2 = await r.json();
+  ok('Program', 'programs are listed for the portfolio', (pl2.programs || []).includes('Head office move') && pl2.cards.find((c) => c.core === core).program === 'Head office move');
+  await p.goto(`${BASE}/admin/#portfolio/summary`); await p.reload(); await p.waitForSelector('.cs-tiles', { timeout: 8000 }).catch(() => {});
+  ok('Program', 'Summary has a By program table', (await p.textContent('#view')).includes('By program') && (await p.textContent('#view')).includes('📁 Head office move'));
+  await p.selectOption('#pbProg', 'Head office move'); await sleep(300);
+  ok('Program', 'filter the portfolio by program', (await p.textContent('#pbSum')).startsWith('1 project'), await p.textContent('#pbSum'));
+  await p.selectOption('#pbProg', ''); 
+  r = await api('sqlData');
+  const sd = r.ok() ? await r.json() : { data: {} };
+  const prow = (sd.data.projects || []).find((x) => x.job === core) || {};
+  ok('Ask AI', 'Ask AI has a projects table with program, phase, health, SPI/CPI', prow.program === 'Head office move' && !!prow.phase && !!prow.health && 'spi' in prow && prow.project_id === core, JSON.stringify(prow).slice(0, 200));
+  r = await api('sqlAsk', { question: 'Status of each program: budget, SPI and CPI', hints: {} });
+  const ask = r.ok() ? await r.json() : {};
+  ok('Ask AI', 'question becomes a query over the projects table', /FROM projects/i.test(ask.sql || ''), JSON.stringify(ask).slice(0, 200));
+  ok('Ask AI', 'AI is told it serves project, program and portfolio managers', /project, program or portfolio manager/.test(global.ASK_SYS || '') && !/building company/.test(global.ASK_SYS || ''));
+  await p.goto(`${BASE}/admin/#sql/ask`); await p.reload(); await p.waitForSelector('#askQ', { timeout: 15000 }).catch(() => {});
+  ok('Ask AI', 'Ask AI page opens with portfolio examples', (await p.textContent('#view')).includes('How healthy is my portfolio?'));
+  ok('Ask AI', 'only project tables offered (no MBS quotes/invoices)', !Object.keys(sd.schema || {}).some((t) => /^(quotes|invoices|customers|payments|expenses)$/.test(t)) && 'projects' in (sd.schema || {}));
+  await p.goto(`${BASE}/admin/#sql/templates`); await sleep(1500);
+  const tv = await p.textContent('#view');
+  ok('Ask AI', 'templates show portfolio reports, not MBS money ones', tv.includes('Portfolio health') && tv.includes('Programs at a glance') && !/Money owed|Quotes waiting/i.test(tv));
 
   // ---- console language: labels translated, project data untouched ----
   await p.goto(`${BASE}/admin/#portfolio/summary`); await p.reload(); await p.waitForSelector('.cs-tiles', { timeout: 8000 }).catch(() => {});
   await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=ms]');
   await p.waitForFunction(() => /\[Bahas/.test(document.querySelector('.side-nav').textContent), null, { timeout: 8000 }).catch(() => {});
   ok('Language', 'console menu translated', /\[Bahas/.test(await p.textContent('.side-nav')));
-  const dataCell = await p.textContent('#view table tbody tr td:nth-child(3)').catch(() => '');
+  const dataCell = await p.$$eval('#view table', (ts) => { const t = ts[ts.length - 1]; const c = t && t.querySelector('tbody tr td:nth-child(3)'); return c ? c.textContent : ''; }).catch(() => '');
   ok('Language', 'project names (data) are not translated', dataCell.includes('Head office fit-out') && !dataCell.includes('[Bahas'), dataCell);
   await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=en]'); await sleep(300);
   await p.evaluate(() => { localStorage.removeItem('champChatLang'); localStorage.removeItem('champLang'); });

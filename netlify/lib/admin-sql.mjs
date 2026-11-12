@@ -31,6 +31,7 @@ const cnt = () => { const m = {}; return (k) => (m[k] = (m[k] || 0) + 1); };
 export const KEYS = {
   customers: { pk: 'customer_id', cols: { customer_id: (r) => r.id } },
   jobs: { pk: 'job_id', cols: { job_id: (r) => r.core, customer_id: (r) => r.customer }, fk: { customer_id: 'customers' } },
+  projects: { pk: 'project_id', cols: { project_id: (r) => r.job, job_id: (r) => r.job }, fk: { job_id: 'jobs' } },
   quotes: { pk: 'quote_id', cols: { quote_id: (r) => r.id, job_id: (r) => r.job, customer_id: (r, x) => x.custOfJob[r.job] || '' }, fk: { job_id: 'jobs', customer_id: 'customers', invoice_id: 'invoices' } },
   invoices: { pk: 'invoice_id', cols: { invoice_id: (r) => r.id, job_id: (r) => r.job, customer_id: (r, x) => x.custOfJob[r.job] || '', quote_id: (r) => r.from_quote || '' }, fk: { job_id: 'jobs', customer_id: 'customers', quote_id: 'quotes' } },
   items: { pk: 'line_id', cols: { line_id: (r) => r.doc_id + '/' + r.line, quote_id: (r) => (/^q/i.test(r.doc_type) ? r.doc_id : ''), invoice_id: (r) => (/^i/i.test(r.doc_type) ? r.doc_id : '') }, fk: { quote_id: 'quotes', invoice_id: 'invoices' } },
@@ -66,7 +67,9 @@ function withKeys(all, ctx) {
 export const SCHEMA = {
   customers: ['id', 'name', 'phone', 'email', 'suburb', 'enquiries', 'confirmed_jobs', 'lost_jobs', 'open_quotes', 'open_jobs', 'quoted_value', 'total_value', 'paid_total', 'owed',
     'first_contact', 'first_month', 'last_contact', 'days_since_contact', 'repeat_customer', 'main_source', 'last_stage', 'tags'],
-  jobs: ['ref', 'core', 'customer', 'stage', 'name', 'phone', 'email', 'suburb', 'service', 'trade', 'source', 'best_time', 'created', 'created_month', 'quote_inc', 'invoice_inc',
+  projects: ['job', 'project_ref', 'project_name', 'client', 'program', 'phase', 'health', 'pct_complete', 'tasks_done', 'tasks_total', 'late_tasks', 'budget', 'planned_value', 'earned_value', 'actual_cost',
+    'spi', 'cpi', 'forecast_cost', 'start', 'finish', 'open_risks', 'high_risks', 'open_issues', 'has_plan', 'created'],
+  jobs: ['ref', 'core', 'customer', 'stage', 'name', 'phone', 'email', 'suburb', 'service', 'program', 'trade', 'source', 'best_time', 'created', 'created_month', 'quote_inc', 'invoice_inc',
     'called_date', 'quoted_date', 'won_date', 'completed_date', 'invoiced_date', 'paid_date', 'lost_date', 'lost_reason', 'photos', 'notes'],
   quotes: ['id', 'job', 'customer', 'status', 'issued', 'issued_month', 'valid_until', 'ex', 'gst', 'inc', 'invoice_id'],
   invoices: ['id', 'job', 'customer', 'status', 'issued', 'issued_month', 'due', 'ex', 'gst', 'inc', 'paid', 'balance', 'days_overdue', 'from_quote'],
@@ -96,6 +99,7 @@ for (const [tb, K] of Object.entries(KEYS)) {   // key columns first: own key, t
   SCHEMA[tb] = [...new Set([...ks, ...SCHEMA[tb]])];
 }
 export const DESCRIBE = {
+  projects: 'Start here. One row per project with its program, PMBOK phase, health (RAG), % complete, budget, earned value, SPI/CPI, dates, late tasks, risks and issues',
   customers: 'One row per customer (same phone + email = same customer) with their job counts and values', jobs: 'Every enquiry and job (pipeline stage, customer, suburb, trade, values)', quotes: 'Quotes (status, totals ex/inc GST)', invoices: 'Tax invoices (paid, balance, days overdue)',
   items: 'Line items of quotes and invoices', plan_tasks: 'Project plan tasks (dates, costs, % complete)', plan_risks: 'Risk registers of all plans', plan_issues: 'Issue logs of all plans', plan_subtasks: 'Sub-tasks inside plan tasks (no costs; costs stay on the task)', plan_stakeholders: 'Stakeholders (RACI) on each project plan, including the subbies working on it', plan_contracts: 'Contracts uploaded on each project: customer, sub-contractor, supply, consultant', sub_trades: 'Every trade category (also ones with no subbies yet) with how many subbies, preferred, compliant, average rating and rates', subcontractors: 'Sub-contractors (subbies): trade, where they are, status, rating, rates, licence and insurance with expiry and whether expired', inventory: 'Stock items (on hand, set aside for jobs, re-order level)', suppliers: 'Suppliers', supplier_prices: 'Supplier quotes per stock item', stock_moves: 'Stock in and out', payments: 'Payments received', expenses: 'Expenses and receipts', reminders: 'Call-backs and follow-ups', visits: 'Website visitors per day'
 };
@@ -110,7 +114,7 @@ export async function tables() {
   const subRecs = await kv.keys('sub:').then((ks) => kv.getMany(ks)).catch(() => []);
   for (const j of jobRecs) {
     if (!j) continue;
-    jobs.push({ ref: J.refFor(j), core: j.core, customer: '', stage: j.stage, name: j.name || '', phone: j.phone || '', email: j.email || '', suburb: j.suburb || '', service: j.service || '',
+    jobs.push({ ref: J.refFor(j), core: j.core, customer: '', stage: j.stage, name: j.name || '', phone: j.phone || '', email: j.email || '', suburb: j.suburb || '', service: j.service || '', program: j.program || '',
       trade: j.trade || (j.core || '')[0] || '', source: j.source || '', best_time: j.best_time || '', created: d10(j.created), created_month: d10(j.created).slice(0, 7),
       quote_inc: j.quote ? r2(j.quote.amount) : null, invoice_inc: j.invoice ? r2(j.invoice.amount) : null,
       called_date: d10(j.called_at), quoted_date: d10(j.quoted_at), won_date: d10(j.won_at), completed_date: d10(j.completed_at), invoiced_date: d10(j.invoiced_at),
@@ -203,7 +207,13 @@ export async function tables() {
       avg_rating: rated.length ? r2(rated.reduce((a, s) => a + s.rating, 0) / rated.length) : null, avg_hourly_rate: rates.length ? r2(rates.reduce((a, x) => a + x, 0) / rates.length) : null, cheapest_hourly_rate: rates.length ? Math.min(...rates) : null };
   });
   subcontractors.forEach((s) => { delete s._keys; });
-  const all = { customers, jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves, subcontractors, sub_trades, plan_stakeholders, plan_contracts };
+  const HN = { red: 'At risk', amber: 'Watch', green: 'On track', grey: 'Not planned' };
+  const projects = (await PLAN.portfolio(d10(now)).catch(() => [])).map((c) => ({ job: c.core, project_ref: c.ref, project_name: c.name, client: c.client || '', program: c.program || '',
+    phase: PLAN.PHASES[c.phase] || c.phase, health: HN[PLAN.healthOf(c)], pct_complete: c.pct || 0, tasks_done: c.done || 0, tasks_total: c.total || 0, late_tasks: c.late || 0,
+    budget: r2(c.BAC || 0), planned_value: r2(c.PV || 0), earned_value: r2(c.EV || 0), actual_cost: r2(c.AC || 0), spi: c.SPI == null ? null : c.SPI, cpi: c.CPI == null ? null : c.CPI,
+    forecast_cost: c.EAC == null ? null : r2(c.EAC), start: c.start || '', finish: c.finish || '', open_risks: c.openRisks || 0, high_risks: c.highRisks || 0, open_issues: c.openIssues || 0,
+    has_plan: !!c.hasPlan, created: d10(c.since) }));
+  const all = { projects, customers, jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves, subcontractors, sub_trades, plan_stakeholders, plan_contracts };
   return withKeys(all, { custOfJob: custOf });
 }
 
@@ -230,7 +240,7 @@ export async function narrative({ title, sql, columns, rows, focus }) {
     const r = await fetch(`${base}/chat/completions`, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({ model, temperature: 0.3, stream: false, max_tokens: 600, response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: 'You are a business analyst for Modern Building Solutions, a Sydney building company (remedial, waterproofing, painting, construction). ' +
+          { role: 'system', content: 'You are a senior PMO analyst for GKH Project Champ (project, program and portfolio management, PMBOK). Explain schedule and cost health with earned value (SPI, CPI) where the data has it. ' +
             'Write a short, plain-English report on the data you are given. Australian spelling, dollars in AUD, GST is 10%. Only state what the data shows; do not invent numbers. ' +
             'Reply as JSON: {"title": string (max 70 chars), "summary": string (2-3 sentences), "insights": [3-5 short bullet strings with specific figures], "recommendations": [1-3 short practical actions]}.' },
           { role: 'user', content: JSON.stringify({ report_title: title, question_or_focus: focus || '', sql, row_count: rows.length, columns: s.columns, rows: s.rows }) }
@@ -253,6 +263,7 @@ export async function narrative({ title, sql, columns, rows, focus }) {
 // short notes the AI needs (kept brief to save tokens)
 // short notes per table (only the tables a question needs are sent, to keep each AI call small)
 const NOTE = {
+  projects: 'start here for project, program and portfolio questions; job = jobs.core = plan_tasks.job; program = group of related projects (blank = none); phase Initiation|Planning|Execution|Monitoring & Evaluation|Closing (PMBOK); health On track|Watch|At risk|Not planned; budget/planned_value/earned_value/actual_cost $; spi/cpi earned value indexes (1 = on plan, under 0.9 = trouble); portfolio = all projects',
   jobs: 'core = id for joins, ref = job number staff see, stage new|called|quoted|won|completed|invoiced|paid|lost, created = enquiry date, *_date = date it reached that stage, quote_inc/invoice_inc $ inc GST, name = customer',
   customers: 'id = jobs.customer; enquiries = all their jobs; confirmed_jobs = won or later; total_value = $ inc GST of confirmed jobs; owed = invoiced not paid; repeat_customer true when 2+ enquiries; dates YYYY-MM-DD',
   quotes: 'job = jobs.core; ex/gst/inc $', invoices: 'job = jobs.core; balance = $ owed; ex/gst/inc $', items: 'doc_id = quote or invoice id', payments: 'invoice_id = invoices.id',
@@ -273,6 +284,7 @@ const NOTE = {
   suppliers: 'suppliers', supplier_prices: 'one row per supplier quote for a stock item', stock_moves: 'qty + in / - out; kind in|out|count|plan|order; job = jobs.core'
 };
 const WORDS = {
+  projects: /project|program|portfolio|phase|initiat|planning|execution|monitor|closing|health|on track|at risk|rag|spi|cpi|earned|budget|overrun|over budget|behind|status|pmo|overall|summary/i,
   customers: /customer|client|repeat|loyal|most (orders|jobs)|biggest|spend|lapsed|win back|regular/i,
   quotes: /quot/i, invoices: /invoic|owe|owing|unpaid|overdue|paid|debt|balance|bill/i, items: /line item|items? on (the|a|my) (quote|invoice)/i, payments: /pay|paid|received|income|revenue|cash/i,
   expenses: /expens|spend|spent|cost|receipt|purchase|bought/i, reminders: /remind|follow/i, visits: /visit|traffic|website/i,
@@ -281,7 +293,7 @@ const WORDS = {
   inventory: /stock|inventor|material|re-?order|low on|on hand|short supply|short of|running (low|out)|run(ning)? out|\blow\b|\bitems?\b|\border(ing)?\b|restock|shortage|supplies|parts?\b|products?\b/i, suppliers: /supplier|vendor/i, supplier_prices: /price|cheap|compare|supplier quote/i, stock_moves: /stock (used|in|out)|used|movement|consum|took/i
 };
 export function pickTables(question, extraSql = '') {
-  const q = String(question || ''), chosen = new Set(['jobs']);
+  const q = String(question || ''), chosen = new Set(['jobs', 'projects']);
   for (const [t, re] of Object.entries(WORDS)) if (re.test(q)) chosen.add(t);
   for (const t of Object.keys(SCHEMA)) if (new RegExp('\\b' + t + '\\b', 'i').test(extraSql)) chosen.add(t);
   if (chosen.has('plan_subtasks')) chosen.add('plan_tasks');
@@ -291,9 +303,12 @@ export function pickTables(question, extraSql = '') {
   if (/contract/i.test(q)) { chosen.add('plan_contracts'); if (/sub|trade/i.test(q)) chosen.add('subcontractors'); }
   if (/stakeholder|raci|accountable|responsible|consulted|informed/i.test(q)) { chosen.add('plan_stakeholders'); chosen.add('plan_tasks'); }
   // nothing specific (and not about jobs): give the AI every table
-  if (chosen.size === 1 && !/job|enquir|customer|lead|won|lost|suburb|trade|new|stage|called/i.test(q)) Object.keys(SCHEMA).forEach((t) => chosen.add(t));
-  return Object.keys(SCHEMA).filter((t) => chosen.has(t));
+  if (chosen.size === 2 && !/job|enquir|customer|lead|won|lost|suburb|trade|new|stage|called/i.test(q)) Object.keys(SCHEMA).forEach((t) => chosen.add(t));
+  return Object.keys(SCHEMA).filter((t) => chosen.has(t) && CHAMP_TABLES.has(t));
 }
+// GKH Project Champ: only the project tables (the MBS business tables, such as quotes and invoices, are always empty here)
+export const CHAMP_TABLES = new Set(['projects', 'jobs', 'plan_tasks', 'plan_subtasks', 'plan_risks', 'plan_issues', 'plan_stakeholders', 'plan_contracts', 'inventory', 'subcontractors', 'sub_trades']);
+const champOnly = (o) => Object.fromEntries(Object.entries(o).filter(([t]) => CHAMP_TABLES.has(t)));
 
 function sydneyDates(now = Date.now()) {
   const p = parts(now);
@@ -323,7 +338,7 @@ export function readOnly(sql) {
   if (!/^(select|with)\b/i.test(s) || /;/.test(s) || /\b(into|insert|update|delete|drop|create|alter|attach|detach|require|source|declare)\b/i.test(s) || /\b(json|csv|xlsx|xls|txt|tab|tsv|html|ods|file)\s*\(/i.test(s)) return '';
   return s;
 }
-const SYSTEM = 'Turn the question from the owner of a Sydney building company into ONE read-only AlaSQL query over the tables given. Rules: ' +
+const SYSTEM = 'Turn the question from a project, program or portfolio manager using GKH Project Champ into ONE read-only AlaSQL query over the tables given. For questions about projects, programs or the portfolio, use the projects table first (one row per project; a program is projects grouped by the program column; the portfolio is every project). Rules: ' +
   '1) One SELECT (or WITH), no semicolons, only the listed tables/columns. ' +
   '2) Dates are text YYYY-MM-DD: use BETWEEN with the exact dates given for today, this week, this month, financial year (1 Jul-30 Jun) etc. ' +
   '3) Never alias as total, value, count, sum, rows, index, plan, top, group, desc or asc; every alias must differ from column names (e.g. jobs_count, total_inc). Same aliases in every UNION part. ' +
@@ -439,7 +454,7 @@ export async function reportPdf({ title, summary, insights, recommendations, sql
 }
 
 export async function sqlPost(action, body, { who }) {
-  if (action === 'sqlData') return out(200, { schema: SCHEMA, describe: DESCRIBE, keys: Object.fromEntries(Object.entries(KEYS).map(([t, K]) => [t, { pk: K.pk, fk: K.fk || {} }])), data: await tables() });
+  if (action === 'sqlData') return out(200, { schema: champOnly(SCHEMA), describe: champOnly(DESCRIBE), keys: champOnly(Object.fromEntries(Object.entries(KEYS).map(([t, K]) => [t, { pk: K.pk, fk: K.fk || {} }]))), data: champOnly(await tables()) });
   if (action === 'sqlNarrative') {
     const columns = (Array.isArray(body.columns) ? body.columns : []).map(String).slice(0, 40), rows = Array.isArray(body.rows) ? body.rows.slice(0, 200) : [];
     return out(200, await narrative({ title: String(body.title || 'Report').slice(0, 120), sql: String(body.sql || '').slice(0, 3000), columns, rows, focus: String(body.focus || '').slice(0, 400) }));
@@ -461,7 +476,7 @@ export async function sqlPost(action, body, { who }) {
     if (body.chart && String(body.chart).length > 4_000_000) return bad('The chart image is too big');
     const bytes = await reportPdf({ title: String(body.title || 'Report').slice(0, 120), summary: String(body.summary || '').slice(0, 1500), insights: (body.insights || []).slice(0, 8).map(String),
       recommendations: (body.recommendations || []).slice(0, 5).map(String), sql: String(body.sql || '').slice(0, 3000), columns, rows, chart: body.chart || '', by: who, ai: !!body.ai });
-    return new Response(bytes, { status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="MBS-report-${new Date().toISOString().slice(0, 10)}.pdf"`, 'Cache-Control': 'no-store' } });
+    return new Response(bytes, { status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="Project-Champ-report-${new Date().toISOString().slice(0, 10)}.pdf"`, 'Cache-Control': 'no-store' } });
   }
   return null;
 }

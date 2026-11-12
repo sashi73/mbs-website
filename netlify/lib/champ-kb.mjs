@@ -24,6 +24,13 @@ SIGNING IN
 - Contractors can be given a login that opens only their own project (they enter a project code).
 - Roles and permissions per module (view or edit), set by the owner in Users & access. An Activity log records who changed what.
 
+PROGRAMS
+- A program groups related projects (for example "ERP rollout"). Set it on the New project form, or on the Pipeline board with ⇄ then "Put in a program…". The Summary has a "By program" table (projects, budget, earned, spent, SPI, CPI, late tasks, at risk) and the board and Summary can be filtered by program.
+
+ASK AI (Reports > Ask AI in the console)
+- Ask any question in plain English about a project, a program or the whole portfolio ("Which projects are at risk and why?", "Status of each program: budget, SPI and CPI", "High risks across all projects and their owners"). The AI turns it into a query over all project data and answers with a table, a chart, a short summary, insights and recommendations; the report can be saved as a PDF. Reports > Reports & data also has ready-made templates, a drag-and-drop wizard and an SQL editor.
+- Inside a project, Project Intelligence answers questions about that one project.
+
 PORTFOLIO (all projects at once)
 - Summary: tiles for number of projects, on track / watch / at risk, total budget, earned and spent, portfolio SPI and CPI, late tasks, high risks and open issues; projects by PMBOK phase; a health table, worst first.
 - Pipeline board: one column per PMBOK life-cycle phase: Initiation, Planning, Execution, Monitoring & Evaluation, Closing. The phase is worked out from the plan (Initiation: no plan yet; Planning: planned, not started; Execution: under way; Monitoring & Evaluation: 80%+ done; Closing: all tasks done). Drag a card, or use the ⇄ button, to move it by hand; "Automatic" puts it back.
@@ -37,7 +44,9 @@ INSIDE A PROJECT PLAN (tabs)
 - Schedule & Gantt: tasks and sub-tasks (WBS), milestones, dependencies, durations in working days, resources and costs per task; baseline (freeze dates and costs to compare); wide view; export to Excel and a Gantt export; print.
 - Critical path: the chain of tasks that sets the finish date, with float.
 - Board: Kanban (To do, Doing, Done) on the same tasks; drag cards; progress flows back to the Gantt.
-- BOM (Bill of Materials): materials costed before work starts, linked to stock, AI can draft it; checked and signed off; exported. It can be switched off per project with the BOM slider (for IT, consulting or ESG projects with no materials).
+- BOM (Bill of Materials): materials costed before work starts, linked to stock, AI can draft it; checked and signed off; exported.
+- Optional modules: BOM and SWMS can each be switched on or off per project with ⚙ Modules at the top of the plan (or on the New project form), for IT, consulting or ESG projects that don't need them. Switching off hides the tab; nothing is deleted.
+- Delete a project: ⇄ on the Pipeline board, the 🗑 in the Projects list, Delete project inside the plan, or tick several in the Summary and Delete selected.
 - Stakeholders: register, influence and interest, RACI (Responsible, Accountable, Consulted, Informed).
 - Scope: objective, in scope, out of scope, deliverables, acceptance criteria; project charter with typed signatures and sign-off.
 - Risks: risk register with likelihood x impact scores, owners, responses; Issues: issue log with priority and status.
@@ -49,7 +58,7 @@ INSIDE A PROJECT PLAN (tabs)
 - Project Intelligence: ask questions about the project in plain English ("what is late this week?", "which risks are high and who owns them?"); answers come from the live plan.
 
 LOOK AND FEEL
-- The 🎨 button changes the skin (Black & Gold, White, GKH Navy, Emerald, Slate & Copper), density (comfortable or compact), width (wide or boxed) and, in the console, the menu (full or icons only). It is remembered in that browser.
+- Top right: 🌐 language, ☀/☾ light or dark, and the 🎨 button. 🎨 changes the skin (Black & Gold, White, GKH Navy, Emerald, Slate & Copper), density (comfortable or compact), width (wide or boxed) and, in the console, the menu (full or icons only). It is remembered in that browser.
 
 AI
 - The AI features (plan drafting, status reports, Project Intelligence, this assistant) use a large language model. AI costs and durations are indicative benchmarks and must be reviewed by the project manager before they are used.
@@ -58,7 +67,7 @@ COMING NEXT (say "planned" if asked; do not claim it is available)
 - Uploading project documents so Project Intelligence can search them, with the files kept in Google Drive.
 
 ALSO ON THE SITE
-- 🌐 language button (top right) translates the website, and the console's menus and labels, into 19 languages using AI. Champ can read its answers aloud (🔊).
+- 🌐 language button (top right) translates the website, and the console's menus and labels, into 19 languages using AI. Champ (this assistant, on the website) can read its answers aloud (🔊). In the console, AI help is built into every screen (Ask AI, Project Intelligence, AI plans and reports), so there is no chat bubble there.
 `;
 
 export const SYSTEM = (lang, where) => `You are "Champ", the assistant for GKH Project Champ, an AI-powered project management product by Global Knowledge House (GKH).

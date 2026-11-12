@@ -34,7 +34,7 @@ export function parseRef(input) {
 }
 
 async function index() { return (await kv.get('index')) || { jobs: {} }; }
-export const summary = (j) => ({ core: j.core, ref: refFor(j), stage: j.stage, name: j.name, phone: j.phone, suburb: j.suburb, service: j.service,
+export const summary = (j) => ({ core: j.core, ref: refFor(j), stage: j.stage, name: j.name, phone: j.phone, suburb: j.suburb, service: j.service, program: j.program || '', source: j.source || '',
   created: j.created, updated: j.updated, quote: j.quote || null, invoice: j.invoice || null,
   called_at: j.called_at || null, quoted_at: j.quoted_at || null, won_at: j.won_at || null, completed_at: j.completed_at || null,
   invoiced_at: j.invoiced_at || null, paid_at: j.paid_at || null, lost_at: j.lost_at || null });
@@ -86,6 +86,8 @@ async function change(input, fn) {
   await indexJob(job);
   return { job, result };
 }
+// GKH Project Champ: put a project in a program (a group of related projects); '' takes it out
+export async function setProgram(input, program) { const r = await change(input, (j) => { j.program = program; }); return r && r.job; }
 // GKH Project Champ: delete a project record for good (its plan is deleted separately, by the caller)
 export async function removeJob(core) {
   const job = await kv.get('job:' + core);
@@ -118,7 +120,7 @@ export async function create(fields, by = 'website') {
   const now = Date.now();
   const job = { core: fields.core, trade: fields.core[0], stage: 'new', created: now, updated: now,
     name: fields.name || '', phone: fields.phone || '', email: fields.email || '', suburb: fields.suburb || '', service: fields.service || '',
-    best_time: fields.best_time || '', summary: fields.summary || '', details: fields.details || '', urgency: fields.urgency || '', mapsUrl: fields.mapsUrl || '', source: fields.source || '',
+    best_time: fields.best_time || '', program: fields.program || '', summary: fields.summary || '', details: fields.details || '', urgency: fields.urgency || '', mapsUrl: fields.mapsUrl || '', source: fields.source || '',
     history: [{ at: now, by, text: `Enquiry received (${fields.source || 'website'})` }], notes: [] };
   const saved = await save(job);
   await CU.attach(saved);   // customer database: same phone (+ email) = same customer
