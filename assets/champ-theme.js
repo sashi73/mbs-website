@@ -42,6 +42,15 @@
       (isConsole && window.MBS_sideMini ? seg('Menu', [['menu', 'full', 'Full'], ['menu', 'icons', 'Icons only']], mini) : '') +
       '<button type="button" class="ct-reset" data-k="reset">Reset to default</button>';
   }
+  // the top-right cluster (website header / console top bar) that holds 🌐 language, ☀/☾ and 🎨
+  function cluster() {
+    var c = document.getElementById('champCtl'); if (c) return c;
+    var host = document.querySelector('header.site .nav-login') || document.querySelector('.top .top-new');
+    if (!host) return null;
+    c = document.createElement('div'); c.id = 'champCtl'; c.className = 'ct-ctl';
+    host.parentNode.insertBefore(c, host); return c;
+  }
+  window.ChampCtl = cluster;
   function build() {
     if (document.getElementById('champTheme')) return;
     var btn = document.createElement('button');
@@ -49,7 +58,8 @@
     btn.innerHTML = '🎨';
     var panel = document.createElement('div');
     panel.id = 'champTheme'; panel.className = 'ct-panel'; panel.hidden = true; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Skin and layout');
-    document.body.appendChild(btn); document.body.appendChild(panel);
+    var ctl = cluster(); if (ctl) { btn.classList.add('ct-in'); ctl.appendChild(btn); } else document.body.appendChild(btn);
+    document.body.appendChild(panel);
     var open = function (on) { panel.hidden = !on; if (on) panel.innerHTML = panelHtml(); btn.setAttribute('aria-expanded', on ? 'true' : 'false'); };
     btn.addEventListener('click', function () { open(panel.hidden); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) open(false); });
@@ -67,12 +77,12 @@
   }
   // one-click light/dark slider: White <-> the last dark skin used (Black & Gold by default)
   function quick() {
-    var host = document.querySelector('header.site .nav-login') || document.querySelector('.top .top-new');
-    if (!host || document.getElementById('champQuick')) return;
+    var ctl = cluster();
+    if (!ctl || document.getElementById('champQuick')) return;
     var t = document.createElement('button');
     t.type = 'button'; t.id = 'champQuick'; t.className = 'ct-quick'; t.setAttribute('role', 'switch'); t.title = 'Light or dark';
     var sync = function () { var dark = get('skin', 'black') !== 'white'; t.setAttribute('aria-checked', dark ? 'true' : 'false'); t.setAttribute('aria-label', dark ? 'Dark skin on: switch to light' : 'Light skin on: switch to dark'); };
-    t.innerHTML = '<span class="ct-track" aria-hidden="true"></span><span class="ct-lbl">' + (isConsole ? 'Theme' : '') + '</span>';
+    t.innerHTML = '<span class="ct-track" aria-hidden="true"></span>';
     t.onclick = function () {
       var cur = get('skin', 'black');
       if (cur === 'white') put('skin', get('dark', 'black'));
@@ -80,7 +90,7 @@
       apply(); sync(); var pn = document.getElementById('champTheme'); if (pn && !pn.hidden) pn.innerHTML = panelHtml();
       window.dispatchEvent(new Event('resize'));
     };
-    host.parentNode.insertBefore(t, host); sync();
+    ctl.insertBefore(t, ctl.querySelector('.ct-btn')); sync();
     window.addEventListener('storage', sync);
   }
   KEYS.dark = 'champDarkSkin';

@@ -39,7 +39,9 @@
   var ss = function (k, v) { try { if (v === undefined) return sessionStorage.getItem(k); sessionStorage.setItem(k, v); } catch (e) { return null; } };
   var ls = function (k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } };
   var msgs = []; try { msgs = JSON.parse(ss('champChat') || '[]'); } catch (e) { msgs = []; }
-  var lang = ls('champChatLang') || 'auto';
+  var lang = ls('champChatLang') || (ls('champLang') && ls('champLang') !== 'en' ? ls('champLang') : 'auto');
+  var voiceOn = ls('champVoice') === '1', voiceOk = true, audio = null, speakingBtn = null;
+  var NOVOICE = { rw: 1 };
   var busy = false;
 
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -61,11 +63,13 @@
     var btn = document.createElement('button');
     btn.type = 'button'; btn.id = 'champChatBtn'; btn.className = 'cc-btn'; btn.setAttribute('aria-label', 'Ask Champ, the Project Champ assistant'); btn.setAttribute('aria-expanded', 'false');
     btn.innerHTML = '<img src="' + ASSET + 'gkh-globe.webp" alt="" class="gkh-globe" width="40" height="40"><span>Ask Champ</span>';
+    if (ls('champChatSeen') !== '1') btn.classList.add('cc-glow');
     var box = document.createElement('section');
     box.id = 'champChat'; box.className = 'cc-box'; box.hidden = true; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Champ assistant');
     box.innerHTML =
       '<header class="cc-h"><img src="' + ASSET + 'gkh-globe.webp" alt="" class="gkh-globe" width="38" height="38"><div><b>Champ</b><small>AI assistant</small></div>' +
       '<select class="cc-lang" aria-label="Language">' + LANGS.map(function (l) { return '<option value="' + l[0] + '"' + (l[0] === lang ? ' selected' : '') + '>' + l[1] + '</option>'; }).join('') + '</select>' +
+      '<button type="button" class="cc-voice" aria-pressed="' + voiceOn + '" title="Read Champ’s answers aloud">🔊 Voice</button>' +
       '<button type="button" class="cc-x" aria-label="Close">✕</button></header>' +
       '<div class="cc-log" aria-live="polite"></div>' +
       '<div class="cc-chips"></div>' +
@@ -79,10 +83,25 @@
       d.innerHTML = html; if (RTL[lang] && role === 'bot') d.dir = 'auto';
       log.appendChild(d); log.scrollTop = log.scrollHeight; return d;
     }
+    function stopVoice() { if (audio) { try { audio.pause(); } catch (e) {} audio = null; } if (speakingBtn) { speakingBtn.classList.remove('on'); speakingBtn.textContent = '🔊 Listen'; speakingBtn = null; } }
+    function speak(text, L, b) {
+      stopVoice(); if (!voiceOk || NOVOICE[L]) return;
+      if (b) { speakingBtn = b; b.classList.add('on'); b.textContent = '■ Stop'; }
+      fetch('/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text, lang: L }) })
+        .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { if (r.status === 503) { voiceOk = false; log.querySelectorAll('.cc-say').forEach(function (x) { x.remove(); }); box.querySelector('.cc-voice').hidden = true; } throw new Error(j.error || 'Voice unavailable'); }); return r.blob(); })
+        .then(function (bl) { if (b && speakingBtn !== b) return; audio = new Audio(URL.createObjectURL(bl)); audio.onended = stopVoice; return audio.play(); })
+        .catch(function (e) { stopVoice(); bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err'); });
+    }
+    function sayBtn(bb, text, L) {
+      if (!voiceOk || NOVOICE[L]) return;
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'cc-say'; b.textContent = '🔊 Listen'; b.setAttribute('aria-label', 'Read this answer aloud');
+      b.onclick = function () { if (speakingBtn === b) stopVoice(); else speak(text, L || 'en', b); };
+      bb.appendChild(b);
+    }
     function draw() {
       log.innerHTML = '';
       bubble('bot', md(HELLO[lang] || HELLO.auto));
-      msgs.forEach(function (m) { bubble(m.role === 'user' ? 'user' : 'bot', m.role === 'user' ? '<p>' + esc(m.content) + '</p>' : md(m.content)); });
+      msgs.forEach(function (m) { if (m.role === 'user') bubble('user', '<p>' + esc(m.content) + '</p>'); else sayBtn(bubble('bot', md(m.content)), m.content, m.lang); });
       chips.innerHTML = msgs.length ? '' : CHIPS.map(function (c) { return '<button type="button">' + esc(c) + '</button>'; }).join('');
       chips.querySelectorAll('button').forEach(function (b) { b.onclick = function () { ask(b.textContent); }; });
       box.dir = RTL[lang] ? 'rtl' : 'ltr';
@@ -92,20 +111,24 @@
       busy = true; msgs.push({ role: 'user', content: q }); ss('champChat', JSON.stringify(msgs.slice(-24)));
       chips.innerHTML = ''; bubble('user', '<p>' + esc(q) + '</p>'); ta.value = ''; ta.style.height = '';
       var wait = bubble('bot', '<span class="cc-dots"><i></i><i></i><i></i></span>', 'cc-wait');
-      fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: msgs.slice(-12), lang: lang, where: where }) })
+      fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: msgs.slice(-12).map(function (m) { return { role: m.role, content: m.content }; }), lang: lang, where: where }) })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || 'The assistant is unavailable right now.'); return j; }); })
-        .then(function (j) { wait.remove(); msgs.push({ role: 'assistant', content: j.reply }); ss('champChat', JSON.stringify(msgs.slice(-24))); bubble('bot', md(j.reply)); })
+        .then(function (j) { wait.remove(); var L = j.lang || (lang === 'auto' ? 'en' : lang); msgs.push({ role: 'assistant', content: j.reply, lang: L }); ss('champChat', JSON.stringify(msgs.slice(-24))); var bb = bubble('bot', md(j.reply)); sayBtn(bb, j.reply, L); if (voiceOn) speak(j.reply, L, bb.querySelector('.cc-say')); })
         .catch(function (e) { wait.remove(); msgs.pop(); ss('champChat', JSON.stringify(msgs)); bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err'); })
         .then(function () { busy = false; ta.focus(); });
     }
     function open(on) {
       box.hidden = !on; btn.setAttribute('aria-expanded', on ? 'true' : 'false'); document.body.classList.toggle('cc-open', on);
+      if (on) { btn.classList.remove('cc-glow'); ls('champChatSeen', '1'); } else stopVoice();
       if (on) { draw(); setTimeout(function () { ta.focus(); }, 50); }
     }
     btn.onclick = function () { open(box.hidden); };
     box.querySelector('.cc-x').onclick = function () { open(false); btn.focus(); };
     box.querySelector('.cc-clear').onclick = function () { msgs = []; ss('champChat', '[]'); draw(); };
-    sel.onchange = function () { lang = sel.value; ls('champChatLang', lang); draw(); };
+    sel.onchange = function () { lang = sel.value; ls('champChatLang', lang); draw(); window.dispatchEvent(new CustomEvent('champ:chatlang', { detail: lang })); };
+    window.addEventListener('champ:lang', function (e) { lang = e.detail; sel.value = lang; if (!box.hidden) draw(); });
+    var vb = box.querySelector('.cc-voice');
+    vb.onclick = function () { voiceOn = !voiceOn; ls('champVoice', voiceOn ? '1' : '0'); vb.setAttribute('aria-pressed', String(voiceOn)); if (!voiceOn) stopVoice(); };
     box.querySelector('form').onsubmit = function (e) { e.preventDefault(); ask(ta.value); };
     ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(ta.value); } });
     ta.addEventListener('input', function () { ta.style.height = ''; ta.style.height = Math.min(120, ta.scrollHeight) + 'px'; });

@@ -22,13 +22,17 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   // a fake DeepSeek: says back which language and page the assistant was told to use
   const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
     const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
+    if (j.response_format) { const inp = JSON.parse(j.messages[1].content).strings; global.I18N_CALLS = (global.I18N_CALLS || 0) + 1;
+      const code = (/into ([^.]+)\./.exec(sys) || [])[1] || '?';
+      s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ t: inp.map((x) => '[' + code.slice(0, 5) + '] ' + x) }) } }] })); }
     const lang = (/Reply in ([^.]+)\./.exec(sys) || [])[1] || '?';
-    const reply = `Echo: lang=${lang}; where=${/signed in to the Project Champ console/.test(sys) ? 'console' : 'site'}; facts=${/Pipeline board/.test(sys) && /PMBOK/.test(sys)}; q=${(j.messages || []).slice(-1)[0].content}\n- **point one**\n- point two`;
+    const reply = `Echo: lang=${lang}; where=${/signed in to the Project Champ console/.test(sys) ? 'console' : 'site'}; facts=${/Pipeline board/.test(sys) && /PMBOK/.test(sys)}; q=${(j.messages || []).slice(-1)[0].content}\n- **point one**\n- point two\n[[lang:ms]]`;
     s2.setHeader('Content-Type', 'application/json'); s2.end(JSON.stringify({ choices: [{ message: { content: reply } }] }));
   }); }).listen(0);
+  const az = http.createServer((q, s3) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => { global.LAST_SSML = b; global.AZ_KEY = q.headers['ocp-apim-subscription-key']; s3.setHeader('Content-Type', 'audio/mpeg'); s3.end(Buffer.from('ID3fakeaudio')); }); }).listen(0);
   await sleep(100);
   const env = { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', NETLIFY_BLOBS_CONTEXT: ctxB64, ADMIN_USERNAME: '', ADMIN_PASSWORD: '', ADMIN_SESSION_SECRET: '',
-    GOOGLE_CLIENT_ID: CLIENT, GOOGLE_TOKENINFO_URL: `http://127.0.0.1:${g.address().port}/tokeninfo`, LLM_API_KEY: 'test-key', LLM_BASE_URL: `http://127.0.0.1:${llm.address().port}`, LLM_MODEL: 'deepseek-chat', TELEGRAM_BOT_TOKEN: '', RESEND_API_KEY: '', SITE_ENV: '' };
+    GOOGLE_CLIENT_ID: CLIENT, GOOGLE_TOKENINFO_URL: `http://127.0.0.1:${g.address().port}/tokeninfo`, LLM_API_KEY: 'test-key', LLM_BASE_URL: `http://127.0.0.1:${llm.address().port}`, LLM_MODEL: 'deepseek-chat', TELEGRAM_BOT_TOKEN: '', AZURE_SPEECH_KEY: 'az-test', AZURE_SPEECH_BASE: `http://127.0.0.1:${az.address().port}`, RESEND_API_KEY: '', SITE_ENV: '' };
   const srv = spawn('node', ['local-server.mjs'], { cwd: SITE, env, stdio: ['ignore', 'pipe', 'pipe'] }); global.SRV = srv;
   let log = ''; srv.stdout.on('data', (d) => (log += d)); srv.stderr.on('data', (d) => (log += d));
   for (let i = 0; i < 60 && !/running/i.test(log); i++) await sleep(150);
@@ -79,6 +83,44 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.click('.cc-x');
   r0 = await p.request.post(`${BASE}/.netlify/functions/chat`, { data: { messages: [] } });
   ok('Chat', 'empty question refused (400)', r0.status() === 400);
+  // ---- Champ voice, glow, and the answer's language ----
+  ok('Chat', 'the reply language tag is removed from the answer', !(await p.textContent('.cc-log')).includes('[[lang'));
+  r0 = await p.request.post(`${BASE}/.netlify/functions/tts`, { data: { text: 'Hello **there**\n- one', lang: 'ms' } });
+  ok('Voice', 'Champ speaks (Azure returns audio)', r0.status() === 200 && /audio\/mpeg/.test(r0.headers()['content-type'] || ''));
+  ok('Voice', 'Malay answer uses the Malaysian voice, markdown removed', /ms-MY-YasminNeural/.test(global.LAST_SSML || '') && !/\*\*/.test(global.LAST_SSML || ''));
+  ok('Voice', 'the Azure key is sent from the server only', global.AZ_KEY === 'az-test');
+  r0 = await p.request.post(`${BASE}/.netlify/functions/tts`, { data: { text: 'x', lang: 'rw' } });
+  ok('Voice', 'no voice for Kinyarwanda gives a clear refusal', r0.status() === 400);
+  await p.click('#champChatBtn'); await sleep(300);
+  ok('Voice', 'each answer has a 🔊 Listen button and the Voice toggle shows', (await p.$$('.cc-say')).length > 0 && await p.isVisible('.cc-voice'));
+  await p.click('.cc-x');
+  await p.evaluate(() => { localStorage.removeItem('champChatSeen'); }); await p.reload(); await sleep(500);
+  ok('Chat', 'Ask Champ glows until it is opened', await p.$eval('#champChatBtn', (e) => e.classList.contains('cc-glow')));
+  await p.click('#champChatBtn'); await p.click('.cc-x');
+  ok('Chat', 'glow stops after opening', !(await p.$eval('#champChatBtn', (e) => e.classList.contains('cc-glow'))));
+  // ---- layout: logo far left, controls top right ----
+  const lb = await p.$eval('header.site .brand', (e) => e.getBoundingClientRect().left);
+  ok('Layout', 'Project Champ logo at the far left', lb < 30, lb);
+  const ctl = await p.$eval('#champCtl', (e) => ({ x: e.getBoundingClientRect().left, kids: [...e.children].map((c) => c.id || c.className) }));
+  ok('Layout', 'language, light/dark and skin sit together at the top right', ctl.x > 700 && JSON.stringify(ctl.kids) === JSON.stringify(['champLangBtn', 'champQuick', 'champThemeBtn']), JSON.stringify(ctl));
+  // ---- page language ----
+  await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=ms]');
+  await p.waitForFunction(() => /\[Bahas/.test(document.querySelector('header.site .menu').textContent), null, { timeout: 8000 }).catch(() => {});
+  ok('Language', 'website menu translated to Malay on the fly', /\[Bahas/.test(await p.textContent('header.site .menu')), await p.textContent('header.site .menu'));
+  ok('Language', 'Project Champ brand line in the chat stays untouched', !(await p.textContent('.cc-h')).includes('[Bahas'));
+  ok('Language', 'html lang set to ms and button shows MS', (await p.getAttribute('html', 'lang')) === 'ms' && (await p.textContent('#champLangBtn')).includes('MS'));
+  const calls1 = global.I18N_CALLS || 0;
+  await p.goto(`${BASE}/features.html`); await sleep(1500);
+  ok('Language', 'choice carries to the next page', /\[Bahas/.test(await p.textContent('header.site .menu')));
+  await p.reload(); await sleep(1200);
+  ok('Language', 'cached: reloading costs no new AI calls', (global.I18N_CALLS || 0) === calls1 + 1 || (global.I18N_CALLS || 0) <= calls1 + 1, `${calls1} -> ${global.I18N_CALLS}`);
+  await p.click('#champChatBtn'); await sleep(300);
+  ok('Language', 'Champ follows the page language', (await p.inputValue('.cc-lang')) === 'ms');
+  await p.click('.cc-x');
+  await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=en]'); await sleep(400);
+  ok('Language', 'back to English restores the original text', (await p.textContent('header.site .menu')).includes('Features') && !/\[Bahas/.test(await p.textContent('header.site .menu')));
+  await p.evaluate(() => { localStorage.removeItem('champChatLang'); });
+
   // ---- quick light/dark slider ----
   ok('Theme', 'light/dark slider in the site header', await p.isVisible('header.site #champQuick'));
   await p.click('#champQuick');
@@ -171,6 +213,16 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Chat', 'console chat answers with console help', (await p.textContent('.cc-log')).includes('where=console'));
   await p.click('.cc-x');
 
+  // ---- console language: labels translated, project data untouched ----
+  await p.goto(`${BASE}/admin/#portfolio/summary`); await p.reload(); await p.waitForSelector('.cs-tiles', { timeout: 8000 }).catch(() => {});
+  await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=ms]');
+  await p.waitForFunction(() => /\[Bahas/.test(document.querySelector('.side-nav').textContent), null, { timeout: 8000 }).catch(() => {});
+  ok('Language', 'console menu translated', /\[Bahas/.test(await p.textContent('.side-nav')));
+  const dataCell = await p.textContent('#view table tbody tr td:nth-child(2)').catch(() => '');
+  ok('Language', 'project names (data) are not translated', dataCell.includes('Head office fit-out') && !dataCell.includes('[Bahas'), dataCell);
+  await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=en]'); await sleep(300);
+  await p.evaluate(() => { localStorage.removeItem('champChatLang'); localStorage.removeItem('champLang'); });
+
   // ---- logout → login page ----
   await p.goto(`${BASE}/admin/#projects`); await sleep(1000);
   await Promise.all([p.waitForURL(/login\.html/, { timeout: 8000 }).catch(() => {}), p.click('#logout')]);
@@ -200,7 +252,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.evaluate(() => { localStorage.clear(); });
 
   ok('Errors', 'no script errors on any page', errors.length === 0, errors.slice(0, 5).join(' || '));
-  await b.close(); srv.kill(); g.close(); llm.close(); await blobs.stop();
+  await b.close(); srv.kill(); g.close(); llm.close(); az.close(); await blobs.stop();
   const bad = results.filter((x) => !x.pass);
   for (const x of results) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`);
   console.log(`\n${results.length - bad.length}/${results.length} passed`);

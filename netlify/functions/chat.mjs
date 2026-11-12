@@ -6,6 +6,8 @@
 
 import { env, stripThinking, cors, json, clean } from '../lib/shared.mjs';
 import { SYSTEM, LANGS } from '../lib/champ-kb.mjs';
+import { store } from '../lib/admin-lib.mjs';
+import { createHash } from 'node:crypto';
 
 const MAX_TURNS = 12, MAX_CHARS = 1200;
 const CONTACT = 'ceo@gkhconsultancy.com';
@@ -26,6 +28,7 @@ export default async (req, context) => {
 
   let body;
   try { body = await req.json(); } catch { return json(400, { error: 'Invalid JSON' }); }
+  if (body?.mode === 'i18n') return i18n(body, ip);
   const lang = LANGS[body?.lang] ? LANGS[body.lang] : LANGS.auto;
   const where = body?.where === 'console' ? 'console' : 'site';
   const messages = (Array.isArray(body?.messages) ? body.messages : [])
@@ -61,6 +64,57 @@ export default async (req, context) => {
     console.log(`Champ assistant: could not reach the model (${e.message})`);
     return json(502, { error: `The assistant is unavailable right now. Please try again, or email ${CONTACT}.` });
   }
-  const reply = stripThinking(data?.choices?.[0]?.message?.content ?? '').trim();
-  return json(200, { reply: reply || `Sorry, I didn't get that. Could you ask again? You can also email ${CONTACT}.` });
+  let reply = stripThinking(data?.choices?.[0]?.message?.content ?? '').trim();
+  // the model ends with [[lang:xx]] (the language it answered in) so the voice can match it
+  let said = LANGS[body?.lang] && body.lang !== 'auto' ? body.lang : 'en';
+  const tag = /\[\[\s*lang\s*[:=]\s*([a-z]{2,3})\s*\]\]\s*$/i.exec(reply);
+  if (tag) { reply = reply.slice(0, tag.index).trim(); if (LANGS[tag[1].toLowerCase()]) said = tag[1].toLowerCase(); }
+  return json(200, { reply: reply || `Sorry, I didn't get that. Could you ask again? You can also email ${CONTACT}.`, lang: said });
 };
+
+// ---------- page translation (website and console labels), cached per language in Netlify Blobs ----------
+// Body: { mode: 'i18n', lang: 'ms', strings: ['Home', 'Features', …] }  →  { map: { 'Home': 'Utama', … } }
+const tCalls = new Map();
+function tLimited(ip) {   // at most 30 model calls per address per 10 minutes for uncached text
+  const now = Date.now(), list = (tCalls.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
+  list.push(now); tCalls.set(ip, list); if (tCalls.size > 5000) tCalls.clear();
+  return list.length > 30;
+}
+const hash = (s) => createHash('sha1').update(s).digest('base64url').slice(0, 16);
+async function i18n(body, ip) {
+  const code = String(body?.lang || '');
+  if (!LANGS[code] || code === 'auto' || code === 'en') return json(400, { error: 'Unknown language' });
+  const strings = [...new Set((Array.isArray(body?.strings) ? body.strings : []).map((x) => clean(String(x || ''), 700)).filter(Boolean))].slice(0, 80);
+  if (!strings.length) return json(200, { map: {} });
+  let st = null, cache = {};
+  try { st = await store('champ-i18n'); cache = (await st.get(code, { type: 'json' })) || {}; } catch (e) { console.log('i18n cache unavailable: ' + e.message); }
+  const map = {}, need = [];
+  for (const t of strings) { const h = hash(t); if (cache[h] != null) map[t] = cache[h]; else need.push(t); }
+  if (need.length) {
+    const apiKey = env('LLM_API_KEY');
+    if (!apiKey) return json(503, { error: 'Translation is not switched on yet (no AI key).', map });
+    if (tLimited(ip)) return json(429, { error: 'Too many translations at once. Please try again in a few minutes.', map });
+    const base = env('LLM_BASE_URL', 'https://api.deepseek.com').replace(/\/+$/, '');
+    let model = env('LLM_MODEL', 'deepseek-chat'); if (/reasoner|thinking/i.test(model)) model = 'deepseek-chat';
+    const sys = `You translate the user interface and web pages of "GKH Project Champ", a project management product, from English into ${LANGS[code]}.
+Return JSON only: {"t": [ ... ]} with exactly one translation per input string, in the same order.
+- Natural, professional ${LANGS[code]}, as a local software product would say it. Keep short UI labels short.
+- Keep unchanged: product and brand names (GKH, Global Knowledge House, Project Champ, Champ), PMBOK, PRINCE2, Scrum, Kanban, Gantt, RACI, RAID, BOM, SWMS, SPI, CPI, EAC, BAC, emoji, numbers, money, dates, email addresses, phone numbers and URLs.
+- Never add notes, quotes or explanations.`;
+    try {
+      const r = await fetch(`${base}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, temperature: 0.1, max_tokens: 6000, stream: false, response_format: { type: 'json_object' },
+          messages: [{ role: 'system', content: sys }, { role: 'user', content: JSON.stringify({ strings: need }) }] }) });
+      if (!r.ok) return json(502, { error: 'Translation is busy right now. Please try again.', map });
+      const data = await r.json();
+      const out = JSON.parse(stripThinking(data?.choices?.[0]?.message?.content || '{}').replace(/^```(json)?|```$/g, '').trim());
+      const arr = Array.isArray(out.t) ? out.t : [];
+      if (arr.length === need.length) need.forEach((t, i) => { const v = clean(String(arr[i] ?? ''), 900); if (v) { map[t] = v; cache[hash(t)] = v; } });
+      if (st) { const now = (await st.get(code, { type: 'json' }).catch(() => null)) || {}; await st.setJSON(code, { ...now, ...cache }); }
+    } catch (e) {
+      console.log('i18n failed: ' + e.message);
+      return json(502, { error: 'Translation is unavailable right now. Please try again.', map });
+    }
+  }
+  return json(200, { map });
+}

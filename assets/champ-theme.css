@@ -4,7 +4,7 @@
 /* ---------- the 🎨 button and panel (both) ---------- */
 .ct-btn{position:fixed;right:24px;bottom:84px;z-index:2147483000;width:46px;height:46px;border-radius:50%;border:1px solid rgba(201,162,39,.6);background:#111;color:#fff;font-size:20px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35);transition:transform .2s}
 .ct-btn:hover{transform:scale(1.08)}
-.ct-panel{position:fixed;right:18px;bottom:140px;z-index:2147483001;width:min(340px,calc(100vw - 36px));background:#fff;color:#1A1A1A;border:1px solid #E5E2DA;border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.35);padding:16px;display:grid;gap:12px;font:500 14px/1.4 'Manrope',system-ui,sans-serif}
+.ct-panel{position:fixed;right:18px;top:74px;z-index:2147483001;width:min(340px,calc(100vw - 36px));background:#fff;color:#1A1A1A;border:1px solid #E5E2DA;border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.35);padding:16px;display:grid;gap:12px;font:500 14px/1.4 'Manrope',system-ui,sans-serif}
 .ct-panel[hidden]{display:none}
 .ct-head{display:flex;justify-content:space-between;align-items:center}.ct-head b{font:800 16px/1 'Archivo',sans-serif;letter-spacing:.01em}
 .ct-x{background:none;border:0;font-size:16px;cursor:pointer;color:#6B6860;width:30px;height:30px}
@@ -177,3 +177,37 @@ html[data-skin=emerald] .cc-h{background:linear-gradient(90deg,#030B08,#06140F 6
 html[data-skin=slate] .cc-h{background:linear-gradient(90deg,#0D0E10,#16181C 60%,#5A2E17);border-bottom-color:#E0793F}html[data-skin=slate] .cc-h small{color:#F6B48B}
 @media (max-width:520px){.cc-box{right:6px;bottom:6px;width:calc(100vw - 12px);height:calc(100vh - 12px)}.cc-btn span{display:none}.cc-btn{padding:6px}}
 @media print{.cc-btn,.cc-box{display:none!important}}
+
+/* ---------- top-right controls cluster ---------- */
+header.site .nav{max-width:none;padding-left:14px;padding-right:20px}
+header.site .brand.champ{margin-right:auto}
+header.site .menu{margin-right:auto}
+.ct-ctl{display:inline-flex;align-items:center;gap:6px;margin-left:auto}
+header.site .ct-ctl+.nav-login{margin-left:4px}
+.ct-btn.ct-in{position:static;width:38px;height:38px;font-size:17px;box-shadow:none;background:transparent;border:1px solid var(--line,#E5E2DA);color:inherit}
+.ct-btn.ct-in:hover{transform:none;border-color:#C9A227}
+.top .ct-ctl{margin-left:auto}
+.top .ct-ctl+.top-new{margin-left:0}
+.ct-lang{display:inline-flex;align-items:center;gap:5px;height:38px;padding:0 11px;border-radius:999px;border:1px solid var(--line,#E5E2DA);background:transparent;color:inherit;font:800 12.5px/1 'Manrope',system-ui,sans-serif;cursor:pointer;letter-spacing:.04em}
+.ct-lang:hover,.ct-lang[aria-expanded=true]{border-color:#C9A227}
+.ct-langmenu{position:fixed;top:74px;right:18px;z-index:2147483002;width:260px;max-height:min(520px,calc(100vh - 100px));overflow-y:auto;background:#fff;color:#1A1A1A;border:1px solid #E5E2DA;border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.3);padding:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.ct-langmenu[hidden]{display:none}
+.ct-langmenu b{grid-column:1/-1;padding:6px 8px 8px;font:800 13px/1.2 'Archivo',sans-serif}
+.ct-langmenu button{text-align:left;border:0;background:none;padding:8px 9px;border-radius:9px;font:600 13px/1.2 'Manrope',sans-serif;cursor:pointer;color:#1A1A1A}
+.ct-langmenu button:hover{background:#F6F1E2}
+.ct-langmenu button[aria-current=true]{background:#111;color:#fff}
+.ct-langmenu small{grid-column:1/-1;padding:6px 8px;color:#8A857A;font-size:11px;line-height:1.4}
+html.i18n-busy body::after{content:"Translating…";position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:2147483003;background:#111;color:#F5D97A;border:1px solid #C9A227;padding:7px 16px;border-radius:999px;font:700 12.5px/1 'Manrope',sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+@media (max-width:900px){header.site .ct-ctl{gap:4px}.ct-lang{padding:0 8px}}
+
+/* ---------- Champ: glow until first opened, voice controls ---------- */
+.cc-btn.cc-glow{animation:cc-glow 2.2s ease-in-out infinite}
+.cc-btn.cc-glow img{animation:gkh-spin 80s linear infinite,cc-img 2.2s ease-in-out infinite}
+@keyframes cc-glow{0%,100%{box-shadow:0 0 0 0 rgba(232,192,74,.65),0 10px 30px rgba(0,0,0,.35)}50%{box-shadow:0 0 0 14px rgba(232,192,74,0),0 0 28px 6px rgba(232,192,74,.55),0 10px 30px rgba(0,0,0,.35)}}
+@keyframes cc-img{50%{filter:drop-shadow(0 0 10px rgba(255,200,80,.95))}}
+.cc-btn:hover{box-shadow:0 0 22px 4px rgba(232,192,74,.5),0 10px 30px rgba(0,0,0,.35)}
+@media (prefers-reduced-motion:reduce){.cc-btn.cc-glow,.cc-btn.cc-glow img{animation:none}}
+.cc-voice{background:none;border:1px solid #444;color:#fff;border-radius:8px;height:30px;padding:0 8px;font:700 12px/1 'Manrope',sans-serif;cursor:pointer;white-space:nowrap}
+.cc-voice[aria-pressed=true]{background:#C9A227;border-color:#C9A227;color:#111}
+.cc-say{display:inline-flex;align-items:center;gap:4px;margin-top:6px;border:1px solid #E1D6B4;background:#FFF9E8;color:#5E4A0E;border-radius:999px;padding:3px 9px;font:700 11.5px/1.2 'Manrope',sans-serif;cursor:pointer}
+.cc-say.on{background:#111;color:#F5D97A;border-color:#111}
