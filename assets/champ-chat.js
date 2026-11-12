@@ -43,6 +43,61 @@
   var voiceOn = ls('champVoice') === '1', voiceOk = true, audio = null, speakingBtn = null;
   var NOVOICE = { rw: 1 };
   var busy = false;
+  // ---- the visitor: Champ's welcome questions (language → name → phone → email → confirm → welcome package) ----
+  var OB = { greet: 'Greetings! I\u2019m Champ 👋 What language would you be most comfortable with?',
+    switchTip: 'You can always switch to English or any other language by saying “switch to …”.',
+    sorry: 'Sorry, I don\u2019t speak that language yet. Let\u2019s keep to English.',
+    askName: 'Lovely! What is your name?', skipTip: '(You can skip any question.)',
+    askPhone: 'Nice to meet you, {name}! Can I have your phone number, with your country code? For example +61 412 345 678.',
+    askPhoneNo: 'Can I have your phone number, with your country code? For example +61 412 345 678.',
+    badPhone: 'That doesn\u2019t look like a phone number with a country code. Please try again, for example +61 412 345 678, or tap Skip.',
+    askEmail: 'Thank you! And your email address?',
+    badEmail: 'That doesn\u2019t look like an email address. Please try again, or tap Skip.',
+    confirmEmail: 'I have your email as {email}. Is that correct?',
+    retypeEmail: 'No problem. Please type your email address again.',
+    askWelcome: 'Shall I send you a welcome package to your email?',
+    yes: 'Yes', no: 'No', yesPlease: 'Yes, please', noThanks: 'No, thanks', skip: 'Skip',
+    sent: 'Done! Your welcome package is on its way to {email}.',
+    noted: 'Noted! The GKH team will send your welcome package to {email} shortly.',
+    thanksName: 'Thank you, {name}! How can I help you today?', thanks: 'Thank you! How can I help you today?',
+    back: 'Welcome back, {name}! 👋 How can I help you today?', forgot: 'Done. I have forgotten your details.' };
+  var vis = {}; try { vis = JSON.parse(ls('champVisitor') || '{}') || {}; } catch (e) { vis = {}; }
+  function newId() { var a = new Uint8Array(12); try { crypto.getRandomValues(a); } catch (e) { for (var i = 0; i < 12; i++) a[i] = Math.random() * 256; } return 'v' + Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+  if (!vis.id) vis.id = newId();
+  function saveVis() { ls('champVisitor', JSON.stringify(vis)); }
+  saveVis();
+  var LNAMES = { en: ['english', 'inggeris', 'ingles', 'inglés', 'anglais', 'englisch'], ms: ['malay', 'melayu', 'bahasa melayu', 'malaysian'], id: ['indonesian', 'indonesia', 'bahasa indonesia'],
+    ta: ['tamil', 'தமிழ்'], zh: ['chinese', 'mandarin', '中文', '普通话', '汉语', '华语', '简体中文'], hi: ['hindi', 'हिन्दी', 'हिंदी'], ar: ['arabic', 'العربية', 'عربي', 'عربية'],
+    fa: ['persian', 'farsi', 'فارسی', 'پارسی'], vi: ['vietnamese', 'tiếng việt', 'tieng viet'], th: ['thai', 'ไทย', 'ภาษาไทย'], tl: ['filipino', 'tagalog'], ja: ['japanese', '日本語', 'にほんご'],
+    ko: ['korean', '한국어'], es: ['spanish', 'español', 'espanol', 'castellano'], fr: ['french', 'français', 'francais'], de: ['german', 'deutsch'], pt: ['portuguese', 'português', 'portugues'],
+    sw: ['swahili', 'kiswahili'], rw: ['kinyarwanda', 'ikinyarwanda'] };
+  function langFromText(t) {
+    t = String(t || '').toLowerCase().replace(/[.,!?¿¡。、！？:;"“”'’()]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!t || t.split(' ').length > 6) return '';
+    var hit = '';
+    Object.keys(LNAMES).forEach(function (k) { if (!hit && LNAMES[k].some(function (n) { return /[a-z]/.test(n) ? (' ' + t + ' ').indexOf(' ' + n + ' ') >= 0 : t.indexOf(n) >= 0; })) hit = k; });
+    return hit;
+  }
+  function yesNo(t) {
+    t = String(t || '').trim().toLowerCase().replace(/[.!。！]+$/, '');
+    if (/^(y|yes|yeah|yep|yup|sure|ok|okay|correct|right|that'?s (right|correct)|please|yes please|ya|iya|ye|betul|ada|ஆம்|ஆமாம்|சரி|oui|sí|si|ja|sim|da|はい|ええ|네|예|是|是的|对|好|نعم|بله|آره|درسته|हाँ|हां|haan|ha|ndiyo|ndio|vâng|có|ใช่|ครับ|ค่ะ|opo|oo)\b/.test(t)) return 'yes';
+    if (/^(n|no|nope|nah|no thanks|not now|wrong|incorrect|tidak|tak|bukan|இல்லை|வேண்டாம்|non|nein|não|nao|いいえ|아니요|아니|不|不是|不用|لا|نه|नहीं|nahi|hapana|không|ไม่|hindi)\b/.test(t)) return 'no';
+    if (t === T(OB.yes).toLowerCase() || t === T(OB.yesPlease).toLowerCase()) return 'yes';
+    if (t === T(OB.no).toLowerCase() || t === T(OB.noThanks).toLowerCase()) return 'no';
+    return '';
+  }
+  function normPhone(s) { var t = String(s || '').replace(/[^\d+]/g, ''); if (t.indexOf('00') === 0) t = '+' + t.slice(2); if (t[0] !== '+') { if (t[0] === '0') return ''; t = '+' + t; } t = '+' + t.slice(1).replace(/\+/g, ''); var n = t.length - 1; return n >= 8 && n <= 15 && t[1] !== '0' ? t : ''; }
+  function normEmail(s) { var t = String(s || '').trim().toLowerCase().replace(/\s+(at|@)\s+/g, '@').replace(/\s+(dot|point)\s+/g, '.').replace(/\s+/g, '').replace(/[.。]+$/, ''); return /^[^\s@<>()",;:]{1,64}@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(t) && t.length <= 120 ? t : ''; }
+  function obStrs() { return Object.keys(OB).map(function (k) { return OB[k]; }); }
+  function fill(t) { return String(t).replace(/\{name\}/g, vis.name || '').replace(/\{email\}/g, vis.email || ''); }
+  function tr(s) { return fill(T(s)); }
+  function obActive() { return where === 'site' && !!vis.step && vis.step !== 'done'; }
+  function obSave(f) {
+    var b = { mode: 'visitor', id: vis.id, page: location.pathname }; Object.keys(f).forEach(function (k) { b[k] = f[k]; });
+    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { j.status = r.status; if (r.ok) { vis.saved = 1; saveVis(); } return j; }); })
+      .catch(function () { return {}; });
+  }
 
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function md(t) {   // **bold**, "- " bullets, links, line breaks; everything else escaped
@@ -156,7 +211,7 @@
         b.onclick = function () { if (speakingBtn === b) stopVoice(); else speak(textOf(msgs[idx]), langOf(msgs[idx]), b, idx); };
         row.appendChild(b);
       }
-      var mb = document.createElement('button'); mb.type = 'button'; mb.className = 'cc-mlink'; mb.textContent = T(UI.menu); mb.onclick = showMenu;
+      var mb = document.createElement('button'); mb.type = 'button'; mb.className = 'cc-mlink'; mb.textContent = T(UI.menu); mb.onclick = menuNow;
       row.appendChild(mb); bb.appendChild(row); return row;
     }
     function showMenu() {
@@ -175,21 +230,22 @@
     }
     function draw() {
       log.innerHTML = '';
-      bubble('bot', md(HELLO[lang] || HELLO.auto));
+      var hasOb = msgs.some(function (m) { return m.ob; });
+      if (!hasOb && !obActive()) bubble('bot', md(vis.name && where === 'site' ? tr(OB.back) : (HELLO[lang] || HELLO.auto)));
       msgs.forEach(function (m, i) { if (m.role === 'user') bubble('user', '<p>' + esc(m.content) + '</p>'); else tools(bubble('bot', md(textOf(m))), i); });
-      if (!msgs.length) showMenu();
+      if (obActive()) obButtons(); else if (!msgs.length) showMenu();
       box.dir = RTL[lang] ? 'rtl' : 'ltr'; labels();
     }
     // switch language: translate what is on screen, keep reading aloud in the new language, then show the main menu
     var switching = 0;
-    function switchLang(L, fromPage) {
-      if (L === lang && !fromPage) return;
+    function switchLang(L, fromPage, after) {
+      if (L === lang && !fromPage) { if (after) after(); return; }
       var wasIdx = speakingIdx; stopVoice();
       lang = L; sel.value = L; ls('champChatLang', L);
       if (!fromPage) window.dispatchEvent(new CustomEvent('champ:chatlang', { detail: L }));
       var my = ++switching;
-      if (L === 'auto') { if (!box.hidden) { draw(); if (msgs.length) showMenu(); } return; }
-      var todo = [], strings = concrete(L) ? Object.keys(UI).map(function (k) { return UI[k]; }).concat(MENU.map(function (x) { return x[1]; })) : [];
+      if (L === 'auto') { if (!box.hidden) { draw(); if (msgs.length && !obActive()) showMenu(); } if (after) after(); return; }
+      var todo = [], strings = concrete(L) ? Object.keys(UI).map(function (k) { return UI[k]; }).concat(MENU.map(function (x) { return x[1]; })).concat(where === 'site' ? obStrs() : []) : [];
       msgs.forEach(function (m) { if (m.role === 'assistant' && m.lang !== L && !(m.tr && m.tr[L])) { todo.push(m); strings = strings.concat(pieces(m.content)); } });
       if (!box.hidden) draw();   // greeting, direction and anything already translated change at once
       if (strings.length) { box.classList.add('cc-switching'); box.querySelector('.cc-sub').textContent = '⏳ ' + UI.switching; }
@@ -198,18 +254,19 @@
         todo.forEach(function (m) { m.tr = m.tr || {}; m.tr[L] = rebuild(m.content, L); });
         ss('champChat', JSON.stringify(msgs.slice(-24)));
         box.classList.remove('cc-switching');
+        if (!box.hidden) { draw(); if (busy) bubble('bot', '<span class="cc-dots"><i></i><i></i><i></i></span>', 'cc-wait'); else if (msgs.length && !obActive() && !after) showMenu(); }
+        if (after) { after(); return; }
         if (box.hidden) return;
-        draw(); if (busy) bubble('bot', '<span class="cc-dots"><i></i><i></i><i></i></span>', 'cc-wait'); else if (msgs.length) showMenu();
         if (wasIdx >= 0 && msgs[wasIdx]) { var bs = log.querySelectorAll('.cc-bot .cc-say'), k = msgs.slice(0, wasIdx + 1).filter(function (m) { return m.role === 'assistant'; }).length - 1; speak(textOf(msgs[wasIdx]), langOf(msgs[wasIdx]), bs[k], wasIdx); }
       });
     }
-    function ask(q, spoken) {
+    function ask(q, spoken, after) {
       q = String(q || '').trim(); if (!q || busy) return;
       var menu = log.querySelector('.cc-menu'); if (menu) menu.remove();
       busy = true; msgs.push({ role: 'user', content: q }); ss('champChat', JSON.stringify(msgs.slice(-24)));
       bubble('user', '<p>' + esc(q) + '</p>'); ta.value = ''; ta.style.height = '';
       var wait = bubble('bot', '<span class="cc-dots"><i></i><i></i><i></i></span>', 'cc-wait');
-      fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: msgs.slice(-12).map(function (m) { return { role: m.role, content: m.role === 'assistant' ? textOf(m) : m.content }; }), lang: lang, where: where }) })
+      fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: msgs.filter(function (m) { return !m.ob; }).slice(-12).map(function (m) { return { role: m.role, content: m.role === 'assistant' ? textOf(m) : m.content }; }), lang: lang, where: where, name: where === 'site' ? (vis.name || '') : '' }) })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || 'The assistant is unavailable right now.'); return j; }); })
         .then(function (j) {
           log.querySelectorAll('.cc-wait').forEach(function (x) { x.remove(); }); var L = j.lang || (lang === 'auto' ? 'en' : lang);
@@ -217,14 +274,139 @@
           var i = msgs.length - 1;
           // you wrote (or spoke) in another language: Champ answered in it, so the whole chat follows you there
           if (j.lang && lang !== 'auto' && j.lang !== lang && LANGS.some(function (x) { return x[0] === j.lang; })) {
-            busy = false; speakingIdx = voiceOn || spoken ? i : -1; switchLang(j.lang); return;
+            busy = false; speakingIdx = voiceOn || spoken ? i : -1; switchLang(j.lang, false, after); return;
           }
           var bb = bubble('bot', md(j.reply)), row = tools(bb, i);
           if (voiceOn || spoken) speak(j.reply, L, row.querySelector('.cc-say'), i);
+          if (after) setTimeout(after, 0);
         })
         .catch(function (e) { log.querySelectorAll('.cc-wait').forEach(function (x) { x.remove(); }); msgs.pop(); ss('champChat', JSON.stringify(msgs)); bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err'); })
         .then(function () { busy = false; ta.focus(); });
     }
+    // ---- Champ's welcome: language, name, phone, email (read back to confirm), welcome package ----
+    function curL() { return concrete(lang) ? lang : 'en'; }
+    function obVoice() { return ls('champVoice') !== '0'; }
+    function obSay(text, L) {
+      var old = log.querySelector('.cc-obb'); if (old) old.remove();
+      msgs.push({ role: 'assistant', content: text, lang: L || curL(), ob: true }); ss('champChat', JSON.stringify(msgs.slice(-24)));
+      var i = msgs.length - 1, row = tools(bubble('bot', md(text)), i);
+      if (obVoice()) speak(text, L || curL(), row.querySelector('.cc-say'), i);
+    }
+    function obUser(t) { var m = log.querySelector('.cc-menu'); if (m) m.remove(); msgs.push({ role: 'user', content: t, ob: true }); ss('champChat', JSON.stringify(msgs.slice(-24))); bubble('user', '<p>' + esc(t) + '</p>'); ta.value = ''; ta.style.height = ''; }
+    function obPrompt() {
+      var st = vis.step;
+      if (st === 'lang') obSay(OB.greet + '\n' + OB.switchTip, 'en');
+      else if (st === 'name') obSay(tr(OB.askName) + ' ' + tr(OB.skipTip));
+      else if (st === 'phone') obSay(tr(vis.name ? OB.askPhone : OB.askPhoneNo));
+      else if (st === 'email') obSay(tr(OB.askEmail));
+      else if (st === 'confirm') obSay(tr(OB.confirmEmail));
+      else if (st === 'welcome') obSay(tr(OB.askWelcome));
+      obButtons();
+    }
+    function obButtons() {
+      var old = log.querySelector('.cc-obb'); if (old) old.remove();
+      if (!obActive()) return;
+      var st = vis.step, btns = [];
+      if (st === 'lang') btns = LANGS.filter(function (l) { return l[0] !== 'auto'; }).map(function (l) { return ['L:' + l[0], l[1]]; }).concat([['skip', 'Skip (English)']]);
+      else if (st === 'confirm') btns = [['yes', '✓ ' + T(OB.yes)], ['no', '✎ ' + T(OB.no)]];
+      else if (st === 'welcome') btns = [['yes', '🎁 ' + T(OB.yesPlease)], ['no', T(OB.noThanks)]];
+      else btns = [['skip', T(OB.skip) + ' ›']];
+      var d = bubble('bot', '<div class="cc-ob-btns' + (st === 'lang' ? ' cc-ob-langs' : '') + '">' + btns.map(function (b) { return '<button type="button" data-ob="' + esc(b[0]) + '">' + esc(b[1]) + '</button>'; }).join('') + '</div>', 'cc-obb');
+      d.querySelectorAll('[data-ob]').forEach(function (b) {
+        b.onclick = function () {
+          var v = b.getAttribute('data-ob');
+          if (v.indexOf('L:') === 0) { obUser(b.textContent); chooseLang(v.slice(2)); }
+          else if (v === 'skip') obSkip();
+          else { obUser(b.textContent.replace(/^[✓✎🎁]\s*/, '')); obAnswer(v === 'yes' ? 'yes' : 'no', false, '', true); }
+        };
+      });
+      log.scrollTop = log.scrollHeight;
+    }
+    function chooseLang(L) {
+      vis.lang = L; vis.step = 'name'; saveVis(); obSave({ lang: L });
+      if (L !== lang) switchLang(L, false, obPrompt);
+      else if (concrete(L)) ensure(obStrs(), L).then(obPrompt); else obPrompt();
+    }
+    function obFinish() {
+      vis.step = 'done'; saveVis();
+      obSay(tr(vis.name ? OB.thanksName : OB.thanks)); showMenu();
+    }
+    function obSkip() {
+      var st = vis.step; obUser(st === 'lang' ? 'Skip (English)' : T(OB.skip));
+      if (st === 'lang') { obSave({ skip: 'lang' }); chooseLang('en'); return; }
+      obSave({ skip: st === 'confirm' ? 'email' : st });
+      if (st === 'name') vis.step = 'phone';
+      else if (st === 'phone') vis.step = 'email';
+      else if (st === 'email' || st === 'confirm') { vis.email = ''; saveVis(); return obFinish(); }
+      else if (st === 'welcome') { obSave({ welcome: 'no' }); return obFinish(); }
+      saveVis(); obPrompt();
+    }
+    // true when the onboarding took the answer
+    function obAnswer(text, spoken, heard, shown) {
+      var st = vis.step, t = String(text || '').trim(); if (!t) return true;
+      var question = /[?？؟]\s*$/.test(t) && st !== 'lang';
+      if (question) { ask(t, spoken, function () { if (obActive()) obPrompt(); }); return true; }
+      if (!shown) obUser(t);
+      if (st === 'lang') {
+        var L = langFromText(t) || (heard && heard !== 'en' && LANGS.some(function (x) { return x[0] === heard; }) ? heard : '');
+        if (!L) { obSay(OB.sorry, 'en'); L = 'en'; }
+        chooseLang(L); return true;
+      }
+      if (st === 'name') {
+        busy = true;
+        obSave({ name: t }).then(function (j) {
+          busy = false;
+          vis.name = (j.visitor && j.visitor.name) || (j.status === 422 ? '' : t.replace(/^(my name is|i am|i'm|call me|this is)\s+/i, '').replace(/[.!]+$/, '').slice(0, 60));
+          vis.step = 'phone'; saveVis(); obPrompt();
+        });
+        return true;
+      }
+      if (st === 'phone') {
+        var p = normPhone(t); if (!p) { obSay(tr(OB.badPhone)); obButtons(); return true; }
+        vis.phone = p; vis.step = 'email'; saveVis(); obSave({ phone: p }); obPrompt(); return true;
+      }
+      if (st === 'email') {
+        var e = normEmail(t); if (!e) { obSay(tr(OB.badEmail)); obButtons(); return true; }
+        vis.email = e; vis.step = 'confirm'; saveVis(); obPrompt(); return true;
+      }
+      if (st === 'confirm') {
+        var yn = yesNo(t), e2 = normEmail(t);
+        if (e2 && e2 !== vis.email) { vis.email = e2; saveVis(); obPrompt(); return true; }   // they typed it again
+        if (yn === 'yes') { vis.step = 'welcome'; saveVis(); obSave({ email: vis.email }); obPrompt(); return true; }
+        vis.step = 'email'; saveVis(); obSay(tr(OB.retypeEmail)); obButtons(); return true;
+      }
+      if (st === 'welcome') {
+        if (yesNo(t) === 'yes') {
+          busy = true;
+          obSave({ welcome: 'yes' }).then(function (j) { busy = false; obSay(tr(j.visitor && j.visitor.welcomeStatus === 'sent' ? OB.sent : OB.noted)); obFinish(); });
+        } else { obSave({ welcome: 'no' }); obFinish(); }
+        return true;
+      }
+      return false;
+    }
+    // everything typed or spoken comes here first: "switch to …", "forget me", the welcome questions, then Champ
+    function handle(text, spoken, heard) {
+      var t = String(text || '').trim(); if (!t || busy) return;
+      var sw = /^\s*(?:please\s+)?(?:switch|change|speak|talk)\s+(?:to|into|in)\s+(.+?)\s*[.!]?\s*$/i.exec(t);
+      if (sw) {
+        obUser(t); var L = langFromText(sw[1]);
+        if (!L) { obSay(OB.sorry, 'en'); L = 'en'; }
+        if (vis.step === 'lang') { chooseLang(L); return; }
+        if (where === 'site' && vis.lang !== L) { vis.lang = L; saveVis(); obSave({ lang: L }); }
+        switchLang(L, false, function () { if (obActive()) obPrompt(); else showMenu(); });
+        return;
+      }
+      if (where === 'site' && /^\s*(forget me|delete my (details|data|info(rmation)?)|remove my (details|data))\s*[.!]?\s*$/i.test(t)) {
+        obUser(t); obSave({ forget: true }); vis = { id: newId(), step: 'done' }; saveVis(); obSay(T(OB.forgot)); showMenu(); return;
+      }
+      if (obActive() && obAnswer(t, spoken, heard)) return;
+      ask(t, spoken);
+    }
+    function menuNow() {   // ☰ during the welcome questions: skip the rest
+      if (obActive()) { obSave({ skip: vis.step }); vis.step = 'done'; saveVis(); var o = log.querySelector('.cc-obb'); if (o) o.remove(); }
+      showMenu();
+    }
+
     // ---- 🎤 Champ's ears: speak in any of your voice languages; Champ switches to it and answers aloud ----
     var STT_ALL = ['en', 'ta', 'ms', 'id', 'fa', 'zh', 'hi', 'ar', 'vi', 'th', 'tl', 'ja', 'ko', 'es', 'fr', 'de', 'sw'];   // Portuguese: “Any language” mode only (refused in a list by Azure in australiaeast)
     function sttAny() { return ls('champSttMode') === 'any'; }
@@ -284,8 +466,9 @@
         .then(function (j) {
           micState('');
           if (!j.text) { bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); return; }
+          if (obActive()) { handle(j.text, true, j.lang); return; }   // the welcome questions: no language jumps on a phone number
           if (j.lang && j.lang !== lang) switchLang(j.lang);   // you spoke Tamil: Champ is now in Tamil
-          ask(j.text, true);
+          handle(j.text, true, j.lang);
         })
         .catch(function (e) { micState(''); bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err'); });
     }
@@ -295,21 +478,28 @@
     function open(on) {
       box.hidden = !on; btn.setAttribute('aria-expanded', on ? 'true' : 'false'); document.body.classList.toggle('cc-open', on);
       if (on) { btn.classList.remove('cc-glow'); ls('champChatSeen', '1'); } else { stopVoice(); if (typeof stopRec === 'function') stopRec(); }
-      if (on) { draw(); setTimeout(function () { ta.focus(); }, 50); if (concrete(lang)) ensure(Object.keys(UI).map(function (k) { return UI[k]; }).concat(MENU.map(function (x) { return x[1]; })), lang).then(function () { if (!box.hidden) { labels(); var mm = log.querySelector('.cc-menu'); if (mm) showMenu(); } }); }
+      if (on) {
+        var fresh = where === 'site' && !vis.step;
+        if (fresh) { vis.step = 'lang'; saveVis(); }
+        if (where === 'site' && vis.saved && !ss('champVisit')) { ss('champVisit', '1'); obSave({ visit: true }); }
+        draw(); setTimeout(function () { ta.focus(); }, 50);
+        if (fresh || (obActive() && !msgs.some(function (m) { return m.ob; }))) obPrompt();
+        if (concrete(lang)) ensure(Object.keys(UI).map(function (k) { return UI[k]; }).concat(MENU.map(function (x) { return x[1]; })).concat(where === 'site' ? obStrs() : []), lang).then(function () { if (!box.hidden) { labels(); var mm = log.querySelector('.cc-menu:not(.cc-obb)'); if (mm && !obActive()) showMenu(); } });
+      }
     }
     btn.onclick = function () { open(box.hidden); };
     box.querySelector('.cc-x').onclick = function () { open(false); btn.focus(); };
-    box.querySelector('.cc-menubtn').onclick = showMenu;
-    box.querySelector('.cc-clear').onclick = function () { stopVoice(); msgs = []; ss('champChat', '[]'); draw(); };
-    sel.onchange = function () { switchLang(sel.value); };
+    box.querySelector('.cc-menubtn').onclick = menuNow;
+    box.querySelector('.cc-clear').onclick = function () { stopVoice(); msgs = []; ss('champChat', '[]'); draw(); if (obActive()) obPrompt(); };
+    sel.onchange = function () { if (obActive() && vis.step === 'lang' && sel.value !== 'auto') { obUser(sel.options[sel.selectedIndex].text); chooseLang(sel.value); } else switchLang(sel.value); };
     window.addEventListener('champ:lang', function (e) { switchLang(e.detail, true); });
     var vb = box.querySelector('.cc-voice');
     vb.onclick = function () { voiceOn = !voiceOn; ls('champVoice', voiceOn ? '1' : '0'); vb.setAttribute('aria-pressed', String(voiceOn)); if (!voiceOn) stopVoice(); };
-    box.querySelector('form').onsubmit = function (e) { e.preventDefault(); ask(ta.value); };
-    ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(ta.value); } });
+    box.querySelector('form').onsubmit = function (e) { e.preventDefault(); handle(ta.value); };
+    ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handle(ta.value); } });
     ta.addEventListener('input', function () { ta.style.height = ''; ta.style.height = Math.min(120, ta.scrollHeight) + 'px'; });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !box.hidden) open(false); });
-    window.ChampChat = { open: function () { open(true); }, ask: function (q) { open(true); ask(q); }, lang: function (L) { switchLang(L); }, menu: function () { open(true); showMenu(); } };
+    window.ChampChat = { open: function () { open(true); }, ask: function (q) { open(true); handle(q); }, visitor: function () { return { id: vis.id, step: vis.step, name: vis.name || '', lang: vis.lang || '' }; }, lang: function (L) { switchLang(L); }, menu: function () { open(true); showMenu(); } };
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build); else build();
 })();

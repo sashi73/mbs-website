@@ -222,6 +222,11 @@ html.i18n-busy body::after{content:"Translating…";position:fixed;top:14px;left
 .cc-menu-list button:hover,.cc-menu-list button:focus-visible{background:#FCEFC4;border-color:#C9A227;outline:none}
 .cc-menu-list button span{font-size:16px;flex:none}
 @media (max-width:420px){.cc-menu-list{grid-template-columns:1fr}}
+.cc-obb{background:transparent!important;border:0!important;box-shadow:none!important;padding:2px 0!important}
+.cc-ob-btns{display:flex;flex-wrap:wrap;gap:6px}
+.cc-ob-btns button{border:1px solid #E1D6B4;background:#FFF9E8;color:#3A2E08;border-radius:999px;padding:7px 13px;font:700 12.5px/1.2 'Manrope',system-ui,sans-serif;cursor:pointer}
+.cc-ob-btns button:hover,.cc-ob-btns button:focus-visible{background:#FCEFC4;border-color:#C9A227;outline:none}
+.cc-ob-langs button{padding:6px 11px}
 .cc-tools{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .cc-tools .cc-say{margin-top:0}
 .cc-mlink{border:1px solid #E5E2DA;background:#fff;color:#5E5A50;border-radius:999px;padding:3px 10px;font:700 11.5px/1.2 'Manrope',sans-serif;cursor:pointer}

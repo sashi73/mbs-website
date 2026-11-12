@@ -5,6 +5,7 @@
 import { env, clean } from '../lib/shared.mjs';
 import * as J from '../lib/jobs.mjs';
 import * as kv from '../lib/kv.mjs';
+import * as VIS from '../lib/visitors.mjs';
 import BUILD from '../lib/build-info.mjs';
 import * as A from '../lib/admin-lib.mjs';
 import { period } from '../lib/bot.mjs';
@@ -291,6 +292,20 @@ async function handle(req, context) {
         if (!ctx.owner) return bad('Only the owner can see the build registry.', 403);
         const reg = (await kv.get('champ-builds').catch(() => null)) || { list: [] };
         return out(200, { current: BUILD, list: reg.list, repo: 'https://github.com/sashi73/mbs-website' });
+      }
+
+      // ---------- GKH Project Champ: visitors / potential customers who introduced themselves to Champ ----------
+      case 'visitorList': {
+        if (ctx.scope) return bad('Sub-contractor logins cannot see visitors.', 403);
+        if (!ctx.owner && !(ctx.mods && ctx.mods.crm)) return bad('You need access to Jobs & customers to see visitors.', 403);
+        return out(200, { list: await VIS.list(), email: !!env('RESEND_API_KEY') });
+      }
+      case 'visitorDelete': {
+        if (ctx.scope) return bad('Sub-contractor logins cannot delete visitors.', 403);
+        if (!ctx.owner && !(ctx.mods && ctx.mods.crm === 'edit')) return bad('You need edit access to Jobs & customers to delete visitors.', 403);
+        const ids = (Array.isArray(body.ids) ? body.ids : [body.id]).map((x) => clean(String(x || ''), 60)).filter(VIS.validId).slice(0, 500);
+        if (!ids.length) return bad('Pick a visitor to delete.');
+        return out(200, { ok: true, removed: await VIS.remove(ids) });
       }
 
       // ---------- GKH Project Champ: delete a project completely (plan, record, phase pin, BOM setting) ----------

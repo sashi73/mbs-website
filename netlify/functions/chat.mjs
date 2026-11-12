@@ -8,6 +8,7 @@ import { env, stripThinking, cors, json, clean } from '../lib/shared.mjs';
 import { SYSTEM, LANGS } from '../lib/champ-kb.mjs';
 import { store } from '../lib/admin-lib.mjs';
 import { createHash } from 'node:crypto';
+import * as V from '../lib/visitors.mjs';
 
 const MAX_TURNS = 12, MAX_CHARS = 1200;
 const CONTACT = 'ceo@gkhconsultancy.com';
@@ -29,6 +30,7 @@ export default async (req, context) => {
   let body;
   try { body = await req.json(); } catch { return json(400, { error: 'Invalid JSON' }); }
   if (body?.mode === 'i18n') return i18n(body, ip);
+  if (body?.mode === 'visitor') return visitor(body, ip, context);
   const lang = LANGS[body?.lang] ? LANGS[body.lang] : LANGS.auto;
   const where = body?.where === 'console' ? 'console' : 'site';
   const messages = (Array.isArray(body?.messages) ? body.messages : [])
@@ -52,7 +54,7 @@ export default async (req, context) => {
     const r = await fetch(`${base}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, temperature: 0.4, max_tokens: 700, stream: false, messages: [{ role: 'system', content: SYSTEM(lang, where) }, ...messages] })
+      body: JSON.stringify({ model, temperature: 0.4, max_tokens: 700, stream: false, messages: [{ role: 'system', content: SYSTEM(lang, where) + who(body?.name) }, ...messages] })
     });
     if (!r.ok) {
       const text = await r.text().catch(() => '');
@@ -71,6 +73,45 @@ export default async (req, context) => {
   if (tag) { reply = reply.slice(0, tag.index).trim(); if (LANGS[tag[1].toLowerCase()]) said = tag[1].toLowerCase(); }
   return json(200, { reply: reply || `Sorry, I didn't get that. Could you ask again? You can also email ${CONTACT}.`, lang: said });
 };
+
+// the visitor told Champ their name: use it now and then
+function who(n) {
+  const name = clean(String(n || ''), 60).replace(/[\r\n<>{}[\]"`\\]/g, ' ').trim();
+  return name ? `\n\nThe person you are talking to is called ${name}. Address them by name naturally now and then (for example in a greeting or when wrapping up), not in every reply.` : '';
+}
+
+// ---------- visitors: Champ's welcome questions (language, name, phone, email, welcome package) ----------
+// Body: { mode: 'visitor', id, lang?, name?, phone?, email?, welcome?: 'yes'|'no', skip?: step, visit?: true, forget?: true }
+const vHits = new Map();
+function vLimited(ip) {
+  const now = Date.now(), list = (vHits.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
+  list.push(now); vHits.set(ip, list); if (vHits.size > 5000) vHits.clear();
+  return list.length > 30;
+}
+async function visitor(body, ip, context) {
+  if (vLimited(ip)) return json(429, { error: 'Too many changes at once. Please try again in a few minutes.' });
+  const id = String(body?.id || '');
+  if (!V.validId(id)) return json(400, { error: 'Unknown visitor' });
+  try {
+    if (body.forget) return json(200, { ok: true, removed: await V.remove(id) });
+    const f = {}, bad = [];
+    if (body.lang != null && LANGS[body.lang] && body.lang !== 'auto') f.lang = body.lang;
+    if (body.name != null) { f.name = await V.extractName(body.name); if (!f.name) bad.push('name'); }
+    if (body.phone != null) { f.phone = V.normPhone(body.phone); if (!f.phone) bad.push('phone'); }
+    if (body.email != null) { f.email = V.normEmail(body.email); if (!f.email) bad.push('email'); }
+    if (body.welcome === 'yes' || body.welcome === 'no') f.welcome = body.welcome;
+    if (['lang', 'name', 'phone', 'email', 'welcome'].includes(body.skip)) f.skip = body.skip;
+    if (body.visit) f.visit = true;
+    if (body.page) f.page = clean(String(body.page), 120);
+    if (bad.length) return json(422, { error: 'invalid', bad });
+    const geo = (context && context.geo) || {};
+    const v = await V.save(id, f, { country: geo.country && geo.country.name, city: geo.city });
+    return json(200, { ok: true, visitor: { name: v.name || '', phone: v.phone || '', email: v.email || '', lang: v.lang || '', welcome: v.welcome || '', welcomeStatus: v.welcomeStatus || '' } });
+  } catch (e) {
+    console.log('visitor save failed: ' + e.message);
+    return json(500, { error: 'Could not save right now.' });
+  }
+}
 
 // ---------- page translation (website and console labels), cached per language in Netlify Blobs ----------
 // Body: { mode: 'i18n', lang: 'ms', strings: ['Home', 'Features', …] }  →  { map: { 'Home': 'Utama', … } }
@@ -100,6 +141,7 @@ async function i18n(body, ip) {
 Return JSON only: {"t": [ ... ]} with exactly one translation per input string, in the same order.
 - Natural, professional ${LANGS[code]}, as a local software product would say it. Keep short UI labels short.
 - Keep unchanged: product and brand names (GKH, Global Knowledge House, Project Champ, Champ), PMBOK, PRINCE2, Scrum, Kanban, Gantt, RACI, RAID, BOM, SWMS, SPI, CPI, EAC, BAC, emoji, numbers, money, dates, email addresses, phone numbers and URLs.
+- Keep placeholders in curly braces, such as {name} and {email}, exactly as they are.
 - Never add notes, quotes or explanations.`;
     try {
       const r = await fetch(`${base}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },

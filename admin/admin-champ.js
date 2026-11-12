@@ -292,4 +292,76 @@
     }).catch(fail);
   }
   M.addView('builds', 'Builds', builds);
+
+  /* ---------------- Customers > Visitors: people who introduced themselves to Champ (potential customers) ---------------- */
+  var VS = { q: '', sel: {} };
+  var LNAME = { en: 'English', ms: 'Bahasa Melayu', id: 'Bahasa Indonesia', ta: 'தமிழ் Tamil', zh: '中文 Chinese', hi: 'हिन्दी Hindi', ar: 'العربية Arabic', fa: 'فارسی Persian', vi: 'Tiếng Việt', th: 'ไทย Thai',
+    tl: 'Filipino', ja: '日本語 Japanese', ko: '한국어 Korean', es: 'Español', fr: 'Français', de: 'Deutsch', pt: 'Português', sw: 'Kiswahili', rw: 'Kinyarwanda' };
+  function visitors() {
+    var el = M.$('#view');
+    if (!M.allowed('crm', 'view')) { el.innerHTML = '<div class="card noaccess"><h2>🔒 No access</h2><p class="muted">Visitors need access to Jobs &amp; customers.</p></div>'; return; }
+    el.innerHTML = '<div class="empty">Loading visitors…</div>';
+    var canDel = M.allowed('crm', 'edit');
+    return api('visitorList').then(function (d) {
+      var all = d.list || [];
+      var when = function (t) { return t ? new Date(t).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; };
+      var week = Date.now() - 7 * 864e5;
+      var wpk = function (v) {
+        if (v.welcome === 'yes') return v.welcomeStatus === 'sent' ? '<span class="pflag pf-green" title="Sent ' + esc(when(v.welcomeAt)) + '">✓ Sent</span>'
+          : v.welcomeStatus === 'failed' ? '<span class="pflag pf-red" title="' + esc(v.welcomeNote || '') + '">Failed: send manually</span>'
+          : '<span class="pflag pf-amber" title="Email sending is not set up yet">Wants it: send manually</span>';
+        return v.welcome === 'no' ? '<span class="muted">No thanks</span>' : '<span class="muted">–</span>';
+      };
+      var tiles = '<div class="cs-tiles">' +
+        '<div class="cs-tile"><span>Visitors</span><b>' + all.length + '</b><small>introduced themselves to Champ</small></div>' +
+        '<div class="cs-tile cs-green"><span>With contact details</span><b>' + all.filter(function (v) { return v.email || v.phone; }).length + '</b><small>phone or email</small></div>' +
+        '<div class="cs-tile"><span>Want the welcome package</span><b>' + all.filter(function (v) { return v.welcome === 'yes'; }).length + '</b><small>' + all.filter(function (v) { return v.welcome === 'yes' && v.welcomeStatus !== 'sent'; }).length + ' still to send</small></div>' +
+        '<div class="cs-tile"><span>This week</span><b>' + all.filter(function (v) { return Date.parse(v.created) > week; }).length + '</b><small>new in the last 7 days</small></div></div>';
+      el.innerHTML = tiles + (d.email ? '' : '<div class="card" style="border-left:4px solid #c9a227"><b>Welcome packages are not emailed automatically yet.</b> <span class="muted">Add RESEND_API_KEY (and FROM_EMAIL from a verified domain) in Netlify; until then, the people marked “Wants it” are waiting for you to send one.</span></div>') +
+        '<div class="card"><div class="card-h"><h2>👋 Visitors &amp; potential customers</h2><span class="sp"></span>' +
+        '<input id="vsQ" type="search" placeholder="Find a name, email, phone, language or country…" value="' + esc(VS.q) + '" style="max-width:300px">' +
+        '<button class="btn btn-sm" id="vsCsv">⬇ CSV</button>' + (canDel ? '<button class="btn btn-sm" id="vsDel" disabled>🗑 Delete</button>' : '') + '<button class="btn btn-sm" id="vsRef">↻</button></div>' +
+        '<div id="vsBody"></div><p class="muted" style="font-size:12px;margin:10px 2px 0">Champ asks every new visitor for their language, name, phone (with country code) and email, then offers a welcome package. Every question can be skipped; a visitor can also tell Champ “forget me”.</p></div>';
+      function rows() {
+        var q = VS.q.trim().toLowerCase();
+        return all.filter(function (v) { return !q || [v.name, v.email, v.phone, LNAME[v.lang] || v.lang, v.country, v.city].join(' ').toLowerCase().indexOf(q) >= 0; });
+      }
+      function draw() {
+        var r = rows(), b = el.querySelector('#vsBody');
+        if (!r.length) { b.innerHTML = '<div class="empty">' + (all.length ? 'No visitor matches that.' : 'No visitors yet. When someone opens Ask Champ on the website and introduces themselves, they appear here.') + '</div>'; return; }
+        b.innerHTML = '<div class="table-wrap"><table><thead><tr>' + (canDel ? '<th style="width:28px"><input type="checkbox" id="vsAll" aria-label="Select all"></th>' : '') +
+          '<th>Name</th><th>Phone</th><th>Email</th><th>Language</th><th>Welcome package</th><th class="hide-sm">From</th><th class="hide-sm">First seen</th><th class="hide-sm">Last seen</th><th class="hide-sm">Visits</th></tr></thead><tbody>' +
+          r.map(function (v) {
+            return '<tr>' + (canDel ? '<td><input type="checkbox" data-vid="' + esc(v.id) + '"' + (VS.sel[v.id] ? ' checked' : '') + '></td>' : '') +
+              '<td><b>' + (v.name ? esc(v.name) : '<span class="muted">(skipped)</span>') + '</b></td>' +
+              '<td>' + (v.phone ? '<a href="tel:' + esc(v.phone) + '">' + esc(v.phone) + '</a> <a href="https://wa.me/' + esc(v.phone.replace('+', '')) + '" target="_blank" rel="noopener" title="WhatsApp">💬</a>' : '<span class="muted">–</span>') + '</td>' +
+              '<td>' + (v.email ? '<a href="mailto:' + esc(v.email) + '">' + esc(v.email) + '</a>' : '<span class="muted">–</span>') + '</td>' +
+              '<td>' + esc(LNAME[v.lang] || v.lang || '–') + '</td><td>' + wpk(v) + '</td>' +
+              '<td class="hide-sm">' + esc([v.city, v.country].filter(Boolean).join(', ') || '–') + '</td>' +
+              '<td class="hide-sm">' + esc(when(v.created)) + '</td><td class="hide-sm">' + esc(when(v.lastSeen || v.updated)) + '</td><td class="hide-sm">' + esc(String(v.visits || 1)) + '</td></tr>';
+          }).join('') + '</tbody></table></div>';
+        b.querySelectorAll('[data-vid]').forEach(function (c) { c.onchange = function () { if (c.checked) VS.sel[c.getAttribute('data-vid')] = 1; else delete VS.sel[c.getAttribute('data-vid')]; selCount(); }; });
+        var a = b.querySelector('#vsAll'); if (a) a.onchange = function () { r.forEach(function (v) { if (a.checked) VS.sel[v.id] = 1; else delete VS.sel[v.id]; }); draw(); selCount(); };
+      }
+      function selCount() { var n = Object.keys(VS.sel).length, d2 = el.querySelector('#vsDel'); if (d2) { d2.disabled = !n; d2.textContent = n ? '🗑 Delete ' + n : '🗑 Delete'; } }
+      el.querySelector('#vsQ').oninput = function () { VS.q = this.value; draw(); };
+      el.querySelector('#vsRef').onclick = visitors;
+      el.querySelector('#vsCsv').onclick = function () {
+        var cols = ['name', 'phone', 'email', 'lang', 'welcome', 'welcomeStatus', 'city', 'country', 'created', 'lastSeen', 'visits'];
+        var q = function (x) { x = x == null ? '' : String(x); if (/^[=+\-@]/.test(x) && !/^\+\d+$/.test(x)) x = "'" + x; return '"' + x.replace(/"/g, '""') + '"'; };
+        var csv = cols.join(',') + '\n' + rows().map(function (v) { return cols.map(function (c) { return q(c === 'lang' ? (LNAME[v.lang] || v.lang) : v[c]); }).join(','); }).join('\n');
+        var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = 'champ-visitors-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();
+      };
+      var del = el.querySelector('#vsDel');
+      if (del) del.onclick = function () {
+        var ids = Object.keys(VS.sel); if (!ids.length) return;
+        M.confirmBox('Delete ' + (ids.length === 1 ? 'this visitor' : ids.length + ' visitors') + '?', 'Their name and contact details are removed from Project Champ. <b>This can\'t be undone.</b>', '🗑 Delete', true).then(function (ok) {
+          if (!ok) return;
+          api('visitorDelete', { ids: ids }).then(function (r) { toast((r.removed || 0) + ' deleted'); VS.sel = {}; visitors(); }).catch(fail);
+        });
+      };
+      draw(); selCount();
+    }).catch(fail);
+  }
+  M.addView('visitors', 'Visitors', visitors);
 })();
