@@ -134,10 +134,10 @@ async function count(body, ip) {
 // ---------- page translation (website and console labels), cached per language in Netlify Blobs ----------
 // Body: { mode: 'i18n', lang: 'ms', strings: ['Home', 'Features', …] }  →  { map: { 'Home': 'Utama', … } }
 const tCalls = new Map();
-function tLimited(ip) {   // at most 30 model calls per address per 10 minutes for uncached text
+function tLimited(ip) {   // at most 60 model calls per address per 10 minutes for uncached text
   const now = Date.now(), list = (tCalls.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
   list.push(now); tCalls.set(ip, list); if (tCalls.size > 5000) tCalls.clear();
-  return list.length > 30;
+  return list.length > 60;
 }
 const hash = (s) => createHash('sha1').update(s).digest('base64url').slice(0, 16);
 async function i18n(body, ip) {

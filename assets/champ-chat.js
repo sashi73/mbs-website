@@ -45,6 +45,7 @@
   var busy = false;
   // ---- the visitor: Champ's welcome questions (language → name → phone → email → confirm → welcome package) ----
   var OB = { greet: 'Greetings! I\u2019m Champ 👋 What language would you be most comfortable with?',
+    greetIn: 'Greetings! I\u2019m Champ 👋 I\u2019ll speak with you in {lang}.',
     switchTip: 'You can always switch to English or any other language by saying “switch to …”.',
     sorry: 'Sorry, I don\u2019t speak that language yet. Let\u2019s keep to English.',
     askName: 'Lovely! What is your name?', skipTip: '(You can skip any question.)',
@@ -89,7 +90,7 @@
   function normPhone(s) { var t = String(s || '').replace(/[^\d+]/g, ''); if (t.indexOf('00') === 0) t = '+' + t.slice(2); if (t[0] !== '+') { if (t[0] === '0') return ''; t = '+' + t; } t = '+' + t.slice(1).replace(/\+/g, ''); var n = t.length - 1; return n >= 8 && n <= 15 && t[1] !== '0' ? t : ''; }
   function normEmail(s) { var t = String(s || '').trim().toLowerCase().replace(/\s+(at|@)\s+/g, '@').replace(/\s+(dot|point)\s+/g, '.').replace(/\s+/g, '').replace(/[.。]+$/, ''); return /^[^\s@<>()",;:]{1,64}@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(t) && t.length <= 120 ? t : ''; }
   function obStrs() { return Object.keys(OB).map(function (k) { return OB[k]; }); }
-  function fill(t) { return String(t).replace(/\{name\}/g, vis.name || '').replace(/\{email\}/g, vis.email || ''); }
+  function fill(t) { var ln = (LANGS.filter(function (l) { return l[0] === lang; })[0] || [0, 'English'])[1]; return String(t).replace(/\{lang\}/g, ln).replace(/\{name\}/g, vis.name || '').replace(/\{email\}/g, vis.email || ''); }
   function tr(s) { return fill(T(s)); }
   function obActive() { return where === 'site' && !!vis.step && vis.step !== 'done' && ss('champObPause') !== '1'; }
   function obSave(f) {
@@ -486,7 +487,11 @@
         if (fresh) { vis.step = 'lang'; saveVis(); }
         if (where === 'site' && vis.saved && !ss('champVisit')) { ss('champVisit', '1'); obSave({ visit: true }); }
         draw(); setTimeout(function () { ta.focus(); }, 50);
-        if (fresh || (obActive() && !msgs.some(function (m) { return m.ob; }))) obPrompt();
+        var picked = ls('champStartLang');
+        if (fresh && picked && picked === lang && concrete(lang)) {   // chosen on the intro's start screen: greet in it and go straight to the name
+          vis.step = 'name'; vis.lang = lang; saveVis(); obSave({ lang: lang });
+          ensure(obStrs(), lang).then(function () { obSay(tr(OB.greetIn) + '\n' + tr(OB.switchTip)); obPrompt(); });
+        } else if (fresh || (obActive() && !msgs.some(function (m) { return m.ob; }))) obPrompt();
         if (concrete(lang)) ensure(Object.keys(UI).map(function (k) { return UI[k]; }).concat(MENU.map(function (x) { return x[1]; })).concat(where === 'site' ? obStrs() : []), lang).then(function () { if (!box.hidden) { labels(); var mm = log.querySelector('.cc-menu:not(.cc-obb)'); if (mm && !obActive()) showMenu(); } });
       }
     }

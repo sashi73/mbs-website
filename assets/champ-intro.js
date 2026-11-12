@@ -25,14 +25,24 @@
   var NODES = [['S', 60, 230, 'START', 1], ['B', 230, 105, 'Charter · 5d', 1], ['C', 230, 355, 'Procure · 12d', 0], ['D', 420, 165, 'Design · 18d', 1], ['E', 420, 370, 'Training · 9d', 0],
     ['F', 610, 150, 'Build · 30d', 1], ['G', 610, 345, 'Integrate · 8d', 0], ['H', 780, 230, 'Test · 16d', 1], ['T', 920, 230, 'GO-LIVE', 1]];
   var EDGES = [['S', 'B'], ['S', 'C'], ['B', 'D'], ['C', 'D'], ['C', 'E'], ['D', 'F'], ['D', 'G'], ['E', 'G'], ['F', 'H'], ['G', 'H'], ['H', 'T']];
+  // words on the intro, in the visitor's language (picked on the start screen; translated once and cached)
+  var LANGS = [['en', 'English'], ['ms', 'Bahasa Melayu'], ['id', 'Bahasa Indonesia'], ['ta', 'தமிழ்'], ['zh', '简体中文'], ['hi', 'हिन्दी'], ['ar', 'العربية'], ['fa', 'فارسی'], ['vi', 'Tiếng Việt'],
+    ['th', 'ไทย'], ['tl', 'Filipino'], ['ja', '日本語'], ['ko', '한국어'], ['es', 'Español'], ['fr', 'Français'], ['de', 'Deutsch'], ['pt', 'Português'], ['sw', 'Kiswahili'], ['rw', 'Kinyarwanda']];
+  var TX = { sub: 'Every project, from initiation to closing.', go: 'Tap to enter', hint: 'Best with sound · 10 seconds', pick: 'Choose your language',
+    plan: 'Plan', planS: 'Scope, WBS, budget and risks: drafted by AI', sch: 'Schedule', schS: 'Gantt chart, milestones and baseline',
+    cp: 'Critical path', cpS: 'Zero float. No surprises.', tag1: 'Plan it. Schedule it.', tag2: 'Deliver it.', son: 'Sound on', soff: 'Sound off', skip: 'Skip intro' };
+  var TR = {}; function t(k) { return TR[TX[k]] || TX[k]; }
+  var curLang = (function () { try { return localStorage.getItem('champLang') || 'en'; } catch (e) { return 'en'; } })();
   var at = {}; NODES.forEach(function (n) { at[n[0]] = n; });
 
   var el = document.createElement('div');
   el.className = 'ci'; el.id = 'champIntro'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'GKH Project Champ intro');
   el.innerHTML =
     '<canvas class="ci-fx" aria-hidden="true"></canvas><div class="ci-vig"></div><i class="ci-lb t"></i><i class="ci-lb b"></i><div class="ci-flare" aria-hidden="true"></div>' +
-    '<div class="ci-start"><img src="' + GLOBE + '" alt="" width="150" height="150"><h1>GKH Project <b>Champ</b></h1><p>Every project, from initiation to closing.</p>' +
-    '<button type="button" class="ci-go" data-ci-start>▶&nbsp; Tap to enter</button><p>Best with sound · 10 seconds</p></div>' +
+    '<div class="ci-start"><img src="' + GLOBE + '" alt="" width="150" height="150"><h1>GKH Project <b>Champ</b></h1><p data-t="sub">Every project, from initiation to closing.</p>' +
+    '<label class="ci-lang"><span aria-hidden="true">🌐</span><span class="sr" data-t="pick">Choose your language</span><select data-ci-lang aria-label="Choose your language">' +
+      LANGS.map(function (l) { return '<option value="' + l[0] + '"' + (l[0] === curLang ? ' selected' : '') + '>' + l[1] + '</option>'; }).join('') + '</select></label>' +
+    '<button type="button" class="ci-go" data-ci-start>▶&nbsp; <span data-t="go">Tap to enter</span></button><p data-t="hint">Best with sound · 10 seconds</p></div>' +
     '<div class="ci-cam" aria-hidden="true">' +
       // 01 the plan
       '<div class="ci-scene ci-plan"><div class="ci-sheet"><div><h3>Project plan · AI drafted</h3><h2>Hospital Wing Upgrade</h2><ul class="ci-wbs">' +
@@ -62,8 +72,8 @@
       return '<div class="ci-tool" style="left:' + t[2] + '%;top:' + t[3] + '%;--fx:' + t[4] + ';--fy:' + t[5] + ';--fr:' + t[6] + ';--d:' + (0.15 + i * 0.17) + 's;animation-delay:' + (i * -0.5) + 's">' + ICON[t[0]] + '<b>' + t[1] + '</b></div>'; }).join('') + '</div>' +
     '<div class="ci-cap" aria-live="polite"><small></small><span></span><em></em></div>' +
     '<div class="ci-flash"></div>' +
-    '<div class="ci-logo"><img src="' + GLOBE + '" alt="" width="170" height="170"><div class="k">Global Knowledge House</div><h2>Project Champ</h2><p>Plan it. Schedule it. <b>Deliver it.</b></p></div>' +
-    '<div class="ci-foot"><button type="button" data-ci-mute>🔊 Sound on</button><button type="button" data-ci-skip>Skip intro →</button></div>';
+    '<div class="ci-logo"><img src="' + GLOBE + '" alt="" width="170" height="170"><div class="k">Global Knowledge House</div><h2>Project Champ</h2><p><span data-t="tag1">Plan it. Schedule it.</span> <b data-t="tag2">Deliver it.</b></p></div>' +
+    '<div class="ci-foot"><button type="button" data-ci-mute>🔊 Sound on</button><button type="button" data-ci-skip><span data-t="skip">Skip intro</span> →</button></div>';
   document.body.insertBefore(el, document.body.firstChild);
   document.documentElement.style.overflow = 'hidden';
 
@@ -188,10 +198,10 @@
     if (running) return; running = true;
     try { if (setupAudio()) score(ac.currentTime + 0.08); } catch (e) {}
     cls('run'); cls('s1'); flare();
-    caption('01', 'Plan', 'Scope, WBS, budget and risks: drafted by AI');
+    caption('01', t('plan'), t('planS'));
     el.querySelectorAll('.ci-wbs li').forEach(function (li, i) { later(function () { li.classList.add('ok'); }, 0.45 + i * 0.2); });
-    later(function () { cls('s1', false); cls('s2'); flare(); caption('02', 'Schedule', 'Gantt chart, milestones and baseline'); }, 2.0);
-    later(function () { cls('s3'); flare(); caption('03', 'Critical path', 'Zero float. No surprises.'); }, 4.6);
+    later(function () { cls('s1', false); cls('s2'); flare(); caption('02', t('sch'), t('schS')); }, 2.0);
+    later(function () { cls('s3'); flare(); caption('03', t('cp'), t('cpS')); }, 4.6);
     later(function () { cls('cp'); pulse(); }, 5.6);
     later(function () {
       el.querySelectorAll('.ci-tool').forEach(function (t) { var r = t.getBoundingClientRect(); t.style.setProperty('--cx', (innerWidth / 2 - r.left - r.width / 2) + 'px'); t.style.setProperty('--cy', (innerHeight * 0.46 - r.top - r.height / 2) + 'px'); });
@@ -221,7 +231,30 @@
   el.querySelector('[data-ci-start]').addEventListener('click', run);
   el.querySelector('[data-ci-skip]').addEventListener('click', finish);
   var mb = el.querySelector('[data-ci-mute]');
-  mb.addEventListener('click', function () { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.72; mb.textContent = muted ? '🔇 Sound off' : '🔊 Sound on'; });
+  mb.addEventListener('click', function () { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.72; mb.textContent = muted ? '🔇 ' + t('soff') : '🔊 ' + t('son'); });
+  // the language picker: the intro, the website and Champ all switch to it
+  function words() {
+    el.querySelectorAll('[data-t]').forEach(function (x) { x.textContent = t(x.getAttribute('data-t')); });
+    mb.textContent = (muted ? '🔇 ' + t('soff') : '🔊 ' + t('son'));
+    el.dir = curLang === 'ar' || curLang === 'fa' ? 'rtl' : 'ltr';
+  }
+  function translate(L) {
+    TR = {}; if (L === 'en') { words(); return Promise.resolve(); }
+    var key = 'champIntro:' + L, strings = Object.keys(TX).map(function (k) { return TX[k]; });
+    try { var c = JSON.parse(localStorage.getItem(key) || 'null'); if (c) { TR = c; words(); return Promise.resolve(); } } catch (e) {}
+    el.classList.add('ci-busy');
+    return fetch('/.netlify/functions/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'i18n', lang: L, strings: strings }) })
+      .then(function (r) { return r.json(); }).then(function (j) { if (L !== curLang) return; TR = j.map || {}; try { localStorage.setItem(key, JSON.stringify(TR)); } catch (e) {} words(); })
+      .catch(function () {}).then(function () { el.classList.remove('ci-busy'); });
+  }
+  var lsel = el.querySelector('[data-ci-lang]');
+  lsel.addEventListener('change', function () {
+    curLang = lsel.value;
+    try { localStorage.setItem('champStartLang', curLang); localStorage.setItem('champChatLang', curLang); } catch (e) {}
+    if (window.ChampI18n) window.ChampI18n.set(curLang); else try { localStorage.setItem('champLang', curLang); } catch (e) {}
+    translate(curLang);
+  });
+  if (curLang !== 'en') translate(curLang);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !done) finish(); });
   window.ChampIntro = { play: run, skip: finish };
   setTimeout(function () { var b = el.querySelector('[data-ci-start]'); if (b && !running) try { b.focus({ preventScroll: true }); } catch (e) {} }, 300);

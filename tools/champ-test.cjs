@@ -101,6 +101,17 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.goto(`${BASE}/index.html?intro=1`); await sleep(300);
   await p.click('[data-ci-skip]'); await sleep(900);
   ok('Intro', 'Skip intro works, and it is not shown again this visit', !(await p.$('#champIntro')) && await p.evaluate(() => sessionStorage.getItem('champIntroSeen') === '1'));
+  // ---- start screen: pick a language; the intro, the website and Champ follow ----
+  await p.goto(`${BASE}/index.html?intro=1`); await sleep(400);
+  ok('Intro', 'start screen has a language picker (English first)', (await p.inputValue('[data-ci-lang]')) === 'en' && (await p.$$('[data-ci-lang] option')).length === 19);
+  await p.selectOption('[data-ci-lang]', 'ta'); await sleep(1500);
+  ok('Intro', 'the start screen switches to Tamil', /\[Tamil\] Tap to enter/.test(await p.textContent('.ci-start')), (await p.textContent('.ci-start')).slice(0, 120));
+  ok('Intro', 'the website switches to Tamil too', (await p.getAttribute('html', 'lang')) === 'ta');
+  await p.click('[data-ci-skip]'); await sleep(900);
+  await p.click('#champChatBtn'); await sleep(2000);
+  const lgi = await p.textContent('.cc-log');
+  ok('Intro', 'Champ greets in Tamil and goes straight to the name', /\[Tamil\] Greetings! I\u2019m Champ 👋 I\u2019ll speak with you in தமிழ்/.test(lgi) && /\[Tamil\] Lovely! What is your name\?/.test(lgi) && (await p.$$('.cc-ob-langs button')).length === 0, lgi.slice(0, 220));
+  await p.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
   const r404 = await p.goto(`${BASE}/nope.html`);
   ok('Site', 'unknown page gives the 404 page', r404.status() === 404 && (await p.textContent('body')).includes('critical path'));
 
