@@ -91,7 +91,7 @@
   function obStrs() { return Object.keys(OB).map(function (k) { return OB[k]; }); }
   function fill(t) { return String(t).replace(/\{name\}/g, vis.name || '').replace(/\{email\}/g, vis.email || ''); }
   function tr(s) { return fill(T(s)); }
-  function obActive() { return where === 'site' && !!vis.step && vis.step !== 'done'; }
+  function obActive() { return where === 'site' && !!vis.step && vis.step !== 'done' && ss('champObPause') !== '1'; }
   function obSave(f) {
     var b = { mode: 'visitor', id: vis.id, page: location.pathname }; Object.keys(f).forEach(function (k) { b[k] = f[k]; });
     return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
@@ -121,7 +121,7 @@
   var MENU = where === 'console'
     ? [['🧭', 'How do I start a new project?'], ['▦', 'How does the Pipeline board work?'], ['📈', 'Explain SPI and CPI'], ['📌', 'How do I set a baseline?'], ['🌐', 'Change language']]
     : [['🧭', 'What is Project Champ?'], ['✨', 'Show me the main features'], ['📐', 'Help with project management'], ['🗂', 'Programs and portfolios explained'],
-      ['⚖️', 'Agile or waterfall: which fits my project?'], ['🚀', 'How do I get started?'], ['💬', 'Talk to GKH or book a demo'], ['🎤', 'Voice languages'], ['🌐', 'Change language']];
+      ['⚖️', 'Agile or waterfall: which fits my project?'], ['🚀', 'How do I get started?'], ['💬', 'Talk to GKH or book a demo'], ['👋', 'Introduce myself'], ['🎤', 'Voice languages'], ['🌐', 'Change language']];
   var TCACHE = {};
   function cacheOf(L) { if (!TCACHE[L]) { try { TCACHE[L] = JSON.parse(localStorage.getItem('champI18n:' + L) || '{}'); } catch (e) { TCACHE[L] = {}; } } return TCACHE[L]; }
   function saveCache(L) { try { localStorage.setItem('champI18n:' + L, JSON.stringify(TCACHE[L])); } catch (e) {} }
@@ -211,8 +211,8 @@
         b.onclick = function () { if (speakingBtn === b) stopVoice(); else speak(textOf(msgs[idx]), langOf(msgs[idx]), b, idx); };
         row.appendChild(b);
       }
-      var mb = document.createElement('button'); mb.type = 'button'; mb.className = 'cc-mlink'; mb.textContent = T(UI.menu); mb.onclick = menuNow;
-      row.appendChild(mb); bb.appendChild(row); return row;
+      if (!m.ob) { var mb = document.createElement('button'); mb.type = 'button'; mb.className = 'cc-mlink'; mb.textContent = T(UI.menu); mb.onclick = menuNow; row.appendChild(mb); }
+      bb.appendChild(row); return row;
     }
     function showMenu() {
       var old = log.querySelector('.cc-menu'); if (old) old.remove();
@@ -223,6 +223,7 @@
           var it = MENU[+b.getAttribute('data-mi')];
           if (it[1] === 'Change language') { sel.focus(); try { sel.showPicker(); } catch (e) {} return; }
           if (it[1] === 'Voice languages') { d.remove(); voiceLangsPanel(); return; }
+          if (it[1] === 'Introduce myself') { d.remove(); ss('champObPause', ''); vis.step = 'lang'; saveVis(); obPrompt(); return; }
           d.remove(); ask(T(it[1]));
         };
       });
@@ -403,7 +404,7 @@
       ask(t, spoken);
     }
     function menuNow() {   // ☰ during the welcome questions: skip the rest
-      if (obActive()) { obSave({ skip: vis.step }); vis.step = 'done'; saveVis(); var o = log.querySelector('.cc-obb'); if (o) o.remove(); }
+      if (obActive()) { ss('champObPause', '1'); var o = log.querySelector('.cc-obb'); if (o) o.remove(); }   // asked again on the next visit
       showMenu();
     }
 
@@ -479,6 +480,8 @@
       box.hidden = !on; btn.setAttribute('aria-expanded', on ? 'true' : 'false'); document.body.classList.toggle('cc-open', on);
       if (on) { btn.classList.remove('cc-glow'); ls('champChatSeen', '1'); } else { stopVoice(); if (typeof stopRec === 'function') stopRec(); }
       if (on) {
+        if (where === 'site' && vis.step === 'done' && !vis.name && !vis.email && !vis.phone && !ss('champObAsked')) { vis.step = ''; msgs = []; ss('champChat', '[]'); }   // shared nothing last time: greet again on a new visit
+        if (where === 'site') ss('champObAsked', '1');
         var fresh = where === 'site' && !vis.step;
         if (fresh) { vis.step = 'lang'; saveVis(); }
         if (where === 'site' && vis.saved && !ss('champVisit')) { ss('champVisit', '1'); obSave({ visit: true }); }

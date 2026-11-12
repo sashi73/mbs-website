@@ -27,4 +27,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 16 | 1.0.16| 2026-11-13 00:13| GKH-Project-Champ| `a21f802` | Share preview: GKH Project Champ card with the globe (WhatsApp, LinkedIn, X); globe icons replace the MBS ones |
 | 17 | 1.0.17| 2026-11-13 00:50| GKH-Project-Champ| `bcc5498` | Share preview: new file names for every GKH logo (WhatsApp kept the old MBS icon by file name); globe centred so a square thumbnail shows it |
 | 18 | 1.0.18| 2026-11-13 01:07| GKH-Project-Champ| `e45b12f` | Champ welcome: language first ("switch to …" any time), then name, phone with country code, email read back to confirm, welcome package; eve |
-| 19 | 1.0.19 | 2026-11-13 01:25 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 19 | 1.0.19| 2026-11-13 01:25| GKH-Project-Champ| `91b30dd` | Cinematic 10-second intro on the home page (Plan, Gantt chart, critical path, PM tools, title) with a live hero score; visitor counter in th |
+| 20 | 1.0.20 | 2026-11-13 01:35 | GKH-Project-Champ | _this commit_ | _see git log_ |
