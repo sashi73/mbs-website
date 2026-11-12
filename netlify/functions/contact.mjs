@@ -5,6 +5,7 @@
 import { cors, json, clean, env, sendEmail } from '../lib/shared.mjs';
 import * as kv from '../lib/kv.mjs';
 import { normPhone, normEmail, normName } from '../lib/visitors.mjs';
+import { toEnglish } from '../lib/english.mjs';
 import { randomBytes } from 'node:crypto';
 
 const KEY = 'champ-enquiries', MAX = 5000;
@@ -44,6 +45,12 @@ export default async (req, context) => {
     size: clean(String(b.size || ''), 20), reason, message: clean(String(b.message || ''), 2000), news: !!b.news,
     consentAt: now.toISOString(), consentVer: 'PDPA/Privacy notice 2026-11', lang: clean(String(b.lang || 'en'), 8), city: geo.city || '', notes: ''
   };
+  // written in another language: the team reads it in English (the original is kept too)
+  const t = await toEnglish({ first: e.first, last: e.last, org: e.org, role: e.role, message: e.message });
+  if (Object.keys(t.original).length) {
+    for (const k of Object.keys(t.original)) e[k] = t.fields[k];
+    e.name = e.first + ' ' + e.last; e.original = t.original; e.origLang = t.lang;
+  }
   try {
     await kv.update(KEY, (cur) => { cur.list.unshift(e); if (cur.list.length > MAX) cur.list.length = MAX; return cur; }, { list: [] });
   } catch (err) {
@@ -54,6 +61,7 @@ export default async (req, context) => {
   const rows = [['Name', e.name], ['Email', e.email], ['Phone', e.phone || '–'], ['Best way to reach', pref], ['Organisation', e.org || '–'], ['Role', e.role || '–'],
     ['Country', e.country || '–'], ['Team size', e.size || '–'], ['How we can help', reason], ['Project Champ news', e.news ? 'Yes, please' : 'No']];
   const site = env('URL', 'https://gkh-project-champ.netlify.app').replace(/\/+$/, '');
+  if (e.original) rows.push(['Written in', (e.origLang || 'another language') + ' (translated to English; original kept in the console)']);
   const text = `New Project Champ enquiry ${ref}\n\n${rows.map((r) => r[0] + ': ' + r[1]).join('\n')}\n\nMessage:\n${e.message || '(none)'}\n\nSee all enquiries: ${site}/admin/#enquiries`;
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:620px;color:#14213d"><h2 style="margin:0 0 12px">New Project Champ enquiry <span style="color:#a8841c">${esc(ref)}</span></h2>
 <table style="border-collapse:collapse;width:100%">${rows.map((r) => `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;color:#667;width:170px">${esc(r[0])}</td><td style="padding:6px 10px;border-bottom:1px solid #eee"><b>${esc(r[1])}</b></td></tr>`).join('')}</table>

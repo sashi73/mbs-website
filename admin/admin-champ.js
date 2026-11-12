@@ -297,6 +297,12 @@
   var VS = { q: '', sel: {} };
   var LNAME = { en: 'English', ms: 'Bahasa Melayu', id: 'Bahasa Indonesia', ta: 'தமிழ் Tamil', zh: '中文 Chinese', hi: 'हिन्दी Hindi', ar: 'العربية Arabic', fa: 'فارسی Persian', vi: 'Tiếng Việt', th: 'ไทย Thai',
     tl: 'Filipino', ja: '日本語 Japanese', ko: '한국어 Korean', es: 'Español', fr: 'Français', de: 'Deutsch', pt: 'Português', sw: 'Kiswahili', rw: 'Kinyarwanda' };
+  // typed in another language: the English is shown, the original underneath
+  function origNote(v, keys) {
+    var o = v.original || {}, got = keys.filter(function (k) { return o[k]; });
+    if (!got.length) return '';
+    return '<br><small class="muted" dir="auto" title="Translated to English from ' + esc(LNAME[v.origLang] || v.origLang || 'another language') + '">🌐 ' + esc(got.map(function (k) { return o[k]; }).join(' ')) + '</small>';
+  }
   function visitors() {
     var el = M.$('#view');
     if (!M.allowed('crm', 'view')) { el.innerHTML = '<div class="card noaccess"><h2>🔒 No access</h2><p class="muted">Visitors need access to Jobs &amp; customers.</p></div>'; return; }
@@ -344,10 +350,10 @@
           '<th>Name</th><th>Phone</th><th>Email</th><th>Reason for visit</th><th>Language</th><th>Welcome pack</th><th class="hide-sm">PDPA consent</th><th class="hide-sm">From</th><th class="hide-sm">First seen</th><th class="hide-sm">Last seen</th><th class="hide-sm">Visits</th></tr></thead><tbody>' +
           r.map(function (v) {
             return '<tr>' + (canDel ? '<td><input type="checkbox" data-vid="' + esc(v.id) + '"' + (VS.sel[v.id] ? ' checked' : '') + '></td>' : '') +
-              '<td><b>' + (v.name ? esc(v.name) : '<span class="muted">(skipped)</span>') + '</b></td>' +
+              '<td><b>' + (v.name ? esc(v.name) : '<span class="muted">(skipped)</span>') + '</b>' + origNote(v, ['first', 'last']) + '</td>' +
               '<td>' + (v.phone ? '<a href="tel:' + esc(v.phone) + '">' + esc(v.phone) + '</a> <a href="https://wa.me/' + esc(v.phone.replace('+', '')) + '" target="_blank" rel="noopener" title="WhatsApp">💬</a>' : '<span class="muted">–</span>') + '</td>' +
               '<td>' + (v.email ? '<a href="mailto:' + esc(v.email) + '">' + esc(v.email) + '</a>' : '<span class="muted">–</span>') + '</td>' +
-              '<td>' + (v.purpose ? esc(v.purpose) + (v.more ? '<br><small class="muted">' + esc(v.more) + '</small>' : '') : '<span class="muted">–</span>') + '</td>' +
+              '<td>' + (v.purpose ? esc(v.purpose) + (v.more ? '<br><small class="muted">' + esc(v.more) + '</small>' + origNote(v, ['more']) : '') : '<span class="muted">–</span>') + '</td>' +
               '<td>' + esc(LNAME[v.lang] || v.lang || '–') + '</td><td>' + wpk(v) + '</td>' +
               '<td class="hide-sm">' + (v.consentAt ? '<span class="pflag pf-green" title="' + esc(v.consentVer || '') + '">✓ ' + esc(when(v.consentAt)) + '</span>' : '<span class="muted">–</span>') + '</td>' +
               '<td class="hide-sm">' + esc([v.city, v.country].filter(Boolean).join(', ') || '–') + '</td>' +
@@ -360,9 +366,9 @@
       el.querySelector('#vsQ').oninput = function () { VS.q = this.value; draw(); };
       el.querySelector('#vsRef').onclick = visitors;
       el.querySelector('#vsCsv').onclick = function () {
-        var cols = ['first', 'last', 'name', 'phone', 'email', 'purpose', 'more', 'lang', 'consentAt', 'welcome', 'welcomeStatus', 'city', 'country', 'created', 'lastSeen', 'visits'];
+        var cols = ['first', 'last', 'name', 'phone', 'email', 'purpose', 'more', 'lang', 'consentAt', 'welcome', 'welcomeStatus', 'city', 'country', 'created', 'lastSeen', 'visits', 'origLang', 'original'];
         var q = function (x) { x = x == null ? '' : String(x); if (/^[=+\-@]/.test(x) && !/^\+\d+$/.test(x)) x = "'" + x; return '"' + x.replace(/"/g, '""') + '"'; };
-        var csv = cols.join(',') + '\n' + rows().map(function (v) { return cols.map(function (c) { return q(c === 'lang' ? (LNAME[v.lang] || v.lang) : v[c]); }).join(','); }).join('\n');
+        var csv = cols.join(',') + '\n' + rows().map(function (v) { return cols.map(function (c) { return q(c === 'lang' ? (LNAME[v.lang] || v.lang) : c === 'original' ? (v.original ? Object.keys(v.original).map(function (k) { return k + ': ' + v.original[k]; }).join(' | ') : '') : v[c]); }).join(','); }).join('\n');
         var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = 'champ-visitors-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();
       };
       var del = el.querySelector('#vsDel');
@@ -420,6 +426,8 @@
             (e.phone ? '<span>📞 <a href="tel:' + esc(e.phone) + '">' + esc(e.phone) + '</a> <a href="https://wa.me/' + esc(e.phone.replace('+', '')) + '" target="_blank" rel="noopener" title="WhatsApp">💬</a></span>' : '') +
             '<span>⭐ Prefers ' + esc(e.pref || 'Email') + '</span>' + (e.country ? '<span>🌏 ' + esc(e.country) + '</span>' : '') + (e.size ? '<span>👥 ' + esc(e.size) + '</span>' : '') +
             (e.news ? '<span class="pflag pf-green">News: yes</span>' : '') + '<span class="muted" title="' + esc(e.consentVer || '') + '">🔒 PDPA consent ' + esc(when(e.consentAt)) + '</span></div>' +
+            (e.original ? '<div class="eq-orig"><span class="pflag pf-blue">🌐 Translated from ' + esc(LNAME[e.origLang] || e.origLang || 'another language') + '</span>' +
+              '<details><summary>Show what they wrote</summary><dl dir="auto">' + Object.keys(e.original).map(function (k) { return '<dt>' + esc({ first: 'First name', last: 'Last name', org: 'Organisation', role: 'Role', message: 'Message' }[k] || k) + '</dt><dd>' + esc(e.original[k]) + '</dd>'; }).join('') + '</dl></details></div>' : '') +
             (e.message ? '<p class="eq-msg">' + esc(e.message) + '</p>' : '') +
             (canEdit ? '<div class="eq-act"><select data-eq-st>' + Object.keys(ESTAT).map(function (k) { return '<option value="' + k + '"' + ((e.status || 'new') === k ? ' selected' : '') + '>' + ESTAT[k][0] + '</option>'; }).join('') + '</select>' +
               '<input data-eq-notes placeholder="Notes for the team (e.g. demo booked Tue 10am)" value="' + esc(e.notes || '') + '" maxlength="2000">' +
@@ -442,9 +450,9 @@
       el.querySelector('#eqQ').oninput = function () { EQ.q = this.value; draw(); };
       el.querySelector('#eqRef').onclick = enquiries;
       el.querySelector('#eqCsv').onclick = function () {
-        var cols = ['ref', 'created', 'status', 'first', 'last', 'email', 'phone', 'pref', 'org', 'role', 'country', 'size', 'reason', 'message', 'news', 'consentAt', 'notes'];
+        var cols = ['ref', 'created', 'status', 'first', 'last', 'email', 'phone', 'pref', 'org', 'role', 'country', 'size', 'reason', 'message', 'news', 'consentAt', 'notes', 'origLang', 'original'];
         var q = function (x) { x = x == null ? '' : String(x); if (/^[=+\-@]/.test(x) && !/^\+\d+$/.test(x)) x = "'" + x; return '"' + x.replace(/"/g, '""') + '"'; };
-        var csv = cols.join(',') + '\n' + rows().map(function (e) { return cols.map(function (c) { return q(e[c]); }).join(','); }).join('\n');
+        var csv = cols.join(',') + '\n' + rows().map(function (e) { return cols.map(function (c) { return q(c === 'original' ? (e.original ? Object.keys(e.original).map(function (k) { return k + ': ' + e.original[k]; }).join(' | ') : '') : e[c]); }).join(','); }).join('\n');
         var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = 'champ-enquiries-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();
       };
       draw();

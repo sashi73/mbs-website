@@ -69,7 +69,7 @@ export async function save(id, fields, meta = {}) {
   await kv.update(KEY, (cur) => {
     let i = cur.list.findIndex((v) => v.id === id);
     const v = i >= 0 ? cur.list[i] : { id, created: now, visits: 0, skipped: [] };
-    for (const k of ['lang', 'name', 'first', 'last', 'phone', 'email', 'purpose', 'more', 'consentAt', 'consentVer', 'welcome', 'page']) if (fields[k] != null && fields[k] !== '') v[k] = fields[k];
+    for (const k of ['lang', 'name', 'first', 'last', 'phone', 'email', 'purpose', 'more', 'consentAt', 'consentVer', 'original', 'origLang', 'welcome', 'page']) if (fields[k] != null && fields[k] !== '') v[k] = fields[k];
     if (fields.skip && !v.skipped.includes(fields.skip)) v.skipped.push(fields.skip);
     if (fields.visit) { v.visits = (v.visits || 0) + 1; v.lastSeen = now; }
     if (!v.country && meta.country) v.country = meta.country;

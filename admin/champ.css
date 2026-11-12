@@ -90,3 +90,4 @@
 .seg{display:inline-flex;border:1px solid var(--line,#ddd);border-radius:999px;overflow:hidden}
 .seg button{border:0;background:transparent;padding:6px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;color:inherit}
 .seg button.on{background:#C9A227;color:#14110a}
+.eq-orig{display:flex;flex-direction:column;gap:6px;align-items:flex-start}.eq-orig details{font-size:13px}.eq-orig summary{cursor:pointer;color:#8A6A00;font-weight:700}.eq-orig dl{margin:6px 0 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px}.eq-orig dt{color:#888}.eq-orig dd{margin:0}

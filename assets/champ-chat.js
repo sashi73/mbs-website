@@ -44,13 +44,13 @@
   var NOVOICE = { rw: 1 };
   var busy = false;
   // ---- the visitor: Champ's welcome questions (language → name → phone → email → confirm → welcome package) ----
-  var OB = { greet: 'Greetings! I\u2019m Champ. What language would you be most comfortable with?', sayLang: 'Just say it, or tap one below.',
+  var OB = { greet: 'Greetings! I\u2019m Champ. Which language are you most comfortable with?', sayLang: 'Just say it, or tap one below.',
     greetIn: 'Greetings! I\u2019m Champ. I\u2019ll speak with you in {lang}.',
-    switchTip: 'You can always switch to English or any other language by saying “switch to …”.',
-    sorry: 'Sorry, I don\u2019t speak that language yet. Let\u2019s keep to English.',
-    skipWord: 'skip', micTip: 'Tip: switch on your microphone and just talk to me. Say “Hey Champ” any time to wake me up.', micOn: '🎤 Turn on microphone',
-    micReady: 'Microphone on. I’m listening.',
-    formIntro: 'Lovely! Please type your details in the form below: typing is quicker and more accurate than voice.', skipForm: 'Prefer not to? Just type or say “skip”.',
+    switchTip: 'You can change language any time: just say “switch to” and the language.',
+    sorry: 'Sorry, I don\u2019t speak that one yet, so let\u2019s carry on in English.',
+    skipWord: 'skip', micTip: 'Tip: turn on your microphone and you can simply talk to me. Say “Hey Champ” whenever you need me.', micOn: '🎤 Turn on microphone',
+    micReady: 'Your microphone is on. Go ahead, I’m listening.',
+    formIntro: 'Lovely. Could you pop your details in the form below? Typing works better than voice for names and emails.', skipForm: 'Rather not? Just say “skip”.',
     formTitle: 'Your details', fFirst: 'First name', fLast: 'Last name', fPhone: 'Phone (with country code)', fEmail: 'Email', fWhy: 'Reason for your visit', fWhyPick: 'Choose one…',
     rProduct: 'Looking for a project management tool', rDemo: 'I’d like a demo', rPrice: 'Pricing and plans', rPartner: 'Partnership or reselling', rTraining: 'Training or consulting', rBrowse: 'Just browsing', rOther: 'Something else',
     fMore: 'Tell us more (optional)', pdpaTitle: '🔒 Your privacy (PDPA)',
@@ -58,13 +58,13 @@
     pdpaRead: 'Read our Privacy Notice', agree: 'I agree to GKH collecting and using my details as described.', send: 'Send ▶', sending: 'Saving…',
     errName: 'Please type your first and last name.', errPhone: 'Please check your phone number and include the country code, for example +61 412 345 678.', errEmail: 'Please check your email address.',
     errWhy: 'Please choose a reason for your visit.', errAgree: 'Please tick the box to agree to the privacy notice.', errSave: 'Sorry, that didn’t save. Please try again.',
-    askWelcome: 'Thank you, {name}! Will it be OK for us to send a welcome pack about our product to your email?', askWelcomeNo: 'Thank you! Will it be OK for us to send a welcome pack about our product to your email?',
-    sayYesNo: 'Just say or tap yes or no.',
+    askWelcome: 'Thanks, {name}! Would you like us to email you a welcome pack about Project Champ?', askWelcomeNo: 'Thanks! Would you like us to email you a welcome pack about Project Champ?',
+    sayYesNo: 'Just say yes or no.',
     yes: 'Yes', no: 'No', yesPlease: 'Yes, please', noThanks: 'No, thanks', skip: 'Skip',
-    sent: 'Done! Your welcome package is on its way to {email}.',
-    noted: 'Noted! The GKH team will send your welcome package to {email} shortly.',
-    thanksName: 'Thank you, {name}! That\u2019s all I needed. Feel free to ask me any question about Project Champ, or about project, program and portfolio management.',
-    thanks: 'Thank you! That\u2019s all I needed. Feel free to ask me any question about Project Champ, or about project, program and portfolio management.',
+    sent: 'Done. Your welcome pack is on its way to {email}.',
+    noted: 'Great, the GKH team will send your welcome pack to {email} shortly.',
+    thanksName: 'That\u2019s everything, {name}. Thank you! Ask me anything about Project Champ, or about running projects, programs and portfolios.',
+    thanks: 'That\u2019s everything. Thank you! Ask me anything about Project Champ, or about running projects, programs and portfolios.',
     back: 'Welcome back, {name}! How can I help you today?', forgot: 'Done. I have forgotten your details.' };
   var vis = {}; try { vis = JSON.parse(ls('champVisitor') || '{}') || {}; } catch (e) { vis = {}; }
   function newId() { var a = new Uint8Array(12); try { crypto.getRandomValues(a); } catch (e) { for (var i = 0; i < 12; i++) a[i] = Math.random() * 256; } return 'v' + Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }

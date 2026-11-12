@@ -9,8 +9,13 @@ import { SYSTEM, LANGS } from '../lib/champ-kb.mjs';
 import { store } from '../lib/admin-lib.mjs';
 import { createHash } from 'node:crypto';
 import * as V from '../lib/visitors.mjs';
+import { toEnglish } from '../lib/english.mjs';
 
 const MAX_TURNS = 12, MAX_CHARS = 1200;
+// Each chat question stays within about 2000 tokens in all: Champ's instructions + the recent conversation + the answer.
+const BUDGET = 2000, ANSWER = 450;   // short, conversational answers; 450 still fits a full answer in Tamil or Chinese
+// a rough token count: about 4 characters a token in Latin script, about 1 a character in Chinese, Tamil, Arabic and the like
+const tokensOf = (t) => { let a = 0, o = 0; for (const ch of String(t)) { if (ch.charCodeAt(0) < 0x250) a++; else o++; } return Math.ceil(a / 4 + o * 0.9) + 4; };
 const CONTACT = 'ceo@gkhconsultancy.com';
 // a light per-address limit for this function instance (stops a runaway script, not a determined attacker)
 const hits = new Map();
@@ -40,6 +45,18 @@ export default async (req, context) => {
     .map((m) => ({ role: m.role, content: clean(m.content, MAX_CHARS) }))
     .filter((m) => m.content);
   if (!messages.length || messages[messages.length - 1].role !== 'user') return json(400, { error: 'Send a question.' });
+  // keep the newest turns that fit the budget (the question itself always goes, shortened if it must)
+  const sys = SYSTEM(lang, where) + who(body?.name);
+  let room = BUDGET - ANSWER - tokensOf(sys);
+  const keep = [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i], n = tokensOf(m.content);
+    if (n <= room) { keep.unshift(m); room -= n; continue; }
+    if (!keep.length) keep.unshift({ role: m.role, content: m.content.slice(0, Math.max(200, room * 3)) });
+    break;
+  }
+  while (keep.length && keep[0].role !== 'user') keep.shift();   // start on a question
+  messages.splice(0, messages.length, ...keep);
 
   const apiKey = env('LLM_API_KEY');
   if (!apiKey) {
@@ -55,7 +72,7 @@ export default async (req, context) => {
     const r = await fetch(`${base}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, temperature: 0.4, max_tokens: 700, stream: false, messages: [{ role: 'system', content: SYSTEM(lang, where) + who(body?.name) }, ...messages] })
+      body: JSON.stringify({ model, temperature: 0.4, max_tokens: ANSWER, stream: false, messages: [{ role: 'system', content: sys }, ...messages] })
     });
     if (!r.ok) {
       const text = await r.text().catch(() => '');
@@ -113,6 +130,15 @@ async function visitor(body, ip, context) {
     if (body.visit) f.visit = true;
     if (body.page) f.page = clean(String(body.page), 120);
     if (bad.length) return json(422, { error: 'invalid', bad });
+    // typed in another language: keep it in English for the GKH team (and the original alongside)
+    if (f.first || f.more) {
+      const t = await toEnglish({ first: f.first || '', last: f.last || '', more: f.more || '' });
+      if (Object.keys(t.original).length) {
+        for (const k of ['first', 'last', 'more']) if (t.original[k]) f[k] = t.fields[k];
+        if (f.first) f.name = f.first + ' ' + f.last;
+        f.original = t.original; f.origLang = t.lang;
+      }
+    }
     const geo = (context && context.geo) || {};
     const v = await V.save(id, f, { country: geo.country && geo.country.name, city: geo.city });
     return json(200, { ok: true, visitor: { first: v.first || '', name: v.name || '', phone: v.phone || '', email: v.email || '', lang: v.lang || '', welcome: v.welcome || '', welcomeStatus: v.welcomeStatus || '' } });
