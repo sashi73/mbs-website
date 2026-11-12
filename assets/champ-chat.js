@@ -238,7 +238,7 @@
     function draw() {
       log.innerHTML = '';
       var hasOb = msgs.some(function (m) { return m.ob; });
-      if (!hasOb && !obActive()) bubble('bot', md(vis.name && where === 'site' ? tr(OB.back) : (HELLO[lang] || HELLO.auto)));
+      if (!hasOb && !(where === 'site' && vis.step && vis.step !== 'done')) bubble('bot', md(vis.name && where === 'site' ? tr(OB.back) : (HELLO[lang] || HELLO.auto)));
       msgs.forEach(function (m, i) { if (m.role === 'user') bubble('user', '<p>' + esc(m.content) + '</p>'); else tools(bubble('bot', md(textOf(m))), i); });
       if (obActive()) obButtons(); else if (!msgs.length) showMenu();
       box.dir = RTL[lang] ? 'rtl' : 'ltr'; labels();
@@ -437,6 +437,16 @@
       if (obActive() && obAnswer(t, spoken, heard)) return;
       ask(t, spoken);
     }
+    // a question from the page (the home "Ask Champ" box): answer it first; the welcome questions follow
+    function askNow(q) {
+      q = String(q || '').trim(); if (!q) return;
+      var fresh = where === 'site' && !vis.step;
+      if (fresh) { vis.step = 'lang'; saveVis(); }
+      var held = obActive();
+      if (held) ss('champObPause', '1');
+      if (box.hidden) open(true); else draw();
+      ask(q, false, function () { if (held) { ss('champObPause', ''); if (obActive()) obPrompt(); } });
+    }
     function menuNow() {   // ☰ during the welcome questions: skip the rest
       if (obActive()) { ss('champObPause', '1'); var o = log.querySelector('.cc-obb'); if (o) o.remove(); }   // asked again on the next visit
       showMenu();
@@ -606,7 +616,15 @@
     ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handle(ta.value); } });
     ta.addEventListener('input', function () { ta.style.height = ''; ta.style.height = Math.min(120, ta.scrollHeight) + 'px'; });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !box.hidden) open(false); });
-    window.ChampChat = { open: function () { open(true); }, ask: function (q) { open(true); handle(q); }, visitor: function () { return { id: vis.id, step: vis.step, name: vis.name || '', lang: vis.lang || '' }; }, lang: function (L) { switchLang(L); }, menu: function () { open(true); showMenu(); } };
+    // the home page "Ask Champ" box hands its question to Champ
+  function bindAsk() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ask-form]'), function (f) {
+      f.addEventListener('submit', function (e) { e.preventDefault(); var i = f.querySelector('input[name=q]'), q = i ? i.value.trim() : ''; if (!q) { if (i) i.focus(); return; } window.ChampChat.ask(q); i.value = ''; });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ask]'), function (b) { b.addEventListener('click', function () { window.ChampChat.ask(b.getAttribute('data-ask')); }); });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindAsk); else bindAsk();
+  window.ChampChat = { open: function () { open(true); }, ask: function (q) { askNow(q); }, visitor: function () { return { id: vis.id, step: vis.step, name: vis.name || '', lang: vis.lang || '' }; }, lang: function (L) { switchLang(L); }, menu: function () { open(true); showMenu(); } };
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build); else build();
 })();

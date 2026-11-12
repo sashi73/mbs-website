@@ -8,7 +8,7 @@
 <style>html,body{background:#0A0A0A;color:#EDEAE3;margin:0}body{visibility:hidden}</style>
 <script>setTimeout(function(){if(document.body)document.body.style.visibility='visible'},2500)</script>
 <link rel="stylesheet" href="assets/style.css?v=42">
-<link rel="stylesheet" href="assets/champ-site.css?v=1">
+<link rel="stylesheet" href="assets/champ-site.css?v=2">
 <link rel="stylesheet" href="assets/champ-theme.css?v=10">
 <script src="assets/champ-theme.js?v=7"></script>
 <script src="assets/champ-i18n.js?v=1" defer></script>
@@ -58,6 +58,31 @@
   <p class="lead rv">Tell us about the project you are running. We will set Project Champ up with your own plan and show you around in 30 minutes.</p>
   
 </div></section>
+<section class="sec" id="enquire" style="padding-top:0"><div class="wrap c-enq">
+  <div class="c-enq-copy">
+    <span class="eyebrow rv">Send us your details</span>
+    <h2 class="display rv" style="font-size:clamp(2.2rem,4.6vw,3.8rem)">Tell us what<br><span class="grad-text">you need.</span></h2>
+    <p class="lead muted rv" style="font-size:17px">Fill in the form and the GKH team will get back to you within one business day, by email or phone, whichever you prefer.</p>
+    <ul class="c-enq-list rv"><li>📅 A 30-minute demo on your own project</li><li>🚀 Pilot set-up and onboarding</li><li>🎓 Training and PMO advisory</li><li>🤝 Partnerships across Asia, the Middle East and Africa</li></ul>
+  </div>
+  <form class="c-enq-form rv" id="enqForm" novalidate>
+    <div class="c-enq-2"><label>First name<input name="first" autocomplete="given-name" maxlength="40" required></label><label>Last name<input name="last" autocomplete="family-name" maxlength="40" required></label></div>
+    <div class="c-enq-2"><label>Email<input name="email" type="email" autocomplete="email" maxlength="120" required placeholder="you@company.com"></label><label>Phone (with country code)<input name="phone" type="tel" autocomplete="tel" maxlength="22" placeholder="+61 412 345 678" dir="ltr"></label></div>
+    <div class="c-enq-2"><label>Organisation<input name="org" autocomplete="organization" maxlength="80"></label><label>Your role<input name="role" autocomplete="organization-title" maxlength="60" placeholder="e.g. PMO lead"></label></div>
+    <div class="c-enq-2"><label>Country<select name="country"><option value="">Choose…</option><option>Australia</option><option>Malaysia</option><option>Singapore</option><option>Indonesia</option><option>New Zealand</option><option>India</option><option>United Arab Emirates</option><option>Saudi Arabia</option><option>Rwanda</option><option>Kenya</option><option>United Kingdom</option><option>United States</option><option>Other</option></select></label>
+      <label>Team size<select name="size"><option value="">Choose…</option><option>Just me</option><option>2 to 10</option><option>11 to 50</option><option>51 to 200</option><option>More than 200</option></select></label></div>
+    <label>How can we help?<select name="reason" required><option value="">Choose one…</option><option>Book a demo</option><option>Start a pilot on one project</option><option>Team plan for a PMO or delivery team</option><option>Enterprise: programs and portfolios</option><option>Training or PMO advisory from GKH</option><option>Partnership or reselling</option><option>Something else</option></select></label>
+    <label>Message<textarea name="message" rows="5" maxlength="2000" placeholder="Tell us about your projects, your timeline and anything you would like to see."></textarea></label>
+    <fieldset class="c-enq-pref"><legend>Best way to reach you</legend><label><input type="radio" name="pref" value="Email" checked> Email</label><label><input type="radio" name="pref" value="Phone"> Phone</label><label><input type="radio" name="pref" value="WhatsApp"> WhatsApp</label></fieldset>
+    <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" class="c-hp">
+    <div class="c-pdpa"><b>🔒 Your privacy (PDPA)</b> Global Knowledge House collects these details only to respond to your enquiry and, if you ask, to tell you about GKH Project Champ. We look after them under Malaysia’s Personal Data Protection Act 2010 (PDPA) and Australia’s Privacy Act 1988, never sell them, and you can ask us to see, correct or delete them at any time. <a href="privacy.html">Read our Privacy Notice</a>.</div>
+    <label class="c-enq-tick"><input type="checkbox" name="consent" required> I agree to GKH collecting and using my details to respond to this enquiry.</label>
+    <label class="c-enq-tick"><input type="checkbox" name="news"> Also send me occasional Project Champ news (optional; unsubscribe any time).</label>
+    <p class="c-enq-err" role="alert" hidden></p>
+    <button class="btn btn-gold" type="submit"><span>Send enquiry</span></button>
+  </form>
+  <div class="c-enq-done" id="enqDone" hidden><i>✅</i><h3>Thank you, <span data-first></span>!</h3><p>Your enquiry is with the GKH team (reference <b data-ref></b>). We’ll be in touch within one business day.</p><button type="button" class="btn btn-ghost btn-sm" id="enqAgain"><span>Send another</span></button></div>
+</div></section>
 <section class="sec" style=""><div class="wrap"><div style="display:flex;flex-direction:column;gap:14px;margin-bottom:36px"><span class="eyebrow rv">Ways to start</span><h2 class="display rv" style="font-size:clamp(2.4rem,5vw,4.2rem);color:var(--text)">Pick your pace.</h2></div><div class="c-grid"><div class="c-card c-plan rv"><i>🚀</i><h3>Pilot</h3><p>Try it on one live project.</p><ul><li>Set-up with your first project</li><li>Gantt, Board and reports</li><li>Guided onboarding call</li></ul><a class="btn btn-ghost btn-sm" href="mailto:ceo@gkhconsultancy.com?subject=Project%20Champ%20-%20Pilot"><span>Ask about Pilot</span></a></div><div class="c-card c-plan rv hot"><span class=tag>Most popular</span><i>👥</i><h3>Team</h3><p>For a PMO or delivery team.</p><ul><li>Unlimited projects</li><li>Users and roles</li><li>Google sign-in</li><li>AI plans and reports</li></ul><a class="btn btn-gold btn-sm" href="mailto:ceo@gkhconsultancy.com?subject=Project%20Champ%20-%20Team"><span>Ask about Team</span></a></div><div class="c-card c-plan rv"><i>🏢</i><h3>Enterprise</h3><p>For programs and organisations.</p><ul><li>Your branding and domain</li><li>Integrations and data migration</li><li>Training and PMO advisory from GKH</li></ul><a class="btn btn-ghost btn-sm" href="mailto:ceo@gkhconsultancy.com?subject=Project%20Champ%20-%20Enterprise"><span>Ask about Enterprise</span></a></div></div></div></section>
 <section class="c-light"><div class="wrap" style="padding:96px 24px"><div style="display:flex;flex-direction:column;gap:14px;margin-bottom:36px"><span class="eyebrow rv">Global Knowledge House</span><h2 class="display rv" style="font-size:clamp(2.4rem,5vw,4.2rem);color:#0A0A0A">Talk to us.</h2></div>
 <div class="c-contact">
@@ -76,6 +101,7 @@
   <div class="fbar"><span>© <span data-year>2026</span> Global Knowledge House</span><span>Photos: Unsplash</span><span data-build data-noi18n hidden></span><span data-visits hidden></span><a href="index.html?intro=1" class="fbar-intro">▶ Play intro</a><span class="fbar-credit">Designed by © Sashi Kumar Sivam · GKH AI Powered Business Intelligence © · ABN 38 107 769 345</span></div>
 </footer>
 <script src="assets/site.js?v=24"></script>
-<script src="assets/champ-chat.js?v=16" defer></script>
+<script src="assets/champ-chat.js?v=17" defer></script>
+<script src="assets/champ-contact.js?v=1" defer></script>
 </body>
 </html>

@@ -377,4 +377,78 @@
     }).catch(fail);
   }
   M.addView('visitors', 'Visitors', visitors);
+
+  /* ---------------- Customers > Enquiries: the contact page form, for the team to action ---------------- */
+  var EQ = { q: '', st: 'open' };
+  var ESTAT = { new: ['New', 'pf-amber'], progress: ['In progress', 'pf-blue'], done: ['Done', 'pf-green'] };
+  function enquiries() {
+    var el = M.$('#view');
+    if (!M.allowed('crm', 'view')) { el.innerHTML = '<div class="card noaccess"><h2>🔒 No access</h2><p class="muted">Enquiries need access to Jobs &amp; customers.</p></div>'; return; }
+    el.innerHTML = '<div class="empty">Loading enquiries…</div>';
+    var canEdit = M.allowed('crm', 'edit');
+    return api('enquiryList').then(function (d) {
+      var all = d.list || [];
+      var when = function (t) { return t ? new Date(t).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; };
+      var cnt = function (st) { return all.filter(function (e) { return (e.status || 'new') === st; }).length; };
+      el.innerHTML = '<div class="cs-tiles">' +
+        '<div class="cs-tile"><span>New</span><b>' + cnt('new') + '</b><small>waiting for a reply</small></div>' +
+        '<div class="cs-tile"><span>In progress</span><b>' + cnt('progress') + '</b><small>being looked after</small></div>' +
+        '<div class="cs-tile cs-green"><span>Done</span><b>' + cnt('done') + '</b><small>actioned</small></div>' +
+        '<div class="cs-tile"><span>All enquiries</span><b>' + all.length + '</b><small>from the contact page</small></div></div>' +
+        (d.email ? '' : '<div class="card" style="border-left:4px solid #c9a227"><b>New enquiries are not emailed to you yet.</b> <span class="muted">Add RESEND_API_KEY (and FROM_EMAIL from a verified domain) in Netlify. Until then, check this page: every enquiry is saved here.</span></div>') +
+        '<div class="card"><div class="card-h"><h2>📨 Enquiries</h2><span class="sp"></span>' +
+        '<div class="seg" id="eqSt">' + [['open', 'Open'], ['new', 'New'], ['progress', 'In progress'], ['done', 'Done'], ['all', 'All']].map(function (x) { return '<button type="button" data-st="' + x[0] + '"' + (EQ.st === x[0] ? ' class="on"' : '') + '>' + x[1] + '</button>'; }).join('') + '</div>' +
+        '<input id="eqQ" type="search" placeholder="Find a name, email, organisation…" value="' + esc(EQ.q) + '" style="max-width:260px">' +
+        '<button class="btn btn-sm" id="eqCsv">⬇ CSV</button><button class="btn btn-sm" id="eqRef">↻</button></div><div id="eqBody"></div></div>';
+      function rows() {
+        var q = EQ.q.trim().toLowerCase();
+        return all.filter(function (e) {
+          var st = e.status || 'new';
+          if (EQ.st === 'open' ? st === 'done' : EQ.st !== 'all' && st !== EQ.st) return false;
+          return !q || [e.name, e.email, e.phone, e.org, e.role, e.country, e.reason, e.message, e.ref].join(' ').toLowerCase().indexOf(q) >= 0;
+        });
+      }
+      function draw() {
+        var r = rows(), b = el.querySelector('#eqBody');
+        if (!r.length) { b.innerHTML = '<div class="empty">' + (all.length ? 'Nothing here.' : 'No enquiries yet. When someone sends the form on the Contact page, it appears here.') + '</div>'; return; }
+        b.innerHTML = r.map(function (e) {
+          var st = ESTAT[e.status || 'new'];
+          return '<div class="eq-card" data-ref="' + esc(e.ref) + '"><div class="eq-h"><b>' + esc(e.name) + '</b>' + (e.org ? '<span class="muted"> · ' + esc(e.org) + (e.role ? ', ' + esc(e.role) : '') + '</span>' : '') +
+            '<span class="sp"></span><span class="pflag ' + st[1] + '">' + st[0] + '</span><small class="muted">' + esc(e.ref) + ' · ' + esc(when(e.created)) + '</small></div>' +
+            '<div class="eq-meta"><span>🎯 <b>' + esc(e.reason) + '</b></span>' +
+            '<span>✉️ <a href="mailto:' + esc(e.email) + '?subject=' + encodeURIComponent('Your Project Champ enquiry ' + e.ref) + '">' + esc(e.email) + '</a></span>' +
+            (e.phone ? '<span>📞 <a href="tel:' + esc(e.phone) + '">' + esc(e.phone) + '</a> <a href="https://wa.me/' + esc(e.phone.replace('+', '')) + '" target="_blank" rel="noopener" title="WhatsApp">💬</a></span>' : '') +
+            '<span>⭐ Prefers ' + esc(e.pref || 'Email') + '</span>' + (e.country ? '<span>🌏 ' + esc(e.country) + '</span>' : '') + (e.size ? '<span>👥 ' + esc(e.size) + '</span>' : '') +
+            (e.news ? '<span class="pflag pf-green">News: yes</span>' : '') + '<span class="muted" title="' + esc(e.consentVer || '') + '">🔒 PDPA consent ' + esc(when(e.consentAt)) + '</span></div>' +
+            (e.message ? '<p class="eq-msg">' + esc(e.message) + '</p>' : '') +
+            (canEdit ? '<div class="eq-act"><select data-eq-st>' + Object.keys(ESTAT).map(function (k) { return '<option value="' + k + '"' + ((e.status || 'new') === k ? ' selected' : '') + '>' + ESTAT[k][0] + '</option>'; }).join('') + '</select>' +
+              '<input data-eq-notes placeholder="Notes for the team (e.g. demo booked Tue 10am)" value="' + esc(e.notes || '') + '" maxlength="2000">' +
+              '<button class="btn btn-sm" data-eq-del title="Delete">🗑</button></div>' : (e.notes ? '<p class="muted">📝 ' + esc(e.notes) + '</p>' : '')) +
+            (e.updated ? '<small class="muted">Updated ' + esc(when(e.updated)) + (e.updatedBy ? ' by ' + esc(e.updatedBy) : '') + '</small>' : '') + '</div>';
+        }).join('');
+        b.querySelectorAll('.eq-card').forEach(function (c) {
+          var ref = c.getAttribute('data-ref'), s1 = c.querySelector('[data-eq-st]'), n1 = c.querySelector('[data-eq-notes]'), d1 = c.querySelector('[data-eq-del]');
+          var save = function (patch) { api('enquirySet', Object.assign({ ref: ref }, patch)).then(function (x) { var e = all.find(function (y) { return y.ref === ref; }); if (e && x.enquiry) Object.assign(e, x.enquiry); toast('Saved'); }).catch(fail); };
+          if (s1) s1.onchange = function () { save({ status: s1.value }); setTimeout(draw, 400); };
+          if (n1) n1.onchange = function () { save({ notes: n1.value }); };
+          if (d1) d1.onclick = function () {
+            M.confirmBox('Delete this enquiry?', 'The enquiry from <b>' + esc(c.querySelector('.eq-h b').textContent) + '</b> is removed. <b>This can\'t be undone.</b>', '🗑 Delete', true).then(function (ok) {
+              if (ok) api('enquiryDelete', { refs: [ref] }).then(function () { toast('Deleted'); enquiries(); }).catch(fail);
+            });
+          };
+        });
+      }
+      el.querySelectorAll('#eqSt [data-st]').forEach(function (bt) { bt.onclick = function () { EQ.st = bt.getAttribute('data-st'); el.querySelectorAll('#eqSt [data-st]').forEach(function (x) { x.classList.toggle('on', x === bt); }); draw(); }; });
+      el.querySelector('#eqQ').oninput = function () { EQ.q = this.value; draw(); };
+      el.querySelector('#eqRef').onclick = enquiries;
+      el.querySelector('#eqCsv').onclick = function () {
+        var cols = ['ref', 'created', 'status', 'first', 'last', 'email', 'phone', 'pref', 'org', 'role', 'country', 'size', 'reason', 'message', 'news', 'consentAt', 'notes'];
+        var q = function (x) { x = x == null ? '' : String(x); if (/^[=+\-@]/.test(x) && !/^\+\d+$/.test(x)) x = "'" + x; return '"' + x.replace(/"/g, '""') + '"'; };
+        var csv = cols.join(',') + '\n' + rows().map(function (e) { return cols.map(function (c) { return q(e[c]); }).join(','); }).join('\n');
+        var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = 'champ-enquiries-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();
+      };
+      draw();
+    }).catch(fail);
+  }
+  M.addView('enquiries', 'Enquiries', enquiries);
 })();

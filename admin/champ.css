@@ -79,3 +79,14 @@
 .champ-mods{border:1px solid var(--line);border-radius:12px;padding:10px 14px 12px;display:grid;gap:10px;margin:0}
 .champ-mods legend{font-weight:800;padding:0 6px}
 .pc-prog{font-size:11px;font-weight:800;color:#475569;background:#EEF2F7;border-radius:6px;padding:2px 7px;align-self:flex-start;margin-bottom:2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* enquiries */
+.eq-card{border:1px solid var(--line,#e3ddd0);border-radius:14px;padding:14px 16px;margin:0 0 12px;display:flex;flex-direction:column;gap:8px}
+.eq-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}.eq-h .sp{flex:1}.eq-h b{font-size:16px}
+.eq-meta{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px}
+.eq-msg{margin:0;white-space:pre-wrap;background:rgba(201,162,39,.07);border-radius:10px;padding:10px 12px;font-size:14px}
+.eq-act{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.eq-act select{width:auto}.eq-act input{flex:1 1 240px;min-width:0}
+.pf-blue{background:#e6efff;color:#1d4ed8}
+.seg{display:inline-flex;border:1px solid var(--line,#ddd);border-radius:999px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:6px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;color:inherit}
+.seg button.on{background:#C9A227;color:#14110a}

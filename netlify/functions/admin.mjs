@@ -308,6 +308,32 @@ async function handle(req, context) {
         return out(200, { ok: true, removed: await VIS.remove(ids) });
       }
 
+      // ---------- GKH Project Champ: enquiries from the contact page ----------
+      case 'enquiryList': {
+        if (ctx.scope) return bad('Sub-contractor logins cannot see enquiries.', 403);
+        if (!ctx.owner && !(ctx.mods && ctx.mods.crm)) return bad('You need access to Jobs & customers to see enquiries.', 403);
+        return out(200, { list: ((await kv.get('champ-enquiries').catch(() => null)) || { list: [] }).list, email: !!env('RESEND_API_KEY') });
+      }
+      case 'enquirySet': {
+        if (ctx.scope || (!ctx.owner && !(ctx.mods && ctx.mods.crm === 'edit'))) return bad('You need edit access to Jobs & customers to update enquiries.', 403);
+        const ref = clean(String(body.ref || ''), 40), status = ['new', 'progress', 'done'].includes(body.status) ? body.status : null;
+        let hit = null;
+        await kv.update('champ-enquiries', (cur) => {
+          const e = cur.list.find((x) => x.ref === ref); if (!e) return cur;
+          if (status) { e.status = status; if (status === 'done') e.doneAt = new Date().toISOString(); }
+          if (body.notes != null) e.notes = clean(String(body.notes), 2000);
+          e.updatedBy = ctx.name || ctx.user || 'owner'; e.updated = new Date().toISOString(); hit = { ...e }; return cur;
+        }, { list: [] });
+        return hit ? out(200, { ok: true, enquiry: hit }) : bad('That enquiry is no longer there.', 404);
+      }
+      case 'enquiryDelete': {
+        if (ctx.scope || (!ctx.owner && !(ctx.mods && ctx.mods.crm === 'edit'))) return bad('You need edit access to Jobs & customers to delete enquiries.', 403);
+        const refs = new Set((Array.isArray(body.refs) ? body.refs : [body.ref]).map((x) => clean(String(x || ''), 40)));
+        let n = 0;
+        await kv.update('champ-enquiries', (cur) => { const before = cur.list.length; cur.list = cur.list.filter((x) => !refs.has(x.ref)); n = before - cur.list.length; return cur; }, { list: [] });
+        return out(200, { ok: true, removed: n });
+      }
+
       // ---------- GKH Project Champ: delete a project completely (plan, record, phase pin, BOM setting) ----------
       case 'planProjectDelete': {
         if (ctx.scope) return bad('Sub-contractor logins cannot delete projects.', 403);
