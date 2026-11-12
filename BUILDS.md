@@ -32,4 +32,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 21 | 1.0.21| 2026-11-13 01:41| GKH-Project-Champ| `7c5a49e` | Intro start screen: pick your language (English by default); the intro, the website and Champ all follow, and Champ greets in it and goes st |
 | 22 | 1.0.22| 2026-11-13 01:51| GKH-Project-Champ| `ca713c4` | Voice input: answer inside Netlify's 10-second limit (clear 'too long' message, one retry only when there's time), show the real reason on e |
 | 23 | 1.0.23| 2026-11-13 01:57| GKH-Project-Champ| `828de2b` | Champ hands-free: switch the microphone on and Champ listens after each question (and after each spoken answer); 'Hey Champ' wakes it; say ' |
-| 24 | 1.0.24 | 2026-11-13 02:00 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 24 | 1.0.24| 2026-11-13 02:00| GKH-Project-Champ| `93092e9` | Intro start screen: language picker on one line |
+| 25 | 1.0.25 | 2026-11-13 02:05 | GKH-Project-Champ | _this commit_ | _see git log_ |
