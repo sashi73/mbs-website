@@ -19,9 +19,16 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   const ctxB64 = Buffer.from(JSON.stringify({ siteID: 'champ', token: 'tok', edgeURL: `http://localhost:${bport}`, uncachedEdgeURL: `http://localhost:${bport}`, apiURL: `http://localhost:${bport}` })).toString('base64');
   // a fake Google tokeninfo: any token is "Jane Tester", verified, for our client ID
   const g = http.createServer((q, s) => { s.setHeader('Content-Type', 'application/json'); s.end(JSON.stringify({ aud: CLIENT, iss: 'https://accounts.google.com', email_verified: 'true', exp: String(Math.floor(Date.now() / 1000) + 600), email: 'jane.tester@example.com', name: 'Jane Tester' })); }).listen(0);
+  // a fake DeepSeek: says back which language and page the assistant was told to use
+  const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
+    const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
+    const lang = (/Reply in ([^.]+)\./.exec(sys) || [])[1] || '?';
+    const reply = `Echo: lang=${lang}; where=${/signed in to the Project Champ console/.test(sys) ? 'console' : 'site'}; facts=${/Pipeline board/.test(sys) && /PMBOK/.test(sys)}; q=${(j.messages || []).slice(-1)[0].content}\n- **point one**\n- point two`;
+    s2.setHeader('Content-Type', 'application/json'); s2.end(JSON.stringify({ choices: [{ message: { content: reply } }] }));
+  }); }).listen(0);
   await sleep(100);
   const env = { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', NETLIFY_BLOBS_CONTEXT: ctxB64, ADMIN_USERNAME: '', ADMIN_PASSWORD: '', ADMIN_SESSION_SECRET: '',
-    GOOGLE_CLIENT_ID: CLIENT, GOOGLE_TOKENINFO_URL: `http://127.0.0.1:${g.address().port}/tokeninfo`, LLM_API_KEY: '', TELEGRAM_BOT_TOKEN: '', RESEND_API_KEY: '', SITE_ENV: '' };
+    GOOGLE_CLIENT_ID: CLIENT, GOOGLE_TOKENINFO_URL: `http://127.0.0.1:${g.address().port}/tokeninfo`, LLM_API_KEY: 'test-key', LLM_BASE_URL: `http://127.0.0.1:${llm.address().port}`, LLM_MODEL: 'deepseek-chat', TELEGRAM_BOT_TOKEN: '', RESEND_API_KEY: '', SITE_ENV: '' };
   const srv = spawn('node', ['local-server.mjs'], { cwd: SITE, env, stdio: ['ignore', 'pipe', 'pipe'] }); global.SRV = srv;
   let log = ''; srv.stdout.on('data', (d) => (log += d)); srv.stderr.on('data', (d) => (log += d));
   for (let i = 0; i < 60 && !/running/i.test(log); i++) await sleep(150);
@@ -51,6 +58,33 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Site', 'footer credit "Designed by © Sashi Kumar Sivam"', (await p.textContent('footer')).includes('Designed by © Sashi Kumar Sivam'));
   const r404 = await p.goto(`${BASE}/nope.html`);
   ok('Site', 'unknown page gives the 404 page', r404.status() === 404 && (await p.textContent('body')).includes('critical path'));
+
+  // ---- Champ chat (website) ----
+  await p.goto(`${BASE}/index.html`);
+  ok('Chat', 'Ask Champ button on the website', await p.isVisible('#champChatBtn'));
+  await p.click('#champChatBtn'); await p.waitForSelector('#champChat:not([hidden])');
+  ok('Chat', 'opens with a greeting and suggestion chips', (await p.textContent('.cc-log')).includes('Champ') && (await p.$$('.cc-chips button')).length === 4);
+  await p.selectOption('.cc-lang', 'ms');
+  ok('Chat', 'language switch changes the greeting (Malay)', (await p.textContent('.cc-log')).includes('Tanya saya'));
+  await p.click('.cc-chips button'); await p.waitForSelector('.cc-bot:not(.cc-wait) >> text=Echo', { timeout: 8000 }).catch(() => {});
+  const t1 = await p.textContent('.cc-log');
+  ok('Chat', 'answer comes back in the chosen language', t1.includes('lang=Bahasa Melayu'), t1.slice(-200));
+  ok('Chat', 'assistant gets the product facts and PM scope', t1.includes('facts=true'));
+  ok('Chat', 'answer formatting (bold, bullets) rendered', (await p.$$('.cc-bot ul li b')).length > 0);
+  await p.selectOption('.cc-lang', 'ar');
+  ok('Chat', 'Arabic switches the chat right-to-left', (await p.getAttribute('#champChat', 'dir')) === 'rtl');
+  await p.selectOption('.cc-lang', 'auto');
+  await p.fill('.cc-f textarea', 'What is a portfolio?'); await p.keyboard.press('Enter'); await sleep(1500);
+  ok('Chat', 'typing a question and Enter sends it', (await p.textContent('.cc-log')).includes('q=What is a portfolio?'));
+  await p.click('.cc-x');
+  r0 = await p.request.post(`${BASE}/.netlify/functions/chat`, { data: { messages: [] } });
+  ok('Chat', 'empty question refused (400)', r0.status() === 400);
+  // ---- quick light/dark slider ----
+  ok('Theme', 'light/dark slider in the site header', await p.isVisible('header.site #champQuick'));
+  await p.click('#champQuick');
+  ok('Theme', 'slider switches to White', (await p.getAttribute('html', 'data-skin')) === 'white');
+  await p.click('#champQuick');
+  ok('Theme', 'slider switches back to dark', (await p.getAttribute('html', 'data-skin')) === 'black');
 
   // ---- security ----
   let r = await api('planList');
@@ -129,6 +163,14 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   r = await api('planGet', { core });
   ok('BOM', 'switching it back on is saved', (await r.json()).champ.bom === true);
 
+  // ---- Champ chat (console) ----
+  await p.goto(`${BASE}/admin/#portfolio`); await sleep(800);
+  ok('Chat', 'Ask Champ is in the console too', await p.isVisible('#champChatBtn'));
+  ok('Theme', 'light/dark slider in the console top bar', await p.isVisible('.top #champQuick'));
+  await p.evaluate(() => window.ChampChat.ask('How do I baseline?')); await sleep(1500);
+  ok('Chat', 'console chat answers with console help', (await p.textContent('.cc-log')).includes('where=console'));
+  await p.click('.cc-x');
+
   // ---- logout → login page ----
   await p.goto(`${BASE}/admin/#projects`); await sleep(1000);
   await Promise.all([p.waitForURL(/login\.html/, { timeout: 8000 }).catch(() => {}), p.click('#logout')]);
@@ -150,7 +192,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Theme', 'White skin gives a white page', /255, 255, 255/.test(bg), bg);
   await p.click('.ct-seg [data-v=compact]');
   ok('Theme', 'density switches to compact', (await p.getAttribute('html', 'data-density')) === 'compact');
-  await p.goto(`${BASE}/login.html`);
+  await p.goto(`${BASE}/features.html`);
   ok('Theme', 'skin is remembered on the next page', (await p.getAttribute('html', 'data-skin')) === 'white');
   await p.evaluate(() => { localStorage.setItem('champSkin', 'navy'); });
   await p.goto(`${BASE}/admin/`); await sleep(600);
@@ -158,7 +200,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.evaluate(() => { localStorage.clear(); });
 
   ok('Errors', 'no script errors on any page', errors.length === 0, errors.slice(0, 5).join(' || '));
-  await b.close(); srv.kill(); g.close(); await blobs.stop();
+  await b.close(); srv.kill(); g.close(); llm.close(); await blobs.stop();
   const bad = results.filter((x) => !x.pass);
   for (const x of results) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`);
   console.log(`\n${results.length - bad.length}/${results.length} passed`);

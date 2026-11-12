@@ -65,6 +65,25 @@
       window.dispatchEvent(new Event('resize'));   // charts and the Gantt re-fit
     });
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build); else build();
+  // one-click light/dark slider: White <-> the last dark skin used (Black & Gold by default)
+  function quick() {
+    var host = document.querySelector('header.site .nav-login') || document.querySelector('.top .top-new');
+    if (!host || document.getElementById('champQuick')) return;
+    var t = document.createElement('button');
+    t.type = 'button'; t.id = 'champQuick'; t.className = 'ct-quick'; t.setAttribute('role', 'switch'); t.title = 'Light or dark';
+    var sync = function () { var dark = get('skin', 'black') !== 'white'; t.setAttribute('aria-checked', dark ? 'true' : 'false'); t.setAttribute('aria-label', dark ? 'Dark skin on: switch to light' : 'Light skin on: switch to dark'); };
+    t.innerHTML = '<span class="ct-track" aria-hidden="true"></span><span class="ct-lbl">' + (isConsole ? 'Theme' : '') + '</span>';
+    t.onclick = function () {
+      var cur = get('skin', 'black');
+      if (cur === 'white') put('skin', get('dark', 'black'));
+      else { try { localStorage.setItem('champDarkSkin', cur); } catch (e) {} put('skin', 'white'); }
+      apply(); sync(); var pn = document.getElementById('champTheme'); if (pn && !pn.hidden) pn.innerHTML = panelHtml();
+      window.dispatchEvent(new Event('resize'));
+    };
+    host.parentNode.insertBefore(t, host); sync();
+    window.addEventListener('storage', sync);
+  }
+  KEYS.dark = 'champDarkSkin';
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', build); document.addEventListener('DOMContentLoaded', quick); } else { build(); quick(); }
   window.ChampTheme = { skins: SKINS.map(function (s) { return s[0]; }), apply: apply };
 })();

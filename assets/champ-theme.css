@@ -2,9 +2,9 @@
    Website rules use body:not(.champ-console); console rules use body.champ-console. */
 
 /* ---------- the 🎨 button and panel (both) ---------- */
-.ct-btn{position:fixed;right:18px;bottom:18px;z-index:2147483000;width:46px;height:46px;border-radius:50%;border:1px solid rgba(201,162,39,.6);background:#111;color:#fff;font-size:20px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35);transition:transform .2s}
+.ct-btn{position:fixed;right:24px;bottom:84px;z-index:2147483000;width:46px;height:46px;border-radius:50%;border:1px solid rgba(201,162,39,.6);background:#111;color:#fff;font-size:20px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35);transition:transform .2s}
 .ct-btn:hover{transform:scale(1.08)}
-.ct-panel{position:fixed;right:18px;bottom:74px;z-index:2147483001;width:min(340px,calc(100vw - 36px));background:#fff;color:#1A1A1A;border:1px solid #E5E2DA;border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.35);padding:16px;display:grid;gap:12px;font:500 14px/1.4 'Manrope',system-ui,sans-serif}
+.ct-panel{position:fixed;right:18px;bottom:140px;z-index:2147483001;width:min(340px,calc(100vw - 36px));background:#fff;color:#1A1A1A;border:1px solid #E5E2DA;border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.35);padding:16px;display:grid;gap:12px;font:500 14px/1.4 'Manrope',system-ui,sans-serif}
 .ct-panel[hidden]{display:none}
 .ct-head{display:flex;justify-content:space-between;align-items:center}.ct-head b{font:800 16px/1 'Archivo',sans-serif;letter-spacing:.01em}
 .ct-x{background:none;border:0;font-size:16px;cursor:pointer;color:#6B6860;width:30px;height:30px}
@@ -133,3 +133,47 @@ html[data-skin=slate] body.champ-console .side-nav a.on{background:linear-gradie
 html[data-skin=slate] body.champ-console .login{background:radial-gradient(1000px 600px at 50% -10%,#5A2E17 0%,#0D0E10 60%)}
 html[data-skin=slate] body.champ-console .login-card{background:#16181C;border-color:#33383F}
 html[data-skin=navy] body.champ-console .top,html[data-skin=emerald] body.champ-console .top,html[data-skin=slate] body.champ-console .top,html[data-skin=white] body.champ-console .top{background:color-mix(in srgb,var(--bg) 92%,transparent)}
+
+/* ---------- quick light/dark slider (header and console top bar) ---------- */
+.ct-quick{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font:700 12px/1 'Manrope',system-ui,sans-serif;color:inherit;background:none;border:0;padding:4px}
+.ct-quick .ct-track{position:relative;width:46px;height:24px;border-radius:999px;background:#E8E3D6;border:1px solid rgba(0,0,0,.15);transition:background .25s}
+.ct-quick .ct-track::after{content:"☀";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;color:#B45309;font-size:12px;line-height:18px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .25s}
+.ct-quick[aria-checked=true] .ct-track{background:#1A1A1A;border-color:rgba(255,255,255,.25)}
+.ct-quick[aria-checked=true] .ct-track::after{content:"☾";transform:translateX(22px);background:#2A2A2A;color:#F5D97A}
+.ct-quick:focus-visible{outline:2px solid #C9A227;outline-offset:2px;border-radius:999px}
+@media (max-width:900px){header.site .ct-quick .ct-lbl{display:none}}
+
+/* ---------- Champ chat ---------- */
+.cc-btn{position:fixed;right:18px;bottom:18px;z-index:2147482990;display:flex;align-items:center;gap:8px;padding:6px 16px 6px 6px;border-radius:999px;border:1px solid rgba(201,162,39,.7);background:#0A0A0A;color:#fff;font:800 14px/1 'Manrope',system-ui,sans-serif;cursor:pointer;box-shadow:0 10px 30px rgba(0,0,0,.35);transition:transform .2s}
+.cc-btn:hover{transform:translateY(-2px)}
+.cc-btn img{width:40px;height:40px}
+body.cc-open .cc-btn,body.cc-open .ct-btn{display:none}
+.cc-box{position:fixed;right:18px;bottom:18px;z-index:2147482995;width:min(420px,calc(100vw - 24px));height:min(640px,calc(100vh - 36px));display:flex;flex-direction:column;background:#fff;color:#1A1A1A;border:1px solid #E5E2DA;border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.4);overflow:hidden;font:500 14.5px/1.5 'Manrope',system-ui,sans-serif}
+.cc-box[hidden]{display:none}
+.cc-h{display:flex;align-items:center;gap:10px;padding:12px 12px 12px 14px;background:linear-gradient(90deg,#000 0%,#111 60%,#2A2210 100%);color:#fff;border-bottom:2px solid #C9A227}
+.cc-h div{display:grid;flex:1;min-width:0}.cc-h b{font:800 17px/1.1 'Archivo',sans-serif}.cc-h small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#E8C04A;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.cc-lang{max-width:118px;font:600 12px/1 'Manrope',sans-serif;padding:6px;border-radius:8px;border:1px solid #444;background:#1A1A1A;color:#fff}
+.cc-x{background:none;border:0;color:#fff;font-size:16px;width:32px;height:32px;cursor:pointer}
+.cc-log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:#FAF9F6}
+.cc-m{max-width:88%;padding:9px 13px;border-radius:14px;word-wrap:break-word}
+.cc-m p{margin:0 0 6px}.cc-m p:last-child{margin:0}.cc-m ul{margin:4px 0 6px;padding-left:18px}.cc-m li{margin:2px 0}
+.cc-m a{color:#7A5E12;font-weight:700}
+.cc-bot{align-self:flex-start;background:#fff;border:1px solid #ECE8DE;border-bottom-left-radius:4px}
+.cc-user{align-self:flex-end;background:#111;color:#fff;border-bottom-right-radius:4px}
+.cc-err{border-color:#F3C9B5;background:#FFF5F0;color:#9A3412}
+.cc-dots{display:inline-flex;gap:4px}.cc-dots i{width:7px;height:7px;border-radius:50%;background:#C9A227;animation:cc-b 1s infinite}.cc-dots i:nth-child(2){animation-delay:.15s}.cc-dots i:nth-child(3){animation-delay:.3s}
+@keyframes cc-b{50%{opacity:.25;transform:translateY(-3px)}}
+.cc-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 8px;background:#FAF9F6}
+.cc-chips:empty{display:none}
+.cc-chips button{border:1px solid #E1D6B4;background:#FFF9E8;color:#5E4A0E;border-radius:999px;padding:6px 11px;font:700 12px/1.2 'Manrope',sans-serif;cursor:pointer}
+.cc-f{display:flex;align-items:flex-end;gap:8px;padding:10px;border-top:1px solid #ECE8DE;background:#fff}
+.cc-f textarea{flex:1;resize:none;font:inherit;min-height:44px;height:44px;margin:0;box-shadow:none;padding:10px 12px;border-radius:12px;border:1px solid #DCD6C8;max-height:120px;color:#1A1A1A;background:#fff}
+.cc-f textarea:focus{outline:2px solid #C9A227;border-color:#C9A227}
+.cc-f button{width:44px;height:44px;flex:none;border-radius:12px;border:0;background:linear-gradient(135deg,#E8C04A,#C9A227);color:#111;font-size:16px;cursor:pointer}
+.cc-foot{margin:0;padding:0 12px 9px;font-size:11px;color:#8A857A;background:#fff;display:flex;justify-content:space-between;gap:8px}
+.cc-clear{background:none;border:0;padding:0;color:#7A5E12;font:700 11px/1 'Manrope',sans-serif;cursor:pointer;text-decoration:underline}
+html[data-skin=navy] .cc-h{background:linear-gradient(90deg,#060E1A,#0A1628 60%,#123A6B);border-bottom-color:#4FA3FF}html[data-skin=navy] .cc-h small{color:#9CCBFF}
+html[data-skin=emerald] .cc-h{background:linear-gradient(90deg,#030B08,#06140F 60%,#0F4A35);border-bottom-color:#34D399}html[data-skin=emerald] .cc-h small{color:#A7F3D0}
+html[data-skin=slate] .cc-h{background:linear-gradient(90deg,#0D0E10,#16181C 60%,#5A2E17);border-bottom-color:#E0793F}html[data-skin=slate] .cc-h small{color:#F6B48B}
+@media (max-width:520px){.cc-box{right:6px;bottom:6px;width:calc(100vw - 12px);height:calc(100vh - 12px)}.cc-btn span{display:none}.cc-btn{padding:6px}}
+@media print{.cc-btn,.cc-box{display:none!important}}
