@@ -73,10 +73,11 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Site', 'footer credit "Designed by © Sashi Kumar Sivam"', (await p.textContent('footer')).includes('Designed by © Sashi Kumar Sivam'));
   // ---- share preview (WhatsApp, LinkedIn…): GKH globe card, no MBS ----
   const og = await p.$eval('meta[property="og:image"]', (m) => m.content).catch(() => '');
-  ok('Share', 'every page has the GKH share image (absolute address)', /^https:\/\/.+\/assets\/og-image\.jpg/.test(og), og);
-  r0 = await p.request.get(`${BASE}/assets/og-image.jpg`);
+  ok('Share', 'every page has the GKH share image (absolute address)', /^https:\/\/.+\/assets\/gkh-champ-share\.jpg$/.test(og), og);
+  r0 = await p.request.get(`${BASE}/assets/gkh-champ-share.jpg`);
   ok('Share', 'share image is served (1200x630 JPEG)', r0.status() === 200 && /image\/jpeg/.test(r0.headers()['content-type'] || ''));
   ok('Share', 'large preview card for WhatsApp/X', (await p.$eval('meta[name="twitter:card"]', (m) => m.content).catch(() => '')) === 'summary_large_image');
+  ok('Share', 'phone icon uses a new file name (old MBS copies kept by apps cannot be reused)', (await p.getAttribute('link[rel=apple-touch-icon]', 'href')) === 'assets/gkh-champ-icon-180.png');
   r0 = await p.request.get(`${BASE}/assets/favicon.svg`);
   ok('Share', 'old MBS favicon is gone', r0.status() === 404);
   const r404 = await p.goto(`${BASE}/nope.html`);

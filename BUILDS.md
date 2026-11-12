@@ -24,4 +24,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 13 | 1.0.13| 2026-11-12 22:28| GKH-Project-Champ| `c2941dc` | Champ ears: Portuguese listens as pt-PT (pt-BR is refused in australiaeast); one automatic retry when Azure is busy |
 | 14 | 1.0.14| 2026-11-12 22:30| GKH-Project-Champ| `7b9968a` | Champ ears: 'any language' mode (Azure multilingual model, no list) |
 | 15 | 1.0.15| 2026-11-12 22:33| GKH-Project-Champ| `39412c4` | Champ ears: two listening modes, My languages (accurate, Tamil/Malay/Persian) and Any language (incl. Portuguese) |
-| 16 | 1.0.16 | 2026-11-13 00:13 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 16 | 1.0.16| 2026-11-13 00:13| GKH-Project-Champ| `a21f802` | Share preview: GKH Project Champ card with the globe (WhatsApp, LinkedIn, X); globe icons replace the MBS ones |
+| 17 | 1.0.17 | 2026-11-13 00:50 | GKH-Project-Champ | _this commit_ | _see git log_ |
