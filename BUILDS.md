@@ -18,4 +18,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 7 | 1.0.7 | 2026-11-12 20:53 | GKH-Project-Champ | `7ef55dc` | ⚙ Modules: switch BOM and SWMS on or off per project |
 | 8 | 1.0.8 | 2026-11-12 21:01 | GKH-Project-Champ | `37fd2a5` | Ask AI for projects, programs and the portfolio; programs; no chat bubble in the console |
 | 9 | 1.0.9| 2026-11-12 21:36| GKH-Project-Champ| `fd1241a` | Project Champ: automatic build numbers and a build registry |
-| 10 | 1.0.10 | 2026-11-12 21:47 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 10 | 1.0.10| 2026-11-12 21:47| GKH-Project-Champ| `04e888b` | Champ: seamless language switching and a main menu |
+| 11 | 1.0.11 | 2026-11-12 21:50 | GKH-Project-Champ | _this commit_ | _see git log_ |

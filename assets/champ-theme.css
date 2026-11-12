@@ -155,7 +155,7 @@ body.cc-open .cc-btn,body.cc-open .ct-btn{display:none}
 .cc-lang{max-width:118px;font:600 12px/1 'Manrope',sans-serif;padding:6px;border-radius:8px;border:1px solid #444;background:#1A1A1A;color:#fff}
 .cc-x{background:none;border:0;color:#fff;font-size:16px;width:32px;height:32px;cursor:pointer}
 .cc-log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:#FAF9F6}
-.cc-m{max-width:88%;padding:9px 13px;border-radius:14px;word-wrap:break-word}
+.cc-m{max-width:88%;padding:9px 13px;border-radius:14px;overflow-wrap:anywhere;box-sizing:border-box}
 .cc-m p{margin:0 0 6px}.cc-m p:last-child{margin:0}.cc-m ul{margin:4px 0 6px;padding-left:18px}.cc-m li{margin:2px 0}
 .cc-m a{color:#7A5E12;font-weight:700}
 .cc-bot{align-self:flex-start;background:#fff;border:1px solid #ECE8DE;border-bottom-left-radius:4px}
@@ -216,8 +216,9 @@ html.i18n-busy body::after{content:"Translating…";position:fixed;top:14px;left
 .cc-menubtn{background:none;border:1px solid #444;color:#fff;border-radius:8px;width:32px;height:30px;font-size:15px;cursor:pointer;flex:none}
 .cc-menubtn:hover{border-color:#C9A227;color:#F5D97A}
 .cc-menu{max-width:100%!important;width:100%}
-.cc-menu-list{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
-.cc-menu-list button{display:flex;align-items:center;gap:8px;text-align:start;border:1px solid #E1D6B4;background:#FFF9E8;color:#3A2E08;border-radius:12px;padding:9px 10px;font:700 12.5px/1.25 'Manrope',system-ui,sans-serif;cursor:pointer;transition:background .15s,border-color .15s}
+.cc-log{overflow-x:hidden}
+.cc-menu-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:8px}
+.cc-menu-list button{display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere;text-align:start;border:1px solid #E1D6B4;background:#FFF9E8;color:#3A2E08;border-radius:12px;padding:9px 10px;font:700 12.5px/1.25 'Manrope',system-ui,sans-serif;cursor:pointer;transition:background .15s,border-color .15s}
 .cc-menu-list button:hover,.cc-menu-list button:focus-visible{background:#FCEFC4;border-color:#C9A227;outline:none}
 .cc-menu-list button span{font-size:16px;flex:none}
 @media (max-width:420px){.cc-menu-list{grid-template-columns:1fr}}

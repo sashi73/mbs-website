@@ -141,7 +141,11 @@
       fetch('/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text, lang: L }) })
         .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { if (r.status === 503) { voiceOk = false; log.querySelectorAll('.cc-say').forEach(function (x) { x.remove(); }); box.querySelector('.cc-voice').hidden = true; } throw new Error(j.error || 'Voice unavailable'); }); return r.blob(); })
         .then(function (bl) { if (b && speakingBtn !== b) return; audio = new Audio(URL.createObjectURL(bl)); audio.onended = stopVoice; return audio.play(); })
-        .catch(function (e) { stopVoice(); bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err'); });
+        .catch(function (e) {
+          stopVoice();
+          if (e && e.name === 'NotAllowedError') return;   // the browser wants a click first: the 🔊 Listen button is there for that
+          bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err');
+        });
     }
     function tools(bb, idx) {   // under each answer: 🔊 Listen and ☰ Main menu
       var row = document.createElement('div'); row.className = 'cc-tools';
