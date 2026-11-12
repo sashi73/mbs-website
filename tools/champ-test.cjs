@@ -194,6 +194,23 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   const st = await p.textContent('#view');
   ok('Portfolio', 'Summary shows tiles, phases and the health table', st.includes('Total budget') && st.includes('Projects by PMBOK phase') && st.includes('ERP rollout') && st.includes('Head office fit-out'));
 
+  // ---- deleting projects ----
+  await p.click('[data-tab=board]'); await p.waitForSelector(`.pcard[data-core="${core2}"]`, { timeout: 8000 }).catch(() => {});
+  await p.click(`.pcard[data-core="${core2}"] [data-move]`); await p.click('.pmenu [data-del]');
+  ok('Delete', 'board ⇄ menu asks before deleting', (await p.textContent('#modal')).includes('ERP rollout') && (await p.textContent('#modal')).includes("can't be undone"));
+  await p.click('#okBtn'); await sleep(1800);
+  ok('Delete', 'project removed from the board', !(await p.$(`.pcard[data-core="${core2}"]`)));
+  r = await api('planGet', { core: core2 });
+  ok('Delete', 'project record really gone (planGet 404)', r.status() === 404, r.status());
+  const extra = [];
+  for (const n of ['Test A', 'Test B']) extra.push((await (await api('planNewProject', { name: n, client: 'Tmp' })).json()).core);
+  await p.click('[data-tab=summary]'); await p.click('#pbRefresh'); await sleep(1500);
+  for (const c of extra) await p.check(`[data-pick="${c}"]`);
+  ok('Delete', 'Summary: tick projects to delete several at once', (await p.textContent('#csDel')).includes('2 selected'));
+  await p.click('#csDel'); await p.click('#okBtn'); await sleep(2500);
+  const left = await (await api('planPipelineList', { today: new Date().toISOString().slice(0, 10) })).json();
+  ok('Delete', 'bulk delete removed both, kept the rest', !left.cards.some((c) => extra.includes(c.core)) && left.cards.some((c) => c.core === core), left.cards.map((c) => c.name).join(', '));
+
   // ---- BOM on/off slider ----
   await p.goto(`${BASE}/admin/#plan/${core}/overview`); await p.reload(); await p.waitForSelector('#bomSwitch', { timeout: 8000 }).catch(() => {});
   ok('BOM', 'BOM tab and slider shown (on by default)', (await p.isChecked('#bomSwitch').catch(() => false)) && (await p.$$('[data-tab=bom],[data-ptab=bom]')).length + ((await p.content()).includes('🧱 BOM</') ? 1 : 0) > 0);
@@ -218,7 +235,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=ms]');
   await p.waitForFunction(() => /\[Bahas/.test(document.querySelector('.side-nav').textContent), null, { timeout: 8000 }).catch(() => {});
   ok('Language', 'console menu translated', /\[Bahas/.test(await p.textContent('.side-nav')));
-  const dataCell = await p.textContent('#view table tbody tr td:nth-child(2)').catch(() => '');
+  const dataCell = await p.textContent('#view table tbody tr td:nth-child(3)').catch(() => '');
   ok('Language', 'project names (data) are not translated', dataCell.includes('Head office fit-out') && !dataCell.includes('[Bahas'), dataCell);
   await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=en]'); await sleep(300);
   await p.evaluate(() => { localStorage.removeItem('champChatLang'); localStorage.removeItem('champLang'); });
@@ -235,6 +252,8 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Google', 'Google user is view-only', me.kind === 'google' && /view only/i.test(me.role || ''), me.role);
   r = await api('planNewProject', { name: 'X', client: 'Y' });
   ok('Google', 'Google view-only user cannot create projects', r.status() === 403, r.status());
+  r = await api('planProjectDelete', { core });
+  ok('Delete', 'view-only user cannot delete projects', r.status() === 403, r.status());
 
   // ---- skins and layout ----
   await p.goto(`${BASE}/index.html`);

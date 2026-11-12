@@ -33,6 +33,23 @@
   }
   var HN = { red: 'At risk', amber: 'Watch', green: 'On track', grey: 'Not planned' };
 
+  /* ---------------- delete projects ---------------- */
+  // one or many: the whole project goes (plan, tasks, costs, risks, issues, stakeholders, reports and the project record)
+  function delProjects(list) {
+    if (!list.length) return Promise.resolve(false);
+    var one = list.length === 1;
+    var names = list.slice(0, 6).map(function (c) { return '<li><b>' + esc(c.name) + '</b> <small class="muted">' + esc(c.ref || '') + '</small></li>'; }).join('') + (list.length > 6 ? '<li>… and ' + (list.length - 6) + ' more</li>' : '');
+    return M.confirmBox(one ? 'Delete this project?' : 'Delete ' + list.length + ' projects?',
+      '<ul style="margin:6px 0 10px;padding-left:18px">' + names + '</ul>Everything in ' + (one ? 'it' : 'them') + ' is deleted: the plan, tasks, dates, costs, risks, issues, stakeholders and reports. <b>This can\'t be undone.</b>',
+      one ? '🗑 Delete project' : '🗑 Delete ' + list.length + ' projects', true).then(function (ok) {
+      if (!ok) return false;
+      var done = 0, bad = [];
+      return list.reduce(function (pr, c) { return pr.then(function () { return api('planProjectDelete', { core: c.core }).then(function () { done++; }).catch(function (e) { bad.push(c.name + ': ' + e.message); }); }); }, Promise.resolve())
+        .then(function () { if (done) toast(done === 1 ? 'Project deleted' : done + ' projects deleted'); if (bad.length) fail(new Error(bad.join(' · '))); return done > 0; });
+    });
+  }
+  M.champDelete = delProjects;
+
   /* ---------------- board ---------------- */
   function flags(c) {
     var f = [], w = function (t, l) { f.push('<span class="pflag pf-' + l + '">' + esc(t) + '</span>'); };
@@ -70,13 +87,15 @@
     var rc = btn.getBoundingClientRect(), m = document.createElement('div');
     m.className = 'pmenu';
     m.innerHTML = '<b>Move to…</b>' + COLS.filter(function (x) { return x[0] !== c.phase; }).map(function (x) { return '<button type="button" data-to="' + x[0] + '" style="--pc:' + x[2] + '"><i></i>' + esc(x[1]) + '</button>'; }).join('') +
-      (c.pinned ? '<button type="button" data-to="auto" style="--pc:#C9A227"><i></i>Automatic (' + esc(NAME[c.auto]) + ')</button>' : '');
+      (c.pinned ? '<button type="button" data-to="auto" style="--pc:#C9A227"><i></i>Automatic (' + esc(NAME[c.auto]) + ')</button>' : '') +
+      (M.allowed('projects', 'edit') && !(M.me && M.me.scope) ? '<hr style="border:0;border-top:1px solid var(--line);margin:4px 0"><button type="button" data-del style="--pc:#DC2626;color:#B91C1C"><i></i>🗑 Delete project…</button>' : '');
     document.body.appendChild(m);
     m.style.top = Math.min(innerHeight - m.offsetHeight - 8, rc.bottom + 4) + 'px'; m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, rc.right - m.offsetWidth)) + 'px';
     var close = function () { m.remove(); document.removeEventListener('pointerdown', out, true); };
     var out = function (e) { if (!m.contains(e.target)) close(); };
     setTimeout(function () { document.addEventListener('pointerdown', out, true); }, 0);
     m.querySelectorAll('[data-to]').forEach(function (b) { b.onclick = function () { close(); moveTo(c, b.getAttribute('data-to')); }; });
+    var d = m.querySelector('[data-del]'); if (d) d.onclick = function () { close(); delProjects([c]).then(function (ok) { if (ok) load(); }); };
   }
   function bindDrag(host, byCore) {
     host.querySelectorAll('.pcard').forEach(function (el) {
@@ -153,9 +172,10 @@
       return '<div class="cs-ph"><span class="cs-phn"><i style="background:' + c[2] + '"></i>' + esc(c[1]) + '</span><div class="cs-bar"><span style="width:' + Math.round(100 * l.length / max) + '%;background:' + c[2] + '"></span></div><b>' + l.length + '</b><small>' + (b ? money(b) : '') + '</small></div>';
     }).join('');
     var rank = { red: 0, amber: 1, grey: 2, green: 3 };
+    var canDel = M.allowed('projects', 'edit') && !(M.me && M.me.scope);
     var rows = cards.slice().sort(function (a, b) { return rank[health(a)] - rank[health(b)] || ORDER.indexOf(a.phase) - ORDER.indexOf(b.phase); }).map(function (c) {
       var h = health(c), col = COLS[ORDER.indexOf(c.phase)];
-      return '<tr class="click" data-plan="' + esc(c.core) + '"><td><span class="cs-rag cs-' + h + '" title="' + HN[h] + '"></span></td><td><b>' + esc(c.name) + '</b><br><small class="muted"><span class="ref">' + esc(c.ref) + '</span> · ' + esc(c.client) + '</small></td>' +
+      return '<tr class="click" data-plan="' + esc(c.core) + '">' + (canDel ? '<td class="cs-pick"><input type="checkbox" data-pick="' + esc(c.core) + '" aria-label="Select ' + esc(c.name) + '"></td>' : '') + '<td><span class="cs-rag cs-' + h + '" title="' + HN[h] + '"></span></td><td><b>' + esc(c.name) + '</b><br><small class="muted"><span class="ref">' + esc(c.ref) + '</span> · ' + esc(c.client) + '</small></td>' +
         '<td><span class="cs-chip" style="--pc:' + col[2] + '">' + esc(col[1]) + '</span></td>' +
         '<td style="min-width:130px">' + (c.hasPlan ? '<div class="pbar"><span style="width:' + c.pct + '%"></span></div><small>' + c.pct + '% · ' + c.done + '/' + c.total + '</small>' : '<small class="muted">No plan yet</small>') + '</td>' +
         '<td class="hide-sm">' + esc(pretty(c.finish)) + '</td><td>' + (c.SPI == null ? '–' : '<b class="ev-' + evC(c.SPI) + '-t">' + c.SPI.toFixed(2) + '</b>') + '</td><td>' + (c.CPI == null ? '–' : '<b class="ev-' + evC(c.CPI) + '-t">' + c.CPI.toFixed(2) + '</b>') + '</td>' +
@@ -167,8 +187,13 @@
       '<div class="card"><div class="card-h"><h2>Health</h2></div><div class="cs-health">' +
       ['green', 'amber', 'red', 'grey'].map(function (k) { return '<div><span class="cs-rag cs-' + k + '"></span><b>' + H[k] + '</b><small>' + HN[k] + '</small></div>'; }).join('') +
       '</div><div class="cs-stack">' + ['green', 'amber', 'red', 'grey'].map(function (k) { return H[k] ? '<span class="cs-' + k + '" style="flex:' + H[k] + '" title="' + HN[k] + ': ' + H[k] + '"></span>' : ''; }).join('') + '</div></div></div>' +
-      '<div class="card"><div class="card-h"><h2>Every project, worst first</h2></div>' + (n ? '<div class="table-wrap"><table><thead><tr><th></th><th>Project</th><th>Phase</th><th>Progress</th><th class="hide-sm">Finish</th><th>SPI</th><th>CPI</th><th class="hide-sm">Budget</th><th class="hide-sm">Late</th><th class="hide-sm">Risks</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No projects yet. <a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div>') + '</div>';
-    host.querySelectorAll('[data-plan]').forEach(function (tr) { tr.onclick = function () { location.hash = '#plan/' + tr.getAttribute('data-plan'); }; });
+      '<div class="card"><div class="card-h"><h2>Every project, worst first</h2>' + (canDel && n ? '<span class="sp"></span><button class="btn btn-sm btn-danger" id="csDel" disabled>🗑 Delete selected</button>' : '') + '</div>' + (n ? '<div class="table-wrap"><table><thead><tr>' + (canDel ? '<th class="cs-pick"><input type="checkbox" id="csAll" aria-label="Select all"></th>' : '') + '<th></th><th>Project</th><th>Phase</th><th>Progress</th><th class="hide-sm">Finish</th><th>SPI</th><th>CPI</th><th class="hide-sm">Budget</th><th class="hide-sm">Late</th><th class="hide-sm">Risks</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No projects yet. <a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div>') + '</div>';
+    host.querySelectorAll('[data-plan]').forEach(function (tr) { tr.onclick = function (e) { if (e.target.closest('.cs-pick')) return; location.hash = '#plan/' + tr.getAttribute('data-plan'); }; });
+    var picks = function () { return [].slice.call(host.querySelectorAll('[data-pick]:checked')).map(function (x) { return cards.filter(function (c) { return c.core === x.getAttribute('data-pick'); })[0]; }); };
+    var syncDel = function () { var b = host.querySelector('#csDel'), n2 = picks().length; if (b) { b.disabled = !n2; b.textContent = n2 ? '🗑 Delete ' + n2 + ' selected' : '🗑 Delete selected'; } };
+    host.querySelectorAll('[data-pick]').forEach(function (x) { x.onchange = syncDel; });
+    var all = host.querySelector('#csAll'); if (all) all.onchange = function () { host.querySelectorAll('[data-pick]').forEach(function (x) { x.checked = all.checked; }); syncDel(); };
+    var del = host.querySelector('#csDel'); if (del) del.onclick = function () { delProjects(picks()).then(function (ok) { if (ok) load(); }); };
   }
 
   /* ---------------- page ---------------- */

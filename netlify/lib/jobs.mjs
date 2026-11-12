@@ -86,6 +86,16 @@ async function change(input, fn) {
   await indexJob(job);
   return { job, result };
 }
+// GKH Project Champ: delete a project record for good (its plan is deleted separately, by the caller)
+export async function removeJob(core) {
+  const job = await kv.get('job:' + core);
+  if (!job) return null;
+  await kv.del('job:' + core);
+  await kv.del('pending:' + core).catch(() => {});
+  await kv.update('index', (idx) => { delete idx.jobs[core]; return idx; }, () => ({ jobs: {} }));
+  await kv.update('reminders', (r) => { r.list = (r.list || []).filter((x) => x.core !== core); return r; }, () => ({ list: [], next: 1 })).catch(() => {});
+  return job;
+}
 export async function healIndex() {
   const pending = await kv.keys('pending:');
   for (const k of pending) {

@@ -419,16 +419,13 @@
               return '<tr class="click" data-plan="' + esc(p.core) + '"><td><b>' + esc(p.name) + '</b><br><small class="muted"><span class="ref">' + esc(p.ref) + '</span> · ' + esc(p.customer) + '</small></td>' +
                 '<td style="min-width:140px"><div class="pbar"><span style="width:' + p.pct + '%"></span></div><small>' + p.pct + '% · ' + p.done + '/' + p.total + ' tasks' + (p.late ? ' · <b style="color:#C2410C">' + p.late + ' late</b>' : '') + '</small></td>' +
                 '<td class="hide-sm">' + esc(prettyY(p.finish)) + '</td><td class="evcell">' + evChip('SPI', p.SPI) + '</td><td class="evcell">' + evChip('CPI', p.CPI) + '</td>' +
-                '<td class="hide-sm">' + p.openRisks + (p.highRisks ? ' <b style="color:#C2410C">(' + p.highRisks + ' high)</b>' : '') + '</td><td class="hide-sm">' + p.openIssues + '</td><td><button class="btn btn-sm" data-pdel="' + esc(p.core) + '" data-pname="' + esc(p.name) + '" title="Delete this plan">🗑</button></td></tr>';
+                '<td class="hide-sm">' + p.openRisks + (p.highRisks ? ' <b style="color:#C2410C">(' + p.highRisks + ' high)</b>' : '') + '</td><td class="hide-sm">' + p.openIssues + '</td><td><button class="btn btn-sm" data-pdel="' + esc(p.core) + '" data-pname="' + esc(p.name) + '" title="Delete this project">🗑</button></td></tr>';
             }).join('') + '</tbody></table></div>' + evLegend() : (avail.length ? '<div class="empty champ-empty"><b>' + avail.length + ' project' + (avail.length > 1 ? 's' : '') + ' waiting for a plan.</b><br>Pick one in “Plan an existing project…” above, or <a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div>' : '<div class="empty champ-empty"><b>No projects yet.</b><br>Start your first one: <a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div>')) + '</div>';
         V().querySelectorAll('[data-plan]').forEach(function (tr) { tr.onclick = function () { location.hash = '#plan/' + tr.getAttribute('data-plan'); }; });
         V().querySelectorAll('[data-pdel]').forEach(function (b) {
           b.onclick = function (e) {
             e.stopPropagation();
-            M.confirmBox('Delete this project plan?', 'The plan “' + esc(b.getAttribute('data-pname')) + '” will be deleted: tasks, dates, costs, risks and issues. The job itself, its quotes and invoices stay. This can\'t be undone.', 'Delete plan', true).then(function (ok) {
-              if (!ok) return;
-              api('planDelete', { core: b.getAttribute('data-pdel') }).then(function () { toast('Plan deleted'); projects(); }).catch(fail);
-            });
+            M.champDelete([{ core: b.getAttribute('data-pdel'), name: b.getAttribute('data-pname') }]).then(function (ok) { if (ok) projects(); });   // GKH Project Champ: the whole project
           };
         });
         var byCore = {}; avail.forEach(function (x) { byCore[x.core] = x; });
@@ -1004,7 +1001,7 @@
     V().innerHTML = (sub ? '<div class="plan-subbie">👷 Signed in as a sub-contractor (' + esc(M.me.name || M.me.user) + ') for project <b>' + esc(S.job.ref) + '</b>. ' + ((M.me.mods || {}).projects === 'edit' ? 'You can update this project.' : 'View only.') + '</div>' : '') +
       '<div class="row" style="margin-bottom:12px">' + (sub ? '' : '<a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>') +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
-      (sub ? '' : '<label class="bom-switch" title="Bill of Materials: switch it off for projects that have no materials (IT, consulting, ESG…)"><input type="checkbox" id="bomSwitch"' + (S.bomOn === false ? '' : ' checked') + '><span class="bom-slider"></span>🧱 BOM</label>') + '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote"' + hide + ' title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel"' + hide + ' title="Delete this plan">🗑 Delete plan</button></div>' +
+      (sub ? '' : '<label class="bom-switch" title="Bill of Materials: switch it off for projects that have no materials (IT, consulting, ESG…)"><input type="checkbox" id="bomSwitch"' + (S.bomOn === false ? '' : ' checked') + '><span class="bom-slider"></span>🧱 BOM</label>') + '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote"' + hide + ' title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel"' + hide + ' title="Delete this project and everything in it">🗑 Delete project</button></div>' +
       '<div id="planChain"></div>' +
       '<div class="grid pkpis">' +
         mini('Scope', R.pct + '% complete', R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8)) +
@@ -1022,14 +1019,11 @@
     drawChain();
     $('#planXls').onclick = function () { exportExcel(); };
     $('#planCsv').onclick = function () { ganttCsvDialog(); };
-    $('#planDel').onclick = function () {
-      M.confirmBox('Delete this project plan?', 'The plan “' + esc(p.name) + '” for ' + esc(S.job.ref) + ' will be deleted: tasks, dates, costs, risks and issues. The job itself, its quotes and invoices stay. This can\'t be undone.', 'Delete plan', true).then(function (ok) {
-        if (!ok) return;
-        clearTimeout(S.timer); S.timer = null;
-        var core = S.core;
-        (S.q || Promise.resolve()).then(function () { return api('planDelete', { core: core }); }).then(function () {
-          S.plan = null; S.core = ''; toast('Plan deleted'); location.hash = '#projects';
-        }).catch(fail);
+    $('#planDel').onclick = function () {   // GKH Project Champ: delete the whole project
+      clearTimeout(S.timer); S.timer = null;
+      var core = S.core;
+      (S.q || Promise.resolve()).then(function () { return M.champDelete([{ core: core, name: p.name, ref: S.job.ref }]); }).then(function (ok) {
+        if (ok) { S.plan = null; S.core = ''; location.hash = '#portfolio'; }
       });
     };
     if ($('#bomSwitch')) $('#bomSwitch').onchange = function () {   // GKH Project Champ: Bill of Materials on or off

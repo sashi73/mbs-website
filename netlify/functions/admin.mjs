@@ -4,6 +4,7 @@
 // which other websites cannot send, so nobody can trigger admin actions from another site.
 import { env, clean } from '../lib/shared.mjs';
 import * as J from '../lib/jobs.mjs';
+import * as kv from '../lib/kv.mjs';
 import * as A from '../lib/admin-lib.mjs';
 import { period } from '../lib/bot.mjs';
 import { parseWhen, whenText } from '../lib/calendar.mjs';
@@ -265,6 +266,22 @@ async function handle(req, context) {
       case 'report': {
         const per = period(body.period || 'month');
         return out(200, { period: per.name, from: per.from, report: J.report(await J.all(), per.from, per.to) });
+      }
+
+      // ---------- GKH Project Champ: delete a project completely (plan, record, phase pin, BOM setting) ----------
+      case 'planProjectDelete': {
+        if (ctx.scope) return bad('Sub-contractor logins cannot delete projects.', 403);
+        if (!ctx.owner && !(ctx.mods && ctx.mods.projects === 'edit')) return bad('You need edit access to Projects to delete one.', 403);
+        const pcore = clean(body.core, 40), job = await J.find(pcore);
+        if (!job) return out(404, { error: 'Project not found' });
+        const plan = await getPlan(job.core).catch(() => null);
+        if (plan) await planPost('planDelete', { core: job.core }, { who, by, audit: null }).catch(() => {});
+        await J.removeJob(job.core);
+        for (const k of ['champ-phases']) await kv.update(k, (cur) => { const m = { ...((cur && cur.map) || {}) }; delete m[job.core]; return { map: m }; }, () => ({ map: {} })).catch(() => {});
+        await kv.update('champ-opts', (cur) => { const off = { ...((cur && cur.bomOff) || {}) }; delete off[job.core]; return { ...(cur || {}), bomOff: off }; }, () => ({ bomOff: {} })).catch(() => {});
+        const label = (plan && plan.name) || job.service || job.core;
+        await A.audit(who, `${J.refFor(job)}: project deleted ("${label}")`);
+        return out(200, { ok: true, name: label });
       }
 
       // ---------- GKH Project Champ: a new project without the CRM ----------

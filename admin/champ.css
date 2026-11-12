@@ -66,3 +66,4 @@
 .bom-switch input:checked+.bom-slider{background:var(--gold)}
 .bom-switch input:checked+.bom-slider::after{transform:translateX(15px)}
 .bom-switch input:focus-visible+.bom-slider{outline:2px solid var(--gold-hi);outline-offset:2px}
+.cs-pick{width:34px;text-align:center}.cs-pick input{width:17px;height:17px;cursor:pointer}
