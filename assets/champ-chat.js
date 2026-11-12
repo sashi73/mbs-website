@@ -589,7 +589,15 @@
     btn.onclick = function () { open(box.hidden); };
     box.querySelector('.cc-x').onclick = function () { open(false); btn.focus(); };
     box.querySelector('.cc-menubtn').onclick = menuNow;
-    box.querySelector('.cc-clear').onclick = function () { stopVoice(); msgs = []; ss('champChat', '[]'); draw(); if (obActive()) obPrompt(); };
+    box.querySelector('.cc-clear').onclick = function () {
+      stopVoice(); msgs = []; ss('champChat', '[]');
+      if (where === 'site' && !window.CHAMP_REMEMBER) {   // "New chat" = the next person: start the welcome again
+        if (rec && rec.state === 'recording') { recNothing = true; recQuiet = true; stopRec(); }
+        vis = { id: newId(), step: 'lang' }; saveVis(); ss('champObPause', ''); try { localStorage.removeItem('champHandsFree'); } catch (e) {} wake.pause();
+        if (lang !== 'auto' && lang !== 'en') switchLang('en');
+      }
+      draw(); if (obActive()) obPrompt();
+    };
     sel.onchange = function () { if (obActive() && vis.step === 'lang' && sel.value !== 'auto') { obUser(sel.options[sel.selectedIndex].text); chooseLang(sel.value); } else switchLang(sel.value); };
     window.addEventListener('champ:lang', function (e) { switchLang(e.detail, true); });
     var vb = box.querySelector('.cc-voice');

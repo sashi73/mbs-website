@@ -36,4 +36,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 25 | 1.0.25| 2026-11-13 02:05| GKH-Project-Champ| `d39afb9` | Intro: language picker at the bottom left |
 | 26 | 1.0.26| 2026-11-13 02:08| GKH-Project-Champ| `cc46145` | Voice: Champ listens in the chosen language for the welcome answers (name, phone; email in English), and a short answer Azure can't place is |
 | 27 | 1.0.27| 2026-11-13 02:29| GKH-Project-Champ| `4b9cd89` | Champ welcome rebuilt: greeting, language by voice or tap, then a typed form (first and last name, phone with country code, email, reason fo |
-| 28 | 1.0.28 | 2026-11-13 02:32 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 28 | 1.0.28| 2026-11-13 02:32| GKH-Project-Champ| `2431460` | Champ form: consent tick beside its text |
+| 29 | 1.0.29 | 2026-11-13 08:32 | GKH-Project-Champ | _this commit_ | _see git log_ |

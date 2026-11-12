@@ -30,8 +30,8 @@ export default async (req, context) => {
   // these have their own limits: page-by-page browsing must not use up the questions allowance
   if (body?.mode === 'count') return count(body, ip);
   if (body?.mode === 'visitor') return visitor(body, ip, context);
+  if (body?.mode === 'i18n') return i18n(body, ip);   // its own limit (pages are cached once translated)
   if (limited(ip)) return json(429, { error: 'Lots of questions in a short time. Please wait a few minutes and try again.' });
-  if (body?.mode === 'i18n') return i18n(body, ip);
   const lang = LANGS[body?.lang] ? LANGS[body.lang] : LANGS.auto;
   const where = body?.where === 'console' ? 'console' : 'site';
   const messages = (Array.isArray(body?.messages) ? body.messages : [])

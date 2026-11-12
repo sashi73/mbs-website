@@ -175,8 +175,14 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.fill('.cc-f textarea', 'switch to Elvish'); await p.keyboard.press('Enter'); await sleep(1500);
   ok('Welcome', '"switch to" an unknown language: sorry, back to English', /don’t speak that language/.test(await p.textContent('.cc-log')) && (await p.inputValue('.cc-lang')) === 'en');
   await p.reload(); await p.click('#champChatBtn'); await sleep(500);
-  await p.click('.cc-clear'); await sleep(300);
-  ok('Welcome', 'a returning visitor is welcomed back by first name, with no questions', /Welcome back, Sashi!/.test(await p.textContent('.cc-log')) && (await p.$$('.cc-obb')).length === 0);
+  ok('Welcome', 'a reload in the same tab keeps the conversation', /Elvish/.test(await p.textContent('.cc-log')), (await p.textContent('.cc-log')).slice(-200));
+  await p.click('.cc-clear'); await sleep(500);
+  ok('Not remembering', '"New chat" is the next person: Champ greets and asks again, no name kept', /Greetings!.*What language/.test(await p.textContent('.cc-log')) && !/Sashi/.test(await p.textContent('.cc-log')) && (await p.evaluate(() => window.ChampChat.visitor().name)) === '');
+  const p2 = await ctx.newPage(); await p2.goto(`${BASE}/features.html`); await sleep(400);
+  await p2.evaluate(() => { sessionStorage.clear(); }); await p2.reload(); await sleep(400);
+  await p2.click('#champChatBtn'); await sleep(900);
+  ok('Not remembering', 'a new visit (new tab) forgets the last person: fresh greeting in English', /Greetings!.*What language/.test(await p2.textContent('.cc-log')) && (await p2.evaluate(() => localStorage.getItem('champLang'))) === null && (await p2.evaluate(() => window.ChampChat.visitor().name)) === '');
+  await p2.close();
   r0 = await p.request.post(`${BASE}/.netlify/functions/chat`, { data: { mode: 'visitor', id: 'bad id!', first: 'x' } });
   ok('Welcome', 'a bad visitor id is refused', r0.status() === 400);
   r0 = await p.request.post(`${BASE}/.netlify/functions/chat`, { data: { mode: 'visitor', id: 'vskiptest000000', skip: 'form' } });
@@ -184,7 +190,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Welcome', 'a bad email is refused by the server', r0.status() === 422);
   r0 = await p.request.post(`${BASE}/.netlify/functions/chat`, { data: { mode: 'visitor', id: 'vbottest0000000', first: 'Spam', last: 'Bot', email: 'bot@spam.com', consent: true, website: 'http://spam' } });
   // fresh visitor for the chat tests below
-  await p.evaluate(() => { localStorage.setItem('champVisitor', JSON.stringify({ id: 'vchattests00000', step: 'done' })); sessionStorage.clear(); sessionStorage.setItem('champObAsked', '1'); localStorage.setItem('champChatLang', 'auto'); localStorage.removeItem('champLang'); });
+  await p.evaluate(() => { localStorage.setItem('champVisitor', JSON.stringify({ id: 'vchattests00000', step: 'done' })); sessionStorage.clear(); sessionStorage.setItem('champObAsked', '1'); sessionStorage.setItem('champFresh', '1'); localStorage.setItem('champChatLang', 'auto'); localStorage.removeItem('champLang'); });
 
   // ---- Champ chat (website) ----
   await p.goto(`${BASE}/index.html`);
@@ -467,7 +473,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.goto(`${BASE}/admin/#portfolio/summary`); await p.reload(); await p.waitForSelector('.cs-tiles', { timeout: 8000 }).catch(() => {});
   await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=ms]');
   await p.waitForFunction(() => /\[Bahas/.test(document.querySelector('.side-nav').textContent), null, { timeout: 8000 }).catch(() => {});
-  ok('Language', 'console menu translated', /\[Bahas/.test(await p.textContent('.side-nav')));
+  ok('Language', 'console menu translated', /\[Bahas/.test(await p.textContent('.side-nav')), (await p.textContent('.side-nav')).slice(0, 160) + ' / lang=' + (await p.evaluate(() => localStorage.getItem('champLang'))));
   const dataCell = await p.$$eval('#view table', (ts) => { const t = ts[ts.length - 1]; const c = t && t.querySelector('tbody tr td:nth-child(3)'); return c ? c.textContent : ''; }).catch(() => '');
   ok('Language', 'project names (data) are not translated', dataCell.includes('Head office fit-out') && !dataCell.includes('[Bahas'), dataCell);
   await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=en]'); await sleep(300);

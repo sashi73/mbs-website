@@ -2,6 +2,17 @@
    A 🎨 button (bottom right) opens a small panel: skin (Black & Gold, White, Navy, Emerald, Slate & Copper),
    density (comfortable / compact), width (wide / boxed) and, in the console, the menu (full / icons only).
    The choice is kept in this browser (localStorage) and shared by the website and the console. */
+// ---- Remembering visitors: OFF for now (the site is shared by several people). Set to true to remember people between visits. ----
+window.CHAMP_REMEMBER = false;
+(function () {
+  // not remembering: every new visit (a new browser tab or window) starts fresh: no name, no language, no microphone setting from the last person
+  if (window.CHAMP_REMEMBER || /\/admin\//.test(location.pathname)) return;
+  try {
+    if (sessionStorage.getItem('champFresh')) return;
+    ['champVisitor', 'champLang', 'champChatLang', 'champStartLang', 'champHandsFree', 'champSttLangs', 'champSttMode', 'champVoice', 'champChatSeen'].forEach(function (k) { localStorage.removeItem(k); });
+    sessionStorage.setItem('champFresh', '1');
+  } catch (e) {}
+})();
 (function () {
   'use strict';
   var root = document.documentElement;
