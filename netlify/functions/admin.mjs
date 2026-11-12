@@ -5,6 +5,7 @@
 import { env, clean } from '../lib/shared.mjs';
 import * as J from '../lib/jobs.mjs';
 import * as kv from '../lib/kv.mjs';
+import BUILD from '../lib/build-info.mjs';
 import * as A from '../lib/admin-lib.mjs';
 import { period } from '../lib/bot.mjs';
 import { parseWhen, whenText } from '../lib/calendar.mjs';
@@ -59,6 +60,22 @@ async function jobFull(input) {
 
 // timing headers: how long the server itself took, and whether this was a fresh ("cold") copy of the function
 let served = 0;
+// GKH Project Champ: remember every build that goes live (build number, commit, deploy id), newest first
+let buildSeen = false;
+async function registerBuild() {
+  if (buildSeen) return; buildSeen = true;
+  const id = BUILD.deployId || BUILD.commit || 'local-' + BUILD.build;
+  try {
+    await kv.update('champ-builds', (cur) => {
+      const list = ((cur && cur.list) || []).filter((x) => x.id !== id);
+      const old = ((cur && cur.list) || []).find((x) => x.id === id);
+      list.unshift({ id, build: BUILD.build, version: BUILD.version, label: `${BUILD.version}.${BUILD.build}`, commit: BUILD.commit || '', subject: BUILD.subject || '', branch: BUILD.branch || '',
+        deployId: BUILD.deployId || '', context: BUILD.context || '', site: BUILD.site || '', builtAt: BUILD.builtAt || '', liveSince: (old && old.liveSince) || Date.now() });
+      return { list: list.slice(0, 500) };
+    }, () => ({ list: [] }));
+  } catch (e) { buildSeen = false; console.log('build registry: ' + e.message); }
+}
+
 export default async (req, context) => {
   const t0 = Date.now(), first = served++ === 0;
   const res = await handle(req, context);
@@ -70,6 +87,7 @@ async function handle(req, context) {
   A.setDefer(context && typeof context.waitUntil === 'function' ? (p) => context.waitUntil(p) : null);
   try {
     await A.ensureSecret();   // Project Champ: the key that signs sessions
+    await registerBuild();    // Project Champ: the build registry (once per server start)
     const url = new URL(req.url);
 
     // ---------- downloads (GET, cookie only) ----------
@@ -186,7 +204,7 @@ async function handle(req, context) {
     }
 
     switch (action) {
-      case 'me': return out(200, { test: PPL.isTest(), user: who, name: ctx.name, expires: session.exp, owner: ctx.owner, role: ctx.role, mods: ctx.mods, mustChange: !!ctx.mustChange, personId: ctx.personId || '', kind: ctx.kind || '', scope: ctx.scope || null, subId: ctx.subId || '', modules: U.MODS.map((m) => ({ key: m[0], name: m[1] })) });
+      case 'me': return out(200, { build: { label: `${BUILD.version}.${BUILD.build}`, build: BUILD.build, commit: (BUILD.commit || '').slice(0, 7) }, test: PPL.isTest(), user: who, name: ctx.name, expires: session.exp, owner: ctx.owner, role: ctx.role, mods: ctx.mods, mustChange: !!ctx.mustChange, personId: ctx.personId || '', kind: ctx.kind || '', scope: ctx.scope || null, subId: ctx.subId || '', modules: U.MODS.map((m) => ({ key: m[0], name: m[1] })) });
 
       // ---------- CRM ----------
       case 'dashboard': {
@@ -266,6 +284,13 @@ async function handle(req, context) {
       case 'report': {
         const per = period(body.period || 'month');
         return out(200, { period: per.name, from: per.from, report: J.report(await J.all(), per.from, per.to) });
+      }
+
+      // ---------- GKH Project Champ: the build registry (Admin > Builds), owner only ----------
+      case 'buildList': {
+        if (!ctx.owner) return bad('Only the owner can see the build registry.', 403);
+        const reg = (await kv.get('champ-builds').catch(() => null)) || { list: [] };
+        return out(200, { current: BUILD, list: reg.list, repo: 'https://github.com/sashi73/mbs-website' });
       }
 
       // ---------- GKH Project Champ: delete a project completely (plan, record, phase pin, BOM setting) ----------

@@ -267,4 +267,29 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && document.body.classList.contains('board-full')) setFull(false); });
   window.addEventListener('hashchange', function () { if (!/^#portfolio/.test(location.hash)) setFull(false); });
   M.addView('portfolio', 'Portfolio', portfolio);
+
+  /* ---------------- Admin > Builds: every build that went live ---------------- */
+  function builds() {
+    var el = M.$('#view');
+    if (!(M.me && M.me.owner)) { el.innerHTML = '<div class="card noaccess"><h2>🔒 Owner only</h2><p class="muted">The build registry is for the owner login.</p></div>'; return; }
+    el.innerHTML = '<div class="empty">Loading builds…</div>';
+    return api('buildList').then(function (d) {
+      var c = d.current || {}, repo = d.repo, short = function (x) { return (x || '').slice(0, 7); };
+      var when = function (t) { return t ? new Date(t).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; };
+      var link = function (b) {
+        return (b.commit ? '<a href="' + repo + '/commit/' + esc(b.commit) + '" target="_blank" rel="noopener"><code>' + esc(short(b.commit)) + '</code></a>' : '<span class="muted">local</span>');
+      };
+      var dep = function (b) { return b.deployId && b.site ? '<a href="https://app.netlify.com/projects/' + esc(b.site) + '/deploys/' + esc(b.deployId) + '" target="_blank" rel="noopener">' + esc(b.deployId.slice(-8)) + '</a>' : '<span class="muted">–</span>'; };
+      el.innerHTML = '<div class="cs-tiles">' +
+        '<div class="cs-tile cs-green"><span>Running now</span><b>PC ' + esc(c.version + '.' + c.build) + '</b><small>Build ' + esc(String(c.build)) + ' · ' + esc(c.context || '') + '</small></div>' +
+        '<div class="cs-tile"><span>Commit</span><b style="font-size:20px">' + link(c) + '</b><small>' + esc(c.subject || c.branch || '') + '</small></div>' +
+        '<div class="cs-tile"><span>Deploy</span><b style="font-size:20px">' + dep(c) + '</b><small>Built ' + esc(c.builtAt ? when(Date.parse(c.builtAt)) : '') + '</small></div>' +
+        '<div class="cs-tile"><span>Registry</span><b>' + d.list.length + '</b><small>builds that went live · <a href="' + repo + '/blob/' + esc(c.branch || 'GKH-Project-Champ') + '/BUILDS.md" target="_blank" rel="noopener">BUILDS.md</a></small></div></div>' +
+        '<div class="card"><div class="card-h"><h2>🏷 Build registry</h2><span class="sp"></span><small class="muted">Every build gets its number on commit (BUILDS.md and “Build: N” in the commit message); this list records when each one went live.</small></div>' +
+        (d.list.length ? '<div class="table-wrap"><table><thead><tr><th>Build</th><th>Version</th><th>Live since</th><th>Commit</th><th>Change</th><th class="hide-sm">Branch</th><th class="hide-sm">Deploy</th></tr></thead><tbody>' +
+          d.list.map(function (b, i) { return '<tr' + (i === 0 ? ' style="background:var(--gold-soft,#FFF8E1)"' : '') + '><td><b>' + esc(String(b.build)) + '</b>' + (i === 0 ? ' <span class="pflag pf-green">live</span>' : '') + '</td><td>' + esc(b.label) + '</td><td>' + esc(when(b.liveSince)) + '</td><td>' + link(b) + '</td><td>' + esc(b.subject || '') + '</td><td class="hide-sm">' + esc(b.branch || '') + '</td><td class="hide-sm">' + dep(b) + '</td></tr>'; }).join('') + '</tbody></table></div>'
+          : '<div class="empty">No builds recorded yet.</div>') + '</div>';
+    }).catch(fail);
+  }
+  M.addView('builds', 'Builds', builds);
 })();

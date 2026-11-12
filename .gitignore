@@ -5,3 +5,6 @@ node_modules/
 .netlify/
 leads/
 data/
+
+# written on Netlify for each deploy (tools/site-env.mjs)
+/build.json

@@ -1,0 +1,3 @@
+#!/bin/sh
+# GKH Project Champ: give every commit the next build number and record it in BUILDS.md
+node "$(git rev-parse --show-toplevel)/tools/build-bump.mjs" || exit 1

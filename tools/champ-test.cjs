@@ -151,7 +151,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.waitForSelector('#app:not([hidden])', { timeout: 10000 }).catch(() => {});
   await sleep(800);
   const menu = await p.$$eval('.side-nav a:not([hidden])', (as) => as.map((a) => a.textContent.trim()));
-  ok('Console', 'menu shows only the project element (+ admin)', JSON.stringify(menu) === JSON.stringify(['📊Summary', '▦Pipeline board', '📅All projects', '＋New project', '✨Ask AI', '📈Reports & data', '🔐Users & access', '🕘Activity log']), menu.join(' | '));
+  ok('Console', 'menu shows only the project element (+ admin)', JSON.stringify(menu) === JSON.stringify(['📊Summary', '▦Pipeline board', '📅All projects', '＋New project', '✨Ask AI', '📈Reports & data', '🔐Users & access', '🕘Activity log', '🏷Builds']), menu.join(' | '));
   ok('Console', 'branded GKH Project Champ', (await p.textContent('.gkh-bar')).includes('GKH Project Champ') && (await p.title()).includes('Project Champ'));
   await p.waitForSelector('.pcol', { timeout: 8000 }).catch(() => {});
   ok('Portfolio', 'pipeline board has the 5 PMBOK phases', JSON.stringify(await p.$$eval('.pcol .pcol-h b', (b) => b.map((x) => x.textContent))) === JSON.stringify(['Initiation', 'Planning', 'Execution', 'Monitoring & Evaluation', 'Closing']));
@@ -242,6 +242,15 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Modules', 'New project form: BOM and SWMS switched off at creation', ch.bom === false && ch.swms === false, JSON.stringify(ch));
   await api('planProjectDelete', { core: itCore });
 
+  // ---- builds ----
+  r = await api('me'); const meB = r.ok() ? await r.json() : {};
+  ok('Build', 'the server reports its build number', meB.build && /^1\.0\.\d+$/.test(meB.build.label), JSON.stringify(meB.build));
+  ok('Build', 'sidebar shows the build', (await p.textContent('.ver')).includes(meB.build ? meB.build.label : '??'));
+  r = await api('buildList'); const bl = r.ok() ? await r.json() : { list: [] };
+  ok('Build', 'this build is in the registry (Admin > Builds)', bl.list.length >= 1 && bl.list[0].build === meB.build.build);
+  await p.goto(`${BASE}/admin/#builds`); await sleep(1200);
+  ok('Build', 'Builds page shows the registry', (await p.textContent('#view')).includes('Build registry'));
+
   // ---- console: no chat bubble (AI is built in), Ask AI about programs ----
   await p.goto(`${BASE}/admin/#portfolio`); await sleep(800);
   ok('Chat', 'no chat bubble in the dashboard', !(await p.$('#champChatBtn')));
@@ -294,6 +303,8 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Google', 'Google view-only user cannot create projects', r.status() === 403, r.status());
   r = await api('planProjectDelete', { core });
   ok('Delete', 'view-only user cannot delete projects', r.status() === 403, r.status());
+  r = await api('buildList');
+  ok('Build', 'the build registry is owner only', r.status() === 403, r.status());
 
   // ---- skins and layout ----
   await p.goto(`${BASE}/index.html`);

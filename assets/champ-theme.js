@@ -94,6 +94,14 @@
     window.addEventListener('storage', sync);
   }
   KEYS.dark = 'champDarkSkin';
+  // the build number in the website footer, from /build.json (written on Netlify for each deploy)
+  function buildTag() {
+    var el = document.querySelector('[data-build]'); if (!el) return;
+    fetch('/build.json', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (b) {
+      if (!b) return; el.textContent = 'Build ' + b.label; el.title = 'Build ' + b.build + (b.commit ? ' · commit ' + String(b.commit).slice(0, 7) : ''); el.hidden = false;
+    }).catch(function () {});
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildTag); else buildTag();
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', build); document.addEventListener('DOMContentLoaded', quick); } else { build(); quick(); }
   window.ChampTheme = { skins: SKINS.map(function (s) { return s[0]; }), apply: apply };
 })();

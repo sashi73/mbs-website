@@ -1,0 +1,5 @@
+#!/bin/sh
+# GKH Project Champ: add "Build: N" to the commit message, so git log can be searched by build number
+B=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$(git rev-parse --show-toplevel)/champ-build.json','utf8')).build)" 2>/dev/null)
+[ -n "$B" ] && ! grep -q "^Build: " "$1" && git interpret-trailers --in-place --trailer "Build: $B" "$1"
+exit 0

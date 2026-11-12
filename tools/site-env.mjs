@@ -7,6 +7,21 @@ import path from 'node:path';
 
 const mode = String(process.env.SITE_ENV || '').trim().toLowerCase();
 const root = path.resolve(process.argv[2] || '.');
+
+// GKH Project Champ: record this deploy's build (number from champ-build.json, commit and deploy id from Netlify)
+// in /build.json (public, for the website and console footers) and netlify/lib/build-info.mjs (the server, Admin > Builds).
+try {
+  const E = process.env, b = JSON.parse(fs.readFileSync(path.join(root, 'champ-build.json'), 'utf8'));
+  let subject = ''; try { subject = (await import('node:child_process')).execSync('git log -1 --format=%s', { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim().slice(0, 160); } catch {}
+  const info = { product: b.product, version: b.version, build: b.build, label: `${b.version}.${b.build}`, commit: E.COMMIT_REF || '', subject, branch: E.BRANCH || E.HEAD || b.branch || '',
+    deployId: E.DEPLOY_ID || '', buildId: E.BUILD_ID || '', context: E.CONTEXT || 'local', site: E.SITE_NAME || '', url: E.URL || '', builtAt: new Date().toISOString() };
+  fs.writeFileSync(path.join(root, 'build.json'), JSON.stringify(info, null, 2) + '\n');
+  fs.writeFileSync(path.join(root, 'netlify/lib/build-info.mjs'), '// Written by tools/site-env.mjs on Netlify for this deploy.\nexport default ' + JSON.stringify(info, null, 2) + ';\n');
+  const ai = path.join(root, 'admin/index.html');
+  fs.writeFileSync(ai, fs.readFileSync(ai, 'utf8').replace(/<small class="ver"[^>]*>[^<]*<\/small>/, `<small class="ver" title="Build ${b.build} · ${info.commit.slice(0, 7)}">PC ${info.label}</small>`));
+  console.log(`site-env: ${info.product} build ${info.build} (${info.label}), commit ${info.commit.slice(0, 7) || '?'}, deploy ${info.deployId || '?'}`);
+} catch (e) { console.log('site-env: build info not written (' + e.message + ')'); }
+
 if (mode !== 'test') {
   console.log('site-env: production build, nothing to change');
   process.exit(0);

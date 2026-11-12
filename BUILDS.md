@@ -1,0 +1,20 @@
+# GKH Project Champ: build registry
+
+Every commit gets the next build number (git pre-commit hook, `tools/build-bump.mjs`) and a row here.
+The row is completed with the commit id and title by the next commit. The commit message carries `Build: N`,
+so `git log --grep "Build: 12"` finds it. Each Netlify deploy records its build, commit and deploy id in the
+console under **Admin > Builds**, and publishes them at `/build.json`.
+
+Version = product version + build number (1.0.12 = version 1.0, build 12). Times are Sydney time.
+
+| Build | Version | Date | Branch | Commit | Change |
+|---|---|---|---|---|---|
+| 1 | 1.0.1 | 2026-11-12 09:07 | GKH-Project-Champ | `b30ce4c` | GKH Project Champ PC 1.0: project element of the test console as its own product |
+| 2 | 1.0.2 | 2026-11-12 09:11 | GKH-Project-Champ | `87fb43e` | BOM on/off slider per project; login page hides the contractor project-code box |
+| 3 | 1.0.3 | 2026-11-12 19:25 | GKH-Project-Champ | `e1efd8d` | Champ assistant (multilingual chat) and a one-click light/dark slider |
+| 4 | 1.0.4 | 2026-11-12 19:38 | GKH-Project-Champ | `b4982a6` | Page language on the fly, Champ voice (Azure, Australia East), glow, top-right controls, logo far left |
+| 5 | 1.0.5 | 2026-11-12 19:39 | GKH-Project-Champ | `fa4fb7a` | Netlify: don't treat LLM_MAX_TOKENS (a plain number) as a secret; it blocked deploys |
+| 6 | 1.0.6 | 2026-11-12 20:37 | GKH-Project-Champ | `3925147` | Delete projects (board menu, Summary bulk delete, Projects list, plan page) |
+| 7 | 1.0.7 | 2026-11-12 20:53 | GKH-Project-Champ | `7ef55dc` | ⚙ Modules: switch BOM and SWMS on or off per project |
+| 8 | 1.0.8 | 2026-11-12 21:01 | GKH-Project-Champ | `37fd2a5` | Ask AI for projects, programs and the portfolio; programs; no chat bubble in the console |
+| 9 | 1.0.9 | 2026-11-12 21:36 | GKH-Project-Champ | _this commit_ | _see git log_ |

@@ -1,8 +1,8 @@
 {
-  "name": "mbs-website",
+  "name": "gkh-project-champ",
   "version": "1.0.0",
   "private": true,
-  "description": "Modern Building Solutions website with Mr. Fixit",
+  "description": "GKH Project Champ: AI-powered project, program and portfolio management (from the MBS console)",
   "type": "module",
   "engines": {
     "node": ">=20.6"
@@ -10,7 +10,9 @@
   "scripts": {
     "start": "node --env-file=.env local-server.mjs",
     "check": "node --env-file=.env tools/check-setup.mjs",
-    "jobs": "node tools/jobs.mjs"
+    "jobs": "node tools/jobs.mjs",
+    "prepare": "git config core.hooksPath .githooks || true",
+    "build:bump": "node tools/build-bump.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "11.1.3",

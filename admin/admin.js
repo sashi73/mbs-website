@@ -51,7 +51,7 @@
   /* ---------------- login ---------------- */
   function showLogin() { $('#app').hidden = true; $('#login').hidden = false; setTimeout(function () { var u = $('#loginForm [name=username]'); if (u) u.focus(); }, 50); }
   // v86: Users & access: what the signed-in person can use. The menu shows only the modules they have; a page they can't use says so.
-  var NAVMOD = { dashboard: 'crm', jobs: 'crm', customers: 'crm', new: 'crm', reminders: 'crm', wonderbird: 'crm', projects: 'projects', projnew: 'projects', psummary: 'projects', pboard: 'projects', quotes: 'accounts', invoices: 'accounts', expenses: 'accounts', accounts: 'accounts',
+  var NAVMOD = { dashboard: 'crm', jobs: 'crm', customers: 'crm', new: 'crm', reminders: 'crm', wonderbird: 'crm', projects: 'projects', projnew: 'projects', psummary: 'projects', pboard: 'projects', builds: 'users', quotes: 'accounts', invoices: 'accounts', expenses: 'accounts', accounts: 'accounts',
     inventory: 'stock', suppliers: 'stock', subs: 'subbies', subscomp: 'subbies', people: 'people', peoplecomp: 'people', peoplework: 'people', payroll: 'people', leave: 'people', ask: 'data', sql: 'data', data: 'data', activity: 'data', analytics: 'data', users: 'users' };
   var VIEWMOD = { dashboard: 'crm', jobs: 'crm', job: 'crm', new: 'crm', reminders: 'crm', wonderbird: 'crm', reports: 'crm', customers: 'crm', customer: 'crm', projects: 'projects', portfolio: 'projects', plan: 'projects', swms: 'projects',
     quotes: 'accounts', invoices: 'accounts', doc: 'accounts', expenses: 'accounts', accounts: 'accounts', inventory: 'stock', subs: 'subbies', people: 'people', payroll: 'people', leave: 'people', myleave: null, sql: 'data', data: 'data', activity: 'data', analytics: 'data', users: 'users' };
@@ -59,6 +59,7 @@
   function allowed(mod, lv, alt) { var me = window.MBS && window.MBS.me; if (!me || me.owner) return true; var m = me.mods || {}; if (LVN[m[mod]] >= LVN[lv || 'view']) return true; if (me.scope) return false; return (alt || []).some(function (k) { return LVN[m[k]] >= 1; }); }   // v91: a sub-contractor: no support reads
   function applyAccess(me) {
     window.MBS.me = me;
+    var vEl = document.querySelector('.side-foot .ver, .ver'); if (vEl && me && me.build) { vEl.textContent = 'PC ' + me.build.label; vEl.title = 'Build ' + me.build.build + (me.build.commit ? ' · commit ' + me.build.commit : '') + ' (Admin > Builds)'; }
     Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (a) { var mod = NAVMOD[a.getAttribute('data-nav')]; a.hidden = !!mod && !allowed(mod, 'view'); });
     Array.prototype.forEach.call(document.querySelectorAll('.side-nav .side-h'), function (h) { var n = h.nextElementSibling, any = false; while (n && !n.classList.contains('side-h')) { if (n.matches('[data-nav]') && !n.hidden) any = true; n = n.nextElementSibling; } h.hidden = !any; });
     $('#who').textContent = me.name || me.user; $('#who').title = (me.owner ? 'Owner' : me.role) + ' · click to change your password';
