@@ -7,7 +7,7 @@ import { env, cors, json } from '../lib/shared.mjs';
 // our language codes → the locale Azure listens for (pt-BR is refused by fast transcription in australiaeast; pt-PT works)
 export const LOCALES = {
   en: 'en-AU', ta: 'ta-IN', ms: 'ms-MY', id: 'id-ID', fa: 'fa-IR', zh: 'zh-CN', hi: 'hi-IN', ar: 'ar-AE', vi: 'vi-VN', th: 'th-TH',
-  tl: 'fil-PH', ja: 'ja-JP', ko: 'ko-KR', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', pt: 'pt-PT', sw: 'sw-KE'
+  tl: 'fil-PH', ja: 'ja-JP', ko: 'ko-KR', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', pt: 'pt-PT', sw: 'sw-KE'   // pt: only heard in 'any' mode (Azure refuses it in a list here)
 };
 const BACK = Object.fromEntries(Object.entries(LOCALES).map(([k, v]) => [v.split('-')[0], k]));
 const MAX_BYTES = 4 * 1024 * 1024;   // about 2 minutes of speech; a question is a few seconds
@@ -30,7 +30,7 @@ export default async (req, context) => {
   const url = new URL(req.url);
   const raw = String(url.searchParams.get('langs') || env('STT_LANGS', 'en,ta,ms,fa'));
   const any = raw.trim() === 'any';   // "any language": no list, Azure's multilingual model works the language out
-  const langs = any ? [] : [...new Set(raw.split(',').map((s) => s.trim()).filter((s) => LOCALES[s]))].slice(0, 10);
+  const langs = any ? [] : [...new Set(raw.split(',').map((s) => s.trim()).filter((s) => LOCALES[s] && s !== 'pt'))].slice(0, 10);
   if (!any && !langs.length) return json(400, { error: 'Pick at least one language to listen for.' });
   const type = (req.headers.get('content-type') || 'audio/webm').split(';')[0].trim().toLowerCase();
   if (!/^audio\/(webm|ogg|mp4|mpeg|mp3|wav|x-wav|aac)$/.test(type)) return json(415, { error: 'Unsupported audio format' });
@@ -63,7 +63,7 @@ export default async (req, context) => {
   const dur = {};
   for (const p of data.phrases || []) { const b = String(p.locale || '').split('-')[0]; if (b) dur[b] = (dur[b] || 0) + (p.durationMilliseconds || 1); }
   const top = Object.entries(dur).sort((a, b) => b[1] - a[1])[0];
-  const lang = (top && BACK[top[0]]) || (langs.length === 1 ? langs[0] : '');
+  const lang = (top && (BACK[top[0]] || (top[0] === 'pt' ? 'pt' : ''))) || (langs.length === 1 ? langs[0] : '');
   if (!text) return json(200, { text: '', lang, empty: true });
   return json(200, { text: text.slice(0, 1200), lang });
 };

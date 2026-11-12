@@ -241,3 +241,4 @@ html.i18n-busy body::after{content:"Translating…";position:fixed;top:14px;left
 .cc-vlangs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px;margin:4px 0 10px}
 .cc-vlangs label{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer}
 .cc-vsave{border:0;border-radius:10px;padding:8px 16px;background:linear-gradient(135deg,#E8C04A,#C9A227);color:#111;font:800 13px/1 'Manrope',sans-serif;cursor:pointer}
+.cc-vmode{display:grid;gap:6px;margin:6px 0 4px}.cc-vmode label{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;cursor:pointer;line-height:1.35}.cc-vmode input{margin-top:3px}

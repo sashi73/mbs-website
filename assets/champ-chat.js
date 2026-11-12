@@ -226,18 +226,24 @@
         .then(function () { busy = false; ta.focus(); });
     }
     // ---- 🎤 Champ's ears: speak in any of your voice languages; Champ switches to it and answers aloud ----
-    var STT_ALL = ['en', 'ta', 'ms', 'id', 'fa', 'zh', 'hi', 'ar', 'vi', 'th', 'tl', 'ja', 'ko', 'es', 'fr', 'de', 'pt', 'sw'];
-    function sttLangs() { try { var v = JSON.parse(ls('champSttLangs') || 'null'); if (Array.isArray(v) && v.length) return v; } catch (e) {} return ['en', 'ta', 'ms', 'fa']; }
+    var STT_ALL = ['en', 'ta', 'ms', 'id', 'fa', 'zh', 'hi', 'ar', 'vi', 'th', 'tl', 'ja', 'ko', 'es', 'fr', 'de', 'sw'];   // Portuguese: “Any language” mode only (refused in a list by Azure in australiaeast)
+    function sttAny() { return ls('champSttMode') === 'any'; }
+    function sttLangs() { try { var v = JSON.parse(ls('champSttLangs') || 'null'); if (Array.isArray(v) && v.length) return v.filter(function (x) { return STT_ALL.indexOf(x) >= 0; }); } catch (e) {} return ['en', 'ta', 'ms', 'fa']; }
     function voiceLangsPanel() {
       var cur = sttLangs(), name = {}; LANGS.forEach(function (l) { name[l[0]] = l[1]; });
-      var d = bubble('bot', '<p><b>🎤 ' + esc(T(UI.voiceLangs)) + '</b></p><p class="cc-small">Pick the languages you speak (up to 6). Fewer is more accurate. Malay and Indonesian sound alike: choose one.</p><div class="cc-vlangs">' +
+      var d = bubble('bot', '<p><b>🎤 ' + esc(T(UI.voiceLangs)) + '</b></p>' +
+        '<div class="cc-vmode"><label><input type="radio" name="ccvm" value="list"' + (sttAny() ? '' : ' checked') + '> <span><b>My languages</b> (most accurate; needed for Tamil, Malay, Persian and other regional languages)</span></label>' +
+        '<label><input type="radio" name="ccvm" value="any"' + (sttAny() ? ' checked' : '') + '> <span><b>Any language</b> (big world languages, including Portuguese; Tamil and Malay are not heard well this way)</span></label></div>' +
+        '<p class="cc-small">My languages: pick the ones you speak (up to 6). Fewer is more accurate. Malay and Indonesian sound alike: choose one.</p><div class="cc-vlangs">' +
         STT_ALL.map(function (k) { return '<label><input type="checkbox" value="' + k + '"' + (cur.indexOf(k) >= 0 ? ' checked' : '') + '> ' + esc(name[k] || k) + '</label>'; }).join('') +
         '</div><button type="button" class="cc-vsave">' + esc(T(UI.save)) + '</button>', 'cc-menu');
       var boxes = d.querySelectorAll('input');
-      boxes.forEach(function (b) { b.onchange = function () { var n = d.querySelectorAll('input:checked').length; if (n > 6) b.checked = false; }; });
+      boxes.forEach(function (b) { if (b.type === 'checkbox') b.onchange = function () { var n = d.querySelectorAll('.cc-vlangs input:checked').length; if (n > 6) b.checked = false; }; });
       d.querySelector('.cc-vsave').onclick = function () {
-        var v = [].slice.call(d.querySelectorAll('input:checked')).map(function (x) { return x.value; });
-        if (!v.length) return; ls('champSttLangs', JSON.stringify(v)); d.remove(); showMenu();
+        var mode = (d.querySelector('[name=ccvm]:checked') || {}).value || 'list';
+        var v = [].slice.call(d.querySelectorAll('.cc-vlangs input:checked')).map(function (x) { return x.value; });
+        if (mode === 'list' && !v.length) return;
+        ls('champSttMode', mode); if (v.length) ls('champSttLangs', JSON.stringify(v)); d.remove(); showMenu();
       };
     }
     var rec = null, recStream = null, recChunks = [], recTimer = null, vad = null, mic = box.querySelector('.cc-mic');
@@ -273,7 +279,7 @@
     function send(blob, type) {
       if (!blob.size || blob.size < 1200) { micState(''); bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); return; }
       micState('busy');
-      fetch('/.netlify/functions/stt?langs=' + encodeURIComponent(sttLangs().join(',')), { method: 'POST', headers: { 'Content-Type': type }, body: blob })
+      fetch('/.netlify/functions/stt?langs=' + (sttAny() ? 'any' : encodeURIComponent(sttLangs().join(','))), { method: 'POST', headers: { 'Content-Type': type }, body: blob })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || 'Voice input is unavailable right now.'); return j; }); })
         .then(function (j) {
           micState('');
