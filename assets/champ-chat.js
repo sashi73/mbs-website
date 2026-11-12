@@ -233,7 +233,7 @@
       var cur = sttLangs(), name = {}; LANGS.forEach(function (l) { name[l[0]] = l[1]; });
       var d = bubble('bot', '<p><b>🎤 ' + esc(T(UI.voiceLangs)) + '</b></p>' +
         '<div class="cc-vmode"><label><input type="radio" name="ccvm" value="list"' + (sttAny() ? '' : ' checked') + '> <span><b>My languages</b> (most accurate; needed for Tamil, Malay, Persian and other regional languages)</span></label>' +
-        '<label><input type="radio" name="ccvm" value="any"' + (sttAny() ? ' checked' : '') + '> <span><b>Any language</b> (big world languages, including Portuguese; Tamil and Malay are not heard well this way)</span></label></div>' +
+        '<label><input type="radio" name="ccvm" value="any"' + (sttAny() ? ' checked' : '') + '> <span><b>Any language</b> (big world languages, including Portuguese; Tamil, Malay and Persian are not heard well this way)</span></label></div>' +
         '<p class="cc-small">My languages: pick the ones you speak (up to 6). Fewer is more accurate. Malay and Indonesian sound alike: choose one.</p><div class="cc-vlangs">' +
         STT_ALL.map(function (k) { return '<label><input type="checkbox" value="' + k + '"' + (cur.indexOf(k) >= 0 ? ' checked' : '') + '> ' + esc(name[k] || k) + '</label>'; }).join('') +
         '</div><button type="button" class="cc-vsave">' + esc(T(UI.save)) + '</button>', 'cc-menu');

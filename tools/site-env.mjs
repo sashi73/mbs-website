@@ -19,6 +19,11 @@ try {
   fs.writeFileSync(path.join(root, 'netlify/lib/build-info.mjs'), '// Written by tools/site-env.mjs on Netlify for this deploy.\nexport default ' + JSON.stringify(info, null, 2) + ';\n');
   const ai = path.join(root, 'admin/index.html');
   fs.writeFileSync(ai, fs.readFileSync(ai, 'utf8').replace(/<small class="ver"[^>]*>[^<]*<\/small>/, `<small class="ver" title="Build ${b.build} · ${info.commit.slice(0, 7)}">PC ${info.label}</small>`));
+  // share tags (WhatsApp, LinkedIn…) need the full address of this site: swap in the live one if it is not the Netlify name
+  const live = (E.URL || '').replace(/\/+$/, '');
+  if (live && live !== 'https://gkh-project-champ.netlify.app') for (const f of fs.readdirSync(root).filter((x) => x.endsWith('.html')).map((x) => path.join(root, x)).concat([path.join(root, 'admin/index.html')])) {
+    try { fs.writeFileSync(f, fs.readFileSync(f, 'utf8').split('https://gkh-project-champ.netlify.app').join(live)); } catch {}
+  }
   console.log(`site-env: ${info.product} build ${info.build} (${info.label}), commit ${info.commit.slice(0, 7) || '?'}, deploy ${info.deployId || '?'}`);
 } catch (e) { console.log('site-env: build info not written (' + e.message + ')'); }
 

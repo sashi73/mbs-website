@@ -71,6 +71,14 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Site', 'header has a Login link to login.html', (await p.getAttribute('header .nav-login', 'href')) === 'login.html');
   ok('Site', 'no MBS wording on the home page', !/Modern Building|0420 494 990|Mr\.? Fixit|Wonder Bird/i.test(await p.content()));
   ok('Site', 'footer credit "Designed by © Sashi Kumar Sivam"', (await p.textContent('footer')).includes('Designed by © Sashi Kumar Sivam'));
+  // ---- share preview (WhatsApp, LinkedIn…): GKH globe card, no MBS ----
+  const og = await p.$eval('meta[property="og:image"]', (m) => m.content).catch(() => '');
+  ok('Share', 'every page has the GKH share image (absolute address)', /^https:\/\/.+\/assets\/og-image\.jpg/.test(og), og);
+  r0 = await p.request.get(`${BASE}/assets/og-image.jpg`);
+  ok('Share', 'share image is served (1200x630 JPEG)', r0.status() === 200 && /image\/jpeg/.test(r0.headers()['content-type'] || ''));
+  ok('Share', 'large preview card for WhatsApp/X', (await p.$eval('meta[name="twitter:card"]', (m) => m.content).catch(() => '')) === 'summary_large_image');
+  r0 = await p.request.get(`${BASE}/assets/favicon.svg`);
+  ok('Share', 'old MBS favicon is gone', r0.status() === 404);
   const r404 = await p.goto(`${BASE}/nope.html`);
   ok('Site', 'unknown page gives the 404 page', r404.status() === 404 && (await p.textContent('body')).includes('critical path'));
 
