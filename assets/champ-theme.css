@@ -247,3 +247,23 @@ html.i18n-busy body::after{content:"Translating…";position:fixed;top:14px;left
 .cc-vlangs label{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer}
 .cc-vsave{border:0;border-radius:10px;padding:8px 16px;background:linear-gradient(135deg,#E8C04A,#C9A227);color:#111;font:800 13px/1 'Manrope',sans-serif;cursor:pointer}
 .cc-vmode{display:grid;gap:6px;margin:6px 0 4px}.cc-vmode label{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;cursor:pointer;line-height:1.35}.cc-vmode input{margin-top:3px}
+/* Champ's welcome form (Wonder Bird style) */
+.cc-formb{max-width:100%!important;width:100%;background:#FFFCF3!important;border:1px solid #E7D9AE!important}
+.cc-form{display:flex;flex-direction:column;gap:9px;margin:0}
+.cc-form-t{font-size:14px;color:#3A2E08}
+.cc-pf2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cc-pf{min-width:0;display:flex;flex-direction:column;gap:4px;margin:0;font-size:11px;font-weight:700;letter-spacing:.04em;color:#6B6252}
+.cc-pf input,.cc-pf select,.cc-pf textarea{width:100%;box-sizing:border-box;min-width:0;height:38px;margin:0;padding:0 11px;border-radius:10px;border:1px solid #D9D0BC;background:#fff;color:#1A1A1A;font:inherit;font-size:14px;font-weight:500;letter-spacing:0;box-shadow:none}
+.cc-pf textarea{height:auto;min-height:54px;padding:8px 11px;resize:vertical}
+.cc-pf input:focus,.cc-pf select:focus,.cc-pf textarea:focus{outline:none;border-color:#C9A227;box-shadow:0 0 0 3px rgba(201,162,39,.18)}
+.cc-hp{position:absolute!important;left:-9999px!important;width:1px;height:1px;opacity:0}
+.cc-pdpa{border-radius:10px;background:#F4F1E8;border:1px solid #E6E0D0;padding:8px 10px;font-size:11.5px;line-height:1.45;color:#4D4636}
+.cc-pdpa b{display:block;font-size:12px;color:#3A2E08;margin-bottom:2px}
+.cc-pdpa p{margin:0}
+.cc-pdpa a{color:#8A6A00;font-weight:700}
+.cc-pc{display:flex;flex-direction:row;gap:8px;align-items:flex-start;margin:0;font-size:12.5px;line-height:1.4;color:#3D372B;font-weight:500}
+.cc-pc input{width:16px;height:16px;margin:2px 0 0;accent-color:#C9A227;flex:none}
+.cc-perr{margin:0;font-size:12.5px;color:#B42318;font-weight:600}
+.cc-go{align-self:flex-start;border:0;border-radius:999px;padding:10px 20px;background:linear-gradient(135deg,#F2D98B,#C9A227);color:#14110a;font:800 14px 'Manrope',system-ui,sans-serif;cursor:pointer}
+.cc-go[disabled]{opacity:.6;cursor:wait}
+@media (max-width:380px){.cc-pf2{grid-template-columns:1fr}}

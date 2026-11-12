@@ -48,16 +48,18 @@
     greetIn: 'Greetings! I\u2019m Champ 👋 I\u2019ll speak with you in {lang}.',
     switchTip: 'You can always switch to English or any other language by saying “switch to …”.',
     sorry: 'Sorry, I don\u2019t speak that language yet. Let\u2019s keep to English.',
-    askName: 'Lovely! What is your name?', skipTip: 'Say “skip” to skip any question.', skipWord: 'skip', skipLang: 'Or say “skip” to carry on in English.',
-    micTip: '🎤 Tip: switch on your microphone and just talk to me. Say “Hey Champ” any time to wake me up.', micOn: '🎤 Turn on microphone', micReady: 'Microphone on. I\u2019m listening: just speak after each question.',
-    askPhone: 'Nice to meet you, {name}! Can I have your phone number, with your country code? For example +61 412 345 678.',
-    askPhoneNo: 'Can I have your phone number, with your country code? For example +61 412 345 678.',
-    badPhone: 'That doesn\u2019t look like a phone number with a country code. Please try again, for example +61 412 345 678, or tap Skip.',
-    askEmail: 'Thank you! And your email address?',
-    badEmail: 'That doesn\u2019t look like an email address. Please try again, or tap Skip.',
-    confirmEmail: 'I have your email as {email}. Is that correct?',
-    retypeEmail: 'No problem. Please type your email address again.',
-    askWelcome: 'Shall I send you a welcome package to your email?',
+    skipWord: 'skip', micTip: '🎤 Tip: switch on your microphone and just talk to me. Say “Hey Champ” any time to wake me up.', micOn: '🎤 Turn on microphone',
+    micReady: 'Microphone on. I’m listening.',
+    formIntro: 'Lovely! Please type your details in the form below: typing is quicker and more accurate than voice.', skipForm: 'Prefer not to? Just type or say “skip”.',
+    formTitle: 'Your details', fFirst: 'First name', fLast: 'Last name', fPhone: 'Phone (with country code)', fEmail: 'Email', fWhy: 'Reason for your visit', fWhyPick: 'Choose one…',
+    rProduct: 'Looking for a project management tool', rDemo: 'I’d like a demo', rPrice: 'Pricing and plans', rPartner: 'Partnership or reselling', rTraining: 'Training or consulting', rBrowse: 'Just browsing', rOther: 'Something else',
+    fMore: 'Tell us more (optional)', pdpaTitle: '🔒 Your privacy (PDPA)',
+    pdpa: 'GKH collects these details only to reply to you and to tell you about GKH Project Champ. We look after them under Malaysia’s Personal Data Protection Act 2010 (PDPA) and Australia’s Privacy Act 1988, never sell them, and you can ask us to see, correct or delete them at any time.',
+    pdpaRead: 'Read our Privacy Notice', agree: 'I agree to GKH collecting and using my details as described.', send: 'Send ▶', sending: 'Saving…',
+    errName: 'Please type your first and last name.', errPhone: 'Please check your phone number and include the country code, for example +61 412 345 678.', errEmail: 'Please check your email address.',
+    errWhy: 'Please choose a reason for your visit.', errAgree: 'Please tick the box to agree to the privacy notice.', errSave: 'Sorry, that didn’t save. Please try again.',
+    askWelcome: 'Thank you, {name}! Will it be OK for us to send a welcome pack about our product to your email?', askWelcomeNo: 'Thank you! Will it be OK for us to send a welcome pack about our product to your email?',
+    sayYesNo: 'Just say or tap yes or no.',
     yes: 'Yes', no: 'No', yesPlease: 'Yes, please', noThanks: 'No, thanks', skip: 'Skip',
     sent: 'Done! Your welcome package is on its way to {email}.',
     noted: 'Noted! The GKH team will send your welcome package to {email} shortly.',
@@ -67,6 +69,7 @@
   var vis = {}; try { vis = JSON.parse(ls('champVisitor') || '{}') || {}; } catch (e) { vis = {}; }
   function newId() { var a = new Uint8Array(12); try { crypto.getRandomValues(a); } catch (e) { for (var i = 0; i < 12; i++) a[i] = Math.random() * 256; } return 'v' + Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
   if (!vis.id) vis.id = newId();
+  if (/^(name|phone|email|confirm)$/.test(vis.step || '')) vis.step = 'form';   // earlier builds asked one question at a time
   function saveVis() { ls('champVisitor', JSON.stringify(vis)); }
   saveVis();
   var LNAMES = { en: ['english', 'inggeris', 'ingles', 'inglés', 'anglais', 'englisch'], ms: ['malay', 'melayu', 'bahasa melayu', 'malaysian'], id: ['indonesian', 'indonesia', 'bahasa indonesia'],
@@ -83,8 +86,8 @@
   }
   function yesNo(t) {
     t = String(t || '').trim().toLowerCase().replace(/[.!。！]+$/, '');
-    if (/^(y|yes|yeah|yep|yup|sure|ok|okay|correct|right|that'?s (right|correct)|please|yes please|ya|iya|ye|betul|ada|ஆம்|ஆமாம்|சரி|oui|sí|si|ja|sim|da|はい|ええ|네|예|是|是的|对|好|نعم|بله|آره|درسته|हाँ|हां|haan|ha|ndiyo|ndio|vâng|có|ใช่|ครับ|ค่ะ|opo|oo)\b/.test(t)) return 'yes';
-    if (/^(n|no|nope|nah|no thanks|not now|wrong|incorrect|tidak|tak|bukan|இல்லை|வேண்டாம்|non|nein|não|nao|いいえ|아니요|아니|不|不是|不用|لا|نه|नहीं|nahi|hapana|không|ไม่|hindi)\b/.test(t)) return 'no';
+    if (/^(y|yes|yeah|yep|yup|sure|ok|okay|correct|right|that'?s (right|correct)|please|yes please|ya|iya|ye|betul|ada|ஆம்|ஆமாம்|சரி|oui|sí|si|ja|sim|da|はい|ええ|네|예|是|是的|对|好|نعم|بله|آره|درسته|हाँ|हां|haan|ha|ndiyo|ndio|vâng|có|ใช่|ครับ|ค่ะ|opo|oo)(?=$|[\s,.!?،。！？])/.test(t)) return 'yes';
+    if (/^(n|no|nope|nah|no thanks|not now|wrong|incorrect|tidak|tak|bukan|இல்லை|வேண்டாம்|non|nein|não|nao|いいえ|아니요|아니|不|不是|不用|لا|نه|नहीं|nahi|hapana|không|ไม่|hindi)(?=$|[\s,.!?،。！？])/.test(t)) return 'no';
     if (t === T(OB.yes).toLowerCase() || t === T(OB.yesPlease).toLowerCase()) return 'yes';
     if (t === T(OB.no).toLowerCase() || t === T(OB.noThanks).toLowerCase()) return 'no';
     return '';
@@ -287,7 +290,7 @@
         .catch(function (e) { log.querySelectorAll('.cc-wait').forEach(function (x) { x.remove(); }); msgs.pop(); ss('champChat', JSON.stringify(msgs)); bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err'); })
         .then(function () { busy = false; ta.focus(); });
     }
-    // ---- Champ's welcome: language, name, phone, email (read back to confirm), welcome package ----
+    // ---- Champ's welcome: greeting → language (voice or tap) → a typed form (Wonder Bird style, with the PDPA notice) → welcome pack yes/no (voice or tap) ----
     function curL() { return concrete(lang) ? lang : 'en'; }
     function obVoice() { return ls('champVoice') !== '0'; }
     function obSay(text, L) {
@@ -296,9 +299,9 @@
       var i = msgs.length - 1, row = tools(bubble('bot', md(text)), i);
       if (obVoice()) speak(text, L || curL(), row.querySelector('.cc-say'), i, listenNext); else listenNext();
     }
-    // hands-free: once the microphone is on, Champ listens after each of its questions (and after answering a spoken question)
+    // hands-free: once the microphone is on, Champ listens after its questions (not while you type the form)
     function handsFree() { return ls('champHandsFree') === '1'; }
-    function listenNext() { if (handsFree() && !box.hidden && !busy && !(rec && rec.state === 'recording')) setTimeout(function () { if (!box.hidden && !busy && !(rec && rec.state === 'recording')) startRec(true); }, 250); }
+    function listenNext() { if (handsFree() && vis.step !== 'form' && !box.hidden && !busy && !(rec && rec.state === 'recording')) setTimeout(function () { if (!box.hidden && !busy && vis.step !== 'form' && !(rec && rec.state === 'recording')) startRec(true); }, 250); }
     function micOn() {
       if (!navigator.mediaDevices) { bubble('bot', '<p>' + esc(T(UI.micBlocked)) + '</p>', 'cc-err'); return; }
       navigator.mediaDevices.getUserMedia({ audio: true }).then(function (st) {
@@ -308,39 +311,74 @@
         bubble('bot', '<p>' + esc(T(OB.micReady)) + '</p>', 'cc-note-mic'); obButtons(); startRec(true);
       }).catch(function () { bubble('bot', '<p>' + esc(T(UI.micBlocked)) + '</p>', 'cc-err'); });
     }
-    function obUser(t) { var m = log.querySelector('.cc-menu'); if (m) m.remove(); msgs.push({ role: 'user', content: t, ob: true }); ss('champChat', JSON.stringify(msgs.slice(-24))); bubble('user', '<p>' + esc(t) + '</p>'); ta.value = ''; ta.style.height = ''; }
+    function obUser(t) { var m = log.querySelector('.cc-menu:not(.cc-obb)'); if (m) m.remove(); msgs.push({ role: 'user', content: t, ob: true }); ss('champChat', JSON.stringify(msgs.slice(-24))); bubble('user', '<p>' + esc(t) + '</p>'); ta.value = ''; ta.style.height = ''; }
     function obPrompt() {
       var st = vis.step;
-      if (st === 'lang') obSay(OB.greet + '\n' + OB.switchTip + ' ' + OB.skipLang + (handsFree() ? '' : '\n' + OB.micTip), 'en');
-      else if (st === 'name') obSay(tr(OB.askName) + ' ' + tr(OB.skipTip));
-      else if (st === 'phone') obSay(tr(vis.name ? OB.askPhone : OB.askPhoneNo) + ' ' + tr(OB.skipTip));
-      else if (st === 'email') obSay(tr(OB.askEmail) + ' ' + tr(OB.skipTip));
-      else if (st === 'confirm') obSay(tr(OB.confirmEmail));
-      else if (st === 'welcome') obSay(tr(OB.askWelcome));
+      if (st === 'lang') obSay(OB.greet + '\n' + OB.switchTip + (handsFree() ? '' : '\n' + OB.micTip), 'en');
+      else if (st === 'form') obSay(tr(OB.formIntro) + ' ' + tr(OB.skipForm));
+      else if (st === 'welcome') obSay(tr(vis.name ? OB.askWelcome : OB.askWelcomeNo) + ' ' + tr(OB.sayYesNo));
       obButtons();
     }
     function obButtons() {
       var old = log.querySelector('.cc-obb'); if (old) old.remove();
       if (!obActive()) return;
       var st = vis.step, btns = [];
+      if (st === 'form') return obForm();
       if (st === 'lang') btns = LANGS.filter(function (l) { return l[0] !== 'auto'; }).map(function (l) { return ['L:' + l[0], l[1]]; });
-      else if (st === 'confirm') btns = [['yes', '✓ ' + T(OB.yes)], ['no', '✎ ' + T(OB.no)]];
       else if (st === 'welcome') btns = [['yes', '🎁 ' + T(OB.yesPlease)], ['no', T(OB.noThanks)]];
       if (!handsFree()) btns.push(['mic', st === 'lang' ? OB.micOn : T(OB.micOn)]);
-      if (!btns.length) return;
       var d = bubble('bot', '<div class="cc-ob-btns' + (st === 'lang' ? ' cc-ob-langs' : '') + '">' + btns.map(function (b) { return '<button type="button" data-ob="' + esc(b[0]) + '">' + esc(b[1]) + '</button>'; }).join('') + '</div>', 'cc-obb');
       d.querySelectorAll('[data-ob]').forEach(function (b) {
         b.onclick = function () {
           var v = b.getAttribute('data-ob');
           if (v.indexOf('L:') === 0) { obUser(b.textContent); chooseLang(v.slice(2)); }
           else if (v === 'mic') micOn();
-          else { obUser(b.textContent.replace(/^[✓✎🎁]\s*/, '')); obAnswer(v === 'yes' ? 'yes' : 'no', false, '', true); }
+          else { obUser(b.textContent.replace(/^🎁\s*/, '')); obAnswer(v === 'yes' ? 'yes' : 'no', false, '', true); }
         };
       });
       log.scrollTop = log.scrollHeight;
     }
+    // the form: typed, because voice gets names, numbers and emails wrong too often
+    var REASONS = ['rProduct', 'rDemo', 'rPrice', 'rPartner', 'rTraining', 'rBrowse', 'rOther'];
+    function obForm() {
+      var F = vis.f = vis.f || {}, d = document.createElement('div');
+      d.className = 'cc-m cc-bot cc-obb cc-formb'; d.dir = 'auto';
+      var fld = function (k, label, type, auto, ph, max) {
+        return '<label class="cc-pf"><span>' + esc(T(label)) + '</span><input name="' + k + '" type="' + type + '" autocomplete="' + auto + '" maxlength="' + max + '" placeholder="' + esc(ph) + '" value="' + esc(F[k] || '') + '"' + (k === 'phone' || k === 'email' ? ' dir="ltr"' : '') + '></label>';
+      };
+      d.innerHTML = '<form class="cc-form" novalidate><b class="cc-form-t">📝 ' + esc(T(OB.formTitle)) + '</b>' +
+        '<div class="cc-pf2">' + fld('first', OB.fFirst, 'text', 'given-name', '', 40) + fld('last', OB.fLast, 'text', 'family-name', '', 40) + '</div>' +
+        fld('phone', OB.fPhone, 'tel', 'tel', '+61 412 345 678', 22) + fld('email', OB.fEmail, 'email', 'email', 'you@example.com', 120) +
+        '<label class="cc-pf"><span>' + esc(T(OB.fWhy)) + '</span><select name="purpose"><option value="">' + esc(T(OB.fWhyPick)) + '</option>' +
+          REASONS.map(function (r) { return '<option value="' + r + '"' + (F.purpose === r ? ' selected' : '') + '>' + esc(T(OB[r])) + '</option>'; }).join('') + '</select></label>' +
+        '<label class="cc-pf"><span>' + esc(T(OB.fMore)) + '</span><textarea name="more" rows="2" maxlength="400">' + esc(F.more || '') + '</textarea></label>' +
+        '<input type="text" name="website" class="cc-hp" tabindex="-1" autocomplete="off" aria-hidden="true">' +
+        '<div class="cc-pdpa"><b>' + esc(T(OB.pdpaTitle)) + '</b><p>' + esc(T(OB.pdpa)) + ' <a href="privacy.html#champ" target="_blank" rel="noopener">' + esc(T(OB.pdpaRead)) + '</a></p></div>' +
+        '<label class="cc-pc"><input type="checkbox" name="consent"' + (F.consent ? ' checked' : '') + '><span>' + esc(T(OB.agree)) + '</span></label>' +
+        '<p class="cc-perr" role="alert" hidden></p><button type="submit" class="cc-go">' + esc(T(OB.send)) + '</button></form>';
+      log.appendChild(d); log.scrollTop = log.scrollHeight;
+      var f = d.querySelector('form'), err = d.querySelector('.cc-perr');
+      f.addEventListener('input', function (e) { var t = e.target; if (!t.name || t.name === 'website') return; F[t.name] = t.type === 'checkbox' ? t.checked : t.value; saveVis(); });
+      f.addEventListener('change', function (e) { var t = e.target; if (t.name) { F[t.name] = t.type === 'checkbox' ? t.checked : t.value; saveVis(); } });
+      f.onsubmit = function (e) {
+        e.preventDefault(); if (busy) return;
+        var first = String(F.first || '').trim(), last = String(F.last || '').trim(), phone = normPhone(F.phone), email = normEmail(F.email);
+        var bad = !first || !last ? OB.errName : !phone ? OB.errPhone : !email ? OB.errEmail : !F.purpose ? OB.errWhy : !F.consent ? OB.errAgree : '';
+        if (bad) { err.textContent = T(bad); err.hidden = false; return; }
+        err.hidden = true; busy = true; var go = d.querySelector('.cc-go'); go.disabled = true; go.textContent = T(OB.sending);
+        obSave({ first: first, last: last, phone: phone, email: email, purpose: OB[F.purpose] || F.purpose, more: String(F.more || '').trim(), consent: true, website: f.website.value })
+          .then(function (j) {
+            busy = false;
+            if (!j.ok) { go.disabled = false; go.textContent = T(OB.send); err.textContent = T(j.status === 422 ? (j.bad && j.bad[0] === 'phone' ? OB.errPhone : j.bad && j.bad[0] === 'email' ? OB.errEmail : OB.errName) : OB.errSave); err.hidden = false; return; }
+            vis.name = first; vis.email = email; vis.f = null; vis.step = 'welcome'; saveVis();
+            d.remove(); obUser('✓ ' + first + ' ' + last + ' · ' + phone + ' · ' + email);
+            obPrompt();
+          });
+      };
+      setTimeout(function () { var x = f.querySelector('input[name=first]'); if (x && !x.value) try { x.focus({ preventScroll: true }); } catch (e2) {} }, 200);
+    }
     function chooseLang(L) {
-      vis.lang = L; vis.step = 'name'; saveVis(); obSave({ lang: L });
+      vis.lang = L; vis.step = 'form'; saveVis(); obSave({ lang: L });
       if (L !== lang) switchLang(L, false, obPrompt);
       else if (concrete(L)) ensure(obStrs(), L).then(obPrompt); else obPrompt();
     }
@@ -350,55 +388,30 @@
     }
     function isSkip(t) {
       t = String(t || '').trim().toLowerCase().replace(/[.!。！]+$/, '');
-      return /^(skip|skip it|skip this|pass|next|no thanks|lewati|langkau|abaikan|தவிர்|தவிர்க்கவும்|அடுத்து|跳过|下一个|छोड़ें|छोड़ो|आगे|تخطى|تخطي|رد|رد شو|بگذر|bỏ qua|ข้าม|laktawan|スキップ|次|건너뛰기|다음|saltar|omitir|passer|suivant|überspringen|weiter|pular|próximo|ruka|ruka swali|simbuka)$/.test(t) || (t && t === T(OB.skipWord).toLowerCase());
+      return /^(skip|skip it|skip this|pass|next|not now|no thanks|lewati|langkau|abaikan|தவிர்|தவிர்க்கவும்|அடுத்து|跳过|下一个|छोड़ें|छोड़ो|आगे|تخطى|تخطي|رد|رد شو|بگذر|bỏ qua|ข้าม|laktawan|スキップ|次|건너뛰기|다음|saltar|omitir|passer|suivant|überspringen|weiter|pular|próximo|ruka|ruka swali|simbuka)$/.test(t) || (t && t === T(OB.skipWord).toLowerCase());
     }
     function obSkip(shown) {
       var st = vis.step; if (!shown) obUser(T(OB.skipWord));
       if (st === 'lang') { obSave({ skip: 'lang' }); chooseLang('en'); return; }
-      obSave({ skip: st === 'confirm' ? 'email' : st });
-      if (st === 'name') vis.step = 'phone';
-      else if (st === 'phone') vis.step = 'email';
-      else if (st === 'email' || st === 'confirm') { vis.email = ''; saveVis(); return obFinish(); }
-      else if (st === 'welcome') { obSave({ welcome: 'no' }); return obFinish(); }
-      saveVis(); obPrompt();
+      if (st === 'form') { obSave({ skip: 'form' }); vis.f = null; saveVis(); return obFinish(); }
+      if (st === 'welcome') { obSave({ welcome: 'no' }); return obFinish(); }
     }
     // true when the onboarding took the answer
     function obAnswer(text, spoken, heard, shown) {
       var st = vis.step, t = String(text || '').trim(); if (!t) return true;
-      if (isSkip(t) && st !== 'confirm' && st !== 'welcome') { if (!shown) obUser(t); obSkip(true); return true; }
-      var question = /[?？؟]\s*$/.test(t) && st !== 'lang';
-      if (question) { ask(t, spoken, function () { if (obActive()) obPrompt(); }); return true; }
-      if (!shown) obUser(t);
+      if (isSkip(t) && st !== 'welcome') { if (!shown) obUser(t); obSkip(true); return true; }
       if (st === 'lang') {
+        if (!shown) obUser(t);
         var L = langFromText(t) || (heard && heard !== 'en' && LANGS.some(function (x) { return x[0] === heard; }) ? heard : '');
         if (!L) { obSay(OB.sorry, 'en'); L = 'en'; }
         chooseLang(L); return true;
       }
-      if (st === 'name') {
-        busy = true;
-        obSave({ name: t }).then(function (j) {
-          busy = false;
-          vis.name = (j.visitor && j.visitor.name) || (j.status === 422 ? '' : t.replace(/^(my name is|i am|i'm|call me|this is)\s+/i, '').replace(/[.!]+$/, '').slice(0, 60));
-          vis.step = 'phone'; saveVis(); obPrompt();
-        });
-        return true;
-      }
-      if (st === 'phone') {
-        var p = normPhone(t); if (!p) { obSay(tr(OB.badPhone)); obButtons(); return true; }
-        vis.phone = p; vis.step = 'email'; saveVis(); obSave({ phone: p }); obPrompt(); return true;
-      }
-      if (st === 'email') {
-        var e = normEmail(t); if (!e) { obSay(tr(OB.badEmail)); obButtons(); return true; }
-        vis.email = e; vis.step = 'confirm'; saveVis(); obPrompt(); return true;
-      }
-      if (st === 'confirm') {
-        var yn = yesNo(t), e2 = normEmail(t);
-        if (e2 && e2 !== vis.email) { vis.email = e2; saveVis(); obPrompt(); return true; }   // they typed it again
-        if (yn === 'yes') { vis.step = 'welcome'; saveVis(); obSave({ email: vis.email }); obPrompt(); return true; }
-        vis.step = 'email'; saveVis(); obSay(tr(OB.retypeEmail)); obButtons(); return true;
-      }
+      if (st === 'form') { ask(t, spoken, function () { if (obActive()) obButtons(); }); return true; }   // a question while the form is open: answer it, keep the form
       if (st === 'welcome') {
-        if (yesNo(t) === 'yes') {
+        var yn = yesNo(t);
+        if (!yn) { if (/[?？؟]\s*$/.test(t)) { ask(t, spoken, function () { if (obActive()) obPrompt(); }); return true; } if (!shown) obUser(t); obSay(tr(OB.sayYesNo)); obButtons(); return true; }
+        if (!shown) obUser(t);
+        if (yn === 'yes') {
           busy = true;
           obSave({ welcome: 'yes' }).then(function (j) { busy = false; obSay(tr(j.visitor && j.visitor.welcomeStatus === 'sent' ? OB.sent : OB.noted)); obFinish(); });
         } else { obSave({ welcome: 'no' }); obFinish(); }
@@ -542,7 +555,11 @@
         setTimeout(function () { c.close(); }, 900);
       } catch (e) {}
     }
-    if (where === 'site' && handsFree()) wake.start();
+    // "Hey Champ" works on every page once the microphone has been allowed for this site (even with the chat closed)
+    if (where === 'site') {
+      if (handsFree()) wake.start();
+      else if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name: 'microphone' }).then(function (p) { if (p.state === 'granted') { ls('champHandsFree', '1'); wake.start(); } }).catch(function () {});
+    }
     mic.onclick = function () {
       if (rec && rec.state === 'recording') return stopRec();
       if (mic.classList.contains('busy')) return;
@@ -563,7 +580,7 @@
         draw(); setTimeout(function () { ta.focus(); }, 50);
         var picked = ls('champStartLang');
         if (fresh && picked && picked === lang && concrete(lang)) {   // chosen on the intro's start screen: greet in it and go straight to the name
-          vis.step = 'name'; vis.lang = lang; saveVis(); obSave({ lang: lang });
+          vis.step = 'form'; vis.lang = lang; saveVis(); obSave({ lang: lang });
           ensure(obStrs(), lang).then(function () { obSay(tr(OB.greetIn) + '\n' + tr(OB.switchTip)); obPrompt(); });
         } else if (fresh || (obActive() && !msgs.some(function (m) { return m.ob; }))) obPrompt();
         if (concrete(lang)) ensure(Object.keys(UI).map(function (k) { return UI[k]; }).concat(MENU.map(function (x) { return x[1]; })).concat(where === 'site' ? obStrs() : []), lang).then(function () { if (!box.hidden) { labels(); var mm = log.querySelector('.cc-menu:not(.cc-obb)'); if (mm && !obActive()) showMenu(); } });

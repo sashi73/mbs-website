@@ -332,22 +332,24 @@
         '<div class="card"><div class="card-h"><h2>👋 Visitors &amp; potential customers</h2><span class="sp"></span>' +
         '<input id="vsQ" type="search" placeholder="Find a name, email, phone, language or country…" value="' + esc(VS.q) + '" style="max-width:300px">' +
         '<button class="btn btn-sm" id="vsCsv">⬇ CSV</button>' + (canDel ? '<button class="btn btn-sm" id="vsDel" disabled>🗑 Delete</button>' : '') + '<button class="btn btn-sm" id="vsRef">↻</button></div>' +
-        '<div id="vsBody"></div><p class="muted" style="font-size:12px;margin:10px 2px 0">Champ asks every new visitor for their language, name, phone (with country code) and email, then offers a welcome package. Every question can be skipped; a visitor can also tell Champ “forget me”.</p></div>';
+        '<div id="vsBody"></div><p class="muted" style="font-size:12px;margin:10px 2px 0">Champ greets every new visitor, asks their language (by voice or tap), then asks them to type their name, phone, email and reason for visiting, with the PDPA privacy notice and a consent tick. The welcome pack is only emailed with consent on record. A visitor can skip, or tell Champ “forget me”.</p></div>';
       function rows() {
         var q = VS.q.trim().toLowerCase();
-        return all.filter(function (v) { return !q || [v.name, v.email, v.phone, LNAME[v.lang] || v.lang, v.country, v.city].join(' ').toLowerCase().indexOf(q) >= 0; });
+        return all.filter(function (v) { return !q || [v.name, v.email, v.phone, v.purpose, v.more, LNAME[v.lang] || v.lang, v.country, v.city].join(' ').toLowerCase().indexOf(q) >= 0; });
       }
       function draw() {
         var r = rows(), b = el.querySelector('#vsBody');
         if (!r.length) { b.innerHTML = '<div class="empty">' + (all.length ? 'No visitor matches that.' : 'No visitors yet. When someone opens Ask Champ on the website and introduces themselves, they appear here.') + '</div>'; return; }
         b.innerHTML = '<div class="table-wrap"><table><thead><tr>' + (canDel ? '<th style="width:28px"><input type="checkbox" id="vsAll" aria-label="Select all"></th>' : '') +
-          '<th>Name</th><th>Phone</th><th>Email</th><th>Language</th><th>Welcome package</th><th class="hide-sm">From</th><th class="hide-sm">First seen</th><th class="hide-sm">Last seen</th><th class="hide-sm">Visits</th></tr></thead><tbody>' +
+          '<th>Name</th><th>Phone</th><th>Email</th><th>Reason for visit</th><th>Language</th><th>Welcome pack</th><th class="hide-sm">PDPA consent</th><th class="hide-sm">From</th><th class="hide-sm">First seen</th><th class="hide-sm">Last seen</th><th class="hide-sm">Visits</th></tr></thead><tbody>' +
           r.map(function (v) {
             return '<tr>' + (canDel ? '<td><input type="checkbox" data-vid="' + esc(v.id) + '"' + (VS.sel[v.id] ? ' checked' : '') + '></td>' : '') +
               '<td><b>' + (v.name ? esc(v.name) : '<span class="muted">(skipped)</span>') + '</b></td>' +
               '<td>' + (v.phone ? '<a href="tel:' + esc(v.phone) + '">' + esc(v.phone) + '</a> <a href="https://wa.me/' + esc(v.phone.replace('+', '')) + '" target="_blank" rel="noopener" title="WhatsApp">💬</a>' : '<span class="muted">–</span>') + '</td>' +
               '<td>' + (v.email ? '<a href="mailto:' + esc(v.email) + '">' + esc(v.email) + '</a>' : '<span class="muted">–</span>') + '</td>' +
+              '<td>' + (v.purpose ? esc(v.purpose) + (v.more ? '<br><small class="muted">' + esc(v.more) + '</small>' : '') : '<span class="muted">–</span>') + '</td>' +
               '<td>' + esc(LNAME[v.lang] || v.lang || '–') + '</td><td>' + wpk(v) + '</td>' +
+              '<td class="hide-sm">' + (v.consentAt ? '<span class="pflag pf-green" title="' + esc(v.consentVer || '') + '">✓ ' + esc(when(v.consentAt)) + '</span>' : '<span class="muted">–</span>') + '</td>' +
               '<td class="hide-sm">' + esc([v.city, v.country].filter(Boolean).join(', ') || '–') + '</td>' +
               '<td class="hide-sm">' + esc(when(v.created)) + '</td><td class="hide-sm">' + esc(when(v.lastSeen || v.updated)) + '</td><td class="hide-sm">' + esc(String(v.visits || 1)) + '</td></tr>';
           }).join('') + '</tbody></table></div>';
@@ -358,7 +360,7 @@
       el.querySelector('#vsQ').oninput = function () { VS.q = this.value; draw(); };
       el.querySelector('#vsRef').onclick = visitors;
       el.querySelector('#vsCsv').onclick = function () {
-        var cols = ['name', 'phone', 'email', 'lang', 'welcome', 'welcomeStatus', 'city', 'country', 'created', 'lastSeen', 'visits'];
+        var cols = ['first', 'last', 'name', 'phone', 'email', 'purpose', 'more', 'lang', 'consentAt', 'welcome', 'welcomeStatus', 'city', 'country', 'created', 'lastSeen', 'visits'];
         var q = function (x) { x = x == null ? '' : String(x); if (/^[=+\-@]/.test(x) && !/^\+\d+$/.test(x)) x = "'" + x; return '"' + x.replace(/"/g, '""') + '"'; };
         var csv = cols.join(',') + '\n' + rows().map(function (v) { return cols.map(function (c) { return q(c === 'lang' ? (LNAME[v.lang] || v.lang) : v[c]); }).join(','); }).join('\n');
         var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = 'champ-visitors-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();

@@ -69,7 +69,7 @@ export async function save(id, fields, meta = {}) {
   await kv.update(KEY, (cur) => {
     let i = cur.list.findIndex((v) => v.id === id);
     const v = i >= 0 ? cur.list[i] : { id, created: now, visits: 0, skipped: [] };
-    for (const k of ['lang', 'name', 'phone', 'email', 'welcome', 'page']) if (fields[k] != null && fields[k] !== '') v[k] = fields[k];
+    for (const k of ['lang', 'name', 'first', 'last', 'phone', 'email', 'purpose', 'more', 'consentAt', 'consentVer', 'welcome', 'page']) if (fields[k] != null && fields[k] !== '') v[k] = fields[k];
     if (fields.skip && !v.skipped.includes(fields.skip)) v.skipped.push(fields.skip);
     if (fields.visit) { v.visits = (v.visits || 0) + 1; v.lastSeen = now; }
     if (!v.country && meta.country) v.country = meta.country;
@@ -80,7 +80,8 @@ export async function save(id, fields, meta = {}) {
     rec = { ...v }; return cur;
   }, { list: [] });
   // the welcome package: once, when they said yes and gave an email
-  if (fields.welcome === 'yes' && rec.email && !rec.welcomeAt) {
+  // spam rules (Spam Act 2003, PDPA): only with their consent on record, and only once
+  if (fields.welcome === 'yes' && rec.email && rec.consentAt && !rec.welcomeAt) {
     const r = await welcome(rec).catch((e) => ({ ok: false, reason: e.message }));
     const status = r.ok ? 'sent' : r.skipped ? 'requested' : 'failed';
     await kv.update(KEY, (cur) => { const v = cur.list.find((x) => x.id === id); if (v) { v.welcomeStatus = status; if (r.ok) v.welcomeAt = now; else v.welcomeNote = String(r.reason || '').slice(0, 200); } return cur; }, { list: [] });
@@ -91,7 +92,7 @@ export async function save(id, fields, meta = {}) {
 
 const SITE = () => env('URL', 'https://gkh-project-champ.netlify.app').replace(/\/+$/, '');
 function welcome(v) {
-  const name = v.name || 'there', site = SITE();
+  const name = v.first || v.name || 'there', site = SITE();
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const text = `Hi ${name},
 
@@ -109,7 +110,9 @@ Book a demo or ask us anything: ${site}/contact.html, or reply to this email.
 
 Warm regards,
 Sashi Kumar Sivam
-Global Knowledge House · ceo@gkhconsultancy.com · 0493 431 202`;
+Global Knowledge House · ceo@gkhconsultancy.com · 0493 431 202
+
+You're receiving this one email because you asked Champ for it on ${site.replace(/^https?:\/\//, '')}. We won't add you to a mailing list. To have your details deleted, reply "unsubscribe" or tell Champ "forget me".`;
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:auto;color:#14213d">
 <div style="background:#0b1530;color:#fff;padding:22px 26px;border-radius:12px 12px 0 0"><img src="${site}/assets/gkh-champ-icon-192.png" width="54" height="54" alt="" style="vertical-align:middle;border-radius:50%"> <b style="font-size:20px;vertical-align:middle;margin-left:8px">GKH Project Champ</b></div>
 <div style="border:1px solid #dde3ee;border-top:0;padding:24px 26px;border-radius:0 0 12px 12px">
@@ -126,8 +129,8 @@ Global Knowledge House · ceo@gkhconsultancy.com · 0493 431 202`;
 &nbsp; <a href="${site}/contact.html" style="color:#0b1530">Book a demo</a></p>
 <p>Questions? Just reply to this email.</p>
 <p>Warm regards,<br><b>Sashi Kumar Sivam</b><br>Global Knowledge House<br>ceo@gkhconsultancy.com · 0493 431 202</p>
-</div><p style="font-size:12px;color:#7a8499;text-align:center">You asked Champ for this welcome package on ${esc(site.replace(/^https?:\/\//, ''))}. GKH AI Powered Business Intelligence · ABN 38 107 769 345</p></div>`;
-  return sendEmail({ to: v.email, subject: `Welcome to GKH Project Champ, ${name}`, html, text, replyTo: env('OWNER_EMAIL', 'ceo@gkhconsultancy.com') });
+</div><p style="font-size:12px;color:#7a8499;text-align:center">You're receiving this one email because you asked Champ for it on ${esc(site.replace(/^https?:\/\//, ''))}. We won't add you to a mailing list. To have your details deleted, reply “unsubscribe” or tell Champ “forget me”.<br>Global Knowledge House · GKH AI Powered Business Intelligence · ABN 38 107 769 345</p></div>`;
+  return sendEmail({ to: v.email, subject: `Your GKH Project Champ welcome pack, ${name}`, html, text, replyTo: env('OWNER_EMAIL', 'ceo@gkhconsultancy.com') });
 }
 
 // ---------- visitor counter: { visitors, visits, days: { 'YYYY-MM-DD': { u, v } } (last 400 days), pages: { '/x': visits } } ----------

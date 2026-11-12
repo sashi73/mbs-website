@@ -97,7 +97,15 @@ async function visitor(body, ip, context) {
     if (body.forget) return json(200, { ok: true, removed: await V.remove(id) });
     const f = {}, bad = [];
     if (body.lang != null && LANGS[body.lang] && body.lang !== 'auto') f.lang = body.lang;
+    if (body.website) return json(200, { ok: true, visitor: {} });   // the hidden field only a bot fills in
     if (body.name != null) { f.name = await V.extractName(body.name); if (!f.name) bad.push('name'); }
+    if (body.first != null || body.last != null) {
+      f.first = V.normName(body.first || '').slice(0, 40); f.last = V.normName(body.last || '').slice(0, 40);
+      if (!f.first || !f.last) bad.push('name'); else f.name = f.first + ' ' + f.last;
+    }
+    if (body.purpose != null) f.purpose = clean(String(body.purpose), 80);
+    if (body.more != null) f.more = clean(String(body.more), 400);
+    if (body.consent === true) { f.consentAt = new Date().toISOString(); f.consentVer = 'PDPA/Privacy notice 2026-11'; }
     if (body.phone != null) { f.phone = V.normPhone(body.phone); if (!f.phone) bad.push('phone'); }
     if (body.email != null) { f.email = V.normEmail(body.email); if (!f.email) bad.push('email'); }
     if (body.welcome === 'yes' || body.welcome === 'no') f.welcome = body.welcome;
@@ -107,7 +115,7 @@ async function visitor(body, ip, context) {
     if (bad.length) return json(422, { error: 'invalid', bad });
     const geo = (context && context.geo) || {};
     const v = await V.save(id, f, { country: geo.country && geo.country.name, city: geo.city });
-    return json(200, { ok: true, visitor: { name: v.name || '', phone: v.phone || '', email: v.email || '', lang: v.lang || '', welcome: v.welcome || '', welcomeStatus: v.welcomeStatus || '' } });
+    return json(200, { ok: true, visitor: { first: v.first || '', name: v.name || '', phone: v.phone || '', email: v.email || '', lang: v.lang || '', welcome: v.welcome || '', welcomeStatus: v.welcomeStatus || '' } });
   } catch (e) {
     console.log('visitor save failed: ' + e.message);
     return json(500, { error: 'Could not save right now.' });
@@ -137,7 +145,7 @@ const tCalls = new Map();
 function tLimited(ip) {   // at most 60 model calls per address per 10 minutes for uncached text
   const now = Date.now(), list = (tCalls.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
   list.push(now); tCalls.set(ip, list); if (tCalls.size > 5000) tCalls.clear();
-  return list.length > 60;
+  return list.length > (Number(env('CHAMP_I18N_LIMIT')) || 60);
 }
 const hash = (s) => createHash('sha1').update(s).digest('base64url').slice(0, 16);
 async function i18n(body, ip) {
