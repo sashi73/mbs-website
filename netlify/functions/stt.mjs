@@ -28,8 +28,10 @@ export default async (req, context) => {
   if (limited(ip)) return json(429, { error: 'Lots of voice questions at once. Please wait a few minutes.' });
 
   const url = new URL(req.url);
-  const langs = [...new Set(String(url.searchParams.get('langs') || env('STT_LANGS', 'en,ta,ms,fa')).split(',').map((s) => s.trim()).filter((s) => LOCALES[s]))].slice(0, 10);
-  if (!langs.length) return json(400, { error: 'Pick at least one language to listen for.' });
+  const raw = String(url.searchParams.get('langs') || env('STT_LANGS', 'en,ta,ms,fa'));
+  const any = raw.trim() === 'any';   // "any language": no list, Azure's multilingual model works the language out
+  const langs = any ? [] : [...new Set(raw.split(',').map((s) => s.trim()).filter((s) => LOCALES[s]))].slice(0, 10);
+  if (!any && !langs.length) return json(400, { error: 'Pick at least one language to listen for.' });
   const type = (req.headers.get('content-type') || 'audio/webm').split(';')[0].trim().toLowerCase();
   if (!/^audio\/(webm|ogg|mp4|mpeg|mp3|wav|x-wav|aac)$/.test(type)) return json(415, { error: 'Unsupported audio format' });
   const audio = Buffer.from(await req.arrayBuffer());
@@ -41,7 +43,7 @@ export default async (req, context) => {
   const ext = { 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/aac': 'aac', 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav' }[type] || 'webm';
   const form = new FormData();
   form.append('audio', new Blob([audio], { type }), 'question.' + ext);
-  form.append('definition', JSON.stringify({ locales: langs.map((l) => LOCALES[l]), profanityFilterMode: 'Masked' }));
+  form.append('definition', JSON.stringify(any ? { profanityFilterMode: 'Masked' } : { locales: langs.map((l) => LOCALES[l]), profanityFilterMode: 'Masked' }));
   let r, data;
   const call = () => fetch(`${endpoint}/speechtotext/transcriptions:transcribe?api-version=2024-11-15`, { method: 'POST', headers: { 'Ocp-Apim-Subscription-Key': key }, body: form });
   try {

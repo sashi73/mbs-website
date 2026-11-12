@@ -21,4 +21,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 10 | 1.0.10| 2026-11-12 21:47| GKH-Project-Champ| `04e888b` | Champ: seamless language switching and a main menu |
 | 11 | 1.0.11| 2026-11-12 21:50| GKH-Project-Champ| `c9e9f4f` | Champ: long menu labels wrap instead of scrolling sideways; a blocked autoplay waits quietly for the Listen button |
 | 12 | 1.0.12| 2026-11-12 22:21| GKH-Project-Champ| `51cb23e` | Champ: speak or type in any language (🎤 with Azure language identification) |
-| 13 | 1.0.13 | 2026-11-12 22:28 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 13 | 1.0.13| 2026-11-12 22:28| GKH-Project-Champ| `c2941dc` | Champ ears: Portuguese listens as pt-PT (pt-BR is refused in australiaeast); one automatic retry when Azure is busy |
+| 14 | 1.0.14 | 2026-11-12 22:30 | GKH-Project-Champ | _this commit_ | _see git log_ |
