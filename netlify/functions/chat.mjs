@@ -25,12 +25,13 @@ export default async (req, context) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors() });
   if (req.method !== 'POST') return json(405, { error: 'Method not allowed' });
   const ip = (context && context.ip) || req.headers.get('x-nf-client-connection-ip') || req.headers.get('x-forwarded-for') || 'local';
-  if (limited(ip)) return json(429, { error: 'Lots of questions in a short time. Please wait a few minutes and try again.' });
-
   let body;
   try { body = await req.json(); } catch { return json(400, { error: 'Invalid JSON' }); }
-  if (body?.mode === 'i18n') return i18n(body, ip);
+  // these have their own limits: page-by-page browsing must not use up the questions allowance
+  if (body?.mode === 'count') return count(body, ip);
   if (body?.mode === 'visitor') return visitor(body, ip, context);
+  if (limited(ip)) return json(429, { error: 'Lots of questions in a short time. Please wait a few minutes and try again.' });
+  if (body?.mode === 'i18n') return i18n(body, ip);
   const lang = LANGS[body?.lang] ? LANGS[body.lang] : LANGS.auto;
   const where = body?.where === 'console' ? 'console' : 'site';
   const messages = (Array.isArray(body?.messages) ? body.messages : [])
@@ -111,6 +112,23 @@ async function visitor(body, ip, context) {
     console.log('visitor save failed: ' + e.message);
     return json(500, { error: 'Could not save right now.' });
   }
+}
+
+// ---------- the visitor counter (website footer; Customers > Visitors in the console) ----------
+// Body: { mode: 'count', unique: bool (first time in this browser), visit: bool (new browser session), page }
+const cSeen = new Map();
+async function count(body, ip) {
+  const now = Date.now(), last = cSeen.get(ip) || {};
+  // one new visitor per address per 6 hours and one visit per address per 10 minutes, so a reload loop can't run the numbers up
+  const unique = !!body.unique && !(last.u && now - last.u < 6 * 3600e3);
+  const visit = !!body.visit && !(last.v && now - last.v < 10 * 60e3);
+  if (cSeen.size > 20000) cSeen.clear();
+  try {
+    if (!unique && !visit) { const c = (await V.counter()) || {}; return json(200, { visitors: c.visitors || 0, visits: c.visits || 0 }); }
+    cSeen.set(ip, { u: unique ? now : last.u, v: visit ? now : last.v });
+    const c = await V.bump({ unique, visit, page: clean(String(body.page || '/'), 80) });
+    return json(200, { visitors: c.visitors, visits: c.visits });
+  } catch (e) { console.log('counter failed: ' + e.message); return json(200, { visitors: 0, visits: 0 }); }
 }
 
 // ---------- page translation (website and console labels), cached per language in Netlify Blobs ----------

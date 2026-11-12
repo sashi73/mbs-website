@@ -102,6 +102,20 @@
     }).catch(function () {});
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildTag); else buildTag();
+  // visitor counter: each browser counts once as a visitor, each browser session once as a visit; the total shows in the footer
+  function visits() {
+    if (/\/admin\//.test(location.pathname)) return;
+    var el = document.querySelector('[data-visits]');
+    var ls = function (k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } };
+    var ss = function (k, v) { try { if (v === undefined) return sessionStorage.getItem(k); sessionStorage.setItem(k, v); } catch (e) { return null; } };
+    var first = !ls('champCounted'), newVisit = !ss('champCounted');
+    fetch('/.netlify/functions/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'count', unique: first, visit: newVisit, page: location.pathname }) })
+      .then(function (r) { return r.ok ? r.json() : null; }).then(function (c) {
+        if (!c) return; ls('champCounted', '1'); ss('champCounted', '1');
+        if (el && c.visitors) { el.textContent = '👁 ' + Number(c.visitors).toLocaleString('en-AU') + ' visitors'; el.title = Number(c.visits || 0).toLocaleString('en-AU') + ' visits in all'; el.hidden = false; }
+      }).catch(function () {});
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', visits); else visits();
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', build); document.addEventListener('DOMContentLoaded', quick); } else { build(); quick(); }
   window.ChampTheme = { skins: SKINS.map(function (s) { return s[0]; }), apply: apply };
 })();

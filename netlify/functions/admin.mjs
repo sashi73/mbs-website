@@ -298,7 +298,7 @@ async function handle(req, context) {
       case 'visitorList': {
         if (ctx.scope) return bad('Sub-contractor logins cannot see visitors.', 403);
         if (!ctx.owner && !(ctx.mods && ctx.mods.crm)) return bad('You need access to Jobs & customers to see visitors.', 403);
-        return out(200, { list: await VIS.list(), email: !!env('RESEND_API_KEY') });
+        return out(200, { list: await VIS.list(), email: !!env('RESEND_API_KEY'), counter: VIS.counterSummary(await VIS.counter()) });
       }
       case 'visitorDelete': {
         if (ctx.scope) return bad('Sub-contractor logins cannot delete visitors.', 403);

@@ -161,7 +161,7 @@ function limitOf(name, def) {
   const m = String(process.env['LIMIT_' + name.toUpperCase()] || def).match(/^(\d+)\/(\d+)$/);
   return m ? [Number(m[1]), Number(m[2]) * 60000] : [Infinity, 60000];
 }
-const LIMITS = { chat: limitOf('chat', '40/10'), tts: limitOf('tts', '80/10'), lead: limitOf('lead', '8/60'), visits: limitOf('visits', '20/10'), admin: limitOf('admin', '600/10'), promo: limitOf('promo', '400/10') };
+const LIMITS = { chat: limitOf('chat', '200/10'), tts: limitOf('tts', '80/10'), lead: limitOf('lead', '8/60'), visits: limitOf('visits', '20/10'), admin: limitOf('admin', '600/10'), promo: limitOf('promo', '400/10') };
 const hits = new Map();
 function clientIp(req) {
   const peer = req.socket.remoteAddress || '';

@@ -129,3 +129,24 @@ Global Knowledge House · ceo@gkhconsultancy.com · 0493 431 202`;
 </div><p style="font-size:12px;color:#7a8499;text-align:center">You asked Champ for this welcome package on ${esc(site.replace(/^https?:\/\//, ''))}. GKH AI Powered Business Intelligence · ABN 38 107 769 345</p></div>`;
   return sendEmail({ to: v.email, subject: `Welcome to GKH Project Champ, ${name}`, html, text, replyTo: env('OWNER_EMAIL', 'ceo@gkhconsultancy.com') });
 }
+
+// ---------- visitor counter: { visitors, visits, days: { 'YYYY-MM-DD': { u, v } } (last 400 days), pages: { '/x': visits } } ----------
+const CKEY = 'champ-counter';
+const sydDay = (t = Date.now()) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+export async function counter() { return kv.get(CKEY).catch(() => null); }
+export async function bump({ unique, visit, page }) {
+  return kv.update(CKEY, (c) => {
+    c.days = c.days || {}; c.pages = c.pages || {};
+    const d = sydDay(), day = c.days[d] || (c.days[d] = { u: 0, v: 0 });
+    if (unique) { c.visitors = (c.visitors || 0) + 1; day.u++; }
+    if (visit) { c.visits = (c.visits || 0) + 1; day.v++; if (Object.keys(c.pages).length < 200 || c.pages[page]) c.pages[page] = (c.pages[page] || 0) + 1; }
+    const keys = Object.keys(c.days).sort(); while (keys.length > 400) delete c.days[keys.shift()];
+    return c;
+  }, { visitors: 0, visits: 0, days: {}, pages: {}, since: new Date().toISOString() });
+}
+export function counterSummary(c) {
+  c = c || {}; const days = c.days || {}, today = sydDay(), sum = (n, f) => { let t = 0; for (let i = 0; i < n; i++) { const x = days[sydDay(Date.now() - i * 864e5)]; if (x) t += x[f]; } return t; };
+  return { visitors: c.visitors || 0, visits: c.visits || 0, since: c.since || '', today: (days[today] || {}).u || 0, todayVisits: (days[today] || {}).v || 0,
+    week: sum(7, 'u'), weekVisits: sum(7, 'v'), month: sum(30, 'u'), pages: Object.entries(c.pages || {}).sort((a, b) => b[1] - a[1]).slice(0, 8),
+    last14: Array.from({ length: 14 }, (_, i) => { const d = sydDay(Date.now() - (13 - i) * 864e5); return [d, (days[d] || {}).u || 0, (days[d] || {}).v || 0]; }) };
+}

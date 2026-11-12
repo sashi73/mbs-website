@@ -52,6 +52,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   const b = await chromium.launch({ executablePath: fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined });
   const ctx = await b.newContext({ viewport: { width: 1366, height: 900 } });
   await ctx.route(/images\.unsplash\.com|accounts\.google\.com/, (r) => r.abort());   // no internet in the test
+  await ctx.addInitScript(() => { if (!/intro=1/.test(location.search)) try { sessionStorage.setItem('champIntroSeen', '1'); } catch (e) {} });   // the intro has its own checks
   const p = await ctx.newPage();
   const errors = [];
   p.on('pageerror', (e) => errors.push(p.url() + ' :: ' + e.message));
@@ -71,6 +72,8 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Site', 'menu has the 5 pages', JSON.stringify(nav) === JSON.stringify(['index.html', 'features.html', 'agile.html', 'industries.html', 'contact.html']), nav.join(','));
   ok('Site', 'header has a Login link to login.html', (await p.getAttribute('header .nav-login', 'href')) === 'login.html');
   ok('Site', 'no MBS wording on the home page', !/Modern Building|0420 494 990|Mr\.? Fixit|Wonder Bird/i.test(await p.content()));
+  await p.waitForSelector('[data-visits]:not([hidden])', { timeout: 5000 }).catch(() => {});
+  ok('Site', 'visitor counter in the footer', /👁 \d+ visitors/.test(await p.textContent('footer')), (await p.textContent('footer')).slice(0, 160));
   ok('Site', 'footer credit "Designed by © Sashi Kumar Sivam"', (await p.textContent('footer')).includes('Designed by © Sashi Kumar Sivam'));
   // ---- share preview (WhatsApp, LinkedIn…): GKH globe card, no MBS ----
   const og = await p.$eval('meta[property="og:image"]', (m) => m.content).catch(() => '');
@@ -81,6 +84,23 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Share', 'phone icon uses a new file name (old MBS copies kept by apps cannot be reused)', (await p.getAttribute('link[rel=apple-touch-icon]', 'href')) === 'assets/gkh-champ-icon-180.png');
   r0 = await p.request.get(`${BASE}/assets/favicon.svg`);
   ok('Share', 'old MBS favicon is gone', r0.status() === 404);
+  // ---- the cinematic intro (home page) ----
+  await p.goto(`${BASE}/index.html?intro=1`); await sleep(400);
+  ok('Intro', 'home page opens with the intro and "Tap to enter"', await p.isVisible('#champIntro [data-ci-start]'));
+  ok('Intro', 'Ask Champ is hidden while the intro plays', !(await p.isVisible('#champChatBtn')));
+  await p.click('[data-ci-start]'); await sleep(1300);
+  ok('Intro', '01 Plan scene', (await p.textContent('.ci-cap')).includes('Plan') && await p.evaluate(() => document.getElementById('champIntro').classList.contains('s1')));
+  await sleep(2300);
+  ok('Intro', '02 Schedule: the Gantt chart builds', (await p.textContent('.ci-cap')).includes('Schedule') && (await p.$$('.ci-bar')).length === 8);
+  await sleep(2400);
+  ok('Intro', '03 Critical path lights up', (await p.textContent('.ci-cap')).includes('Critical path') && await p.evaluate(() => document.getElementById('champIntro').classList.contains('cp')));
+  await sleep(2300);
+  ok('Intro', 'title: Project Champ', await p.evaluate(() => document.getElementById('champIntro').classList.contains('logo')));
+  await sleep(3300);
+  ok('Intro', 'ends by itself after about 10 seconds and gives the page back', !(await p.$('#champIntro')) && await p.isVisible('#champChatBtn'));
+  await p.goto(`${BASE}/index.html?intro=1`); await sleep(300);
+  await p.click('[data-ci-skip]'); await sleep(900);
+  ok('Intro', 'Skip intro works, and it is not shown again this visit', !(await p.$('#champIntro')) && await p.evaluate(() => sessionStorage.getItem('champIntroSeen') === '1'));
   const r404 = await p.goto(`${BASE}/nope.html`);
   ok('Site', 'unknown page gives the 404 page', r404.status() === 404 && (await p.textContent('body')).includes('critical path'));
 
@@ -366,6 +386,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.goto(`${BASE}/admin/#visitors`); await sleep(1200);
   const vtx = await p.textContent('#view');
   ok('Visitors', 'Visitors & leads page lists them', vtx.includes('Visitors & potential customers') && vtx.includes('sashi@example.com') && vtx.includes('+61412345678') && vtx.includes('Wants it'), vtx.slice(0, 200));
+  ok('Visitors', 'visitor counter shown in the console', vtx.includes('Website visitor counter') && vl.counter && vl.counter.visitors >= 1, JSON.stringify(vl.counter || {}).slice(0, 160));
   ok('Visitors', 'menu link under Customers', await p.isVisible('a[data-nav="visitors"]'));
   await p.fill('#vsQ', 'nobody-here'); await sleep(200);
   ok('Visitors', 'search filters the list', (await p.textContent('#vsBody')).includes('No visitor matches'));

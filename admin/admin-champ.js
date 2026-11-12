@@ -317,7 +317,18 @@
         '<div class="cs-tile cs-green"><span>With contact details</span><b>' + all.filter(function (v) { return v.email || v.phone; }).length + '</b><small>phone or email</small></div>' +
         '<div class="cs-tile"><span>Want the welcome package</span><b>' + all.filter(function (v) { return v.welcome === 'yes'; }).length + '</b><small>' + all.filter(function (v) { return v.welcome === 'yes' && v.welcomeStatus !== 'sent'; }).length + ' still to send</small></div>' +
         '<div class="cs-tile"><span>This week</span><b>' + all.filter(function (v) { return Date.parse(v.created) > week; }).length + '</b><small>new in the last 7 days</small></div></div>';
-      el.innerHTML = tiles + (d.email ? '' : '<div class="card" style="border-left:4px solid #c9a227"><b>Welcome packages are not emailed automatically yet.</b> <span class="muted">Add RESEND_API_KEY (and FROM_EMAIL from a verified domain) in Netlify; until then, the people marked “Wants it” are waiting for you to send one.</span></div>') +
+      var c = d.counter || {}, n = function (x) { return Number(x || 0).toLocaleString('en-AU'); };
+      var mx = Math.max.apply(null, (c.last14 || []).map(function (x) { return x[2]; }).concat([1]));
+      var traffic = '<div class="card"><div class="card-h"><h2>👁 Website visitor counter</h2><span class="sp"></span><small class="muted">' + (c.since ? 'Counting since ' + esc(when(c.since)) : '') + '</small></div>' +
+        '<div class="cs-tiles" style="margin:0 0 12px">' +
+        '<div class="cs-tile cs-green"><span>Visitors</span><b>' + n(c.visitors) + '</b><small>different browsers, all time</small></div>' +
+        '<div class="cs-tile"><span>Today</span><b>' + n(c.today) + '</b><small>' + n(c.todayVisits) + ' visits</small></div>' +
+        '<div class="cs-tile"><span>Last 7 days</span><b>' + n(c.week) + '</b><small>' + n(c.weekVisits) + ' visits</small></div>' +
+        '<div class="cs-tile"><span>Visits</span><b>' + n(c.visits) + '</b><small>all time</small></div></div>' +
+        '<div style="display:flex;gap:4px;align-items:flex-end;height:90px;padding:0 2px" aria-label="Visits, last 14 days">' + (c.last14 || []).map(function (x) {
+          return '<div title="' + esc(x[0]) + ': ' + x[1] + ' new visitors, ' + x[2] + ' visits" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%"><small class="muted" style="font-size:10px">' + (x[2] || '') + '</small><div style="width:100%;border-radius:4px 4px 0 0;background:#C9A227;height:' + Math.max(2, Math.round(70 * x[2] / mx)) + 'px"></div><small class="muted" style="font-size:9.5px">' + esc(x[0].slice(8)) + '</small></div>'; }).join('') + '</div>' +
+        ((c.pages || []).length ? '<p class="muted" style="font-size:12.5px;margin:10px 2px 0">Most visited: ' + c.pages.map(function (p) { return esc(p[0]) + ' (' + n(p[1]) + ')'; }).join(' · ') + '</p>' : '') + '</div>';
+      el.innerHTML = traffic + tiles + (d.email ? '' : '<div class="card" style="border-left:4px solid #c9a227"><b>Welcome packages are not emailed automatically yet.</b> <span class="muted">Add RESEND_API_KEY (and FROM_EMAIL from a verified domain) in Netlify; until then, the people marked “Wants it” are waiting for you to send one.</span></div>') +
         '<div class="card"><div class="card-h"><h2>👋 Visitors &amp; potential customers</h2><span class="sp"></span>' +
         '<input id="vsQ" type="search" placeholder="Find a name, email, phone, language or country…" value="' + esc(VS.q) + '" style="max-width:300px">' +
         '<button class="btn btn-sm" id="vsCsv">⬇ CSV</button>' + (canDel ? '<button class="btn btn-sm" id="vsDel" disabled>🗑 Delete</button>' : '') + '<button class="btn btn-sm" id="vsRef">↻</button></div>' +
