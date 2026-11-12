@@ -489,7 +489,11 @@
       if (nothing && quiet) { micState(''); return; }   // hands-free and nobody spoke: stop listening quietly ("Hey Champ" wakes it again)
       if (!blob.size || blob.size < 1200) { micState(''); if (!quiet) bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); return; }
       micState('busy');
-      fetch('/.netlify/functions/stt?langs=' + (sttAny() ? 'any' : encodeURIComponent(sttLangs().join(','))), { method: 'POST', headers: { 'Content-Type': type }, body: blob })
+      // during the welcome questions Champ knows which language to expect: a name or a phone number is too short for Azure to guess it
+      var st = obActive() ? vis.step : '', q;
+      if (st && st !== 'lang') q = st === 'email' ? 'en' : (STT_ALL.indexOf(curL()) >= 0 ? curL() : 'en');
+      else q = sttAny() ? 'any' : sttLangs().join(',');
+      fetch('/.netlify/functions/stt?langs=' + encodeURIComponent(q) + '&prefer=' + encodeURIComponent(STT_ALL.indexOf(curL()) >= 0 ? curL() : 'en'), { method: 'POST', headers: { 'Content-Type': type }, body: blob })
         .then(function (r) { return r.json().catch(function () { return null; }).then(function (j) {
           if (r.ok && j) return j;
           // no JSON: Netlify cut the function off (about 10 s): Azure was too slow for this recording

@@ -28,7 +28,7 @@
   // words on the intro, in the visitor's language (picked on the start screen; translated once and cached)
   var LANGS = [['en', 'English'], ['ms', 'Bahasa Melayu'], ['id', 'Bahasa Indonesia'], ['ta', 'தமிழ்'], ['zh', '简体中文'], ['hi', 'हिन्दी'], ['ar', 'العربية'], ['fa', 'فارسی'], ['vi', 'Tiếng Việt'],
     ['th', 'ไทย'], ['tl', 'Filipino'], ['ja', '日本語'], ['ko', '한국어'], ['es', 'Español'], ['fr', 'Français'], ['de', 'Deutsch'], ['pt', 'Português'], ['sw', 'Kiswahili'], ['rw', 'Kinyarwanda']];
-  var TX = { sub: 'Every project, from initiation to closing.', go: 'Tap to enter', hint: 'Best with sound · 10 seconds', pick: 'Choose your language',
+  var TX = { sub: 'Every project, from initiation to closing.', go: 'Tap to enter', hint: 'Best with sound', pick: 'Choose your language',
     plan: 'Plan', planS: 'Scope, WBS, budget and risks: drafted by AI', sch: 'Schedule', schS: 'Gantt chart, milestones and baseline',
     cp: 'Critical path', cpS: 'Zero float. No surprises.', tag1: 'Plan it. Schedule it.', tag2: 'Deliver it.', son: 'Sound on', soff: 'Sound off', skip: 'Skip intro' };
   var TR = {}; function t(k) { return TR[TX[k]] || TX[k]; }
@@ -42,7 +42,7 @@
     '<div class="ci-start"><img src="' + GLOBE + '" alt="" width="150" height="150"><h1>GKH Project <b>Champ</b></h1><p data-t="sub">Every project, from initiation to closing.</p>' +
     '<label class="ci-lang"><span aria-hidden="true">🌐</span><span class="sr" data-t="pick">Choose your language</span><select data-ci-lang aria-label="Choose your language">' +
       LANGS.map(function (l) { return '<option value="' + l[0] + '"' + (l[0] === curLang ? ' selected' : '') + '>' + l[1] + '</option>'; }).join('') + '</select></label>' +
-    '<button type="button" class="ci-go" data-ci-start>▶&nbsp; <span data-t="go">Tap to enter</span></button><p data-t="hint">Best with sound · 10 seconds</p></div>' +
+    '<button type="button" class="ci-go" data-ci-start>▶&nbsp; <span data-t="go">Tap to enter</span></button><p data-t="hint">Best with sound</p></div>' +
     '<div class="ci-cam" aria-hidden="true">' +
       // 01 the plan
       '<div class="ci-scene ci-plan"><div class="ci-sheet"><div><h3>Project plan · AI drafted</h3><h2>Hospital Wing Upgrade</h2><ul class="ci-wbs">' +

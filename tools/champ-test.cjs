@@ -39,6 +39,8 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     s2.setHeader('Content-Type', 'application/json'); s2.end(JSON.stringify({ choices: [{ message: { content: reply } }] }));
   }); }).listen(0);
   const az = http.createServer((q, s3) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
+    if (/speechtotext/.test(q.url) && global.STT_422) { const def = (/name="definition"\r?\n\r?\n([^\r\n]+)/.exec(b) || [])[1] || ''; global.STT_DEFS = (global.STT_DEFS || []).concat(def);
+      if ((def.match(/-[A-Z]{2}"/g) || []).length > 1) { s3.statusCode = 422; s3.setHeader('Content-Type', 'application/json'); return s3.end(JSON.stringify({ code: 'InvalidAudio', message: 'No language was identified.' })); } }
     if (/speechtotext/.test(q.url) && global.STT_SLOW) return setTimeout(() => { try { s3.end('{}'); } catch (e) {} }, 9500);
     if (/speechtotext/.test(q.url)) { global.STT_DEF = (/name="definition"\r?\n\r?\n([^\r\n]+)/.exec(b) || [])[1] || ''; global.STT_KEY = q.headers['ocp-apim-subscription-key'];
       s3.setHeader('Content-Type', 'application/json'); return s3.end(JSON.stringify({ combinedPhrases: [{ text: 'எனது திட்டங்கள் எப்படி உள்ளன?' }], phrases: [{ locale: 'ta-IN', durationMilliseconds: 1800, text: 'எனது திட்டங்கள் எப்படி உள்ளன?' }] })); }
@@ -240,6 +242,11 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.evaluate(() => window.ChampEars.send(new Blob([new Uint8Array(6000)], { type: 'audio/webm' }), 'audio/webm')); await sleep(2500);
   ok('Ears', '"Any language" mode sends no language list to Azure', global.STT_DEF && !/locales/.test(global.STT_DEF), global.STT_DEF);
   await p.evaluate(() => { localStorage.removeItem('champSttMode'); });
+  global.STT_422 = true; global.STT_DEFS = [];
+  r0 = await p.request.post(`${BASE}/.netlify/functions/stt?langs=en,ta,ms,fa&prefer=ta`, { data: Buffer.alloc(6000), headers: { 'Content-Type': 'audio/webm' } });
+  const j422 = await r0.json().catch(() => ({}));
+  ok('Ears', 'a short answer Azure can\u2019t place ("No language was identified") is heard again in the chat\u2019s language', r0.status() === 200 && j422.text && j422.lang === 'ta' && /"ta-IN"\]/.test(global.STT_DEFS[1] || ''), r0.status() + ' ' + JSON.stringify(j422) + ' ' + global.STT_DEFS.join(' | '));
+  global.STT_422 = false;
   global.STT_SLOW = true;
   r0 = await p.request.post(`${BASE}/.netlify/functions/stt?langs=en,ta`, { data: Buffer.alloc(6000), headers: { 'Content-Type': 'audio/webm' } });
   const slowJ = await r0.json().catch(() => ({}));

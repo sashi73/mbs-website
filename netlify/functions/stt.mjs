@@ -41,9 +41,15 @@ export default async (req, context) => {
   const region = env('AZURE_SPEECH_REGION', 'australiaeast');
   const endpoint = env('AZURE_STT_ENDPOINT', `https://${region}.api.cognitive.microsoft.com`).replace(/\/+$/, '');
   const ext = { 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/aac': 'aac', 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav' }[type] || 'webm';
-  const form = new FormData();
-  form.append('audio', new Blob([audio], { type }), 'question.' + ext);
-  form.append('definition', JSON.stringify(any ? { profanityFilterMode: 'Masked' } : { locales: langs.map((l) => LOCALES[l]), profanityFilterMode: 'Masked' }));
+  // prefer: the language the chat is in; used on its own when Azure can't tell which language a short answer (a name) was in
+  const prefer = LOCALES[url.searchParams.get('prefer')] && url.searchParams.get('prefer') !== 'pt' ? url.searchParams.get('prefer') : (langs[0] || 'en');
+  const formFor = (list) => {
+    const f = new FormData();
+    f.append('audio', new Blob([audio], { type }), 'question.' + ext);
+    f.append('definition', JSON.stringify(list ? { locales: list.map((l) => LOCALES[l]), profanityFilterMode: 'Masked' } : { profanityFilterMode: 'Masked' }));
+    return f;
+  };
+  let form = formFor(any ? null : langs);
   // Netlify stops a function after about 10 seconds, so Azure gets 8.5 s in all (one retry only if there is time)
   let r, data;
   const t0 = Date.now(), left = () => 8500 - (Date.now() - t0);
@@ -51,6 +57,10 @@ export default async (req, context) => {
   try {
     r = await call(); data = await r.json().catch(() => ({}));
     if ((r.status === 429 || r.status >= 500) && left() > 4000) { await new Promise((ok) => setTimeout(ok, 800)); r = await call(); data = await r.json().catch(() => ({})); }   // busy for a moment: one retry
+    // "No language was identified": too short to tell the language apart (a name, a yes): hear it in the chat's language
+    const noLang = () => r.status === 422 || /no language was identified/i.test(JSON.stringify(data || {}));
+    if (!r.ok && noLang() && left() > 2500 && !(langs.length === 1 && langs[0] === prefer)) { form = formFor([prefer]); r = await call(); data = await r.json().catch(() => ({})); if (r.ok) langs.splice(0, langs.length, prefer); }
+    if (!r.ok && noLang()) return json(200, { text: '', lang: '', empty: true, reason: 'no language identified' });
   } catch (e) {
     const slow = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
     console.log(`Champ ears: ${slow ? 'Azure too slow' : 'could not reach Azure'} after ${Date.now() - t0} ms, ${audio.length} bytes, ${any ? 'any' : langs.join(',')} (${e.message})`);
