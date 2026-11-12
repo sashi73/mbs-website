@@ -83,7 +83,7 @@ function tLimited(ip) {   // at most 30 model calls per address per 10 minutes f
 const hash = (s) => createHash('sha1').update(s).digest('base64url').slice(0, 16);
 async function i18n(body, ip) {
   const code = String(body?.lang || '');
-  if (!LANGS[code] || code === 'auto' || code === 'en') return json(400, { error: 'Unknown language' });
+  if (!LANGS[code] || code === 'auto') return json(400, { error: 'Unknown language' });
   const strings = [...new Set((Array.isArray(body?.strings) ? body.strings : []).map((x) => clean(String(x || ''), 700)).filter(Boolean))].slice(0, 80);
   if (!strings.length) return json(200, { map: {} });
   let st = null, cache = {};
@@ -96,7 +96,7 @@ async function i18n(body, ip) {
     if (tLimited(ip)) return json(429, { error: 'Too many translations at once. Please try again in a few minutes.', map });
     const base = env('LLM_BASE_URL', 'https://api.deepseek.com').replace(/\/+$/, '');
     let model = env('LLM_MODEL', 'deepseek-chat'); if (/reasoner|thinking/i.test(model)) model = 'deepseek-chat';
-    const sys = `You translate the user interface and web pages of "GKH Project Champ", a project management product, from English into ${LANGS[code]}.
+    const sys = `You translate the user interface, web pages and assistant answers of "GKH Project Champ", a project management product, into ${LANGS[code]}. The text may be in English or any other language.
 Return JSON only: {"t": [ ... ]} with exactly one translation per input string, in the same order.
 - Natural, professional ${LANGS[code]}, as a local software product would say it. Keep short UI labels short.
 - Keep unchanged: product and brand names (GKH, Global Knowledge House, Project Champ, Champ), PMBOK, PRINCE2, Scrum, Kanban, Gantt, RACI, RAID, BOM, SWMS, SPI, CPI, EAC, BAC, emoji, numbers, money, dates, email addresses, phone numbers and URLs.

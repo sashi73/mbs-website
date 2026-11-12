@@ -211,3 +211,21 @@ html.i18n-busy body::after{content:"Translating…";position:fixed;top:14px;left
 .cc-voice[aria-pressed=true]{background:#C9A227;border-color:#C9A227;color:#111}
 .cc-say{display:inline-flex;align-items:center;gap:4px;margin-top:6px;border:1px solid #E1D6B4;background:#FFF9E8;color:#5E4A0E;border-radius:999px;padding:3px 9px;font:700 11.5px/1.2 'Manrope',sans-serif;cursor:pointer}
 .cc-say.on{background:#111;color:#F5D97A;border-color:#111}
+
+/* ---------- Champ: main menu and language switching ---------- */
+.cc-menubtn{background:none;border:1px solid #444;color:#fff;border-radius:8px;width:32px;height:30px;font-size:15px;cursor:pointer;flex:none}
+.cc-menubtn:hover{border-color:#C9A227;color:#F5D97A}
+.cc-menu{max-width:100%!important;width:100%}
+.cc-menu-list{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.cc-menu-list button{display:flex;align-items:center;gap:8px;text-align:start;border:1px solid #E1D6B4;background:#FFF9E8;color:#3A2E08;border-radius:12px;padding:9px 10px;font:700 12.5px/1.25 'Manrope',system-ui,sans-serif;cursor:pointer;transition:background .15s,border-color .15s}
+.cc-menu-list button:hover,.cc-menu-list button:focus-visible{background:#FCEFC4;border-color:#C9A227;outline:none}
+.cc-menu-list button span{font-size:16px;flex:none}
+@media (max-width:420px){.cc-menu-list{grid-template-columns:1fr}}
+.cc-tools{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.cc-tools .cc-say{margin-top:0}
+.cc-mlink{border:1px solid #E5E2DA;background:#fff;color:#5E5A50;border-radius:999px;padding:3px 10px;font:700 11.5px/1.2 'Manrope',sans-serif;cursor:pointer}
+.cc-mlink:hover{border-color:#C9A227;color:#3A2E08}
+.cc-box.cc-switching .cc-log{opacity:.55;transition:opacity .2s}
+.cc-box[dir=rtl] .cc-user{align-self:flex-start}.cc-box[dir=rtl] .cc-bot{align-self:flex-end}
+.cc-box .cc-h{flex-wrap:nowrap}
+@media (max-width:420px){.cc-voice{padding:0 6px}.cc-lang{max-width:96px}}

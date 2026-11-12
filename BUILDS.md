@@ -17,4 +17,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 6 | 1.0.6 | 2026-11-12 20:37 | GKH-Project-Champ | `3925147` | Delete projects (board menu, Summary bulk delete, Projects list, plan page) |
 | 7 | 1.0.7 | 2026-11-12 20:53 | GKH-Project-Champ | `7ef55dc` | ⚙ Modules: switch BOM and SWMS on or off per project |
 | 8 | 1.0.8 | 2026-11-12 21:01 | GKH-Project-Champ | `37fd2a5` | Ask AI for projects, programs and the portfolio; programs; no chat bubble in the console |
-| 9 | 1.0.9 | 2026-11-12 21:36 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 9 | 1.0.9| 2026-11-12 21:36| GKH-Project-Champ| `fd1241a` | Project Champ: automatic build numbers and a build registry |
+| 10 | 1.0.10 | 2026-11-12 21:47 | GKH-Project-Champ | _this commit_ | _see git log_ |
