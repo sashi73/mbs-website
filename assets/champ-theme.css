@@ -230,3 +230,14 @@ html.i18n-busy body::after{content:"Translating…";position:fixed;top:14px;left
 .cc-box[dir=rtl] .cc-user{align-self:flex-start}.cc-box[dir=rtl] .cc-bot{align-self:flex-end}
 .cc-box .cc-h{flex-wrap:nowrap}
 @media (max-width:420px){.cc-voice{padding:0 6px}.cc-lang{max-width:96px}}
+
+/* ---------- Champ: 🎤 speak ---------- */
+.cc-mic{width:44px;height:44px;flex:none;border-radius:12px;border:1px solid #DCD6C8;background:#fff;font-size:18px;cursor:pointer;transition:background .2s,border-color .2s}
+.cc-mic:hover{border-color:#C9A227}
+.cc-mic.on{background:#DC2626;border-color:#DC2626;color:#fff;animation:cc-rec 1.2s ease-in-out infinite}
+.cc-mic.busy{background:#FFF9E8;border-color:#C9A227;cursor:progress}
+@keyframes cc-rec{50%{box-shadow:0 0 0 8px rgba(220,38,38,.18)}}
+.cc-small{font-size:12px;color:#6B6860;margin:4px 0 8px!important}
+.cc-vlangs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px;margin:4px 0 10px}
+.cc-vlangs label{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer}
+.cc-vsave{border:0;border-radius:10px;padding:8px 16px;background:linear-gradient(135deg,#E8C04A,#C9A227);color:#111;font:800 13px/1 'Manrope',sans-serif;cursor:pointer}

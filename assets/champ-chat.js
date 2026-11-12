@@ -61,11 +61,12 @@
 
   // ---- words on the chat itself (translated with the page translator's cache) ----
   var UI = { listen: '🔊 Listen', stop: '■ Stop', menu: '☰ Main menu', menuTitle: 'Main menu: what would you like to do?', newchat: 'New chat', ph: 'Ask Champ anything about projects…',
-    note: 'AI answers can be wrong; check important details.', voice: '🔊 Voice', sub: 'AI assistant', switching: 'Switching language…' };
+    note: 'AI answers can be wrong; check important details.', voice: '🔊 Voice', sub: 'AI assistant', switching: 'Switching language…',
+    listening: 'Listening… tap 🎤 again to send', hearing: 'Working out what you said…', notHeard: 'Sorry, I didn’t catch that. Tap 🎤 and try again.', micBlocked: 'Please allow the microphone to talk to Champ.', voiceLangs: 'Languages Champ listens for', save: 'Save' };
   var MENU = where === 'console'
     ? [['🧭', 'How do I start a new project?'], ['▦', 'How does the Pipeline board work?'], ['📈', 'Explain SPI and CPI'], ['📌', 'How do I set a baseline?'], ['🌐', 'Change language']]
     : [['🧭', 'What is Project Champ?'], ['✨', 'Show me the main features'], ['📐', 'Help with project management'], ['🗂', 'Programs and portfolios explained'],
-      ['⚖️', 'Agile or waterfall: which fits my project?'], ['🚀', 'How do I get started?'], ['💬', 'Talk to GKH or book a demo'], ['🌐', 'Change language']];
+      ['⚖️', 'Agile or waterfall: which fits my project?'], ['🚀', 'How do I get started?'], ['💬', 'Talk to GKH or book a demo'], ['🎤', 'Voice languages'], ['🌐', 'Change language']];
   var TCACHE = {};
   function cacheOf(L) { if (!TCACHE[L]) { try { TCACHE[L] = JSON.parse(localStorage.getItem('champI18n:' + L) || '{}'); } catch (e) { TCACHE[L] = {}; } } return TCACHE[L]; }
   function saveCache(L) { try { localStorage.setItem('champI18n:' + L, JSON.stringify(TCACHE[L])); } catch (e) {} }
@@ -118,7 +119,7 @@
       '<button type="button" class="cc-voice" aria-pressed="' + voiceOn + '" title="Read Champ’s answers aloud">🔊 Voice</button>' +
       '<button type="button" class="cc-x" aria-label="Close">✕</button></header>' +
       '<div class="cc-log" aria-live="polite"></div>' +
-      '<form class="cc-f"><textarea rows="1" maxlength="1200" placeholder="Ask Champ anything about projects…" aria-label="Your question"></textarea><button type="submit" aria-label="Send">➤</button></form>' +
+      '<form class="cc-f"><button type="button" class="cc-mic" aria-label="Speak to Champ" title="Speak (Champ answers in the language you speak)">🎤</button><textarea rows="1" maxlength="1200" placeholder="Ask Champ anything about projects…" aria-label="Your question"></textarea><button type="submit" aria-label="Send">➤</button></form>' +
       '<p class="cc-foot"><span class="cc-note">AI answers can be wrong; check important details.</span> <button type="button" class="cc-clear">New chat</button></p>';
     document.body.appendChild(btn); document.body.appendChild(box);
     var log = box.querySelector('.cc-log'), ta = box.querySelector('textarea'), sel = box.querySelector('.cc-lang'), speakingIdx = -1;
@@ -166,6 +167,7 @@
         b.onclick = function () {
           var it = MENU[+b.getAttribute('data-mi')];
           if (it[1] === 'Change language') { sel.focus(); try { sel.showPicker(); } catch (e) {} return; }
+          if (it[1] === 'Voice languages') { d.remove(); voiceLangsPanel(); return; }
           d.remove(); ask(T(it[1]));
         };
       });
@@ -197,11 +199,11 @@
         ss('champChat', JSON.stringify(msgs.slice(-24)));
         box.classList.remove('cc-switching');
         if (box.hidden) return;
-        draw(); if (msgs.length) showMenu();
+        draw(); if (busy) bubble('bot', '<span class="cc-dots"><i></i><i></i><i></i></span>', 'cc-wait'); else if (msgs.length) showMenu();
         if (wasIdx >= 0 && msgs[wasIdx]) { var bs = log.querySelectorAll('.cc-bot .cc-say'), k = msgs.slice(0, wasIdx + 1).filter(function (m) { return m.role === 'assistant'; }).length - 1; speak(textOf(msgs[wasIdx]), langOf(msgs[wasIdx]), bs[k], wasIdx); }
       });
     }
-    function ask(q) {
+    function ask(q, spoken) {
       q = String(q || '').trim(); if (!q || busy) return;
       var menu = log.querySelector('.cc-menu'); if (menu) menu.remove();
       busy = true; msgs.push({ role: 'user', content: q }); ss('champChat', JSON.stringify(msgs.slice(-24)));
@@ -210,17 +212,83 @@
       fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: msgs.slice(-12).map(function (m) { return { role: m.role, content: m.role === 'assistant' ? textOf(m) : m.content }; }), lang: lang, where: where }) })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || 'The assistant is unavailable right now.'); return j; }); })
         .then(function (j) {
-          wait.remove(); var L = j.lang || (lang === 'auto' ? 'en' : lang);
+          log.querySelectorAll('.cc-wait').forEach(function (x) { x.remove(); }); var L = j.lang || (lang === 'auto' ? 'en' : lang);
           msgs.push({ role: 'assistant', content: j.reply, lang: L }); ss('champChat', JSON.stringify(msgs.slice(-24)));
-          var i = msgs.length - 1, bb = bubble('bot', md(j.reply)), row = tools(bb, i);
-          if (voiceOn) speak(j.reply, L, row.querySelector('.cc-say'), i);
+          var i = msgs.length - 1;
+          // you wrote (or spoke) in another language: Champ answered in it, so the whole chat follows you there
+          if (j.lang && lang !== 'auto' && j.lang !== lang && LANGS.some(function (x) { return x[0] === j.lang; })) {
+            busy = false; speakingIdx = voiceOn || spoken ? i : -1; switchLang(j.lang); return;
+          }
+          var bb = bubble('bot', md(j.reply)), row = tools(bb, i);
+          if (voiceOn || spoken) speak(j.reply, L, row.querySelector('.cc-say'), i);
         })
-        .catch(function (e) { wait.remove(); msgs.pop(); ss('champChat', JSON.stringify(msgs)); bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err'); })
+        .catch(function (e) { log.querySelectorAll('.cc-wait').forEach(function (x) { x.remove(); }); msgs.pop(); ss('champChat', JSON.stringify(msgs)); bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err'); })
         .then(function () { busy = false; ta.focus(); });
     }
+    // ---- 🎤 Champ's ears: speak in any of your voice languages; Champ switches to it and answers aloud ----
+    var STT_ALL = ['en', 'ta', 'ms', 'id', 'fa', 'zh', 'hi', 'ar', 'vi', 'th', 'tl', 'ja', 'ko', 'es', 'fr', 'de', 'pt', 'sw'];
+    function sttLangs() { try { var v = JSON.parse(ls('champSttLangs') || 'null'); if (Array.isArray(v) && v.length) return v; } catch (e) {} return ['en', 'ta', 'ms', 'fa']; }
+    function voiceLangsPanel() {
+      var cur = sttLangs(), name = {}; LANGS.forEach(function (l) { name[l[0]] = l[1]; });
+      var d = bubble('bot', '<p><b>🎤 ' + esc(T(UI.voiceLangs)) + '</b></p><p class="cc-small">Pick the languages you speak (up to 6). Fewer is more accurate. Malay and Indonesian sound alike: choose one.</p><div class="cc-vlangs">' +
+        STT_ALL.map(function (k) { return '<label><input type="checkbox" value="' + k + '"' + (cur.indexOf(k) >= 0 ? ' checked' : '') + '> ' + esc(name[k] || k) + '</label>'; }).join('') +
+        '</div><button type="button" class="cc-vsave">' + esc(T(UI.save)) + '</button>', 'cc-menu');
+      var boxes = d.querySelectorAll('input');
+      boxes.forEach(function (b) { b.onchange = function () { var n = d.querySelectorAll('input:checked').length; if (n > 6) b.checked = false; }; });
+      d.querySelector('.cc-vsave').onclick = function () {
+        var v = [].slice.call(d.querySelectorAll('input:checked')).map(function (x) { return x.value; });
+        if (!v.length) return; ls('champSttLangs', JSON.stringify(v)); d.remove(); showMenu();
+      };
+    }
+    var rec = null, recStream = null, recChunks = [], recTimer = null, vad = null, mic = box.querySelector('.cc-mic');
+    function micState(st) { mic.classList.toggle('on', st === 'rec'); mic.classList.toggle('busy', st === 'busy'); mic.textContent = st === 'busy' ? '⏳' : '🎤'; ta.placeholder = st === 'rec' ? T(UI.listening) : st === 'busy' ? T(UI.hearing) : T(UI.ph); }
+    function stopRec() { if (rec && rec.state !== 'inactive') rec.stop(); }
+    function cleanRec() { clearTimeout(recTimer); if (vad) { try { vad.ctx.close(); } catch (e) {} vad = null; } if (recStream) recStream.getTracks().forEach(function (t) { t.stop(); }); recStream = null; }
+    function startRec() {
+      if (!navigator.mediaDevices || !window.MediaRecorder) { bubble('bot', '<p>' + esc(T(UI.micBlocked)) + '</p>', 'cc-err'); return; }
+      stopVoice();
+      navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function (stream) {
+        recStream = stream; recChunks = [];
+        var types = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/webm'], mt = types.filter(function (t) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t); })[0] || '';
+        rec = new MediaRecorder(stream, mt ? { mimeType: mt } : undefined);
+        rec.ondataavailable = function (e) { if (e.data && e.data.size) recChunks.push(e.data); };
+        rec.onstop = function () { var type = (rec.mimeType || mt || 'audio/webm').split(';')[0]; cleanRec(); send(new Blob(recChunks, { type: type }), type); };
+        rec.start(); micState('rec');
+        recTimer = setTimeout(stopRec, 30000);   // a question, not a speech
+        // stop by itself after a pause: about 1.4 s of quiet once you have started talking
+        try {
+          var AC = window.AudioContext || window.webkitAudioContext, ctx = new AC(), an = ctx.createAnalyser(), buf = new Uint8Array(1024), spoke = false, quietSince = 0, t0 = Date.now();
+          ctx.createMediaStreamSource(stream).connect(an); an.fftSize = 1024; vad = { ctx: ctx };
+          (function tick() {
+            if (!vad || !rec || rec.state === 'inactive') return;
+            an.getByteTimeDomainData(buf); var sum = 0; for (var i = 0; i < buf.length; i++) { var x = (buf[i] - 128) / 128; sum += x * x; }
+            var rms = Math.sqrt(sum / buf.length), now = Date.now();
+            if (rms > 0.035) { spoke = true; quietSince = 0; } else if (spoke) { quietSince = quietSince || now; if (now - quietSince > 1400) return stopRec(); }
+            if (!spoke && now - t0 > 8000) return stopRec();   // nothing said
+            requestAnimationFrame(tick);
+          })();
+        } catch (e) {}
+      }).catch(function () { micState(''); bubble('bot', '<p>' + esc(T(UI.micBlocked)) + '</p>', 'cc-err'); });
+    }
+    function send(blob, type) {
+      if (!blob.size || blob.size < 1200) { micState(''); bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); return; }
+      micState('busy');
+      fetch('/.netlify/functions/stt?langs=' + encodeURIComponent(sttLangs().join(',')), { method: 'POST', headers: { 'Content-Type': type }, body: blob })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || 'Voice input is unavailable right now.'); return j; }); })
+        .then(function (j) {
+          micState('');
+          if (!j.text) { bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); return; }
+          if (j.lang && j.lang !== lang) switchLang(j.lang);   // you spoke Tamil: Champ is now in Tamil
+          ask(j.text, true);
+        })
+        .catch(function (e) { micState(''); bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err'); });
+    }
+    mic.onclick = function () { if (rec && rec.state === 'recording') stopRec(); else if (!mic.classList.contains('busy')) startRec(); };
+    window.ChampEars = { send: send, langs: sttLangs };
+
     function open(on) {
       box.hidden = !on; btn.setAttribute('aria-expanded', on ? 'true' : 'false'); document.body.classList.toggle('cc-open', on);
-      if (on) { btn.classList.remove('cc-glow'); ls('champChatSeen', '1'); } else stopVoice();
+      if (on) { btn.classList.remove('cc-glow'); ls('champChatSeen', '1'); } else { stopVoice(); if (typeof stopRec === 'function') stopRec(); }
       if (on) { draw(); setTimeout(function () { ta.focus(); }, 50); if (concrete(lang)) ensure(Object.keys(UI).map(function (k) { return UI[k]; }).concat(MENU.map(function (x) { return x[1]; })), lang).then(function () { if (!box.hidden) { labels(); var mm = log.querySelector('.cc-menu'); if (mm) showMenu(); } }); }
     }
     btn.onclick = function () { open(box.hidden); };
