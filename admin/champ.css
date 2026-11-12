@@ -67,3 +67,14 @@
 .bom-switch input:checked+.bom-slider::after{transform:translateX(15px)}
 .bom-switch input:focus-visible+.bom-slider{outline:2px solid var(--gold-hi);outline-offset:2px}
 .cs-pick{width:34px;text-align:center}.cs-pick input{width:17px;height:17px;cursor:pointer}
+
+/* ⚙ Modules: optional modules per project (BOM, SWMS) */
+.mod-wrap{position:relative;display:inline-flex}
+.mod-btn small{font-weight:800;font-size:10.5px;letter-spacing:.06em;color:var(--muted);margin-left:2px}
+.mod-pop{position:absolute;top:calc(100% + 6px);right:0;z-index:40;width:min(340px,90vw);background:var(--card,#fff);border:1px solid var(--line);border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.2);padding:14px;display:grid;gap:10px}
+.mod-pop>b{font:800 15px/1.2 'Archivo',sans-serif}
+.mod-row{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;font-weight:400}
+.mod-row>span:first-child{display:grid;gap:2px}.mod-row small{color:var(--muted);font-size:12px;line-height:1.35}
+.mod-row .bom-switch{border:0;padding:0;background:none}
+.champ-mods{border:1px solid var(--line);border-radius:12px;padding:10px 14px 12px;display:grid;gap:10px;margin:0}
+.champ-mods legend{font-weight:800;padding:0 6px}

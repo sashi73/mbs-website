@@ -732,6 +732,26 @@ export async function fitPlanAi({ core, finishBy }, by) {
     risks, critical: [...crit].map((id) => num[id]).filter(Boolean), weekend, rev: p0.rev || 0, tokens: used, today: todayUse };
 }
 
+export const MODS = ['bom', 'swms'], MODNAME = { bom: 'Bill of Materials', swms: 'SWMS' };
+// champ-opts: { off: { bom: { core: true }, swms: { … } } } (older builds kept bomOff: { core: true })
+export function modulesOf(opts, core) {
+  const off = (opts && opts.off) || {}, out = {};
+  for (const m of MODS) out[m] = !((off[m] || {})[core] || (m === 'bom' && ((opts && opts.bomOff) || {})[core]));
+  return out;
+}
+export async function setModule(core, mod, on) {
+  await kv.update('champ-opts', (cur) => {
+    const c = { ...(cur || {}) }, off = { ...(c.off || {}) }, m = { ...(off[mod] || {}) };
+    if (mod === 'bom' && c.bomOff && c.bomOff[core]) { c.bomOff = { ...c.bomOff }; delete c.bomOff[core]; if (!on) m[core] = true; }
+    if (on) delete m[core]; else m[core] = true;
+    off[mod] = m; c.off = off; return c;
+  }, () => ({ off: {} }));
+}
+export async function forgetModules(core) {
+  await kv.update('champ-opts', (cur) => { const c = { ...(cur || {}) }; const off = { ...(c.off || {}) };
+    for (const m of Object.keys(off)) { off[m] = { ...off[m] }; delete off[m][core]; } c.off = off;
+    if (c.bomOff) { c.bomOff = { ...c.bomOff }; delete c.bomOff[core]; } return c; }, () => ({ off: {} }));
+}
 export async function planPost(action, body, { who, by, audit }) {
   const core = str(body.core, 40);
   if (action === 'planList') {
@@ -776,12 +796,15 @@ export async function planPost(action, body, { who, by, audit }) {
     if (audit) await audit(who, `Project ${core}: phase ${ph === 'auto' ? 'set to automatic' : 'moved to ' + ph}`);
     return out(200, { ok: true });
   }
-  if (action === 'planBomSet') {   // GKH Project Champ: switch the Bill of Materials on or off for a project
+  // GKH Project Champ: optional modules per project (BOM, SWMS), switched on or off. Stored as champ-opts.off[mod][core] = true.
+  if (action === 'planModuleSet' || action === 'planBomSet') {
+    const mod = action === 'planBomSet' ? 'bom' : String(body.mod || '');
+    if (!MODS.includes(mod)) return out(400, { error: 'Unknown module' });
     if (!core || !(await J.find(core))) return out(404, { error: 'Project not found' });
     const on = !!body.on;
-    await kv.update('champ-opts', (cur) => { const off = { ...((cur && cur.bomOff) || {}) }; if (on) delete off[core]; else off[core] = true; return { ...(cur || {}), bomOff: off }; }, () => ({ bomOff: {} }));
-    if (audit) await audit(who, `Project ${core}: Bill of Materials ${on ? 'on' : 'off'}`);
-    return out(200, { ok: true, bom: on });
+    await setModule(core, mod, on);
+    if (audit) await audit(who, `Project ${core}: ${MODNAME[mod]} ${on ? 'on' : 'off'}`);
+    return out(200, { ok: true, mod, on, [mod]: on });
   }
   if (action === 'planGet') {
     const job = await J.find(core);
@@ -790,7 +813,7 @@ export async function planPost(action, body, { who, by, audit }) {
     const rems = remsAll.filter((r) => r.core === job.core).map((r) => ({ ...r, when: whenText(r.at) }));
     let costs = 0;
     try { costs = r2(Object.values((idx && idx.expenses) || {}).filter((e) => e.core === job.core).reduce((a, e) => a + (e.inc - e.gst), 0)); } catch {}
-    return out(200, { champ: { bom: !(((champ && champ.bomOff) || {})[job.core]) }, plan, job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), phone: job.phone || '', email: job.email || '', scope: jobScope(job), urgency: job.urgency || '', emergency: isEmergency(job) }, reminders: rems, expensesEx: costs, test: isTestSite(), bench: plan ? benchTarget(plan, job) : null });
+    return out(200, { champ: modulesOf(champ, job.core), plan, job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), phone: job.phone || '', email: job.email || '', scope: jobScope(job), urgency: job.urgency || '', emergency: isEmergency(job) }, reminders: rems, expensesEx: costs, test: isTestSite(), bench: plan ? benchTarget(plan, job) : null });
   }
   if (action === 'planSave') {
     if (!core || !(await J.find(core))) return out(404, { error: 'Job not found' });

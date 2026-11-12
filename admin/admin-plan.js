@@ -399,10 +399,13 @@
       '<label>Contact phone <small class="muted">(optional)</small><input name="phone" maxlength="40"></label></div>' +
       '<label>Contact email <small class="muted">(optional)</small><input name="email" type="email" maxlength="160"></label>' +
       '<label>What is the project about? <small class="muted">(the AI uses this to draft the plan)</small><textarea name="summary" rows="4" maxlength="1500" placeholder="Objective, scope, constraints, budget, key dates…"></textarea></label>' +
+      '<fieldset class="champ-mods"><legend>Optional modules <small class="muted">(you can change these later with ⚙ Modules)</small></legend>' +
+      '<label class="mod-row"><span><b>🧱 Bill of Materials (BOM)</b><small>For projects with materials to buy (construction, fit-outs, installs)</small></span><span class="bom-switch"><input type="checkbox" name="bom" checked><span class="bom-slider"></span></span></label>' +
+      '<label class="mod-row"><span><b>🦺 SWMS</b><small>Safe Work Method Statements for high-risk construction work</small></span><span class="bom-switch"><input type="checkbox" name="swms" checked><span class="bom-slider"></span></span></label></fieldset>' +
       '<div class="actions"><button class="btn btn-gold" type="submit">Create project and plan it →</button></div></form></div>';
     $('#champNew').onsubmit = function (e) {
       e.preventDefault(); var f = e.target, b = f.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Creating…';
-      api('planNewProject', { name: f.name.value, client: f.client.value, site: f.site.value, phone: f.phone.value, email: f.email.value, summary: f.summary.value })
+      api('planNewProject', { name: f.name.value, client: f.client.value, site: f.site.value, phone: f.phone.value, email: f.email.value, summary: f.summary.value, bom: f.bom.checked, swms: f.swms.checked })
         .then(function (r) { toast('Project ' + r.ref + ' created'); location.hash = '#plan/' + r.core; })
         .catch(function (err) { fail(err); b.disabled = false; b.textContent = 'Create project and plan it →'; });
     };
@@ -460,7 +463,7 @@
     var pending = S.timer ? saveNow() : (S.q || Promise.resolve());
     return pending.then(function () { return api('planGet', { core: core }); }).then(function (d) {
       S.plan = null;
-      S.core = d.job.core; S.job = d.job; S.reminders = d.reminders; S.expensesEx = d.expensesEx; S.tab = tab; S.bomOn = !d.champ || d.champ.bom !== false; if (!S.bomOn && S.tab === 'bom') S.tab = 'overview';
+      S.core = d.job.core; S.job = d.job; S.reminders = d.reminders; S.expensesEx = d.expensesEx; S.tab = tab; S.mods = { bom: !d.champ || d.champ.bom !== false, swms: !d.champ || d.champ.swms !== false }; if (S.mods[S.tab] === false) S.tab = 'overview';
       if (!d.plan) return chooser();
       S.plan = normalise(d.plan); S.rev = d.plan.rev; S.chain = null; S.away = false; S.bench = d.bench || null; S.isTest = !!d.test;
       loadChain();
@@ -995,13 +998,14 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board']].concat(S.bomOn === false ? [] : [['bom', '🧱 BOM']]).concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Project Intelligence']]);
-    if (S.bomOn === false && S.tab === 'bom') S.tab = 'overview';
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Project Intelligence']]);
+    var MODS = S.mods || {}; tabs = tabs.filter(function (t) { return MODS[t[0]] !== false; });   // GKH Project Champ: optional modules switched off
+    if (MODS[S.tab] === false) S.tab = 'overview';
     var sub = !!(M.me && M.me.scope), hide = sub ? ' style="display:none"' : '';   // v91: a sub-contractor signed in to this project
     V().innerHTML = (sub ? '<div class="plan-subbie">👷 Signed in as a sub-contractor (' + esc(M.me.name || M.me.user) + ') for project <b>' + esc(S.job.ref) + '</b>. ' + ((M.me.mods || {}).projects === 'edit' ? 'You can update this project.' : 'View only.') + '</div>' : '') +
       '<div class="row" style="margin-bottom:12px">' + (sub ? '' : '<a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>') +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
-      (sub ? '' : '<label class="bom-switch" title="Bill of Materials: switch it off for projects that have no materials (IT, consulting, ESG…)"><input type="checkbox" id="bomSwitch"' + (S.bomOn === false ? '' : ' checked') + '><span class="bom-slider"></span>🧱 BOM</label>') + '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote"' + hide + ' title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel"' + hide + ' title="Delete this project and everything in it">🗑 Delete project</button></div>' +
+      (sub ? '' : '<span class="mod-wrap"><button type="button" class="btn btn-sm mod-btn" id="modBtn" aria-haspopup="true" aria-expanded="false" title="Switch optional modules on or off for this project">⚙ Modules <small>' + ['bom', 'swms'].filter(function (m) { return (S.mods || {})[m] !== false; }).map(function (m) { return m.toUpperCase(); }).join(' · ') + '</small></button></span>') + '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote"' + hide + ' title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel"' + hide + ' title="Delete this project and everything in it">🗑 Delete project</button></div>' +
       '<div id="planChain"></div>' +
       '<div class="grid pkpis">' +
         mini('Scope', R.pct + '% complete', R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8)) +
@@ -1026,10 +1030,27 @@
         if (ok) { S.plan = null; S.core = ''; location.hash = '#portfolio'; }
       });
     };
-    if ($('#bomSwitch')) $('#bomSwitch').onchange = function () {   // GKH Project Champ: Bill of Materials on or off
-      var on = this.checked, box = this; box.disabled = true;
-      api('planBomSet', { core: S.core, on: on }).then(function () { S.bomOn = on; if (!on && S.tab === 'bom') S.tab = 'overview'; toast(on ? '🧱 Bill of Materials switched on' : 'Bill of Materials switched off for this project'); render(); })
-        .catch(function (e) { box.checked = !on; box.disabled = false; fail(e); });
+    if ($('#modBtn')) $('#modBtn').onclick = function (e) {   // GKH Project Champ: optional modules (BOM, SWMS) on or off
+      e.stopPropagation();
+      var btn = this, old = document.getElementById('modPop'); if (old) { old.remove(); btn.setAttribute('aria-expanded', 'false'); return; }
+      var L = [['bom', '🧱 Bill of Materials (BOM)', 'Materials costed before work starts, linked to stock'], ['swms', '🦺 SWMS', 'Safe Work Method Statements for high-risk construction work']];
+      var pop = document.createElement('div'); pop.id = 'modPop'; pop.className = 'mod-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Modules');
+      pop.innerHTML = '<b>Modules for this project</b>' + L.map(function (m) {
+        return '<label class="mod-row"><span><b>' + m[1] + '</b><small>' + m[2] + '</small></span><span class="bom-switch"><input type="checkbox" data-mod="' + m[0] + '"' + ((S.mods || {})[m[0]] === false ? '' : ' checked') + '><span class="bom-slider"></span></span></label>';
+      }).join('') + '<small class="muted">Off hides the tab for this project. Nothing is deleted: switch it back on and it is all still there.</small>';
+      btn.parentNode.appendChild(pop); btn.setAttribute('aria-expanded', 'true');
+      var shut = function (ev) { if (!pop.contains(ev.target) && ev.target !== btn) { pop.remove(); btn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', shut); } };
+      setTimeout(function () { document.addEventListener('click', shut); }, 0);
+      pop.querySelectorAll('[data-mod]').forEach(function (box) {
+        box.onchange = function () {
+          var mod = box.getAttribute('data-mod'), on = box.checked; box.disabled = true;
+          api('planModuleSet', { core: S.core, mod: mod, on: on }).then(function () {
+            S.mods = S.mods || {}; S.mods[mod] = on; if (!on && S.tab === mod) S.tab = 'overview';
+            toast((mod === 'bom' ? '🧱 Bill of Materials' : '🦺 SWMS') + (on ? ' switched on' : ' switched off for this project'));
+            document.removeEventListener('click', shut); render();
+          }).catch(function (err) { box.checked = !on; box.disabled = false; fail(err); });
+        };
+      });
     };
     $('#planBase').onclick = function () {
       M.confirmBox(p.baseline ? 'Re-set the baseline?' : 'Set the baseline?', 'Saves today\'s planned dates and costs so you can see later how far the job moved (PMI baseline). ' + (p.baseline ? 'The old baseline from ' + M.day(p.baseline.at) + ' is replaced.' : ''), 'Set baseline').then(function (ok) {

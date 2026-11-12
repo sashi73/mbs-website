@@ -211,16 +211,31 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   const left = await (await api('planPipelineList', { today: new Date().toISOString().slice(0, 10) })).json();
   ok('Delete', 'bulk delete removed both, kept the rest', !left.cards.some((c) => extra.includes(c.core)) && left.cards.some((c) => c.core === core), left.cards.map((c) => c.name).join(', '));
 
-  // ---- BOM on/off slider ----
-  await p.goto(`${BASE}/admin/#plan/${core}/overview`); await p.reload(); await p.waitForSelector('#bomSwitch', { timeout: 8000 }).catch(() => {});
-  ok('BOM', 'BOM tab and slider shown (on by default)', (await p.isChecked('#bomSwitch').catch(() => false)) && (await p.$$('[data-tab=bom],[data-ptab=bom]')).length + ((await p.content()).includes('🧱 BOM</') ? 1 : 0) > 0);
-  await p.click('.bom-switch'); await sleep(1500);
-  r = await api('planGet', { core });
-  ok('BOM', 'switching the slider off is saved', (await r.json()).champ.bom === false);
-  ok('BOM', 'BOM tab is hidden when off', !(await p.$$eval('.ptabs a, .ptabs button, [data-tab]', (as) => as.some((a) => /BOM/.test(a.textContent)))));
-  await p.click('.bom-switch'); await sleep(1500);
-  r = await api('planGet', { core });
-  ok('BOM', 'switching it back on is saved', (await r.json()).champ.bom === true);
+  // ---- ⚙ Modules: BOM and SWMS on/off ----
+  const tabNames = () => p.$$eval('a.tab', (as) => as.map((a) => a.textContent));
+  await p.goto(`${BASE}/admin/#plan/${core}/overview`); await p.reload(); await p.waitForSelector('#modBtn', { timeout: 8000 }).catch(() => {});
+  ok('Modules', 'BOM and SWMS tabs on by default', (await tabNames()).some((t) => /BOM/.test(t)) && (await tabNames()).some((t) => /SWMS/.test(t)));
+  await p.click('#modBtn');
+  ok('Modules', '⚙ Modules opens sliders for BOM and SWMS', (await p.$$('#modPop [data-mod]')).length === 2);
+  await p.click('#modPop .mod-row:has([data-mod=swms]) .bom-slider'); await sleep(1500);
+  r = await api('planGet', { core }); let ch = (await r.json()).champ;
+  ok('Modules', 'switching SWMS off is saved, BOM untouched', ch.swms === false && ch.bom === true, JSON.stringify(ch));
+  ok('Modules', 'SWMS tab hidden when off', !(await tabNames()).some((t) => /SWMS/.test(t)));
+  await p.click('#modBtn'); await p.click('#modPop .mod-row:has([data-mod=bom]) .bom-slider'); await sleep(1500);
+  r = await api('planGet', { core }); ch = (await r.json()).champ;
+  ok('Modules', 'BOM off too, and its tab hidden', ch.bom === false && !(await tabNames()).some((t) => /BOM/.test(t)));
+  ok('Modules', 'header shows which modules are on', !/BOM|SWMS/.test(await p.textContent('#modBtn small')));
+  await api('planModuleSet', { core, mod: 'bom', on: true }); await api('planModuleSet', { core, mod: 'swms', on: true });
+  r = await api('planGet', { core }); ch = (await r.json()).champ;
+  ok('Modules', 'switching back on restores both', ch.bom === true && ch.swms === true);
+  await p.goto(`${BASE}/admin/#projects/new`); await p.reload(); await p.waitForSelector('#champNew');
+  await p.fill('#champNew [name=name]', 'IT rollout'); await p.fill('#champNew [name=client]', 'Finance');
+  await p.click('#champNew .mod-row:has([name=bom]) .bom-slider'); await p.click('#champNew .mod-row:has([name=swms]) .bom-slider');
+  await p.click('#champNew button[type=submit]'); await p.waitForFunction(() => /#plan\//.test(location.hash), null, { timeout: 8000 }).catch(() => {});
+  const itCore = decodeURIComponent(p.url().split('#plan/')[1] || '').split('/')[0];
+  r = await api('planGet', { core: itCore }); ch = r.ok() ? (await r.json()).champ : {};
+  ok('Modules', 'New project form: BOM and SWMS switched off at creation', ch.bom === false && ch.swms === false, JSON.stringify(ch));
+  await api('planProjectDelete', { core: itCore });
 
   // ---- Champ chat (console) ----
   await p.goto(`${BASE}/admin/#portfolio`); await sleep(800);

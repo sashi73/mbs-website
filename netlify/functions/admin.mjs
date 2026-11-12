@@ -11,7 +11,7 @@ import { parseWhen, whenText } from '../lib/calendar.mjs';
 import { tradeCode } from '../lib/store.mjs';
 import { acctGet, acctPost } from '../lib/admin-acct.mjs';
 import { sqlPost } from '../lib/admin-sql.mjs';
-import { planPost, get as getPlan } from '../lib/plan.mjs';
+import { planPost, get as getPlan, setModule, forgetModules } from '../lib/plan.mjs';
 import { invPost } from '../lib/inventory.mjs';
 import { custPost } from '../lib/admin-cust.mjs';
 import { planQuotePost } from '../lib/plan-quote.mjs';
@@ -278,7 +278,7 @@ async function handle(req, context) {
         if (plan) await planPost('planDelete', { core: job.core }, { who, by, audit: null }).catch(() => {});
         await J.removeJob(job.core);
         for (const k of ['champ-phases']) await kv.update(k, (cur) => { const m = { ...((cur && cur.map) || {}) }; delete m[job.core]; return { map: m }; }, () => ({ map: {} })).catch(() => {});
-        await kv.update('champ-opts', (cur) => { const off = { ...((cur && cur.bomOff) || {}) }; delete off[job.core]; return { ...(cur || {}), bomOff: off }; }, () => ({ bomOff: {} })).catch(() => {});
+        await forgetModules(job.core).catch(() => {});
         const label = (plan && plan.name) || job.service || job.core;
         await A.audit(who, `${J.refFor(job)}: project deleted ("${label}")`);
         return out(200, { ok: true, name: label });
@@ -293,6 +293,8 @@ async function handle(req, context) {
           summary: clean(body.summary, 1500), source: 'Project Champ' }, by);
         const r = await J.setStage(core, 'won', by, {});
         const job = (r && r.job) || (await J.find(core));
+        if (body.bom === false) await setModule(core, 'bom', false);     // optional modules chosen on the form
+        if (body.swms === false) await setModule(core, 'swms', false);
         await A.audit(who, `${J.refFor(job)}: project created (${pname})`);
         return out(200, { core, ref: J.refFor(job) });
       }
