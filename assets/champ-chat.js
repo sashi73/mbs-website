@@ -48,7 +48,8 @@
     greetIn: 'Greetings! I\u2019m Champ 👋 I\u2019ll speak with you in {lang}.',
     switchTip: 'You can always switch to English or any other language by saying “switch to …”.',
     sorry: 'Sorry, I don\u2019t speak that language yet. Let\u2019s keep to English.',
-    askName: 'Lovely! What is your name?', skipTip: '(You can skip any question.)',
+    askName: 'Lovely! What is your name?', skipTip: 'Say “skip” to skip any question.', skipWord: 'skip', skipLang: 'Or say “skip” to carry on in English.',
+    micTip: '🎤 Tip: switch on your microphone and just talk to me. Say “Hey Champ” any time to wake me up.', micOn: '🎤 Turn on microphone', micReady: 'Microphone on. I\u2019m listening: just speak after each question.',
     askPhone: 'Nice to meet you, {name}! Can I have your phone number, with your country code? For example +61 412 345 678.',
     askPhoneNo: 'Can I have your phone number, with your country code? For example +61 412 345 678.',
     badPhone: 'That doesn\u2019t look like a phone number with a country code. Please try again, for example +61 412 345 678, or tap Skip.',
@@ -60,7 +61,8 @@
     yes: 'Yes', no: 'No', yesPlease: 'Yes, please', noThanks: 'No, thanks', skip: 'Skip',
     sent: 'Done! Your welcome package is on its way to {email}.',
     noted: 'Noted! The GKH team will send your welcome package to {email} shortly.',
-    thanksName: 'Thank you, {name}! How can I help you today?', thanks: 'Thank you! How can I help you today?',
+    thanksName: 'Thank you, {name}! That\u2019s all I needed. Feel free to ask me any question about Project Champ, or about project, program and portfolio management.',
+    thanks: 'Thank you! That\u2019s all I needed. Feel free to ask me any question about Project Champ, or about project, program and portfolio management.',
     back: 'Welcome back, {name}! 👋 How can I help you today?', forgot: 'Done. I have forgotten your details.' };
   var vis = {}; try { vis = JSON.parse(ls('champVisitor') || '{}') || {}; } catch (e) { vis = {}; }
   function newId() { var a = new Uint8Array(12); try { crypto.getRandomValues(a); } catch (e) { for (var i = 0; i < 12; i++) a[i] = Math.random() * 256; } return 'v' + Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
@@ -191,15 +193,15 @@
       box.querySelector('.cc-menubtn').title = T(UI.menu).replace('☰ ', '');
     }
     function stopVoice() { if (audio) { try { audio.pause(); } catch (e) {} audio = null; } speakingIdx = -1; if (speakingBtn) { speakingBtn.classList.remove('on'); speakingBtn.textContent = T(UI.listen); speakingBtn = null; } }
-    function speak(text, L, b, idx) {
-      stopVoice(); if (!voiceOk || NOVOICE[L]) return;
+    function speak(text, L, b, idx, done) {
+      stopVoice(); if (!voiceOk || NOVOICE[L]) { if (done) done(); return; }
       speakingIdx = idx == null ? -1 : idx;
       if (b) { speakingBtn = b; b.classList.add('on'); b.textContent = T(UI.stop); }
       fetch('/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text, lang: L }) })
         .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { if (r.status === 503) { voiceOk = false; log.querySelectorAll('.cc-say').forEach(function (x) { x.remove(); }); box.querySelector('.cc-voice').hidden = true; } throw new Error(j.error || 'Voice unavailable'); }); return r.blob(); })
-        .then(function (bl) { if (b && speakingBtn !== b) return; audio = new Audio(URL.createObjectURL(bl)); audio.onended = stopVoice; return audio.play(); })
+        .then(function (bl) { if (b && speakingBtn !== b) return; audio = new Audio(URL.createObjectURL(bl)); audio.onended = function () { stopVoice(); if (done) done(); }; return audio.play(); })
         .catch(function (e) {
-          stopVoice();
+          stopVoice(); if (done) done();
           if (e && e.name === 'NotAllowedError') return;   // the browser wants a click first: the 🔊 Listen button is there for that
           bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err');
         });
@@ -279,7 +281,7 @@
             busy = false; speakingIdx = voiceOn || spoken ? i : -1; switchLang(j.lang, false, after); return;
           }
           var bb = bubble('bot', md(j.reply)), row = tools(bb, i);
-          if (voiceOn || spoken) speak(j.reply, L, row.querySelector('.cc-say'), i);
+          if (voiceOn || spoken) speak(j.reply, L, row.querySelector('.cc-say'), i, spoken ? listenNext : null);
           if (after) setTimeout(after, 0);
         })
         .catch(function (e) { log.querySelectorAll('.cc-wait').forEach(function (x) { x.remove(); }); msgs.pop(); ss('champChat', JSON.stringify(msgs)); bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err'); })
@@ -292,15 +294,27 @@
       var old = log.querySelector('.cc-obb'); if (old) old.remove();
       msgs.push({ role: 'assistant', content: text, lang: L || curL(), ob: true }); ss('champChat', JSON.stringify(msgs.slice(-24)));
       var i = msgs.length - 1, row = tools(bubble('bot', md(text)), i);
-      if (obVoice()) speak(text, L || curL(), row.querySelector('.cc-say'), i);
+      if (obVoice()) speak(text, L || curL(), row.querySelector('.cc-say'), i, listenNext); else listenNext();
+    }
+    // hands-free: once the microphone is on, Champ listens after each of its questions (and after answering a spoken question)
+    function handsFree() { return ls('champHandsFree') === '1'; }
+    function listenNext() { if (handsFree() && !box.hidden && !busy && !(rec && rec.state === 'recording')) setTimeout(function () { if (!box.hidden && !busy && !(rec && rec.state === 'recording')) startRec(true); }, 250); }
+    function micOn() {
+      if (!navigator.mediaDevices) { bubble('bot', '<p>' + esc(T(UI.micBlocked)) + '</p>', 'cc-err'); return; }
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (st) {
+        st.getTracks().forEach(function (t) { t.stop(); });
+        ls('champHandsFree', '1'); wake.start();
+        var o = log.querySelector('.cc-obb'); if (o) o.remove();
+        bubble('bot', '<p>' + esc(T(OB.micReady)) + '</p>', 'cc-note-mic'); obButtons(); startRec(true);
+      }).catch(function () { bubble('bot', '<p>' + esc(T(UI.micBlocked)) + '</p>', 'cc-err'); });
     }
     function obUser(t) { var m = log.querySelector('.cc-menu'); if (m) m.remove(); msgs.push({ role: 'user', content: t, ob: true }); ss('champChat', JSON.stringify(msgs.slice(-24))); bubble('user', '<p>' + esc(t) + '</p>'); ta.value = ''; ta.style.height = ''; }
     function obPrompt() {
       var st = vis.step;
-      if (st === 'lang') obSay(OB.greet + '\n' + OB.switchTip, 'en');
+      if (st === 'lang') obSay(OB.greet + '\n' + OB.switchTip + ' ' + OB.skipLang + (handsFree() ? '' : '\n' + OB.micTip), 'en');
       else if (st === 'name') obSay(tr(OB.askName) + ' ' + tr(OB.skipTip));
-      else if (st === 'phone') obSay(tr(vis.name ? OB.askPhone : OB.askPhoneNo));
-      else if (st === 'email') obSay(tr(OB.askEmail));
+      else if (st === 'phone') obSay(tr(vis.name ? OB.askPhone : OB.askPhoneNo) + ' ' + tr(OB.skipTip));
+      else if (st === 'email') obSay(tr(OB.askEmail) + ' ' + tr(OB.skipTip));
       else if (st === 'confirm') obSay(tr(OB.confirmEmail));
       else if (st === 'welcome') obSay(tr(OB.askWelcome));
       obButtons();
@@ -309,16 +323,17 @@
       var old = log.querySelector('.cc-obb'); if (old) old.remove();
       if (!obActive()) return;
       var st = vis.step, btns = [];
-      if (st === 'lang') btns = LANGS.filter(function (l) { return l[0] !== 'auto'; }).map(function (l) { return ['L:' + l[0], l[1]]; }).concat([['skip', 'Skip (English)']]);
+      if (st === 'lang') btns = LANGS.filter(function (l) { return l[0] !== 'auto'; }).map(function (l) { return ['L:' + l[0], l[1]]; });
       else if (st === 'confirm') btns = [['yes', '✓ ' + T(OB.yes)], ['no', '✎ ' + T(OB.no)]];
       else if (st === 'welcome') btns = [['yes', '🎁 ' + T(OB.yesPlease)], ['no', T(OB.noThanks)]];
-      else btns = [['skip', T(OB.skip) + ' ›']];
+      if (!handsFree()) btns.push(['mic', st === 'lang' ? OB.micOn : T(OB.micOn)]);
+      if (!btns.length) return;
       var d = bubble('bot', '<div class="cc-ob-btns' + (st === 'lang' ? ' cc-ob-langs' : '') + '">' + btns.map(function (b) { return '<button type="button" data-ob="' + esc(b[0]) + '">' + esc(b[1]) + '</button>'; }).join('') + '</div>', 'cc-obb');
       d.querySelectorAll('[data-ob]').forEach(function (b) {
         b.onclick = function () {
           var v = b.getAttribute('data-ob');
           if (v.indexOf('L:') === 0) { obUser(b.textContent); chooseLang(v.slice(2)); }
-          else if (v === 'skip') obSkip();
+          else if (v === 'mic') micOn();
           else { obUser(b.textContent.replace(/^[✓✎🎁]\s*/, '')); obAnswer(v === 'yes' ? 'yes' : 'no', false, '', true); }
         };
       });
@@ -333,8 +348,12 @@
       vis.step = 'done'; saveVis();
       obSay(tr(vis.name ? OB.thanksName : OB.thanks)); showMenu();
     }
-    function obSkip() {
-      var st = vis.step; obUser(st === 'lang' ? 'Skip (English)' : T(OB.skip));
+    function isSkip(t) {
+      t = String(t || '').trim().toLowerCase().replace(/[.!。！]+$/, '');
+      return /^(skip|skip it|skip this|pass|next|no thanks|lewati|langkau|abaikan|தவிர்|தவிர்க்கவும்|அடுத்து|跳过|下一个|छोड़ें|छोड़ो|आगे|تخطى|تخطي|رد|رد شو|بگذر|bỏ qua|ข้าม|laktawan|スキップ|次|건너뛰기|다음|saltar|omitir|passer|suivant|überspringen|weiter|pular|próximo|ruka|ruka swali|simbuka)$/.test(t) || (t && t === T(OB.skipWord).toLowerCase());
+    }
+    function obSkip(shown) {
+      var st = vis.step; if (!shown) obUser(T(OB.skipWord));
       if (st === 'lang') { obSave({ skip: 'lang' }); chooseLang('en'); return; }
       obSave({ skip: st === 'confirm' ? 'email' : st });
       if (st === 'name') vis.step = 'phone';
@@ -346,6 +365,7 @@
     // true when the onboarding took the answer
     function obAnswer(text, spoken, heard, shown) {
       var st = vis.step, t = String(text || '').trim(); if (!t) return true;
+      if (isSkip(t) && st !== 'confirm' && st !== 'welcome') { if (!shown) obUser(t); obSkip(true); return true; }
       var question = /[?？؟]\s*$/.test(t) && st !== 'lang';
       if (question) { ask(t, spoken, function () { if (obActive()) obPrompt(); }); return true; }
       if (!shown) obUser(t);
@@ -434,7 +454,10 @@
     function micState(st) { mic.classList.toggle('on', st === 'rec'); mic.classList.toggle('busy', st === 'busy'); mic.textContent = st === 'busy' ? '⏳' : '🎤'; ta.placeholder = st === 'rec' ? T(UI.listening) : st === 'busy' ? T(UI.hearing) : T(UI.ph); }
     function stopRec() { if (rec && rec.state !== 'inactive') rec.stop(); }
     function cleanRec() { clearTimeout(recTimer); if (vad) { try { vad.ctx.close(); } catch (e) {} vad = null; } if (recStream) recStream.getTracks().forEach(function (t) { t.stop(); }); recStream = null; }
-    function startRec() {
+    var recQuiet = false;
+    function startRec(quiet) {
+      if (rec && rec.state === 'recording') return;
+      recQuiet = !!quiet; wake.pause();
       if (!navigator.mediaDevices || !window.MediaRecorder) { bubble('bot', '<p>' + esc(T(UI.micBlocked)) + '</p>', 'cc-err'); return; }
       stopVoice();
       navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function (stream) {
@@ -454,14 +477,17 @@
             an.getByteTimeDomainData(buf); var sum = 0; for (var i = 0; i < buf.length; i++) { var x = (buf[i] - 128) / 128; sum += x * x; }
             var rms = Math.sqrt(sum / buf.length), now = Date.now();
             if (rms > 0.035) { spoke = true; quietSince = 0; } else if (spoke) { quietSince = quietSince || now; if (now - quietSince > 1400) return stopRec(); }
-            if (!spoke && now - t0 > 8000) return stopRec();   // nothing said
+            if (!spoke && now - t0 > (recQuiet ? 9000 : 8000)) { recNothing = true; return stopRec(); }   // nothing said
             requestAnimationFrame(tick);
           })();
         } catch (e) {}
-      }).catch(function () { micState(''); bubble('bot', '<p>' + esc(T(UI.micBlocked)) + '</p>', 'cc-err'); });
+      }).catch(function () { micState(''); wake.resume(); bubble('bot', '<p>' + esc(T(UI.micBlocked)) + '</p>', 'cc-err'); });
     }
+    var recNothing = false;
     function send(blob, type) {
-      if (!blob.size || blob.size < 1200) { micState(''); bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); return; }
+      var quiet = recQuiet, nothing = recNothing; recNothing = false; wake.resume();
+      if (nothing && quiet) { micState(''); return; }   // hands-free and nobody spoke: stop listening quietly ("Hey Champ" wakes it again)
+      if (!blob.size || blob.size < 1200) { micState(''); if (!quiet) bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); return; }
       micState('busy');
       fetch('/.netlify/functions/stt?langs=' + (sttAny() ? 'any' : encodeURIComponent(sttLangs().join(','))), { method: 'POST', headers: { 'Content-Type': type }, body: blob })
         .then(function (r) { return r.json().catch(function () { return null; }).then(function (j) {
@@ -472,14 +498,53 @@
         }); })
         .then(function (j) {
           micState('');
-          if (!j.text) { bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); return; }
+          if (!j.text) { if (!quiet) bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); else listenNext(); return; }
           if (obActive()) { handle(j.text, true, j.lang); return; }   // the welcome questions: no language jumps on a phone number
           if (j.lang && j.lang !== lang) switchLang(j.lang);   // you spoke Tamil: Champ is now in Tamil
           handle(j.text, true, j.lang);
         })
         .catch(function (e) { micState(''); bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err'); });
     }
-    mic.onclick = function () { if (rec && rec.state === 'recording') stopRec(); else if (!mic.classList.contains('busy')) startRec(); };
+    // ---- "Hey Champ": the browser's own speech recognition listens for the wake words (Chrome, Edge, Safari) ----
+    var wake = (function () {
+      var SR = window.SpeechRecognition || window.webkitSpeechRecognition, r = null, on = false, paused = false;
+      var WORDS = /\b(hey|hi|hello|ok|okay|hay)[\s,.!]*(champ|champs|chomp|champion|camp|shamp|chimp)\b/i;
+      function begin() {
+        if (!SR || !on || paused || document.hidden || r) return;
+        try {
+          r = new SR(); r.continuous = true; r.interimResults = true; r.lang = 'en-AU';
+          r.onresult = function (e) {
+            for (var i = e.resultIndex; i < e.results.length; i++) if (WORDS.test(e.results[i][0].transcript)) { heard(); return; }
+          };
+          r.onend = function () { r = null; if (on && !paused) setTimeout(begin, 400); };
+          r.onerror = function (e) { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') on = false; };
+          r.start();
+        } catch (e) { r = null; }
+      }
+      function stop() { if (r) { try { r.onend = null; r.abort(); } catch (e) {} r = null; } }
+      function heard() {
+        if (audio && !audio.paused) return;   // Champ talking about itself, not you
+        stop(); chime();
+        if (box.hidden) open(true);
+        setTimeout(function () { startRec(true); }, 350);
+      }
+      document.addEventListener('visibilitychange', function () { if (document.hidden) stop(); else begin(); });
+      return { supported: !!SR, start: function () { on = true; paused = false; begin(); }, pause: function () { paused = true; stop(); }, resume: function () { paused = false; setTimeout(begin, 600); } };
+    })();
+    function chime() {   // a soft two-note "I'm listening"
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext, c = new AC(), t = c.currentTime;
+        [880, 1318.5].forEach(function (f, i) { var o = c.createOscillator(), g = c.createGain(); o.frequency.value = f; g.gain.setValueAtTime(0.0001, t + i * 0.12); g.gain.exponentialRampToValueAtTime(0.18, t + i * 0.12 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.12 + 0.3); o.connect(g); g.connect(c.destination); o.start(t + i * 0.12); o.stop(t + i * 0.12 + 0.35); });
+        setTimeout(function () { c.close(); }, 900);
+      } catch (e) {}
+    }
+    if (where === 'site' && handsFree()) wake.start();
+    mic.onclick = function () {
+      if (rec && rec.state === 'recording') return stopRec();
+      if (mic.classList.contains('busy')) return;
+      if (where === 'site' && !handsFree()) { ls('champHandsFree', '1'); wake.start(); var o = log.querySelector('[data-ob="mic"]'); if (o) o.remove(); }   // you talk to Champ: it keeps listening after each answer
+      startRec();
+    };
     window.ChampEars = { send: send, langs: sttLangs };
 
     function open(on) {

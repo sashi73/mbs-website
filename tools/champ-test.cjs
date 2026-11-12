@@ -50,7 +50,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   let log = ''; srv.stdout.on('data', (d) => (log += d)); srv.stderr.on('data', (d) => (log += d));
   for (let i = 0; i < 60 && !/running/i.test(log); i++) await sleep(150);
 
-  const b = await chromium.launch({ executablePath: fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined });
+  const b = await chromium.launch({ executablePath: fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined, args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
   const ctx = await b.newContext({ viewport: { width: 1366, height: 900 } });
   await ctx.route(/images\.unsplash\.com|accounts\.google\.com/, (r) => r.abort());   // no internet in the test
   await ctx.addInitScript(() => { if (!/intro=1/.test(location.search)) try { sessionStorage.setItem('champIntroSeen', '1'); } catch (e) {} });   // the intro has its own checks
@@ -162,6 +162,22 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.fill('.cc-f textarea', 'What is a Gantt chart'); await p.keyboard.press('Enter'); await sleep(1500);
   ok('Welcome', 'Champ is told the visitor\u2019s name for its answers', /called Sashi/.test(global.CHAT_SYS || ''));
   ok('Welcome', 'phone and email never go to the AI', !/412 345|example\.com/.test(global.CHAT_SYS || '') && !/412 345|sashi@example/.test(JSON.stringify(global.CHAT_MSGS || '')));
+  // say "skip" (no Skip button), and the closing line
+  ok('Welcome', 'no Skip buttons during the questions', (await p.$$('[data-ob="skip"]')).length === 0);
+  await p.click('.cc-menubtn'); await sleep(300); await p.click('.cc-menu-list button:has-text("Introduce myself")'); await sleep(500);
+  ok('Welcome', 'Champ suggests switching the microphone on', /Hey Champ/.test(await p.textContent('.cc-log')) && (await p.$$('[data-ob="mic"]')).length === 1);
+  await p.click('.cc-ob-langs button:has-text("English")'); await sleep(1500);
+  ok('Welcome', 'each question says how to skip', /Say “skip” to skip any question\./.test(await p.textContent('.cc-log')));
+  // hands-free: switch the microphone on and Champ listens after its question, then again after the next one
+  await p.evaluate(() => { HTMLMediaElement.prototype.play = function () { var a = this; setTimeout(function () { a.dispatchEvent(new Event('ended')); }, 150); return Promise.resolve(); }; });
+  await p.click('[data-ob="mic"]'); await sleep(1200);
+  ok('Hands-free', 'microphone on: Champ starts listening for the answer by itself', await p.evaluate(() => document.querySelector('.cc-mic').classList.contains('on')) && /Microphone on/.test(await p.textContent('.cc-log')));
+  ok('Hands-free', 'the microphone button is gone once it is on', (await p.$$('[data-ob="mic"]')).length === 0);
+  await p.evaluate(() => { const m = document.querySelector('.cc-mic'); if (m.classList.contains('on')) m.click(); }); await sleep(2500);
+  await p.evaluate(() => localStorage.removeItem('champHandsFree'));
+  for (const w of ['skip', 'Skip.', 'skip']) { await p.fill('.cc-f textarea', w); await p.keyboard.press('Enter'); await sleep(900); }
+  const lgs = await p.textContent('.cc-log');
+  ok('Welcome', 'saying "skip" moves past name, phone and email', /Feel free to ask me any question/.test(lgs) && (await p.evaluate(() => window.ChampChat.visitor().step)) === 'done', lgs.slice(-200));
   await p.fill('.cc-f textarea', 'switch to Elvish'); await p.keyboard.press('Enter'); await sleep(1500);
   ok('Welcome', '"switch to" an unknown language: sorry, back to English', /don\u2019t speak that language/.test(await p.textContent('.cc-log')) && (await p.inputValue('.cc-lang')) === 'en');
   await p.reload(); await p.click('#champChatBtn'); await sleep(500);
