@@ -145,8 +145,8 @@
   .ci-cap{bottom:calc(9vh + 60px)}
 }
 body.ci-on .cc-btn,body.ci-on #champCtl{visibility:hidden}
-.ci-lang{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(212,175,55,.45);background:rgba(0,0,0,.35);border-radius:999px;padding:6px 8px 6px 14px;color:#F2D98B;font-size:15px}
-.ci-lang select{appearance:auto;background:transparent;border:0;color:#fff;font:700 14px 'Manrope',system-ui,sans-serif;padding:4px 6px;cursor:pointer;max-width:60vw}
+.ci-lang{display:inline-flex!important;flex-direction:row!important;align-items:center;margin:0;gap:8px;border:1px solid rgba(212,175,55,.45);background:rgba(0,0,0,.35);border-radius:999px;padding:6px 8px 6px 14px;color:#F2D98B;font-size:15px}
+.ci-lang select{appearance:auto;display:inline-block!important;width:auto!important;min-width:0;margin:0!important;background:transparent;border:0;color:#fff;font:700 14px 'Manrope',system-ui,sans-serif;padding:4px 6px;cursor:pointer;max-width:60vw}
 .ci-lang select option{color:#111;background:#fff}
 .ci-lang select:focus-visible{outline:2px solid #D4AF37;border-radius:6px}
 .ci .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
