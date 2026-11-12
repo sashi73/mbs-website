@@ -4,10 +4,10 @@
 // AZURE_STT_ENDPOINT can point at another regional endpoint if fast transcription moves.
 import { env, cors, json } from '../lib/shared.mjs';
 
-// our language codes → the locale Azure listens for
+// our language codes → the locale Azure listens for (pt-BR is refused by fast transcription in australiaeast; pt-PT works)
 export const LOCALES = {
   en: 'en-AU', ta: 'ta-IN', ms: 'ms-MY', id: 'id-ID', fa: 'fa-IR', zh: 'zh-CN', hi: 'hi-IN', ar: 'ar-AE', vi: 'vi-VN', th: 'th-TH',
-  tl: 'fil-PH', ja: 'ja-JP', ko: 'ko-KR', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', pt: 'pt-BR', sw: 'sw-KE'
+  tl: 'fil-PH', ja: 'ja-JP', ko: 'ko-KR', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', pt: 'pt-PT', sw: 'sw-KE'
 };
 const BACK = Object.fromEntries(Object.entries(LOCALES).map(([k, v]) => [v.split('-')[0], k]));
 const MAX_BYTES = 4 * 1024 * 1024;   // about 2 minutes of speech; a question is a few seconds
@@ -43,9 +43,10 @@ export default async (req, context) => {
   form.append('audio', new Blob([audio], { type }), 'question.' + ext);
   form.append('definition', JSON.stringify({ locales: langs.map((l) => LOCALES[l]), profanityFilterMode: 'Masked' }));
   let r, data;
+  const call = () => fetch(`${endpoint}/speechtotext/transcriptions:transcribe?api-version=2024-11-15`, { method: 'POST', headers: { 'Ocp-Apim-Subscription-Key': key }, body: form });
   try {
-    r = await fetch(`${endpoint}/speechtotext/transcriptions:transcribe?api-version=2024-11-15`, { method: 'POST', headers: { 'Ocp-Apim-Subscription-Key': key }, body: form });
-    data = await r.json().catch(() => ({}));
+    r = await call(); data = await r.json().catch(() => ({}));
+    if (r.status === 429) { await new Promise((ok) => setTimeout(ok, 1200)); r = await call(); data = await r.json().catch(() => ({})); }   // busy for a moment: one retry
   } catch (e) {
     console.log(`Champ ears: could not reach Azure (${e.message})`);
     return json(502, { error: 'Voice input is unavailable right now.' });
