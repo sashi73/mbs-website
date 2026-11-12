@@ -41,4 +41,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 30 | 1.0.30| 2026-11-13 08:45| GKH-Project-Champ| `9620768` | Home: 'Ask Champ' section for project questions (answered first, then the welcome); Contact: enquiry form with the PDPA notice and consent,  |
 | 31 | 1.0.31| 2026-11-13 08:46| GKH-Project-Champ| `8848140` | Contact form: thank-you box hidden until sent; ticks and radio buttons beside their labels |
 | 32 | 1.0.32| 2026-11-13 08:53| GKH-Project-Champ| `ab89012` | Voice: listening that starts by itself now hears you (sound meter resumed and tuned to the room, never drops a recording silently); short sp |
-| 33 | 1.0.33 | 2026-11-13 09:17 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 33 | 1.0.33| 2026-11-13 09:17| GKH-Project-Champ| `ca07b38` | Champ: chat capped at 2000 tokens per question (shorter instructions, recent conversation trimmed to fit, 450-token answers) and a more natu |
+| 34 | 1.0.34 | 2026-11-13 09:25 | GKH-Project-Champ | _this commit_ | _see git log_ |

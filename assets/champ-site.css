@@ -101,3 +101,31 @@
 .c-enq-form .c-enq-pref label,.c-enq-form .c-enq-tick{display:flex!important;flex-direction:row!important;align-items:flex-start!important}
 .c-enq-form .c-enq-tick input,.c-enq-form .c-enq-pref input{display:inline-block!important;order:-1;width:17px!important;height:17px!important;min-height:0!important;padding:0!important;margin:2px 0 0!important}
 .c-enq-pref{display:flex!important;flex-direction:row!important}
+/* about: selected work and the team */
+.c-work{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.c-work-i{background:#fff;border:1px solid #D8D2C2;border-radius:16px;padding:20px 22px;display:flex;flex-direction:column;gap:6px}
+.c-work-i span{font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#7A5E12}
+.c-work-i b{font-size:18px;color:#0A0A0A}
+.c-work-i p{margin:0;color:#4A4639;font-size:14.5px;line-height:1.55}
+.c-person{display:grid;grid-template-columns:minmax(200px,300px) 1fr;gap:clamp(24px,4vw,56px);align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:clamp(22px,3.5vw,44px)}
+.c-person-photo{position:relative;aspect-ratio:4/5;border-radius:18px;overflow:hidden;background:radial-gradient(circle at 30% 25%,#2A2414,#0E0C08);display:grid;place-items:center}
+.c-person-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.c-person-photo span{font:800 clamp(44px,6vw,72px)/1 'Manrope',system-ui,sans-serif;letter-spacing:.06em;color:transparent;background:linear-gradient(180deg,#F2D98B,#B8901F);-webkit-background-clip:text;background-clip:text}
+.c-person-body{display:flex;flex-direction:column;gap:14px;min-width:0}
+.c-person-body h3{margin:0;font-size:clamp(26px,3vw,36px)}
+.c-person-role{margin:0;color:var(--gold);font-weight:700;font-size:15px}
+.c-person-tags{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.c-person-tags li{border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:12.5px;font-weight:700;color:var(--text)}
+.c-person-body > p{margin:0;color:var(--muted);font-size:16px;line-height:1.7}
+.c-person-facts{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;margin:6px 0 0;font-size:14.5px}
+.c-person-facts dt{color:var(--muted);font-weight:700}
+.c-person-facts dd{margin:0;color:var(--text)}
+.c-person-facts a{color:var(--gold)}
+@media (max-width:760px){.c-person{grid-template-columns:1fr}.c-person-photo{max-width:260px}}
+/* six menu items + the controls: keep each on one line */
+@media (min-width:901px){.menu a{white-space:nowrap}.menu{gap:clamp(14px,1.6vw,30px)}.menu a{font-size:clamp(13.5px,1.05vw,15px)}}
+@media (min-width:901px) and (max-width:1140px){
+  header .btn-gold.btn-sm{display:none!important}
+  #champCtl .ct-lang,#champCtl button{white-space:nowrap}
+  .brand,.brand *{white-space:nowrap}
+}
