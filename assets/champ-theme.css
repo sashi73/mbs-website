@@ -267,3 +267,6 @@ html.i18n-busy body::after{content:"Translating…";position:fixed;top:14px;left
 .cc-go{align-self:flex-start;border:0;border-radius:999px;padding:10px 20px;background:linear-gradient(135deg,#F2D98B,#C9A227);color:#14110a;font:800 14px 'Manrope',system-ui,sans-serif;cursor:pointer}
 .cc-go[disabled]{opacity:.6;cursor:wait}
 @media (max-width:380px){.cc-pf2{grid-template-columns:1fr}}
+/* "Hey Champ" is listening: a small ear on the Ask Champ button */
+.cc-btn.cc-wake::after{content:'';position:absolute;top:-3px;right:-3px;width:12px;height:12px;border-radius:50%;background:#34D399;box-shadow:0 0 0 3px rgba(52,211,153,.25);animation:ccWake 2s ease-in-out infinite}
+@keyframes ccWake{50%{box-shadow:0 0 0 7px rgba(52,211,153,0)}}

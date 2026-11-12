@@ -44,11 +44,11 @@
   var NOVOICE = { rw: 1 };
   var busy = false;
   // ---- the visitor: Champ's welcome questions (language → name → phone → email → confirm → welcome package) ----
-  var OB = { greet: 'Greetings! I\u2019m Champ 👋 What language would you be most comfortable with?',
-    greetIn: 'Greetings! I\u2019m Champ 👋 I\u2019ll speak with you in {lang}.',
+  var OB = { greet: 'Greetings! I\u2019m Champ. What language would you be most comfortable with?', sayLang: 'Just say it, or tap one below.',
+    greetIn: 'Greetings! I\u2019m Champ. I\u2019ll speak with you in {lang}.',
     switchTip: 'You can always switch to English or any other language by saying “switch to …”.',
     sorry: 'Sorry, I don\u2019t speak that language yet. Let\u2019s keep to English.',
-    skipWord: 'skip', micTip: '🎤 Tip: switch on your microphone and just talk to me. Say “Hey Champ” any time to wake me up.', micOn: '🎤 Turn on microphone',
+    skipWord: 'skip', micTip: 'Tip: switch on your microphone and just talk to me. Say “Hey Champ” any time to wake me up.', micOn: '🎤 Turn on microphone',
     micReady: 'Microphone on. I’m listening.',
     formIntro: 'Lovely! Please type your details in the form below: typing is quicker and more accurate than voice.', skipForm: 'Prefer not to? Just type or say “skip”.',
     formTitle: 'Your details', fFirst: 'First name', fLast: 'Last name', fPhone: 'Phone (with country code)', fEmail: 'Email', fWhy: 'Reason for your visit', fWhyPick: 'Choose one…',
@@ -65,23 +65,30 @@
     noted: 'Noted! The GKH team will send your welcome package to {email} shortly.',
     thanksName: 'Thank you, {name}! That\u2019s all I needed. Feel free to ask me any question about Project Champ, or about project, program and portfolio management.',
     thanks: 'Thank you! That\u2019s all I needed. Feel free to ask me any question about Project Champ, or about project, program and portfolio management.',
-    back: 'Welcome back, {name}! 👋 How can I help you today?', forgot: 'Done. I have forgotten your details.' };
+    back: 'Welcome back, {name}! How can I help you today?', forgot: 'Done. I have forgotten your details.' };
   var vis = {}; try { vis = JSON.parse(ls('champVisitor') || '{}') || {}; } catch (e) { vis = {}; }
   function newId() { var a = new Uint8Array(12); try { crypto.getRandomValues(a); } catch (e) { for (var i = 0; i < 12; i++) a[i] = Math.random() * 256; } return 'v' + Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
   if (!vis.id) vis.id = newId();
   if (/^(name|phone|email|confirm)$/.test(vis.step || '')) vis.step = 'form';   // earlier builds asked one question at a time
   function saveVis() { ls('champVisitor', JSON.stringify(vis)); }
   saveVis();
-  var LNAMES = { en: ['english', 'inggeris', 'ingles', 'inglés', 'anglais', 'englisch'], ms: ['malay', 'melayu', 'bahasa melayu', 'malaysian'], id: ['indonesian', 'indonesia', 'bahasa indonesia'],
-    ta: ['tamil', 'தமிழ்'], zh: ['chinese', 'mandarin', '中文', '普通话', '汉语', '华语', '简体中文'], hi: ['hindi', 'हिन्दी', 'हिंदी'], ar: ['arabic', 'العربية', 'عربي', 'عربية'],
-    fa: ['persian', 'farsi', 'فارسی', 'پارسی'], vi: ['vietnamese', 'tiếng việt', 'tieng viet'], th: ['thai', 'ไทย', 'ภาษาไทย'], tl: ['filipino', 'tagalog'], ja: ['japanese', '日本語', 'にほんご'],
+  var LNAMES = { en: ['english', 'inggeris', 'ingles', 'inglés', 'anglais', 'englisch'], ms: ['malay', 'melayu', 'malayu', 'bahasa melayu', 'bahasa malaysia', 'malaysian'], id: ['indonesian', 'indonesia', 'bahasa indonesia'],
+    ta: ['tamil', 'thamil', 'tamizh', 'தமிழ்'], zh: ['chinese', 'mandarin', '中文', '普通话', '汉语', '华语', '简体中文'], hi: ['hindi', 'हिन्दी', 'हिंदी'], ar: ['arabic', 'العربية', 'عربي', 'عربية'],
+    fa: ['persian', 'farsi', 'parsi', 'فارسی', 'پارسی'], vi: ['vietnamese', 'tiếng việt', 'tieng viet'], th: ['thai', 'ไทย', 'ภาษาไทย'], tl: ['filipino', 'tagalog'], ja: ['japanese', '日本語', 'にほんご'],
     ko: ['korean', '한국어'], es: ['spanish', 'español', 'espanol', 'castellano'], fr: ['french', 'français', 'francais'], de: ['german', 'deutsch'], pt: ['portuguese', 'português', 'portugues'],
     sw: ['swahili', 'kiswahili'], rw: ['kinyarwanda', 'ikinyarwanda'] };
+  function near(a, b) {   // one letter off (an extra, a missing or a wrong letter)
+    if (Math.abs(a.length - b.length) > 1) return false;
+    var i = 0, j = 0, d = 0;
+    while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; continue; } if (++d > 1) return false; if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; } }
+    return d + (a.length - i) + (b.length - j) <= 1;
+  }
   function langFromText(t) {
     t = String(t || '').toLowerCase().replace(/[.,!?¿¡。、！？:;"“”'’()]/g, ' ').replace(/\s+/g, ' ').trim();
     if (!t || t.split(' ').length > 6) return '';
     var hit = '';
     Object.keys(LNAMES).forEach(function (k) { if (!hit && LNAMES[k].some(function (n) { return /[a-z]/.test(n) ? (' ' + t + ' ').indexOf(' ' + n + ' ') >= 0 : t.indexOf(n) >= 0; })) hit = k; });
+    if (!hit) t.split(' ').forEach(function (w) { if (hit || w.length < 5) return; Object.keys(LNAMES).forEach(function (k) { if (!hit && LNAMES[k].some(function (n) { return /^[a-z]+$/.test(n) && n.length >= 5 && near(w, n); })) hit = k; }); });
     return hit;
   }
   function yesNo(t) {
@@ -196,8 +203,11 @@
       box.querySelector('.cc-menubtn').title = T(UI.menu).replace('☰ ', '');
     }
     function stopVoice() { if (audio) { try { audio.pause(); } catch (e) {} audio = null; } speakingIdx = -1; if (speakingBtn) { speakingBtn.classList.remove('on'); speakingBtn.textContent = T(UI.listen); speakingBtn = null; } }
+    function sayable(t) {   // what the voice reads: no emoji, icons or markdown symbols
+      return String(t || '').replace(/[\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D\u20E3]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDFFF]/g, '').replace(/[*_#`>|~]+/g, ' ').replace(/[ \t]{2,}/g, ' ').trim();
+    }
     function speak(text, L, b, idx, done) {
-      stopVoice(); if (!voiceOk || NOVOICE[L]) { if (done) done(); return; }
+      stopVoice(); text = sayable(text); if (!voiceOk || NOVOICE[L] || !text) { if (done) done(); return; }
       speakingIdx = idx == null ? -1 : idx;
       if (b) { speakingBtn = b; b.classList.add('on'); b.textContent = T(UI.stop); }
       fetch('/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text, lang: L }) })
@@ -293,11 +303,11 @@
     // ---- Champ's welcome: greeting → language (voice or tap) → a typed form (Wonder Bird style, with the PDPA notice) → welcome pack yes/no (voice or tap) ----
     function curL() { return concrete(lang) ? lang : 'en'; }
     function obVoice() { return ls('champVoice') !== '0'; }
-    function obSay(text, L) {
+    function obSay(text, L, spoken) {
       var old = log.querySelector('.cc-obb'); if (old) old.remove();
       msgs.push({ role: 'assistant', content: text, lang: L || curL(), ob: true }); ss('champChat', JSON.stringify(msgs.slice(-24)));
       var i = msgs.length - 1, row = tools(bubble('bot', md(text)), i);
-      if (obVoice()) speak(text, L || curL(), row.querySelector('.cc-say'), i, listenNext); else listenNext();
+      if (obVoice()) speak(spoken || text, L || curL(), row.querySelector('.cc-say'), i, listenNext); else listenNext();
     }
     // hands-free: once the microphone is on, Champ listens after its questions (not while you type the form)
     function handsFree() { return ls('champHandsFree') === '1'; }
@@ -314,7 +324,7 @@
     function obUser(t) { var m = log.querySelector('.cc-menu:not(.cc-obb)'); if (m) m.remove(); msgs.push({ role: 'user', content: t, ob: true }); ss('champChat', JSON.stringify(msgs.slice(-24))); bubble('user', '<p>' + esc(t) + '</p>'); ta.value = ''; ta.style.height = ''; }
     function obPrompt() {
       var st = vis.step;
-      if (st === 'lang') obSay(OB.greet + '\n' + OB.switchTip + (handsFree() ? '' : '\n' + OB.micTip), 'en');
+      if (st === 'lang') obSay(OB.greet + '\n' + OB.switchTip + (handsFree() ? '' : '\n' + OB.micTip), 'en', OB.greet + ' ' + OB.sayLang);
       else if (st === 'form') obSay(tr(OB.formIntro) + ' ' + tr(OB.skipForm));
       else if (st === 'welcome') obSay(tr(vis.name ? OB.askWelcome : OB.askWelcomeNo) + ' ' + tr(OB.sayYesNo));
       obButtons();
@@ -493,23 +503,28 @@
         recTimer = setTimeout(stopRec, 15000);   // a question, not a speech (long recordings are slow to hear)
         // stop by itself after a pause: about 1.4 s of quiet once you have started talking
         try {
-          var AC = window.AudioContext || window.webkitAudioContext, ctx = new AC(), an = ctx.createAnalyser(), buf = new Uint8Array(1024), spoke = false, quietSince = 0, t0 = Date.now();
+          var AC = window.AudioContext || window.webkitAudioContext, ctx = new AC(), an = ctx.createAnalyser(), buf = new Uint8Array(1024), spoke = false, quietSince = 0, t0 = Date.now(), floor = 0, nf = 0, live = false;
+          if (ctx.state === 'suspended' && ctx.resume) ctx.resume();   // started without a tap (after Champ speaks, or "Hey Champ"): the meter must still run
           ctx.createMediaStreamSource(stream).connect(an); an.fftSize = 1024; vad = { ctx: ctx };
+          // setTimeout, not requestAnimationFrame: keeps measuring even when the browser holds back animation frames
           (function tick() {
             if (!vad || !rec || rec.state === 'inactive') return;
             an.getByteTimeDomainData(buf); var sum = 0; for (var i = 0; i < buf.length; i++) { var x = (buf[i] - 128) / 128; sum += x * x; }
             var rms = Math.sqrt(sum / buf.length), now = Date.now();
-            if (rms > 0.035) { spoke = true; quietSince = 0; } else if (spoke) { quietSince = quietSince || now; if (now - quietSince > 1400) return stopRec(); }
-            if (!spoke && now - t0 > (recQuiet ? 9000 : 8000)) { recNothing = true; return stopRec(); }   // nothing said
-            requestAnimationFrame(tick);
+            if (rms > 0) live = true;
+            if (now - t0 < 350) { floor += rms; nf++; return setTimeout(tick, 40); }   // the room's own noise first
+            var level = Math.max(0.012, (floor / Math.max(1, nf)) * 2.5);
+            if (rms > level) { spoke = true; quietSince = 0; } else if (spoke) { quietSince = quietSince || now; if (now - quietSince > 1300) return stopRec(); }
+            if (!spoke && now - t0 > 8000) { recNothing = live; return stopRec(); }   // nothing said (if the meter never ran, send it anyway: Azure can tell)
+            setTimeout(tick, 40);
           })();
         } catch (e) {}
       }).catch(function () { micState(''); wake.resume(); bubble('bot', '<p>' + esc(T(UI.micBlocked)) + '</p>', 'cc-err'); });
     }
-    var recNothing = false;
+    var recNothing = false, emptyRuns = 0;
     function send(blob, type) {
       var quiet = recQuiet, nothing = recNothing; recNothing = false; wake.resume();
-      if (nothing && quiet) { micState(''); return; }   // hands-free and nobody spoke: stop listening quietly ("Hey Champ" wakes it again)
+      if (nothing && quiet) { micState(''); emptyRuns = 0; return; }   // hands-free and nobody spoke: stop listening quietly ("Hey Champ" wakes it again)
       if (!blob.size || blob.size < 1200) { micState(''); if (!quiet) bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); return; }
       micState('busy');
       // during the welcome questions Champ knows which language to expect: a name or a phone number is too short for Azure to guess it
@@ -525,7 +540,8 @@
         }); })
         .then(function (j) {
           micState('');
-          if (!j.text) { if (!quiet) bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); else listenNext(); return; }
+          if (!j.text) { if (!quiet) bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); else if (++emptyRuns < 2) listenNext(); else emptyRuns = 0; return; }
+          emptyRuns = 0;
           if (obActive()) { handle(j.text, true, j.lang); return; }   // the welcome questions: no language jumps on a phone number
           if (j.lang && j.lang !== lang) switchLang(j.lang);   // you spoke Tamil: Champ is now in Tamil
           handle(j.text, true, j.lang);
@@ -535,24 +551,34 @@
     // ---- "Hey Champ": the browser's own speech recognition listens for the wake words (Chrome, Edge, Safari) ----
     var wake = (function () {
       var SR = window.SpeechRecognition || window.webkitSpeechRecognition, r = null, on = false, paused = false;
-      var WORDS = /\b(hey|hi|hello|ok|okay|hay)[\s,.!]*(champ|champs|chomp|champion|camp|shamp|chimp)\b/i;
+      // what the browser hears for "Hey Champ": plenty of near misses, and "Champ" on its own as a short phrase
+      var NAME = '(champ|champs|chump|chomp|chimp|champion|cham|shamp|shump|tramp|chap)';
+      var WORDS = new RegExp('\\b(hey|hi|hello|ok|okay|hay|hei|a|yo)[\\s,.!]*' + NAME + '\\b', 'i'), ALONE = new RegExp('^\\s*' + NAME + '[\\s,.!?]*$', 'i');
       function begin() {
         if (!SR || !on || paused || document.hidden || r) return;
         try {
-          r = new SR(); r.continuous = true; r.interimResults = true; r.lang = 'en-AU';
+          r = new SR(); r.continuous = true; r.interimResults = true; r.lang = 'en-AU'; r.maxAlternatives = 3;
+          r.onstart = function () { btn.classList.add('cc-wake'); };
           r.onresult = function (e) {
-            for (var i = e.resultIndex; i < e.results.length; i++) if (WORDS.test(e.results[i][0].transcript)) { heard(); return; }
+            for (var i = e.resultIndex; i < e.results.length; i++) for (var a = 0; a < e.results[i].length; a++) {
+              var tx = e.results[i][a].transcript;
+              if (WORDS.test(tx) || ALONE.test(tx)) { heard(); return; }
+            }
           };
-          r.onend = function () { r = null; if (on && !paused) setTimeout(begin, 400); };
+          r.onend = function () { r = null; btn.classList.remove('cc-wake'); if (on && !paused) setTimeout(begin, 300); };
           r.onerror = function (e) { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') on = false; };
           r.start();
         } catch (e) { r = null; }
       }
-      function stop() { if (r) { try { r.onend = null; r.abort(); } catch (e) {} r = null; } }
+      function stop() { btn.classList.remove('cc-wake'); if (r) { try { r.onend = null; r.abort(); } catch (e) {} r = null; } }
       function heard() {
         if (audio && !audio.paused) return;   // Champ talking about itself, not you
         stop(); chime();
-        if (box.hidden) open(true);
+        if (box.hidden) {
+          var had = msgs.some(function (m) { return m.ob; });
+          open(true);
+          if (obActive() && !had) return;   // Champ greets first, then listens by itself
+        }
         setTimeout(function () { startRec(true); }, 350);
       }
       document.addEventListener('visibilitychange', function () { if (document.hidden) stop(); else begin(); });
@@ -624,7 +650,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-ask]'), function (b) { b.addEventListener('click', function () { window.ChampChat.ask(b.getAttribute('data-ask')); }); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindAsk); else bindAsk();
-  window.ChampChat = { open: function () { open(true); }, ask: function (q) { askNow(q); }, visitor: function () { return { id: vis.id, step: vis.step, name: vis.name || '', lang: vis.lang || '' }; }, lang: function (L) { switchLang(L); }, menu: function () { open(true); showMenu(); } };
+  window.ChampChat = { open: function () { open(true); }, ask: function (q) { askNow(q); }, langOf: function (t) { return langFromText(t); }, visitor: function () { return { id: vis.id, step: vis.step, name: vis.name || '', lang: vis.lang || '' }; }, lang: function (L) { switchLang(L); }, menu: function () { open(true); showMenu(); } };
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build); else build();
 })();

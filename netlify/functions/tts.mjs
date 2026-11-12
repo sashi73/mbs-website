@@ -13,7 +13,7 @@ export const VOICES = {
 };
 const xml = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
 // what to say: no markdown symbols, links read as their name
-const speakable = (t) => String(t).replace(/\*\*?|__|`/g, '').replace(/^\s*[-•]\s+/gm, '').replace(/https?:\/\/\S+/g, 'the link').replace(/\[\[lang:[a-z]+\]\]/gi, '').trim();
+const speakable = (t) => String(t).replace(/\*\*?|__|`/g, '').replace(/^\s*[-•]\s+/gm, '').replace(/https?:\/\/\S+/g, 'the link').replace(/\[\[lang:[a-z]+\]\]/gi, '').replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}]/gu, '').replace(/[ \t]{2,}/g, ' ').trim();   // never read emoji aloud
 
 const hits = new Map();
 function limited(ip) {
