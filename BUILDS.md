@@ -29,4 +29,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 18 | 1.0.18| 2026-11-13 01:07| GKH-Project-Champ| `e45b12f` | Champ welcome: language first ("switch to …" any time), then name, phone with country code, email read back to confirm, welcome package; eve |
 | 19 | 1.0.19| 2026-11-13 01:25| GKH-Project-Champ| `91b30dd` | Cinematic 10-second intro on the home page (Plan, Gantt chart, critical path, PM tools, title) with a live hero score; visitor counter in th |
 | 20 | 1.0.20| 2026-11-13 01:35| GKH-Project-Champ| `8a4b655` | Champ welcome: the Main menu link no longer ends the questions (☰ only pauses them for this visit); visitors who shared nothing are greeted  |
-| 21 | 1.0.21 | 2026-11-13 01:41 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 21 | 1.0.21| 2026-11-13 01:41| GKH-Project-Champ| `7c5a49e` | Intro start screen: pick your language (English by default); the intro, the website and Champ all follow, and Champ greets in it and goes st |
+| 22 | 1.0.22 | 2026-11-13 01:51 | GKH-Project-Champ | _this commit_ | _see git log_ |

@@ -39,6 +39,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     s2.setHeader('Content-Type', 'application/json'); s2.end(JSON.stringify({ choices: [{ message: { content: reply } }] }));
   }); }).listen(0);
   const az = http.createServer((q, s3) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
+    if (/speechtotext/.test(q.url) && global.STT_SLOW) return setTimeout(() => { try { s3.end('{}'); } catch (e) {} }, 9500);
     if (/speechtotext/.test(q.url)) { global.STT_DEF = (/name="definition"\r?\n\r?\n([^\r\n]+)/.exec(b) || [])[1] || ''; global.STT_KEY = q.headers['ocp-apim-subscription-key'];
       s3.setHeader('Content-Type', 'application/json'); return s3.end(JSON.stringify({ combinedPhrases: [{ text: 'எனது திட்டங்கள் எப்படி உள்ளன?' }], phrases: [{ locale: 'ta-IN', durationMilliseconds: 1800, text: 'எனது திட்டங்கள் எப்படி உள்ளன?' }] })); }
     global.LAST_SSML = b; global.AZ_KEY = q.headers['ocp-apim-subscription-key']; s3.setHeader('Content-Type', 'audio/mpeg'); s3.end(Buffer.from('ID3fakeaudio')); }); }).listen(0);
@@ -223,6 +224,11 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.evaluate(() => window.ChampEars.send(new Blob([new Uint8Array(6000)], { type: 'audio/webm' }), 'audio/webm')); await sleep(2500);
   ok('Ears', '"Any language" mode sends no language list to Azure', global.STT_DEF && !/locales/.test(global.STT_DEF), global.STT_DEF);
   await p.evaluate(() => { localStorage.removeItem('champSttMode'); });
+  global.STT_SLOW = true;
+  r0 = await p.request.post(`${BASE}/.netlify/functions/stt?langs=en,ta`, { data: Buffer.alloc(6000), headers: { 'Content-Type': 'audio/webm' } });
+  const slowJ = await r0.json().catch(() => ({}));
+  ok('Ears', 'a slow speech service gives a clear "too long" answer before Netlify\u2019s 10-second cut-off', r0.status() === 504 && /too long/.test(slowJ.error || ''), r0.status() + ' ' + JSON.stringify(slowJ));
+  global.STT_SLOW = false;
   r0 = await p.request.post(`${BASE}/.netlify/functions/stt?langs=en,ta`, { data: Buffer.from('x'), headers: { 'Content-Type': 'text/plain' } });
   ok('Ears', 'non-audio uploads are refused', r0.status() === 415, r0.status());
   await p.selectOption('.cc-lang', 'ar');

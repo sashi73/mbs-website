@@ -44,19 +44,23 @@ export default async (req, context) => {
   const form = new FormData();
   form.append('audio', new Blob([audio], { type }), 'question.' + ext);
   form.append('definition', JSON.stringify(any ? { profanityFilterMode: 'Masked' } : { locales: langs.map((l) => LOCALES[l]), profanityFilterMode: 'Masked' }));
+  // Netlify stops a function after about 10 seconds, so Azure gets 8.5 s in all (one retry only if there is time)
   let r, data;
-  const call = () => fetch(`${endpoint}/speechtotext/transcriptions:transcribe?api-version=2024-11-15`, { method: 'POST', headers: { 'Ocp-Apim-Subscription-Key': key }, body: form });
+  const t0 = Date.now(), left = () => 8500 - (Date.now() - t0);
+  const call = () => fetch(`${endpoint}/speechtotext/transcriptions:transcribe?api-version=2024-11-15`, { method: 'POST', headers: { 'Ocp-Apim-Subscription-Key': key }, body: form, signal: AbortSignal.timeout(Math.max(1000, left())) });
   try {
     r = await call(); data = await r.json().catch(() => ({}));
-    if (r.status === 429) { await new Promise((ok) => setTimeout(ok, 1200)); r = await call(); data = await r.json().catch(() => ({})); }   // busy for a moment: one retry
+    if ((r.status === 429 || r.status >= 500) && left() > 4000) { await new Promise((ok) => setTimeout(ok, 800)); r = await call(); data = await r.json().catch(() => ({})); }   // busy for a moment: one retry
   } catch (e) {
-    console.log(`Champ ears: could not reach Azure (${e.message})`);
-    return json(502, { error: 'Voice input is unavailable right now.' });
+    const slow = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
+    console.log(`Champ ears: ${slow ? 'Azure too slow' : 'could not reach Azure'} after ${Date.now() - t0} ms, ${audio.length} bytes, ${any ? 'any' : langs.join(',')} (${e.message})`);
+    return json(slow ? 504 : 502, slow ? { error: 'That took too long to hear. Please try a shorter question, or type it.', reason: 'Azure timeout' }
+      : { error: 'Voice input could not reach the speech service. Please try again.', reason: 'network: ' + String(e.message).slice(0, 100) });
   }
   if (!r.ok) {
     const why = (data && (data.message || (data.error && data.error.message))) || '';
-    console.log(`Champ ears: Azure ${r.status} (region ${region}) ${String(why).slice(0, 200)}`);
-    return json(r.status === 429 ? 429 : 502, { error: r.status === 429 ? 'The voice service is busy. Please try again shortly.' : 'Voice input is unavailable right now.', reason: `Azure ${r.status}: ${String(why).slice(0, 160)}` });
+    console.log(`Champ ears: Azure ${r.status} (region ${region}) ${audio.length} bytes ${type} ${String(why).slice(0, 200)}`);
+    return json(r.status === 429 ? 429 : 502, { error: r.status === 429 ? 'The voice service is busy. Please try again shortly.' : r.status === 400 || r.status === 422 ? 'Champ could not read that recording. Please try again, a little closer to the microphone.' : 'Voice input is unavailable right now.', reason: `Azure ${r.status}: ${String(why).slice(0, 160)}` });
   }
   const text = String((data.combinedPhrases && data.combinedPhrases[0] && data.combinedPhrases[0].text) || '').trim();
   // the language heard: the one covering most of the speech

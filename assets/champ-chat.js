@@ -444,7 +444,7 @@
         rec.ondataavailable = function (e) { if (e.data && e.data.size) recChunks.push(e.data); };
         rec.onstop = function () { var type = (rec.mimeType || mt || 'audio/webm').split(';')[0]; cleanRec(); send(new Blob(recChunks, { type: type }), type); };
         rec.start(); micState('rec');
-        recTimer = setTimeout(stopRec, 30000);   // a question, not a speech
+        recTimer = setTimeout(stopRec, 15000);   // a question, not a speech (long recordings are slow to hear)
         // stop by itself after a pause: about 1.4 s of quiet once you have started talking
         try {
           var AC = window.AudioContext || window.webkitAudioContext, ctx = new AC(), an = ctx.createAnalyser(), buf = new Uint8Array(1024), spoke = false, quietSince = 0, t0 = Date.now();
@@ -464,7 +464,12 @@
       if (!blob.size || blob.size < 1200) { micState(''); bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); return; }
       micState('busy');
       fetch('/.netlify/functions/stt?langs=' + (sttAny() ? 'any' : encodeURIComponent(sttLangs().join(','))), { method: 'POST', headers: { 'Content-Type': type }, body: blob })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || 'Voice input is unavailable right now.'); return j; }); })
+        .then(function (r) { return r.json().catch(function () { return null; }).then(function (j) {
+          if (r.ok && j) return j;
+          // no JSON: Netlify cut the function off (about 10 s): Azure was too slow for this recording
+          if (!j) throw new Error(r.status === 502 || r.status === 504 ? 'That took too long to hear. Please try a shorter question, or type it.' : 'Voice input is unavailable right now (' + r.status + ').');
+          throw new Error((j.error || 'Voice input is unavailable right now.') + (j.reason && !/timeout/i.test(j.reason) ? ' [' + j.reason + ']' : ''));
+        }); })
         .then(function (j) {
           micState('');
           if (!j.text) { bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); return; }

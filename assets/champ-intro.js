@@ -36,7 +36,7 @@
   var at = {}; NODES.forEach(function (n) { at[n[0]] = n; });
 
   var el = document.createElement('div');
-  el.className = 'ci'; el.id = 'champIntro'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'GKH Project Champ intro');
+  el.className = 'ci'; el.id = 'champIntro'; el.setAttribute('data-noi18n', '');   // translated by itself, not by the page translator el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'GKH Project Champ intro');
   el.innerHTML =
     '<canvas class="ci-fx" aria-hidden="true"></canvas><div class="ci-vig"></div><i class="ci-lb t"></i><i class="ci-lb b"></i><div class="ci-flare" aria-hidden="true"></div>' +
     '<div class="ci-start"><img src="' + GLOBE + '" alt="" width="150" height="150"><h1>GKH Project <b>Champ</b></h1><p data-t="sub">Every project, from initiation to closing.</p>' +

@@ -112,7 +112,7 @@
     fetch('/.netlify/functions/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'count', unique: first, visit: newVisit, page: location.pathname }) })
       .then(function (r) { return r.ok ? r.json() : null; }).then(function (c) {
         if (!c) return; ls('champCounted', '1'); ss('champCounted', '1');
-        if (el && c.visitors) { el.textContent = '👁 ' + Number(c.visitors).toLocaleString('en-AU') + ' visitors'; el.title = Number(c.visits || 0).toLocaleString('en-AU') + ' visits in all'; el.hidden = false; }
+        if (el && c.visitors) { el.innerHTML = '👁 <b data-noi18n style="font-weight:inherit">' + Number(c.visitors).toLocaleString('en-AU') + '</b> <span>visitors</span>'; el.title = Number(c.visits || 0).toLocaleString('en-AU') + ' visits in all'; el.hidden = false; }
       }).catch(function () {});
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', visits); else visits();
