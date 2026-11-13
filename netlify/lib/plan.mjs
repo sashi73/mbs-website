@@ -155,7 +155,7 @@ function clean(p, core) {
     item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000),
     // v64: the Board: owner (a stakeholder), priority and story points
     desc: str(t.desc, 300), owner: str(t.owner, 80),
-    stickies: (Array.isArray(t.stickies) ? t.stickies : []).slice(-40).map((n) => (n && typeof n === 'object' && str(n.text, 1500) ? { id: str(n.id, 20).replace(/[^\w-]/g, '') || 'n' + Math.random().toString(36).slice(2, 8), c: ['R', 'A', 'G'].includes(n.c) ? n.c : 'G', text: str(n.text, 1500), by: str(n.by, 80), at: Number(n.at) || Date.now(), done: !!n.done, doneBy: str(n.doneBy, 80) } : null)).filter(Boolean),
+    stickies: (Array.isArray(t.stickies) ? t.stickies : []).slice(-40).map((n) => (n && typeof n === 'object' && str(n.text, 1500) ? { id: str(n.id, 20).replace(/[^\w-]/g, '') || 'n' + Math.random().toString(36).slice(2, 8), c: ['R', 'A', 'G'].includes(n.c) ? n.c : 'G', text: str(n.text, 1500), by: str(n.by, 80), at: Number(n.at) || Date.now(), done: !!n.done, doneBy: str(n.doneBy, 80), editedAt: Number(n.editedAt) || 0, editedBy: str(n.editedBy, 80) } : null)).filter(Boolean),
     // v78: an indicative (AI benchmark) cost not yet reviewed by the consultant, and how it was worked out
     est: !!t.est, basis: str(t.basis, 200), priority: ['High', 'Medium', 'Low'].includes(t.priority) ? t.priority : '', points: int(t.points, 0, 100, 0)
     };

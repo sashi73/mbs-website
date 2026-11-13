@@ -800,6 +800,19 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.click('#stkPop .stk-R [data-sdone]').catch(() => {}); await sleep(2000);
   snp = (await (await api('planGet', { core: sn })).json()).plan || { tasks: [] }; sk = (snp.tasks.find((t) => (t.stickies || []).length) || {}).stickies || [];
   ok('Sticky notes', 'the note expands; others can add a green note and resolve the red one', bigNote && sk.length === 2 && sk.find((x) => x.c === 'R').done === true && sk.find((x) => x.c === 'G').text === 'Caterer confirmed', JSON.stringify(sk.map((x) => [x.c, x.done])) + ' big=' + bigNote);
+  // edit a note in place; a checklist note: tick items one by one, the note is done when all are ticked
+  await p.click('#stkPop .stk-G [data-sed]', { timeout: 5000 }).catch(() => {}); await p.fill('#stkPop [data-setx]', 'Caterer confirmed for 30 guests', { timeout: 5000 }).catch(() => {});
+  await p.click('#stkPop [data-secol=A]').catch(() => {}); await p.click('#stkPop [data-sesave]').catch(() => {}); await sleep(800);
+  await p.fill('#stkTx', '- Book the venue\n- Order the cake', { timeout: 5000 }).catch(() => {}); await p.click('#stkPop [data-scol=G]').catch(() => {}); await p.click('#stkPop [data-sadd]').catch(() => {}); await sleep(800);
+  await p.click('#stkPop .stk-cl [data-sitem]', { timeout: 5000 }).catch(() => {}); await sleep(1500);
+  snp = (await (await api('planGet', { core: sn })).json()).plan || { tasks: [] }; sk = (snp.tasks.find((t) => (t.stickies || []).length) || {}).stickies || [];
+  const edn = sk.find((x) => /Caterer/.test(x.text)), cl = sk.find((x) => /Book the venue/.test(x.text));
+  ok('Sticky notes', 'a note can be edited in place (text and colour), marked edited', edn && edn.text === 'Caterer confirmed for 30 guests' && edn.c === 'A' && !!edn.editedBy, JSON.stringify(edn));
+  ok('Sticky notes', 'a checklist note: ticking one item keeps the note open (1/2)', cl && /- \[x\] Book the venue/.test(cl.text) && /- \[ \] Order the cake/.test(cl.text) && !cl.done && /1\/2/.test(await p.textContent('#stkPop').catch(() => '')), JSON.stringify(cl));
+  await p.click('#stkPop .stk-cl [data-sitem="1"]', { timeout: 5000 }).catch(() => {}); await sleep(1500);
+  snp = (await (await api('planGet', { core: sn })).json()).plan || { tasks: [] }; sk = (snp.tasks.find((t) => (t.stickies || []).length) || {}).stickies || [];
+  const cl2 = sk.find((x) => /Book the venue/.test(x.text));
+  ok('Sticky notes', 'ticking the last item ticks the note as done (tick box)', cl2 && cl2.done && !!cl2.doneBy && await p.isChecked('#stkPop [data-nid="' + cl2.id + '"] [data-sdone]').catch(() => false), JSON.stringify(cl2));
   await p.keyboard.press('Escape');
   await api('planProjectDelete', { core: sn });
 

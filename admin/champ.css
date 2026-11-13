@@ -241,3 +241,12 @@ html.dark .stkpop,body.dark .stkpop{color:#1F1D18}
 .thm-b small{font-size:11px;line-height:1.2;text-align:center;color:var(--muted,#6B665A)}
 .thm-b.on{border-color:#C9A227;background:#FFF8E1}.thm-b:hover{background:#F7F3E6}
 .thm-ci{display:flex!important;overflow:hidden;background:#fff}.thm-ci input{flex:1;width:50%;height:100%;border:0;padding:0;cursor:pointer;background:none}
+/* 🗒 notes: tick box, checklist, edit */
+.stk-ck{display:inline-flex;align-items:center}.stk-ck input{width:17px;height:17px;margin:0;accent-color:var(--stk);cursor:pointer}
+.stk-cnt{font-size:11px;font-weight:700;color:#6B665A;background:#F1EEE6;border-radius:99px;padding:0 7px}
+.stk-cl{display:grid;gap:3px}.stk-li{display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:2px 2px;border-radius:6px}.stk-li:hover{background:#FBF8EC}
+.stk-li input{width:15px;height:15px;margin:2px 0 0;flex:none;accent-color:var(--stk);cursor:pointer}.stk-li.on span{text-decoration:line-through;color:#8A867C}
+.stk-p{font-weight:600;margin:2px 0}
+.stk-n.done .stk-cl{text-decoration:none}.stk-n.done .stk-li span{text-decoration:line-through}
+.stk-n.editing{box-shadow:0 0 0 2px var(--stk)}.stk-ed{display:grid;gap:6px}.stk-ed textarea{width:100%;border:1px solid #EADFA8;border-radius:8px;padding:7px 9px;font:inherit;resize:vertical}
+.stk-tx[data-sedit]{cursor:text}
