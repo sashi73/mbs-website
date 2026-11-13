@@ -22,6 +22,18 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   // a fake DeepSeek: says back which language and page the assistant was told to use
   const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
     const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
+    if (j.response_format && /Project Management Plan/.test(sys)) {   // the project plan narrative: three parts
+      const task = JSON.parse(j.messages[1].content).task; global.PLANDOC_SYS = sys; global.PLANDOC_CALLS = (global.PLANDOC_CALLS || 0) + 1; global.PLANDOC_MAX = Math.max(global.PLANDOC_MAX || 0, j.max_tokens || 0);
+      const ms = /Bahasa Melayu/.test(sys), w = (en, m) => (ms ? m : en), lorem = (n) => Array.from({ length: n }, (_, i) => w('The project team will deliver this work on time and on budget, with **clear governance** and weekly reporting to the sponsor.', 'Pasukan projek akan menyiapkan kerja ini tepat pada masanya dan dalam bajet, dengan **tadbir urus yang jelas** dan laporan mingguan kepada penaja.')).join(' ');
+      let o = {};
+      if (/executive_summary/.test(task)) o = { executive_summary: lorem(6), background: lorem(3), scope_statement: lorem(3), approach: lorem(2) + '\n- ' + w('Discovery', 'Penemuan') + '\n- ' + w('Delivery', 'Penyampaian'), objectives: [{ objective: w('Deliver the ESG strategy by the finish date', 'Siapkan strategi ESG'), measure: w('Signed off by the board', 'Diluluskan oleh lembaga') }, { objective: 'Stay within budget', measure: 'CPI at or above 0.95' }],
+        success_criteria: ['Board sign-off', 'Within budget', 'Staff trained'], assumptions: ['Client data arrives on time'], constraints: ['Fixed finish date'], deliverables: [{ deliverable: 'ESG roadmap', description: 'Costed roadmap', acceptance: 'Signed off' }] };
+      else if (/schedule_management/.test(task)) o = { schedule_management: lorem(5), cost_management: lorem(5), resource_management: lorem(3), roles: [{ role: 'Project sponsor', responsibilities: 'Owns the business case' }, { role: 'Project manager', responsibilities: 'Runs the project' }],
+        communication_plan: [{ audience: 'Sponsor', information: 'Status report', method: 'Email', frequency: 'Weekly', owner: 'PM' }, { audience: 'Team', information: 'Stand-up', method: 'Teams', frequency: 'Daily', owner: 'PM' }], stakeholder_engagement: lorem(3) };
+      else o = { risk_management: lorem(4), quality_management: lorem(3), quality_checks: [{ deliverable: 'Roadmap', standard: 'GRI', check: 'Peer review' }], change_control: lorem(3), procurement: lorem(2), governance: lorem(3), governance_forums: [{ forum: 'Steering committee', members: 'Sponsor, PM', frequency: 'Monthly', purpose: 'Decisions' }], closure: lorem(3), next_steps: ['Kick-off meeting', 'Data request'] };
+      s2.setHeader('Content-Type', 'application/json');
+      return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }], usage: { total_tokens: 4200 } }));
+    }
     if (j.response_format && /Project Intelligence/.test(sys)) {
       global.INTEL_Q = JSON.parse(j.messages[1].content).question; global.INTEL_CTX = JSON.parse(j.messages[1].content);
       s2.setHeader('Content-Type', 'application/json');
@@ -633,6 +645,42 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Change records', 'Project Intelligence sees the change register and the signed records (who approved)', (IC.change_requests || []).some((c) => c.cr === 'CR-001' && c.decision && c.decision.by === 'Sashi Kumar Sivam' && c.decision.signed) && (IC.change_records || []).some((c) => c.cr === 'CR-001' && c.by === 'Sashi Kumar Sivam' && c.signed_pdf_kept), JSON.stringify([IC.change_requests, IC.change_records]).slice(0, 300));
   const sq = await (await api('sqlData')).json();
   ok('Change records', 'the change_records table can be queried (who approved what)', ((sq.data || {}).change_records || []).some((r) => r.cr === 'CR-001' && r.approved_by === 'Sashi Kumar Sivam' && r.decision === 'Approved' && r.signed), JSON.stringify((sq.data || {}).change_records || sq.error).slice(0, 200));
+  // ---- 💰 Budget, 📜 designed charter (max 4 pages), 📘 designed project plan (~20 pages), PDF and Word, in English and Malay ----
+  const fsx = require('fs'), { execSync } = require('child_process'), pagesOf = (f) => { try { return Number((execSync('pdfinfo ' + f).toString().match(/Pages:\s+(\d+)/) || [])[1] || 0); } catch (e) { return -1; } };
+  await p.goto(`${BASE}/admin/#plan/${esg}/budget`); await p.reload(); await p.waitForSelector('.bd-tiles', { timeout: 10000 }).catch(() => {});
+  const bt = await p.textContent('#planBody').catch(() => '');
+  ok('Budget', 'the Budget tab works out base cost, contingency, reserve and total', /Base cost \(BAC\)/.test(bt) && /Contingency 10%/.test(bt) && /Total budget/.test(bt) && (await p.$$('.bd-ch')).length >= 2, bt.slice(0, 200));
+  ok('Budget', 'the documents bar replaces Quote and invoice: Budget, Project charter, Project plan', (await p.$$('.docs3 .vstep')).length === 3 && !/Make the quote/.test(await p.textContent('#planChain').catch(() => '')));
+  await p.fill('[data-bcfg=cont]', '20'); await p.dispatchEvent('[data-bcfg=cont]', 'change'); await sleep(400);
+  ok('Budget', 'changing the contingency updates the totals', /Contingency 20%/.test(await p.textContent('.bd-tiles').catch(() => '')));
+  await p.click('#bdSet'); await p.click('#okBtn').catch(() => {}); await sleep(2000);
+  gp = (await (await api('planGet', { core: esg })).json()).plan;
+  ok('Budget', 'set as the approved budget: the charter budget follows (base + 20% + 5%)', gp.budgetCfg && gp.budgetCfg.cont === 20 && Math.abs(gp.charter.budget - Math.round(R1x.BAC * 1.25 * 100) / 100) < 2, JSON.stringify([gp.charter.budget, R1x.BAC]));
+  const dl = async (sel, file) => { const [d] = await Promise.all([p.waitForEvent('download', { timeout: 60000 }), p.click(sel)]); await d.saveAs(file); return file; };
+  await p.click('[data-dact=charter]'); await p.waitForSelector('#chPdf', { timeout: 5000 }).catch(() => {});
+  const chf = await dl('#chPdf', '/tmp/champ-charter.pdf').catch((e) => (console.log('charter dl: ' + e.message), ''));
+  ok('Documents', 'the designed project charter downloads as a PDF of at most 4 pages', chf && pagesOf(chf) >= 1 && pagesOf(chf) <= 4, pagesOf(chf) + ' pages');
+  const chw = await dl('#chDocx', '/tmp/champ-charter.docx').catch(() => '');
+  ok('Documents', 'the charter downloads as Word', chw && fsx.statSync(chw).size > 8000, chw && fsx.statSync(chw).size);
+  await p.click('#modal [data-close]').catch(() => {}); await sleep(300);
+  await p.click('[data-dact=plan]'); await p.waitForSelector('#pdAi', { timeout: 5000 }).catch(() => {});
+  global.PLANDOC_CALLS = 0; await p.click('#pdAi'); await p.waitForFunction(() => /Narrative written/.test((document.querySelector('#pdState') || {}).textContent || ''), null, { timeout: 60000 }).catch(() => {});
+  ok('Documents', 'the AI writes the plan narrative in three parts, within the 50,000-token budget', global.PLANDOC_CALLS === 3 && global.PLANDOC_MAX <= 12000 && /Narrative written/.test(await p.textContent('#pdState').catch(() => '')), global.PLANDOC_CALLS + ' calls, max ' + global.PLANDOC_MAX);
+  const plf = await dl('#pdPdf', '/tmp/champ-plan.pdf').catch((e) => (console.log('plan dl: ' + e.message), ''));
+  ok('Documents', 'the designed project plan downloads as a PDF of about 20 pages', plf && pagesOf(plf) >= 16 && pagesOf(plf) <= 32, pagesOf(plf) + ' pages');
+  const plw = await dl('#pdDocx', '/tmp/champ-plan.docx').catch(() => '');
+  ok('Documents', 'the project plan downloads as Word', plw && fsx.statSync(plw).size > 30000, plw && fsx.statSync(plw).size);
+  await p.selectOption('#pdLang', 'ms'); await p.click('#pdAi'); await sleep(500); await p.waitForFunction(() => /Bahasa Melayu/.test((document.querySelector('#pdState') || {}).textContent || ''), null, { timeout: 60000 }).catch(() => {});
+  ok('Documents', 'in Bahasa Melayu the AI writes the narrative in Malay', /Bahasa Melayu/.test(global.PLANDOC_SYS || ''));
+  const plm = await dl('#pdPdf', '/tmp/champ-plan-ms.pdf').catch((e) => (console.log('plan ms dl: ' + e.message), ''));
+  let msTxt = ''; try { msTxt = execSync('pdftotext -l 6 /tmp/champ-plan-ms.pdf -').toString(); } catch (e) {}
+  ok('Documents', 'the Malay plan has the Malay narrative and translated headings', /Pasukan projek/.test(msTxt) && /\[Bahas|Kandungan|Ringkasan/.test(msTxt), msTxt.slice(0, 200).replace(/\s+/g, ' '));
+  await p.selectOption('#pdLang', 'ta');
+  const [pop] = await Promise.all([p.waitForEvent('popup', { timeout: 30000 }).catch(() => null), p.click('#pdPdf')]);
+  if (pop) await pop.waitForFunction(() => document.documentElement.lang === 'ta', null, { timeout: 30000 }).catch(() => {});
+  ok('Documents', 'in Tamil the PDF opens as a print view (the browser draws Tamil properly)', !!pop && (await pop.evaluate(() => document.documentElement.lang).catch(() => '')) === 'ta', pop ? await pop.evaluate(() => document.documentElement.lang).catch((e) => e.message) : 'no popup');
+  if (pop) await pop.close().catch(() => {});
+  await p.click('#modal [data-close]').catch(() => {});
   await api('planProjectDelete', { core: esg });
 
   // ---- builds ----
@@ -724,6 +772,21 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   const sv = await p.textContent('#planBody').catch(() => '');
   ok('Schedule', 'no Cooling-off or Emergency on the schedule', !/Cooling-off|cooling-off|Emergency/.test(sv) && !(await p.isVisible('#pEmerg').catch(() => false)), (sv.match(/.{40}(Cooling|Emergency).{40}/) || [''])[0]);
   await api('planProjectDelete', { core: wd2 });
+  // the console in another language: a project type's tasks, sub-tasks and risks are written in that language
+  const lp = (await (await api('planNewProject', { name: 'Hari jadi', client: 'Family', program: 'Digital health' })).json()).core;
+  await p.evaluate(() => localStorage.setItem('champLang', 'ms'));
+  await p.goto(`${BASE}/admin/#plan/${lp}`); await p.reload(); await p.waitForSelector('[data-mode=type]', { timeout: 10000 }).catch(() => {});
+  await p.click('[data-mode=type]').catch(() => {}); await p.waitForSelector('#tplType', { timeout: 5000 }).catch(() => {});
+  await p.selectOption('#tplType', 'fun-birthday').catch(() => {}); await p.waitForFunction(() => /\[Bahas/.test((document.querySelector('#tplPrev') || {}).textContent || ''), null, { timeout: 30000 }).catch(() => {});
+  ok('Language', 'the project type preview is in the chosen language (Malay)', /\[Bahas/.test(await p.textContent('#tplPrev').catch(() => '')), (await p.textContent('#tplPrev').catch(() => '')).slice(0, 160));
+  await p.fill('#tplScope', 'A birthday party for 30 guests at a local hall.').catch(() => {});
+  const lpBtn = await p.evaluate(() => { const b = document.querySelector('#tplCreate'); return b ? b.disabled + ' ' + b.textContent : 'none'; }).catch((e) => e.message);
+  await p.click('#tplCreate').catch(() => {}); await sleep(2500);
+  const lpToast = await p.evaluate(() => [...document.querySelectorAll('.toast,#toast')].map((x) => x.textContent).join(' | ')).catch(() => '');
+  const lpp = (await (await api('planGet', { core: lp })).json()).plan || { tasks: [] };
+  ok('Language', 'the plan is created with Malay task names and risks (the Gantt chart shows them)', lpp.tasks.length > 5 && lpp.tasks.every((t) => /^\[Bahas/.test(t.name)) && (lpp.risks || []).every((r) => /^\[Bahas/.test(r.title)), JSON.stringify(lpp.tasks.slice(0, 2).map((t) => t.name)) + ' btn=' + lpBtn + ' toast=' + lpToast + ' url=' + p.url());
+  await p.evaluate(() => { localStorage.removeItem('champLang'); localStorage.removeItem('champChatLang'); });
+  await api('planProjectDelete', { core: lp });
 
   // ---- console: no chat bubble (AI is built in), Ask AI about programs ----
   await p.goto(`${BASE}/admin/#portfolio`); await sleep(800);

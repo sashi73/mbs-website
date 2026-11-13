@@ -198,6 +198,10 @@ function clean(p, core) {
       doc: str(m.doc, 30), analysed: Number(m.analysed) || 0, applied: Number(m.applied) || 0, notes: str(m.notes, 1000), cr: str(m.cr, 20) })),
     // v82: 🔁 change control: change requests (CR-001 ...): raised, assessed, reviewed (change control meeting), approved / rejected / deferred, implemented
     changes: (Array.isArray(p.changes) ? p.changes : []).slice(0, 200).map(crClean).filter(Boolean),
+    budgetCfg: (() => { const b = p.budgetCfg && typeof p.budgetCfg === 'object' ? p.budgetCfg : null; if (!b) return undefined; const pc = (v, d) => (isNaN(Number(v)) ? d : Math.max(0, Math.min(100, Number(v))));   // 💰 Budget settings
+      const cats = ['Labour', 'Materials', 'Subcontractors', 'Equipment', 'Travel and expenses', 'Other'], cat = {};
+      for (const [k, v] of Object.entries(b.cat && typeof b.cat === 'object' ? b.cat : {}).slice(0, 600)) if (/^[\w-]{1,30}$/.test(k) && cats.includes(v)) cat[k] = v;
+      return { cont: pc(b.cont, 10), res: pc(b.res, 5), margin: pc(b.margin, 0), gst: pc(b.gst, 10), cat, setAt: Number(b.setAt) || 0, setBy: str(b.setBy, 80) }; })(),
     baseline: p.baseline && typeof p.baseline === 'object' ? { at: Number(p.baseline.at) || Date.now(), finish: ymdOk(p.baseline.finish), BAC: r2(p.baseline.BAC),
       tasks: Object.fromEntries(Object.entries(p.baseline.tasks || {}).slice(0, 300).map(([k, v]) => [str(k, 20), { es: ymdOk(v.es), ef: ymdOk(v.ef), cost: r2(v.cost) }])) } : null
   };
@@ -548,7 +552,7 @@ export function privateOut(text, job = {}) {
 // ---------- ✨ AI builds a plan (runs in a background function, so it can take longer than a normal request) ----------
 // AI plan reply cap (v56): default 10,000 tokens so big multi-phase projects are planned end to end; AI_PLAN_MAX_TOKENS 2,000-32,000
 const planCap = () => Math.max(2000, Math.min(32000, Number(env('AI_PLAN_MAX_TOKENS', '10000')) || 10000));
-export async function buildAiPlan({ core, describe, scope, type, start, finish, emergency, weekends }, by) {
+export async function buildAiPlan({ core, describe, scope, type, start, finish, emergency, weekends, lang }, by) {
   const job = core ? await J.find(core) : null;
   if (!job) return { error: 'Job not found' };
   const text = privateOut(str(describe, 6000) || str(scope, 6000), job);   // never send the customer's name, phone or email
@@ -572,7 +576,9 @@ export async function buildAiPlan({ core, describe, scope, type, start, finish, 
   const user = { job_type: str(type, 120), work: str(job.service, 120), suburb: str(job.suburb, 60), start_date: st, emergency: !!emergency, weekends_allowed: !!weekends, cooling_off_days: emergency ? 0 : 3, description: text };
   if (fin && fin >= st) { user.finish_by = fin; user.working_days_available = workBetween(nextWork(st, !!(emergency || weekends)), fin, !!(emergency || weekends)); }
   let o, used, cutOff = false;
-  try { ({ data: o, used, cutOff } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: planCap(), timeoutMs: 600000, temperature: 0.3 })); }
+  const LN = { ms: 'Bahasa Melayu (Malay)', id: 'Bahasa Indonesia', ta: 'Tamil', zh: 'Simplified Chinese', hi: 'Hindi', ar: 'Arabic', fa: 'Persian', vi: 'Vietnamese', th: 'Thai', tl: 'Filipino', ja: 'Japanese', ko: 'Korean', es: 'Spanish', fr: 'French', de: 'German', pt: 'Portuguese', sw: 'Kiswahili', rw: 'Kinyarwanda' }[lang];
+  const sys2 = LN ? system + ` Write every task name, sub-task name, phase name, risk, objective, scope, deliverable and acceptance text in ${LN} (natural, professional ${LN}); JSON keys, codes, units and numbers stay as specified.` : system;
+  try { ({ data: o, used, cutOff } = await llmJson([{ role: 'system', content: sys2 }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: planCap(), timeoutMs: 600000, temperature: 0.3 })); }
   catch (e) { return { error: e.message }; }
   const today = await usage(true, used);
   const tasks = (Array.isArray(o.tasks) ? o.tasks : []).slice(0, 150).map((t) => ({

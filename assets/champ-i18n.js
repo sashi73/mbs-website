@@ -131,5 +131,18 @@
     if (lang !== 'en') translate();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
-  window.ChampI18n = { set: setLang, get: function () { return lang; }, langs: LANGS };
+  // translate a list of strings (documents: the project charter and plan), using the same cache; returns { english: translation }
+  function strings(list, l) {
+    l = l || lang; if (l === 'en' || !BY[l]) return Promise.resolve({});
+    var cache = cacheOf(l), need = [], out = {};
+    list.forEach(function (t) { t = String(t || '').trim(); if (!t || SKIP_TEXT.test(t) || !/\p{L}/u.test(t)) return; if (cache[t] != null) out[t] = cache[t]; else if (need.indexOf(t) < 0) need.push(t); });
+    var batches = []; for (var i = 0; i < need.length; i += 25) batches.push(need.slice(i, i + 25));
+    // three batches at a time
+    return Promise.all([0, 1, 2].map(function (start) { var chain = Promise.resolve(); for (var k = start; k < batches.length; k += 3) (function (kk) { chain = chain.then(function () { return run1(kk); }); })(k); return chain; }))
+      .then(function () { saveCache(l); return out; });
+    function run1(k) { return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'i18n', lang: l, strings: batches[k] }) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || 'Translation unavailable'); return j; }); })
+      .then(function (j) { Object.keys(j.map || {}).forEach(function (x) { cache[x] = j.map[x]; out[x] = j.map[x]; }); }); }
+  }
+  window.ChampI18n = { set: setLang, get: function () { return lang; }, langs: LANGS, strings: strings, name: function (l) { return (BY[l || lang] || BY.en)[1]; } };
 })();

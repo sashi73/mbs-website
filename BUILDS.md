@@ -50,4 +50,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 39 | 1.0.39| 2026-11-14 00:18| GKH-Project-Champ| `4935df7` | Project types: General and fun projects for learning project management |
 | 40 | 1.0.40| 2026-11-14 01:11| GKH-Project-Champ| `f6e2e45` | Project types: one program per category, link related projects |
 | 41 | 1.0.41| 2026-11-14 01:14| GKH-Project-Champ| `7e2e50b` | Project types: one program per category, link related projects |
-| 42 | 1.0.42 | 2026-11-14 01:38 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 42 | 1.0.42| 2026-11-14 01:38| GKH-Project-Champ| `6f6e2de` | Change control records kept for good; no cooling-off or emergency; types fit the Finish by date |
+| 43 | 1.0.43 | 2026-11-14 02:25 | GKH-Project-Champ | _this commit_ | _see git log_ |

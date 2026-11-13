@@ -12,6 +12,7 @@ import * as U from '../lib/users.mjs';
 import * as SUB from '../lib/subbies.mjs';
 import * as PPL from '../lib/people.mjs';
 import * as BOM from '../lib/bom.mjs';
+import * as PLANDOC from '../lib/plandoc.mjs';
 
 const ok = () => new Response('', { status: 202 });
 export default async (req) => {
@@ -45,6 +46,12 @@ export default async (req) => {
       const r = await COMMS.analyse({ core: body.core, id: body.meeting }, `Admin (${session.u})`);
       await kv.set('aiplan:' + id, { analysis: r.error ? null : r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
       if (!r.error) await A.audit(session.u, `AI analysed meeting "${String(r.meeting.title).slice(0, 60)}" on ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
+      return ok();
+    }
+    if (body.mode === 'plandoc') {   // 📘 the narrative of the Project Management Plan (three parts at once, within the token budget)
+      const r = await PLANDOC.write({ core: body.core, budgetFacts: body.budget, lang: String(body.lang || '').slice(0, 5) }, `Admin (${session.u})`);
+      await kv.set('aiplan:' + id, { plandoc: r.error ? null : r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
+      if (!r.error) await A.audit(session.u, `AI wrote the project management plan for ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
       return ok();
     }
     if (body.mode === 'intel') {   // v52: 🧠 Project Intelligence question
@@ -83,7 +90,7 @@ export default async (req) => {
       if (!r.error && !r.already) await A.audit(session.u, `AI suggested how to fit plan ${String(body.core || '').slice(0, 20)} to finish by ${r.finishBy} (${r.tokens || 0} tokens)`);
       return ok();
     }
-    const r = await buildAiPlan({ core: body.core, describe: body.describe, scope: body.scope, type: body.type, start: body.start, finish: body.finish, emergency: !!body.emergency, weekends: !!body.weekends }, `Admin (${session.u})`);
+    const r = await buildAiPlan({ core: body.core, describe: body.describe, scope: body.scope, type: body.type, start: body.start, finish: body.finish, emergency: !!body.emergency, weekends: !!body.weekends, lang: String(body.lang || '').slice(0, 5) }, `Admin (${session.u})`);
     await kv.set('aiplan:' + id, { ...r, status: r.error ? 'error' : 'done', at: Date.now() });
     if (!r.error) await A.audit(session.u, `AI built a plan draft for ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
   } catch (e) {

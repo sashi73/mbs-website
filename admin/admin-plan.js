@@ -752,12 +752,12 @@
       var me = (d.cards || []).filter(function (c) { return c.core === S.core; })[0], cur = me ? pn(me) : '';
       var mates = (d.cards || []).filter(function (c) { return c.core !== S.core && pn(c) === pg; });
       el.innerHTML = '<div class="tpl-link" style="margin:12px 0 4px;padding:12px 14px;border:1px solid var(--line,#e5e2d8);border-radius:12px;display:grid;gap:8px">' +
-        '<b>🔗 Program and links</b>' +
+        '<h4 style="margin:0">🔗 Program and links</h4>' +
         (cur === pg ? '<span>✓ Already in the <b>' + esc(pg) + '</b> program.</span>' :
           '<label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="tplProgOn" checked> <span>Put this project in the <b>' + esc(pg) + '</b> program' + (cur ? ' <small class="muted">(now in ' + esc(cur) + ')</small>' : '') + '. Related projects then sit together on the Programs page and the Dependency board.</span></label>') +
         '<label style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">Link it to <select id="tplAfter" style="width:auto;max-width:320px"><option value="">no other project</option>' +
           mates.map(function (c) { return '<option value="' + esc(c.core) + '">' + esc(c.name) + '</option>'; }).join('') + '</select>' +
-          '<select id="tplDepType" style="width:auto"><option value="FS">starts after it finishes</option><option value="SS">starts at the same time</option><option value="FF">finishes at the same time</option></select></label>' +
+          '<select id="tplDepType" data-i18n style="width:auto"><option value="FS">starts after it finishes</option><option value="SS">starts at the same time</option><option value="FF">finishes at the same time</option></select></label>' +
         (mates.length ? '' : '<small class="muted">No other projects in ' + esc(pg) + ' yet. Create the next one from this type and you can link them here.</small>') + '</div>';
     });
   }
@@ -781,6 +781,19 @@
     }
     var got = span(R);
     return 'Durations squeezed from ' + pl(need, 'working day') + ' to ' + pl(got, 'working day') + ' to finish by ' + dmy(plan.finishBy) + (R.finish > plan.finishBy ? ' (still ' + pl(workBetween(plan.finishBy, R.finish) - 1, 'day') + ' over: every task is already at its shortest)' : '') + '.';
+  }
+  // GKH Project Champ: a project type in the language the console is in (Tamil, Malay ...): its tasks, sub-tasks, risks and charter text
+  function tplLang() { return (window.ChampI18n && window.ChampI18n.get && window.ChampI18n.get()) || 'en'; }
+  function tplFor(v) { var l = tplLang(); if (l === 'en' || !window.ChampI18n || !window.ChampI18n.strings) return buildTemplate(v); return (S.tplL || {})[v + '@' + l] || null; }
+  function localizeTpl(v) {
+    var l = tplLang(), key = v + '@' + l; S.tplL = S.tplL || {}; if (l === 'en' || S.tplL[key]) return Promise.resolve(tplFor(v));
+    var t = JSON.parse(JSON.stringify(buildTemplate(v))), list = [], put = [];
+    var add = function (get, set) { var x = get(); if (x && /\p{L}/u.test(x)) { list.push(x); put.push([x, set]); } };
+    var lines = function (o, k) { if (!o[k]) return; var L = String(o[k]).split('\n'); L.forEach(function (ln, i) { var m = ln.match(/^(\s*[-•]\s+)?(.*)$/); if (m[2]) add(function () { return m[2]; }, function (v2) { L[i] = (m[1] || '') + v2; o[k] = L.join('\n'); }); }); };
+    ['name', 'objective', 'scope'].forEach(function (k) { add(function () { return t[k]; }, function (v2) { t[k] = v2; }); }); lines(t, 'deliverables'); add(function () { return t.acceptance; }, function (v2) { t.acceptance = v2; });
+    t.rows.forEach(function (r) { add(function () { return r[2]; }, function (v2) { r[2] = v2; }); (r[9] || []).forEach(function (x) { if (Array.isArray(x)) add(function () { return x[0]; }, function (v2) { x[0] = v2; }); }); });
+    t.risks.forEach(function (r) { add(function () { return r[0]; }, function (v2) { r[0] = v2; }); add(function () { return r[4]; }, function (v2) { r[4] = v2; }); if (r[5]) add(function () { return r[5]; }, function (v2) { r[5] = v2; }); });
+    return window.ChampI18n.strings(list, l).then(function (map) { put.forEach(function (x) { if (map[x[0]]) x[1](map[x[0]]); }); S.tplL[key] = t; return t; });
   }
   function chooser() {
     setTimeout(function () { dateBoxes(V()); }, 0);
@@ -812,7 +825,11 @@
       if (S.mode === 'type') {
         mb.innerHTML = '<label style="display:grid;gap:4px;font-weight:700">Project type<select id="tplType" style="max-width:520px">' + typeOptions(S.tplType || guess) + '</select></label>' +
           (guess && !S.tplType ? '<small class="muted">Suggested from the description. Change it if it\'s not right.</small>' : '') + '<div id="tplLink"></div><div id="tplPrev"></div>';
-        var show = function () { var v = $('#tplType').value; S.tplType = v; $('#tplPrev').innerHTML = v ? previewHtml(newPlan(buildTemplate(v), j, $('#tplStart').value || today(), '')) : ''; linkBox(v); };
+        var show = function () { var v = $('#tplType').value; S.tplType = v; linkBox(v); if (!v) { $('#tplPrev').innerHTML = ''; return; }
+          var t = tplFor(v); if (t) { $('#tplPrev').innerHTML = previewHtml(newPlan(t, j, $('#tplStart').value || today(), '')); return; }
+          $('#tplPrev').innerHTML = '<p class="ask-think" style="margin:10px 0">Writing the tasks in ' + esc(window.ChampI18n.name()) + '…</p>'; $('#tplCreate').disabled = true;
+          localizeTpl(v).catch(function () { S.tplL[v + '@' + tplLang()] = buildTemplate(v); toast('Translation is unavailable right now: the tasks are in English', true); })
+            .then(function () { if ($('#tplType') && $('#tplType').value === v) { $('#tplCreate').disabled = false; show(); } }); };
         $('#tplType').onchange = show; show();
       } else if (S.mode === 'blank') {
         mb.innerHTML = '<p class="muted" style="margin:0">A plan with a site inspection and a handover. Add tasks, milestones and sub-tasks yourself on the Schedule tab.</p>';
@@ -859,7 +876,7 @@
         });
       };
       fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
-        body: JSON.stringify({ id: id, core: j.core, describe: desc, scope: scope, type: cat ? cat.cat + ': ' + cat.item.n : '', start: $('#tplStart').value || today(), finish: $('#aiFinish').value || '', emergency: !!($('#tplEmerg') && $('#tplEmerg').checked), weekends: !!($('#tplWeek') && $('#tplWeek').checked) }) })
+        body: JSON.stringify({ id: id, core: j.core, lang: tplLang(), describe: desc, scope: scope, type: cat ? cat.cat + ': ' + cat.item.n : '', start: $('#tplStart').value || today(), finish: $('#aiFinish').value || '', emergency: !!($('#tplEmerg') && $('#tplEmerg').checked), weekends: !!($('#tplWeek') && $('#tplWeek').checked) }) })
         .then(function (r) {
           if (r.status === 401 || r.status === 403) throw new Error('Your session has ended. Sign in again.');
           if (r.status !== 202 && !r.ok) throw new Error('Could not start the AI (' + r.status + '). Try again.');
@@ -918,7 +935,8 @@
       if (scope.length < 10 && !(S.mode === 'ai' && S.aiDraft)) { toast('Write the scope of work first: what the project must deliver', true); $('#tplScope').focus(); return; }
       if (S.mode === 'type') {
         var v = $('#tplType').value; if (!v) { toast('Pick a project type first', true); $('#tplType').focus(); return; }
-        plan = newPlan(buildTemplate(v), j, start, scope); note = 'plan created (' + v + ')';
+        var tl = tplFor(v); if (!tl) { toast('Still writing the tasks in ' + window.ChampI18n.name() + '. A moment…', true); return; }
+        plan = newPlan(tl, j, start, scope); note = 'plan created (' + v + (tplLang() !== 'en' ? ', ' + tplLang() : '') + ')';
       } else if (S.mode === 'blank') {
         plan = newPlan(TEMPLATES.blank, j, start, scope); plan.name = j.title || j.service || 'Project plan'; note = 'plan created (blank)';
       } else {
@@ -948,7 +966,8 @@
   }
   function liveQuote(c) { var q = (c.quotes || []).filter(function (x) { return x.status !== 'void'; }); return q[q.length - 1] || null; }
   function liveInvoice(c) { var v = (c.invoices || []).filter(function (x) { return x.status !== 'void'; }); return v[v.length - 1] || null; }
-  function drawChain() {
+  function drawChain() { return drawDocs(); }
+  function drawChainOld() {
     var el = $('#planChain'); if (!el) return;
     var c = S.chain; if (!c) { el.innerHTML = ''; return; }
     var q = liveQuote(c), inv = liveInvoice(c), won = ['won', 'completed', 'invoiced', 'paid'].indexOf(c.stage) >= 0;
@@ -1225,14 +1244,14 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Project Intelligence']]);
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['budget', '💰 Budget'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Project Intelligence']]);
     var MODS = S.mods || {}; tabs = tabs.filter(function (t) { return MODS[t[0]] !== false; });   // GKH Project Champ: optional modules switched off
     if (MODS[S.tab] === false) S.tab = 'overview';
     var sub = !!(M.me && M.me.scope), hide = sub ? ' style="display:none"' : '';   // v91: a sub-contractor signed in to this project
     V().innerHTML = (sub ? '<div class="plan-subbie">👷 Signed in as a sub-contractor (' + esc(M.me.name || M.me.user) + ') for project <b>' + esc(S.job.ref) + '</b>. ' + ((M.me.mods || {}).projects === 'edit' ? 'You can update this project.' : 'View only.') + '</div>' : '') +
       '<div class="row" style="margin-bottom:12px">' + (sub ? '' : '<a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>') +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
-      (sub ? '' : '<span class="mod-wrap"><button type="button" class="btn btn-sm mod-btn" id="modBtn" aria-haspopup="true" aria-expanded="false" title="Switch optional modules on or off for this project">⚙ Modules <small>' + ['bom', 'swms'].filter(function (m) { return (S.mods || {})[m] !== false; }).map(function (m) { return m.toUpperCase(); }).join(' · ') + '</small></button></span>') + '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote"' + hide + ' title="Make a quote in Quotes from this plan (customer details, lines, a cover page and a 2-page project management plan with a Gantt chart)">📄 Quote &amp; PM plan</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel"' + hide + ' title="Delete this project and everything in it">🗑 Delete project</button></div>' +
+      (sub ? '' : '<span class="mod-wrap"><button type="button" class="btn btn-sm mod-btn" id="modBtn" aria-haspopup="true" aria-expanded="false" title="Switch optional modules on or off for this project">⚙ Modules <small>' + ['bom', 'swms'].filter(function (m) { return (S.mods || {})[m] !== false; }).map(function (m) { return m.toUpperCase(); }).join(' · ') + '</small></button></span>') + '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote"' + hide + ' title="Work out the budget for this project: cost by phase and category, contingency, reserve and cash flow">💰 Budget</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel"' + hide + ' title="Delete this project and everything in it">🗑 Delete project</button></div>' +
       '<div id="planChain"></div>' +
       '<div class="grid pkpis">' +
         mini('Scope', R.pct + '% complete', R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8)) +
@@ -1242,12 +1261,8 @@
       '</div>' +
       '<div class="tabs" id="planTabs">' + tabs.map(function (t) { return '<a class="tab' + (S.tab === t[0] ? ' on' : '') + '" href="#plan/' + esc(S.core) + '/' + t[0] + '" style="text-decoration:none">' + t[1] + '</a>'; }).join('') + '</div><div id="planBody"></div>';
     $('#planWide').onclick = function () { document.body.classList.toggle('plan-wide'); render(); };
-    $('#planQuote').onclick = function () {
-      var q = S.chain && liveQuote(S.chain);
-      if (q && q.fromPlan && q.status === 'draft' && !q.invoiceId) return quoteDialog(q);   // keep one draft in step with the plan
-      quoteDialog(null);
-    };
-    drawChain();
+    $('#planQuote').onclick = function () { location.hash = '#plan/' + S.core + '/budget'; };   // GKH Project Champ: budgeting instead of quotes
+    drawDocs();
     $('#planXls').onclick = function () { exportExcel(); };
     $('#planCsv').onclick = function () { ganttCsvDialog(); };
     $('#planDel').onclick = function () {   // GKH Project Champ: delete the whole project
@@ -1285,7 +1300,7 @@
         p.baseline = { at: Date.now(), finish: R.finish, BAC: R.BAC, tasks: tasks }; saveNow('baseline set'); toast('Baseline set'); render();
       });
     };
-    ({ overview: overview, schedule: scheduleTab, critical: criticalTab, board: board, bom: bomTab, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, change: changeTab, intel: intelTab }[S.tab] || scheduleTab)(R);
+    ({ overview: overview, schedule: scheduleTab, budget: budgetTab, critical: criticalTab, board: board, bom: bomTab, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, change: changeTab, intel: intelTab }[S.tab] || scheduleTab)(R);
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
@@ -2825,10 +2840,226 @@
       project: { name: p.name, ref: S.job.ref }, sections: S2, fileBase: ((S.job.ref || 'Project') + '-Project-Charter-v' + v).replace(/[^\w.-]+/g, '-'),
       gantt: { title: 'Task', from: addDays(R.start || t0, -2), to: addDays(R.finish || t0, 3), today: t0, rows: topRows.map(function (x) { var t = x.t; return { label: '#' + x.n + ' ' + clean(t.name), es: t.es, ef: t.ef, pct: t.pct, mile: t.dur === 0, crit: !!crit[t.id], late: t.pct < 100 && t.ef < t0, status: t.status, level: 1 }; }) } };
   }
+  /* ---------- 💰 Budget: work out the project budget (replaces the quote step in GKH Project Champ) ---------- */
+  var BCATS = ['Labour', 'Materials', 'Subcontractors', 'Equipment', 'Travel and expenses', 'Other'];
+  function bCfg(p) { p.budgetCfg = p.budgetCfg || {}; var b = p.budgetCfg; ['cont', 'res', 'margin', 'gst'].forEach(function (k, i) { if (b[k] == null || isNaN(+b[k])) b[k] = [10, 5, 0, 10][i]; }); b.cat = b.cat || {}; return b; }
+  function catOf(p, t) {
+    var o = bCfg(p).cat[t.id]; if (o && BCATS.indexOf(o) >= 0) return o;
+    var u = String(t.unit || '').toLowerCase().trim(), n = String(t.name || '').toLowerCase(), who = String(t.resource || '').toLowerCase();
+    if (/travel|flight|airfare|accommodation|hotel|per diem|visa/.test(n)) return 'Travel and expenses';
+    if (/hire|equipment|scaffold|crane|plant|licen[cs]e|software|laptop/.test(n)) return 'Equipment';
+    if (/subcontract|sub-contract|\bsub\b/.test(who + ' ' + n) || u === 'sub') return 'Subcontractors';
+    if (/^(h|hr|hrs|hour|hours|d|day|days|wk|week|weeks|person|ppl|fte|shift)s?$/.test(u)) return 'Labour';
+    if ((t.mats || []).length || /^(m|m2|m²|m3|m³|lm|kg|t|l|item|items|ea|each|sheet|bag|box|roll|unit|pc|pcs)$/.test(u)) return 'Materials';
+    return 'Other';
+  }
+  function phaseGroups() {   // the work between milestones (a phase ends at its milestone)
+    var G = [], cur = { name: '', rows: [] };
+    ordered().forEach(function (x) { if (x.t.dur === 0) { if (cur.rows.length) { cur.name = String(x.t.name).replace(/^[✓◆\s]+/, '').replace(/^Phase \d+ complete:\s*/i, ''); G.push(cur); } cur = { name: '', rows: [] }; } else cur.rows.push(x); });
+    if (cur.rows.length) { cur.name = G.length ? 'Close-out' : 'Work'; G.push(cur); }
+    return G;
+  }
+  function budgetCalc(p) {
+    var b = bCfg(p), R = rollup(p, today()), base = 0, byCat = {}, byPh = [], tasks = [], months = {};
+    BCATS.forEach(function (k) { byCat[k] = 0; });
+    phaseGroups().forEach(function (g) { var sum = 0; g.rows.forEach(function (x) { var c = cost(x.t); if (!c) return; var k = catOf(p, x.t); byCat[k] += c; sum += c; base += c; tasks.push({ n: x.n, t: x.t, c: c, cat: k, ph: g.name });
+      if (x.t.es && x.t.ef) { var d0 = Date.parse(x.t.es), d1 = Date.parse(x.t.ef), days = Math.max(1, Math.round((d1 - d0) / 864e5) + 1), per = c / days; for (var i = 0; i < days; i++) { var m = new Date(d0 + i * 864e5).toISOString().slice(0, 7); months[m] = (months[m] || 0) + per; } } });
+      if (sum) byPh.push({ name: g.name, v: sum }); });
+    var r2_ = function (v) { return Math.round(v * 100) / 100; }, cont = r2_(base * b.cont / 100), res = r2_(base * b.res / 100), total = r2_(base + cont + res), price = r2_(total * (1 + b.margin / 100)), gst = r2_(price * b.gst / 100);
+    var mk = Object.keys(months).sort(); return { cfg: b, R: R, base: r2_(base), cont: cont, res: res, total: total, price: price, gst: gst, inc: r2_(price + gst), byCat: byCat, byPh: byPh, tasks: tasks,
+      months: mk.map(function (m) { return { m: m, v: r2_(months[m]) }; }), approved: (p.charter || {}).budget || 0 };
+  }
+  var mon = function (m) { return new Date(m + '-01T00:00:00Z').toLocaleDateString('en-AU', { month: 'short', year: '2-digit', timeZone: 'UTC' }); };
+  function budgetTab() {
+    var p = S.plan, B = $('#planBody'), K = budgetCalc(p), b = K.cfg, ro = !!(M.me && M.me.scope && (M.me.mods || {}).projects !== 'edit');
+    var pct = function (k, lab, tip) { return '<label class="bd-in" title="' + esc(tip) + '">' + lab + '<span><input type="number" min="0" max="100" step="0.5" data-bcfg="' + k + '" value="' + b[k] + '"' + (ro ? ' disabled' : '') + '> %</span></label>'; };
+    var img = function (kind, data, alt) { try { var c = M.studio ? M.studio.chart({ kind: kind, data: data }) : null; return c ? '<img class="bd-ch" alt="' + esc(alt) + '" src="' + c.png + '">' : ''; } catch (e) { return ''; } };
+    var tile = function (v, l, cls) { return '<div class="bd-t ' + (cls || '') + '"><b>' + v + '</b><small>' + l + '</small></div>'; };
+    var diff = K.approved ? Math.round((K.approved - K.total) * 100) / 100 : 0;
+    B.innerHTML = '<div class="card bd"><div class="card-h"><h2>💰 Budget</h2><span class="sp"></span>' +
+      '<button class="btn btn-sm" id="bdCsv" type="button">⬇ Budget (CSV)</button><button class="btn btn-sm btn-gold" id="bdSet" type="button"' + (ro ? ' disabled' : '') + '>✔ Set as the approved budget</button></div>' +
+      '<p class="muted" style="margin:-4px 0 12px">Work out the budget from the plan: every task\'s cost (quantity × rate) by phase and by category, plus contingency for known risks and a management reserve for the unknown. Change a quantity, rate or category below and the totals follow.</p>' +
+      '<div class="bd-tiles">' + tile(money(K.base), 'Base cost (BAC)', 'dark') + tile(money(K.cont), 'Contingency ' + b.cont + '%') + tile(money(K.res), 'Management reserve ' + b.res + '%') + tile(money(K.total), 'Total budget', 'gold') +
+        tile(money(K.price), b.margin ? 'Client price (+' + b.margin + '% margin)' : 'Client price') + tile(money(K.inc), 'Including GST ' + b.gst + '%') + '</div>' +
+      '<div class="bd-cfg">' + pct('cont', 'Contingency', 'For identified risks (known unknowns). PMBOK: part of the cost baseline.') + pct('res', 'Management reserve', 'For unforeseen work (unknown unknowns). Held by the sponsor, outside the cost baseline.') +
+        pct('margin', 'Margin', 'Mark-up on the total budget, for the price to the client (0 for an internal project).') + pct('gst', 'GST / tax', 'Tax on the client price (10% GST in Australia, 8% SST in Malaysia).') +
+        '<div class="bd-ap">' + (K.approved ? 'Approved budget <b>' + money(K.approved) + '</b>' + (Math.abs(diff) >= 1 ? ' · <span class="' + (diff < 0 ? 'bad' : 'good') + '">' + (diff < 0 ? money(-diff) + ' short of this budget' : money(diff) + ' to spare') + '</span>' : ' · <span class="good">matches</span>') : '<span class="muted">No approved budget yet</span>') + '</div></div>' +
+      '<div class="bd-charts"><div><h3>Cost by phase</h3>' + (K.byPh.length ? img('bar', { items: K.byPh.map(function (x) { return { l: x.name, v: x.v, t: money(x.v) }; }) }, 'Cost by phase') : '<p class="muted">No costs yet.</p>') + '</div>' +
+        '<div><h3>Cost by category</h3>' + (K.base ? img('donut', { items: BCATS.map(function (k) { return { l: k, v: K.byCat[k], t: money(K.byCat[k]) }; }), center: money(K.base), centerLabel: 'Base cost' }, 'Cost by category') : '<p class="muted">No costs yet.</p>') + '</div></div>' +
+      (K.months.length ? '<h3>Cash flow by month</h3>' + img('scurve', { points: K.months.map(function (x) { return { l: mon(x.m), v: x.v }; }) }, 'Cash flow') : '') +
+      '<h3>Cost breakdown</h3><div class="table-wrap"><table class="rt bd-tbl"><thead><tr><th>#</th><th>Task</th><th>Phase</th><th>Category</th><th class="num">Qty</th><th>Unit</th><th class="num">Rate</th><th class="num">Cost</th></tr></thead><tbody>' +
+      K.tasks.map(function (x) { return '<tr><td>' + x.n + '</td><td>' + esc(x.t.name) + '</td><td><small>' + esc(x.ph) + '</small></td><td><select data-bcat="' + esc(x.t.id) + '"' + (ro ? ' disabled' : '') + '>' + BCATS.map(function (k) { return '<option' + (k === x.cat ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></td>' +
+        '<td class="num"><input type="number" step="any" min="0" data-bq="' + esc(x.t.id) + '" value="' + (x.t.qty || 0) + '"' + (ro ? ' disabled' : '') + '></td><td>' + esc(x.t.unit || '') + '</td><td class="num"><input type="number" step="any" min="0" data-br="' + esc(x.t.id) + '" value="' + (x.t.rate || 0) + '"' + (ro ? ' disabled' : '') + '></td><td class="num"><b>' + money(x.c) + '</b></td></tr>'; }).join('') +
+      '</tbody><tfoot><tr><td colspan="7">Base cost (BAC)</td><td class="num"><b>' + money(K.base) + '</b></td></tr><tr><td colspan="7">Contingency (' + b.cont + '%)</td><td class="num">' + money(K.cont) + '</td></tr><tr><td colspan="7">Management reserve (' + b.res + '%)</td><td class="num">' + money(K.res) + '</td></tr><tr class="bd-tot"><td colspan="7">Total budget</td><td class="num"><b>' + money(K.total) + '</b></td></tr></tfoot></table></div>' +
+      (K.tasks.length ? '' : '<div class="empty">No task has a cost yet. Give tasks a quantity and a rate on the Schedule tab (Costs view), or here once they have one.</div>') + '</div>';
+    var byId = {}; p.tasks.forEach(function (t) { byId[t.id] = t; });
+    B.querySelectorAll('[data-bcfg]').forEach(function (i) { i.onchange = function () { var v = Math.max(0, Math.min(100, +this.value || 0)); bCfg(p)[this.getAttribute('data-bcfg')] = v; dirty('budget ' + this.getAttribute('data-bcfg') + ' ' + v + '%'); setTimeout(budgetTab, 0); }; });
+    B.querySelectorAll('[data-bcat]').forEach(function (s0) { s0.onchange = function () { bCfg(p).cat[this.getAttribute('data-bcat')] = this.value; dirty('budget category'); setTimeout(budgetTab, 0); }; });
+    B.querySelectorAll('[data-bq],[data-br]').forEach(function (i) { i.onchange = function () { var t = byId[this.getAttribute('data-bq') || this.getAttribute('data-br')]; if (!t) return; if (this.hasAttribute('data-bq')) t.qty = Math.max(0, +this.value || 0); else t.rate = Math.max(0, +this.value || 0); derive && derive(t); dirty('budget: ' + t.name); setTimeout(render, 0); }; });
+    $('#bdSet').onclick = function () { var c = p.charter = p.charter || {}, old = c.budget || 0;
+      M.confirmBox('Set the approved budget?', 'The approved budget becomes <b>' + money(K.total) + '</b> (base ' + money(K.base) + ' + contingency ' + money(K.cont) + ' + reserve ' + money(K.res) + ')' + (old ? ', replacing ' + money(old) : '') + '. It is the budget in the charter and the project plan.', 'Set the budget').then(function (ok) {
+        if (!ok) return; c.budget = K.total; bCfg(p).setAt = Date.now(); bCfg(p).setBy = (M.me && (M.me.name || M.me.user)) || ''; dirty('approved budget ' + K.total); budgetTab(); toast('Approved budget: ' + money(K.total)); }); };
+    $('#bdCsv').onclick = function () {
+      var q = function (v) { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+      var L = [['#', 'Task', 'Phase', 'Category', 'Qty', 'Unit', 'Rate', 'Cost']].concat(K.tasks.map(function (x) { return [x.n, x.t.name, x.ph, x.cat, x.t.qty || 0, x.t.unit || '', x.t.rate || 0, x.c]; }))
+        .concat([[], ['', 'Base cost (BAC)', '', '', '', '', '', K.base], ['', 'Contingency ' + b.cont + '%', '', '', '', '', '', K.cont], ['', 'Management reserve ' + b.res + '%', '', '', '', '', '', K.res], ['', 'Total budget', '', '', '', '', '', K.total], ['', 'Client price', '', '', '', '', '', K.price], ['', 'GST ' + b.gst + '%', '', '', '', '', '', K.gst], ['', 'Including GST', '', '', '', '', '', K.inc]]);
+      M.report.save(new Blob(['﻿' + L.map(function (r) { return r.map(q).join(','); }).join('\r\n')], { type: 'text/csv' }), ((S.job.ref || 'Project') + '-Budget.csv').replace(/[^\w.-]+/g, '-')); };
+  }
+
+  /* ---------- documents bar (replaces Plan → Quote → Invoice in GKH Project Champ) ---------- */
+  function drawDocs() {
+    var el = $('#planChain'); if (!el) return; var p = S.plan, K = budgetCalc(p), c = p.charter || {}, last = S.pdoc && S.pdoc.core === S.core ? S.pdoc.doc : null;
+    var step = function (on, icon, title, sub, btn) { return '<div class="vstep' + (on ? ' done' : '') + '"><b>' + icon + ' ' + esc(title) + '</b><small>' + sub + '</small>' + btn + '</div>'; };
+    el.innerHTML = '<div class="vchain docs3">' +
+      step(!!c.budget, '💰', 'Budget', c.budget ? 'approved ' + esc(money(c.budget)) + (Math.abs(c.budget - K.total) >= 1 ? ' · works out at ' + esc(money(K.total)) : '') : 'works out at ' + esc(money(K.total)) + ' · not approved yet', '<button class="btn btn-sm btn-gold" data-dact="budget">💰 Work out the budget</button>') +
+      step(c.docStatus === 'Approved', '📜', 'Project charter', 'v' + esc(c.docVersion || '1.0') + ' · ' + esc(c.docStatus || 'Draft') + ' · up to 4 pages', '<button class="btn btn-sm" data-dact="charter">📜 Generate the charter</button>') +
+      step(!!last, '📘', 'Project plan', last ? 'AI narrative ' + esc(new Date(last.at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })) + ' · about 20 pages' : 'about 20 pages · PDF and Word', '<button class="btn btn-sm" data-dact="plan">📘 Generate the project plan</button>') + '</div>';
+    el.querySelectorAll('[data-dact]').forEach(function (b) { b.onclick = function () { var a = b.getAttribute('data-dact'); if (a === 'budget') location.hash = '#plan/' + S.core + '/budget'; else if (a === 'charter') charterDialog(); else planDocDialog(); }; });
+    if (!S.pdoc || S.pdoc.core !== S.core) { var core = S.core; S.pdoc = { core: core, doc: null }; api('intelPlanDocGet', { core: core }).then(function (d) { if (S.core === core) { S.pdoc = { core: core, doc: d.doc }; if (d.doc) drawDocs(); } }).catch(function () {}); }
+  }
+
+  /* ---------- 🎨 designed documents: shared pieces ---------- */
+  function docLang() { var l = (window.ChampI18n && window.ChampI18n.get && window.ChampI18n.get()) || 'en'; return l; }
+  function langSelect(id, l) { var L = (window.ChampI18n && window.ChampI18n.langs) || [['en', 'English']]; return '<label>Language<select id="' + id + '" data-noi18n>' + L.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === l ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label>'; }
+  function ganttOf(p, R, crit, rows, t0) { var clean = function (n) { return String(n || '').replace(/^[✓◆\s]+/, ''); };
+    return { title: 'Task', from: addDays(R.start || t0, -2), to: addDays(R.finish || t0, 3), today: t0, rows: rows.filter(function (x) { return x.t.es; }).map(function (x) { var t = x.t; return { label: '#' + x.n + ' ' + clean(t.name), es: t.es, ef: t.ef, pct: t.pct, mile: t.dur === 0, crit: !!crit[t.id], late: t.pct < 100 && t.ef < t0, status: t.status, level: 1 }; }) }; }
+  function docFacts() {
+    var p = S.plan, c = p.charter || {}, t0 = today(), R = rollup(p, t0), C = cpm(p), crit = {}; Object.keys(C.tasks).forEach(function (id) { if (C.tasks[id].float === 0) crit[id] = 1; });
+    var rows = ordered(), all = !!p.weekends, dur = R.start && R.finish ? (all ? Math.round((Date.parse(R.finish) - Date.parse(R.start)) / 864e5) + 1 : workBetween(R.start, R.finish)) : 0;
+    var miles = rows.filter(function (x) { return x.t.dur === 0; }), K = budgetCalc(p), clean = function (n) { return String(n || '').replace(/^[✓◆\s]+/, ''); };
+    var wk = Math.max(1, Math.round(dur / (all ? 7 : 5)));
+    return { p: p, c: c, t0: t0, R: R, crit: crit, rows: rows, dur: dur, weeks: wk, miles: miles, K: K, clean: clean, unit: all ? 'day' : 'working day', ref: S.job.ref || '', program: S.job.program || '',
+      sponsor: c.customer || S.job.name || '', pm: c.manager || 'To be confirmed', v: c.docVersion || '1.0', st: c.docStatus || 'Draft' };
+  }
+  var fd = function (s) { return s ? new Date(s + 'T00:00:00Z').toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) : 'To be set'; };
+  function shStakeRows(p, contacts) { return (p.stakeholders || []).filter(function (x) { return x.name || x.role; }).map(function (x) { var r = [{ t: x.name || '', b: true }, x.role || '', { t: x.raci || '', center: true }]; if (contacts) r.push(x.email || ''); return r; }); }
+  function riskRows(p, n) { return (p.risks || []).filter(function (x) { return x.status !== 'Closed' && x.title; }).sort(function (a, b) { return b.p * b.i - a.p * a.i; }).slice(0, n).map(function (x) { var sc = x.p * x.i; return [x.title, { t: String(sc), rag: sc >= 15 ? 'R' : sc >= 8 ? 'A' : 'G' }, x.response + (x.action ? ': ' + x.action : ''), x.owner || '']; }); }
+  function heatOf(p) { var cells = {}; (p.risks || []).forEach(function (r) { if (r.status === 'Closed' || !r.p || !r.i) return; var k = r.p + 'x' + r.i; cells[k] = (cells[k] || 0) + 1; }); return { cells: cells }; }
+  function genDoc(D, fmt, msgEl) {   // PDF (or a print view for scripts the PDF fonts can't draw), or Word
+    var say = function (t) { if (msgEl) msgEl.innerHTML = t ? '<span class="ask-think">' + esc(t) + '</span>' : ''; };
+    if (!M.studio) return Promise.reject(new Error('The document designer did not load. Reload the page.'));
+    var tr = D.lang && D.lang !== 'en' ? ' in ' + ((window.ChampI18n && window.ChampI18n.name(D.lang)) || D.lang) : '';
+    if (fmt === 'pdf' && M.studio.needsPrint(D)) { var win = window.open('', '_blank'); say('Translating and laying out' + tr + '…'); return M.studio.print(D, win).then(function (r) { say(''); toast('Print view open: choose “Save as PDF” in the print window'); return r; }); }
+    say((fmt === 'pdf' ? 'Designing the PDF' : 'Designing the Word file') + tr + '…');
+    return M.studio[fmt](D).then(function (r) { M.report.save(r.blob, r.name); say(''); toast((fmt === 'pdf' ? 'PDF' : 'Word') + ' ready' + (r.pages ? ': ' + pl(r.pages, 'page') : '')); return r; });
+  }
+
+  /* ---------- 📜 the project charter, designed (at most 4 pages) ---------- */
+  function charterDoc(o, lim, lang) {
+    var F = docFacts(), p = F.p, c = F.c, R = F.R, K = F.K, L = [1, 0.75, 0.5, 0.35][lim || 0], n = 0, ch = function (title, kicker, blocks, lead) { return { no: ++n, title: title, kicker: kicker, lead: lead, blocks: blocks.filter(Boolean) }; };
+    var miles = F.miles.slice(0, Math.max(4, Math.round(12 * L))).map(function (x) { var late = x.t.pct < 100 && x.t.ef < F.t0; return [F.clean(x.t.name).replace(/^Phase \d+ complete:\s*/i, ''), fd(x.t.es), { t: x.t.pct >= 100 ? 'Done' : late ? 'Late' : 'Planned', rag: x.t.pct >= 100 ? 'G' : late ? 'R' : undefined, center: true }]; });
+    var signers = [{ role: 'Project sponsor', name: F.sponsor }, { role: 'Project manager', name: c.manager || '' }];
+    (p.stakeholders || []).filter(function (x) { return x.raci === 'A' && x.name && !signers.some(function (y) { return y.name && y.name.toLowerCase() === x.name.toLowerCase(); }); }).slice(0, 2).forEach(function (x) { signers.push({ role: x.role || 'Accountable stakeholder', name: x.name }); });
+    var C = [
+      ch('Purpose and objective', 'Why', [{ t: 'p', text: c.objective || 'Not stated yet.' }, (o.background && (c.background || S.job.scope)) ? { t: 'callout', title: 'Background', text: c.background || S.job.scope } : null]),
+      ch('Scope', 'What', [{ t: 'cards', items: [{ title: 'In scope', text: c.inScope || 'Not stated yet.', tag: 'Included' }, { title: 'Out of scope', text: c.outScope || 'Nothing excluded yet.', tag: 'Excluded', color: C_MUTED }] },
+        { t: 'cards', items: [{ title: 'Deliverables', text: c.deliverables || 'Not stated yet.' }, { title: 'Acceptance criteria', text: c.acceptance || 'Not stated yet.' }] }]),
+      ch('Schedule and milestones', 'When', [o.milestones && miles.length ? { t: 'table', head: ['Milestone', 'Date', 'Status'], rows: miles, widths: [4, 1.6, 1] } : null,
+        o.gantt && L >= 0.5 ? { t: 'chart', kind: 'gantt', data: ganttOf(p, R, F.crit, F.rows, F.t0), max: Math.round(24 * L), maxH: 92 * L + 20 } : null]),
+      ch('Budget', 'How much', [{ t: 'stats', items: [{ v: money(K.base), l: 'Base cost (BAC)' }, { v: money(K.cont + K.res), l: 'Contingency and reserve' }, { v: money(c.budget || K.total), l: c.budget ? 'Approved budget' : 'Proposed budget' }] }]),
+      o.stake ? ch('Stakeholders', 'Who', [{ t: 'table', head: o.contacts ? ['Name', 'Role', 'RACI', 'Email'] : ['Name', 'Role', 'RACI'], rows: shStakeRows(p, o.contacts).slice(0, Math.round(12 * L)), widths: o.contacts ? [2, 2.4, 0.6, 2.4] : [2, 3, 0.7], empty: 'No stakeholders identified yet.' }]) : null,
+      o.risks ? ch('Key risks', 'What could go wrong', [{ t: 'table', head: ['Risk', 'Score', 'Response', 'Owner'], rows: riskRows(p, Math.round(8 * L)), widths: [3, 0.7, 4, 1.4], empty: 'No open risks recorded.' }]) : null,
+      ch('Assumptions, constraints and governance', 'How it is run', [{ t: 'p', text: (c.assumptions ? c.assumptions + '\n' : '') + '- The project manager runs the project day to day and reports to the sponsor.\n- Any change to scope, time or cost is raised in change control and approved and signed before it is made.' }]),
+      ch('Approval', 'Sign-off', [{ t: 'sign', intro: 'By signing, the parties agree to the purpose, scope, schedule, budget and acceptance criteria in this charter (version ' + F.v + ', ' + fd(F.t0) + ').', rows: signers }])
+    ].filter(Boolean);
+    return { lang: lang, flow: true, cover: 'band', kicker: 'Project charter', title: p.name, subtitle: (F.sponsor ? F.sponsor + ' · ' : '') + (F.program ? F.program : 'Project charter'), short: 'Project charter',
+      headRight: ['Version ' + F.v + ' · ' + F.st, 'Issued ' + fd(F.t0), F.ref], footer: 'Project charter v' + F.v + ' · ' + p.name.slice(0, 70),
+      stats: [{ v: fd(R.start).replace(/ \d{4}$/, ''), l: 'Start' }, { v: fd(R.finish).replace(/ \d{4}$/, ''), l: 'Finish' }, { v: F.weeks + ' weeks', l: 'Duration' }, { v: money(c.budget || K.total), l: c.budget ? 'Approved budget' : 'Budget' }],
+      chapters: C, fileBase: ((F.ref || 'Project') + '-Project-Charter-v' + F.v + (lang && lang !== 'en' ? '-' + lang : '')).replace(/[^\w.-]+/g, '-') };
+  }
+  var C_MUTED = [107, 102, 90];
+
+  /* ---------- 📘 the project management plan, designed (about 20 pages) ---------- */
+  function planDoc(N, lang) {
+    var F = docFacts(), p = F.p, c = F.c, R = F.R, K = F.K, n = 0, S2 = (N && N.sections) || {}, nl = N && N.lang === lang;   // narrative already in this language: not translated again
+    var T = function (text) { return text ? { t: 'p', text: text, noTr: nl } : null; };
+    var ch = function (title, kicker, blocks, lead, blurb) { return { no: ++n, title: title, kicker: kicker, lead: lead, blurb: blurb, blocks: blocks.filter(Boolean) }; };
+    var part = function (no, name, title, blurb, list) { return { divider: true, part: name, partNo: no, title: title, blurb: blurb, list: list }; };
+    var crs = (p.changes || []).slice().sort(function (a, b) { return a.num - b.num; });
+    var miles = F.miles.map(function (x) { var late = x.t.pct < 100 && x.t.ef < F.t0; return [String(x.n), F.clean(x.t.name).replace(/^Phase \d+ complete:\s*/i, ''), fd(x.t.es), { t: x.t.pct >= 100 ? 'Done' : late ? 'Late' : 'Planned', rag: x.t.pct >= 100 ? 'G' : late ? 'R' : undefined, center: true }]; });
+    var critRows = F.rows.filter(function (x) { return F.crit[x.t.id] && x.t.es && x.t.dur > 0; }).map(function (x) { return [String(x.n), { t: F.clean(x.t.name), b: true }, fd(x.t.es), fd(x.t.ef), pl(x.t.dur, F.unit)]; });
+    var obj = (S2.objectives || []).map(function (o) { return [{ t: o.objective, b: true }, o.measure]; });
+    var dlv = (S2.deliverables || []).map(function (o) { return [{ t: o.deliverable, b: true }, o.description, o.acceptance]; });
+    var phases = phaseGroups().map(function (g) { return { name: g.name, from: g.rows[0] && g.rows[0].t.es, to: g.rows[g.rows.length - 1] && g.rows[g.rows.length - 1].t.ef, n: g.rows.length }; });
+    var D = { lang: lang, toc: true, kicker: 'Project management plan', title: p.name, short: 'Project management plan',
+      subtitle: (c.objective || '').split(/(?<=[.!?])\s/)[0].slice(0, 200), coverNote: 'Prepared with GKH Project Champ · ' + fd(F.t0),
+      headRight: ['Version ' + F.v + ' · ' + F.st, F.ref], footer: 'Project management plan v' + F.v + ' · ' + p.name.slice(0, 70),
+      meta: [['Sponsor', F.sponsor || 'To be confirmed'], ['Project manager', F.pm], ['Program', F.program || 'Not in a program'], ['Reference', F.ref], ['Version', F.v + ' · ' + F.st], ['Issued', fd(F.t0)]],
+      stats: [{ v: money(c.budget || K.total), l: c.budget ? 'Approved budget' : 'Budget' }, { v: F.weeks + ' weeks', l: fd(R.start) + ' to ' + fd(R.finish) }, { v: String(R.total), l: 'Tasks' }, { v: String(F.miles.length), l: 'Milestones' }],
+      fileBase: ((F.ref || 'Project') + '-Project-Management-Plan-v' + F.v + (lang && lang !== 'en' ? '-' + lang : '')).replace(/[^\w.-]+/g, '-'), chapters: [] };
+    var X = D.chapters;
+    X.push(part(1, 'Part 1', 'Define the project', 'Why the project exists, what it will deliver and how success is judged.', [['01', 'Executive summary'], ['02', 'Project overview'], ['03', 'Scope']]));
+    X.push(ch('Executive summary', 'Overview', [{ t: 'stats', items: D.stats },
+      T(S2.executive_summary || c.objective || 'Write the executive summary with ✨ AI, or describe the project in the charter.'),
+      { t: 'cards', cols: 3, items: [{ title: 'Start', text: fd(R.start), dark: true }, { title: 'Finish', text: fd(R.finish) + (p.finishBy ? ' (finish by ' + fd(p.finishBy) + ')' : '') }, { title: 'Health', text: R.pct + '% complete · ' + pl(Number(R.late) || 0, 'late task') }] }], '', 'The project on one page'));
+    X.push(ch('Project overview', 'Context', [T(S2.background || c.background || S.job.scope), { t: 'h', text: 'Objectives' }, obj.length ? { t: 'table', head: ['Objective', 'How success is measured'], rows: obj, widths: [3, 2.4], noTr: nl } : T(c.objective),
+      (S2.success_criteria || []).length ? { t: 'h', text: 'Success criteria' } : null, (S2.success_criteria || []).length ? { t: 'cards', cols: 2, items: S2.success_criteria.map(function (s, i) { return { title: 'Criterion ' + (i + 1), text: s }; }), noTr: false } : null], '', 'Background, objectives and success criteria'));
+    X.push(ch('Scope', 'Boundaries', [T(S2.scope_statement), { t: 'cards', items: [{ title: 'In scope', text: c.inScope || 'Not stated yet.', tag: 'Included' }, { title: 'Out of scope', text: c.outScope || 'Nothing excluded yet.', tag: 'Excluded', color: C_MUTED }] },
+      { t: 'h', text: 'Deliverables' }, dlv.length ? { t: 'table', head: ['Deliverable', 'Description', 'Acceptance'], rows: dlv, widths: [1.6, 3, 2.4], noTr: nl } : T(c.deliverables || 'Not stated yet.'),
+      { t: 'cards', items: [{ title: 'Assumptions', text: (S2.assumptions || []).length ? S2.assumptions.map(function (x) { return '- ' + x; }).join('\n') : c.assumptions || 'None stated.' }, { title: 'Constraints', text: (S2.constraints || []).length ? S2.constraints.map(function (x) { return '- ' + x; }).join('\n') : 'Time: finish by ' + fd(p.finishBy || R.finish) + '. Budget: ' + money(c.budget || K.total) + '.' }] },
+      { t: 'callout', title: 'Acceptance criteria', text: c.acceptance || 'Not stated yet.' }], '', 'What is delivered, and what is not'));
+    X.push(part(2, 'Part 2', 'Plan the work', 'When the work happens, what it costs and who does it.', [['04', 'Schedule'], ['05', 'Budget and cost'], ['06', 'Resources and roles'], ['07', 'Stakeholders and communications']]));
+    X.push(ch('Schedule', 'Time', [T(S2.schedule_management || 'The schedule below is the baseline. Progress is updated weekly against it.'),
+      { t: 'cards', cols: Math.min(3, Math.max(1, phases.length)), items: phases.slice(0, 6).map(function (g, i) { return { title: 'Phase ' + (i + 1) + ': ' + g.name, text: fd(g.from) + ' to ' + fd(g.to) + ' · ' + pl(g.n, 'task'), dark: i === 0 }; }) },
+      { t: 'chart', kind: 'gantt', title: 'Gantt chart', data: ganttOf(p, R, F.crit, F.rows, F.t0), max: 40, maxH: 175 },
+      { t: 'table', title: 'Milestones', head: ['#', 'Milestone', 'Date', 'Status'], rows: miles, widths: [0.5, 4, 1.8, 1] },
+      { t: 'table', title: 'Critical path', head: ['#', 'Task', 'Start', 'Finish', 'Duration'], rows: critRows, widths: [0.5, 3.6, 1.6, 1.6, 1.3], note: 'Any delay to a task on the critical path delays the finish date of ' + fd(R.finish) + '.', empty: 'No critical path yet: link the tasks.' }], '', 'Phases, Gantt chart, milestones and critical path'));
+    X.push(ch('Budget and cost', 'Cost', [{ t: 'stats', items: [{ v: money(K.base), l: 'Base cost (BAC)' }, { v: money(K.cont), l: 'Contingency ' + K.cfg.cont + '%' }, { v: money(K.res), l: 'Reserve ' + K.cfg.res + '%' }, { v: money(c.budget || K.total), l: c.budget ? 'Approved budget' : 'Total budget' }] },
+      T(S2.cost_management || 'The budget is built from each task\'s quantity and rate, with contingency for identified risks and a management reserve held by the sponsor.'),
+      K.byPh.length ? { t: 'chart', kind: 'bar', title: 'Cost by phase', data: { items: K.byPh.map(function (x) { return { l: x.name, v: x.v, t: money(x.v) }; }) }, maxH: 70 } : null,
+      K.base ? { t: 'chart', kind: 'donut', title: 'Cost by category', data: { items: BCATS.map(function (k) { return { l: k, v: K.byCat[k], t: money(K.byCat[k]) }; }), center: money(K.base), centerLabel: 'Base cost' }, maxH: 72 } : null,
+      K.months.length ? { t: 'chart', kind: 'scurve', title: 'Cash flow by month (S-curve)', data: { points: K.months.map(function (x) { return { l: mon(x.m), v: x.v }; }) }, maxH: 80 } : null,
+      { t: 'table', title: 'Budget summary', head: ['Item', 'Amount'], rows: [['Base cost (BAC)', { t: money(K.base), right: true }], ['Contingency (' + K.cfg.cont + '%)', { t: money(K.cont), right: true }], ['Management reserve (' + K.cfg.res + '%)', { t: money(K.res), right: true }], [{ t: 'Total budget', total: true }, { t: money(K.total), total: true, right: true }]].concat(K.cfg.margin ? [['Client price (+' + K.cfg.margin + '% margin)', { t: money(K.price), right: true }]] : []).concat(K.cfg.gst ? [['Including GST ' + K.cfg.gst + '%', { t: money(K.inc), right: true }]] : []), widths: [3, 1.4] }], '', 'Cost baseline, contingency and cash flow'));
+    X.push(ch('Resources and roles', 'People', [T(S2.resource_management), (S2.roles || []).length ? { t: 'table', title: 'Roles and responsibilities', head: ['Role', 'Responsibilities'], rows: S2.roles.map(function (r) { return [{ t: r.role, b: true }, r.responsibilities]; }), widths: [1.4, 4], noTr: nl } : null,
+      { t: 'table', title: 'Project team and stakeholders (RACI)', head: ['Name', 'Role', 'RACI'], rows: shStakeRows(p), widths: [2, 3, 0.7], note: 'R = Responsible · A = Accountable · C = Consulted · I = Informed', empty: 'No team members or stakeholders recorded yet.' }], '', 'Who does the work and who decides'));
+    X.push(ch('Stakeholders and communications', 'Engagement', [T(S2.stakeholder_engagement), (S2.communication_plan || []).length ? { t: 'table', title: 'Communication plan', head: ['Audience', 'What', 'How', 'When', 'Owner'], rows: S2.communication_plan.map(function (r) { return [{ t: r.audience, b: true }, r.information, r.method, r.frequency, r.owner]; }), widths: [1.4, 2.6, 1.2, 1, 1.1], noTr: nl } : null,
+      { t: 'callout', title: 'Reporting', text: 'Status reports go to the sponsor and stakeholders on a regular cycle with a red, amber or green rating for schedule, cost, scope, risks and issues, made from the live plan in Project Champ.' }], '', 'Who needs to know what, and when'));
+    X.push(part(3, 'Part 3', 'Control and close', 'How risks, quality and change are managed, how the project is governed, and how it is closed.', [['08', 'Risk management'], ['09', 'Quality management'], ['10', 'Change control'], ['11', 'Procurement and contracts'], ['12', 'Governance'], ['13', 'Closure and next steps']]));
+    var rk = riskRows(p, 15);
+    X.push(ch('Risk management', 'Risk', [T(S2.risk_management || 'Risks are identified, scored (probability × impact, 1 to 5 each), owned and reviewed every week.'), rk.length ? { t: 'chart', kind: 'heat', title: 'Risk heat map (open risks)', data: heatOf(p), maxH: 70 } : null,
+      { t: 'table', title: 'Risk register', head: ['Risk', 'Score', 'Response and action', 'Owner'], rows: rk, widths: [3, 0.7, 4, 1.4], empty: 'No open risks recorded yet.' },
+      (p.issues || []).filter(function (x) { return x.status !== 'Resolved' && x.title; }).length ? { t: 'table', title: 'Open issues', head: ['Issue', 'Priority', 'Owner', 'Due'], rows: (p.issues || []).filter(function (x) { return x.status !== 'Resolved' && x.title; }).map(function (x) { return [x.title, { t: x.priority, rag: x.priority === 'Critical' ? 'R' : x.priority === 'High' ? 'A' : undefined }, x.owner || '', fd(x.due)]; }), widths: [4, 1, 1.6, 1.4] } : null], '', 'Risk register, heat map and open issues'));
+    X.push(ch('Quality management', 'Quality', [T(S2.quality_management || 'Each deliverable is checked against its acceptance criteria before it is handed over.'), (S2.quality_checks || []).length ? { t: 'table', title: 'Quality checks', head: ['Deliverable', 'Standard', 'How it is checked'], rows: S2.quality_checks.map(function (r) { return [{ t: r.deliverable, b: true }, r.standard, r.check]; }), widths: [1.6, 2.4, 2.6], noTr: nl } : null], '', 'Standards and checks'));
+    X.push(ch('Change control', 'Change', [T(S2.change_control || 'Every change to scope, time or cost is raised as a change request, assessed for its impact, approved and signed, and kept on record.'),
+      { t: 'cards', cols: 3, items: [{ title: '1. Raise', text: 'From a meeting, Project Intelligence or by hand.', dark: true }, { title: '2. Assess', text: 'Scope, time, cost, quality, risks, issues, stakeholders.' }, { title: '3. Decide and sign', text: 'Approve, reject or defer; the signed PDF is kept on record.' }] },
+      { t: 'table', title: 'Change register', head: ['CR', 'Change', 'Status', 'Decision', 'Effect'], rows: crs.map(function (x) { var e = x.effect || {}; return ['CR-' + ('00' + x.num).slice(-3), x.title, x.status, x.decision ? x.decision.outcome + ' by ' + x.decision.by + (x.decision.role ? ' (' + x.decision.role + ')' : '') : 'Open', e.f1 ? 'Finish ' + fd(e.f1) + (e.b1 ? ', budget ' + money(e.b1) : '') : '']; }), widths: [0.8, 3, 1.1, 2.4, 2], empty: 'No change requests yet.' }], '', 'How changes are approved'));
+    X.push(ch('Procurement and contracts', 'Contracts', [T(S2.procurement || 'Goods and services are bought through the organisation\'s procurement process, with contracts recorded against the project.'),
+      (p.contracts || []).length ? { t: 'table', title: 'Contracts', head: ['Type', 'With', 'Value', 'Status'], rows: (p.contracts || []).map(function (x) { return [x.type || '', x.type === 'Customer' ? F.sponsor : x.party || '', x.value ? money(x.value) : '', x.status || '']; }), widths: [1.2, 2.6, 1.2, 1.2] } : null], '', 'Buying and contracts'));
+    X.push(ch('Governance', 'Governance', [T(S2.governance || 'The sponsor owns the business case and approves major changes; the project manager runs the project day to day.'), (S2.governance_forums || []).length ? { t: 'table', title: 'Governance forums', head: ['Forum', 'Members', 'How often', 'Purpose'], rows: S2.governance_forums.map(function (r) { return [{ t: r.forum, b: true }, r.members, r.frequency, r.purpose]; }), widths: [1.4, 2.2, 1, 2.6], noTr: nl } : null], '', 'Who decides, and where'));
+    X.push(ch('Closure and next steps', 'Close', [T(S2.closure || 'The project closes when every deliverable is accepted, the handover is complete, final costs are settled and lessons learned are recorded.'),
+      (S2.next_steps || []).length ? { t: 'callout', title: 'Next 30 days', dark: true, text: S2.next_steps.map(function (x) { return '- ' + x; }).join('\n'), noTr: nl } : null,
+      { t: 'sign', title: 'Approval', intro: 'By signing, the parties approve this project management plan (version ' + F.v + ', ' + fd(F.t0) + ') as the baseline for the project.', rows: [{ role: 'Project sponsor', name: F.sponsor }, { role: 'Project manager', name: c.manager || '' }] }], '', 'Acceptance, handover and sign-off'));
+    X.push(ch('Appendix: task list', 'Appendix', [{ t: 'table', head: ['#', 'Task', 'Start', 'Finish', 'Days', 'Cost'], rows: F.rows.map(function (x) { return [String(x.n), x.t.dur === 0 ? { t: F.clean(x.t.name), b: true } : F.clean(x.t.name), fd(x.t.es), fd(x.t.ef), x.t.dur ? String(x.t.dur) : '◆', cost(x.t) ? { t: money(cost(x.t)), right: true } : '']; }), widths: [0.5, 4, 1.6, 1.6, 0.6, 1.2], size: 7.2 }], '', 'Every task, with dates and cost'));
+    return D;
+  }
+  function planDocDialog() {
+    var core = S.core, last = S.pdoc && S.pdoc.core === core ? S.pdoc.doc : null, l = docLang();
+    M.modal('<h2>📘 Project management plan</h2><p class="muted" style="margin:4px 0 10px">A designed plan of about 20 pages: cover, contents, three parts (define, plan, control and close), 13 chapters with the Gantt chart, budget charts, cash flow, risk heat map and registers, and an approval page. ✨ The AI writes the narrative from this plan (up to 50,000 tokens, about 1 to 3 minutes). Download it as PDF or Word.</p>' +
+      '<div class="form ch-form">' + langSelect('pdLang', l) + '<div class="full" id="pdState" style="font-size:13px"></div></div>' +
+      '<div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-gold" id="pdAi" type="button">✨ Write the narrative with AI</button><button class="btn" id="pdPdf" type="button">⬇ PDF</button><button class="btn" id="pdDocx" type="button">⬇ Word</button><span class="muted" id="pdMsg" style="font-size:12.5px"></span></div>' +
+      '<div class="actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Close</button></div>');
+    var state = function () { var d = S.pdoc && S.pdoc.doc, e = $('#pdState'); if (!e) return; e.innerHTML = d ? '✓ Narrative written ' + esc(new Date(d.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })) + ' by ' + esc(d.by || '') + ' · ' + (d.lang && d.lang !== 'en' ? esc((window.ChampI18n && window.ChampI18n.name(d.lang)) || d.lang) + ' · ' : '') + Number(d.tokens || 0).toLocaleString('en-AU') + ' tokens' + (d.partial ? ' · <span class="warn">' + esc(d.partial) + '</span>' : '') + '. Write it again after big changes to the plan.' : '<span class="warn">No AI narrative yet:</span> the plan can still be made from the plan data, but ✨ the AI adds the executive summary, objectives, deliverables and the management plans.'; };
+    state();
+    var busy = false, msg = $('#pdMsg');
+    var make = function (fmt) { if (busy) return; busy = true; var lang = $('#pdLang').value; genDoc(planDoc(S.pdoc && S.pdoc.doc, lang), fmt, msg).catch(function (e) { msg.innerHTML = ''; fail(e); }).then(function () { busy = false; }); };
+    $('#pdPdf').onclick = function () { make('pdf'); }; $('#pdDocx').onclick = function () { make('docx'); };
+    $('#pdAi').onclick = function () {
+      if (busy) return; busy = true; var b = this, id = rid(), lang = $('#pdLang').value, K = budgetCalc(S.plan), t0 = Date.now(); b.disabled = true; msg.innerHTML = '<span class="ask-think">✨ The AI is writing the plan in three parts at once (about 1 to 3 minutes)…</span>';
+      fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
+        body: JSON.stringify({ id: id, core: core, mode: 'plandoc', lang: lang, budget: { base: K.base, contingency: K.cont, reserve: K.res, total: K.total, approved: (S.plan.charter || {}).budget || 0, by_phase: K.byPh, by_category: K.byCat, months: K.months.length } }) })
+        .then(function (r) { if (r.status === 401 || r.status === 403) throw new Error('Your session has ended, or you need edit access to projects.'); if (r.status !== 202 && !r.ok) throw new Error('Could not start the AI (' + r.status + ')'); })
+        .then(function poll() { return new Promise(function (res) { setTimeout(res, 2500); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
+          if (d.status === 'done' && d.plandoc) { S.pdoc = { core: core, doc: d.plandoc }; state(); drawDocs(); msg.innerHTML = ''; toast('Narrative written (' + Number(d.plandoc.tokens || 0).toLocaleString('en-AU') + ' tokens). Download the PDF or Word.'); return; }
+          if (d.status === 'error') throw new Error(d.error || 'The AI could not write the plan');
+          if (Date.now() - t0 > 600000) throw new Error('The AI is taking too long. Try again.');
+          return poll(); }); })
+        .catch(function (e) { msg.innerHTML = ''; fail(e); }).then(function () { busy = false; b.disabled = false; });
+    };
+  }
   function charterDialog() {
     var p = S.plan, c = p.charter, o = chOpts();
     M.modal('<h2>📄 Project charter</h2><p class="muted" style="margin:4px 0 10px">A sign-off document from this plan: objective, scope, deliverables, acceptance criteria, milestones, the Gantt chart, critical path, stakeholder register, risks and budget, with signature lines. Download it as PDF, or as Word to change it.</p>' +
-      '<div class="form ch-form"><label>Version<input id="chV" maxlength="10" value="' + esc(c.docVersion || '1.0') + '"></label><label>Status<select id="chS">' + ['Draft', 'For approval', 'Approved'].map(function (x) { return '<option' + ((c.docStatus || 'Draft') === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label></div>' +
+      '<div class="form ch-form">' + langSelect('chLang', docLang()) + '<label>Version<input id="chV" maxlength="10" value="' + esc(c.docVersion || '1.0') + '"></label><label>Status<select id="chS">' + ['Draft', 'For approval', 'Approved'].map(function (x) { return '<option' + ((c.docStatus || 'Draft') === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label></div>' +
       '<b style="font-size:13px;display:block;margin:10px 0 4px">Include</b><div class="ch-opts">' + CH_OPT.map(function (x) { return '<label class="qchk' + (x[0] === 'contacts' ? ' ch-sub' : '') + '"><input type="checkbox" data-cho="' + x[0] + '"' + (o[x[0]] ? ' checked' : '') + '> ' + esc(x[1]) + '</label>'; }).join('') + '</div>' +
       '<p class="muted" style="font-size:12px;margin:8px 0 0">Always included: project at a glance, objective, scope in and out, deliverables, acceptance criteria, assumptions, and the approval and sign-off block.</p>' +
       '<div class="row" style="gap:6px;margin-top:12px"><button class="btn" id="chPrev" type="button">👁 Preview</button><button class="btn btn-gold" id="chPdf" type="button">⬇ PDF</button><button class="btn" id="chDocx" type="button">⬇ Word (to edit)</button><span class="muted" id="chMsg" style="font-size:12.5px"></span></div>' +
@@ -2838,9 +3069,13 @@
     var keep = function () { var nv = $('#chV').value.trim() || '1.0', ns = $('#chS').value; if (nv !== c.docVersion || ns !== c.docStatus) { c.docVersion = nv; c.docStatus = ns; dirty('charter version ' + nv + ' ' + ns); } label();
       document.querySelectorAll('[data-cho]').forEach(function (b) { o[b.getAttribute('data-cho')] = b.checked; }); try { localStorage.setItem('mbsCharterOpt', JSON.stringify(o)); } catch (e) {} };
     var msg = function (t) { $('#chMsg').innerHTML = t ? '<span class="ask-think">' + esc(t) + '</span>' : ''; };
-    var busy = false, go = function (fmt, preview) { if (busy) return; busy = true; keep(); msg(fmt === 'pdf' ? 'Making the PDF…' : 'Making the Word file…'); var win = preview ? window.open('', '_blank') : null;
-      var s = charterSnapshot(o);
-      M.report[fmt](s).then(function (r) { if (preview) { var u = URL.createObjectURL(r.blob); if (win) win.location = u; else M.report.save(r.blob, r.name); } else M.report.save(r.blob, r.name); msg(''); toast((fmt === 'pdf' ? 'PDF' : 'Word') + ' ready' + (r.pages ? ': ' + pl(r.pages, 'page') : '')); })
+    var busy = false, go = function (fmt, preview) { if (busy) return; busy = true; keep(); var lang = $('#chLang').value, el = $('#chMsg');
+      var D0 = charterDoc(o, 0, lang);
+      if (fmt === 'docx' || M.studio.needsPrint(D0)) { genDoc(D0, fmt, el).catch(function (e) { msg(''); fail(e); }).then(function () { busy = false; }); return; }
+      var win = preview ? window.open('', '_blank') : null;
+      msg('Designing the charter' + (lang !== 'en' ? ' in ' + window.ChampI18n.name(lang) : '') + '…');
+      var tryLim = function (lim, D) { return M.studio.pdf(D).then(function (r) { if (r.pages > 4 && lim < 3) return tryLim(lim + 1, charterDoc(o, lim + 1, lang)); return r; }); };   // at most 4 pages: tables and the Gantt chart shrink until it fits
+      tryLim(0, D0).then(function (r) { if (preview) { var u = URL.createObjectURL(r.blob); if (win) win.location = u; else M.report.save(r.blob, r.name); } else M.report.save(r.blob, r.name); msg(''); toast('Charter ready: ' + pl(r.pages, 'page')); })
         .catch(function (e) { msg(''); fail(e); }).then(function () { busy = false; }); };
     $('#chPrev').onclick = function () { go('pdf', true); }; $('#chPdf').onclick = function () { go('pdf'); }; $('#chDocx').onclick = function () { go('docx'); };
     $('#chV').onchange = keep; $('#chS').onchange = keep;

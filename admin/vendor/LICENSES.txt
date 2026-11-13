@@ -10,3 +10,6 @@ mammoth.browser.min.js: Mammoth 1.8.0, Michael Williamson, BSD 2-Clause License,
 docx.iife.js: docx 9.5.1, Dolan Miu, MIT License, https://github.com/dolanmiu/docx (SWMS Word download)
 jspdf.umd.min.js: jsPDF 2.5.2, MIT License, https://github.com/parallax/jsPDF (SWMS PDF download)
 jspdf.plugin.autotable.min.js: jsPDF-AutoTable 3.8.4, Simon Bengtsson, MIT License, https://github.com/simonbengtsson/jsPDF-AutoTable
+
+
+Poppins (admin/vendor/poppins.js): Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins). Licensed under the SIL Open Font License, Version 1.1 (https://openfontlicense.org). Latin subset embedded in generated project documents.

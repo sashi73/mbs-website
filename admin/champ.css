@@ -179,3 +179,24 @@ tr.pg-row td{background:color-mix(in srgb,var(--pg,#94A3B8) 9%,#fff);border-top:
 .pg-rowin{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .pg-rowin .sp{flex:1}
 tr.pg-member td:first-child{box-shadow:inset 4px 0 0 var(--pg)}
+
+/* 💰 Budget and the documents bar (budget, charter, project plan) */
+.vchain.docs3{display:grid;grid-template-columns:repeat(3,1fr)}
+.vchain.docs3 .vstep small{white-space:normal}
+.vchain.docs3 .vstep{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.vchain.docs3 .vstep .btn{margin-top:6px}
+@media (max-width:760px){.vchain.docs3{grid-template-columns:1fr}}
+.bd-tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:0 0 14px}
+.bd-t{background:#FBF8EC;border:1px solid #E3DDD0;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.bd-t b{font-size:18px;font-weight:800;color:#0C0B08}.bd-t small{font-size:11px;font-weight:700;color:#6B665A;text-transform:uppercase;letter-spacing:.03em}
+.bd-t.dark{background:#0C0B08;border-color:#0C0B08}.bd-t.dark b{color:#E8C04A}.bd-t.dark small{color:#D7D0BE}
+.bd-t.gold{background:#C9A227;border-color:#C9A227}.bd-t.gold small{color:#3a2f0a}
+.bd-cfg{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-end;margin:0 0 16px;padding:12px 14px;border:1px dashed #D8D2C2;border-radius:12px}
+.bd-in{display:grid;gap:4px;font-weight:700;font-size:13px}.bd-in span{display:flex;align-items:center;gap:6px}.bd-in input{width:82px}
+.bd-ap{margin-left:auto;font-size:13.5px}
+.bd-charts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:6px}
+.bd h3{font-size:15px;margin:14px 0 8px}
+.bd-ch{width:100%;height:auto;border:1px solid #E3DDD0;border-radius:12px;background:#fff}
+.bd-tbl input{width:90px;text-align:right}.bd-tbl select{width:auto;max-width:170px}
+.bd-tbl tfoot td{font-weight:600;background:#FBF8EC}.bd-tbl tr.bd-tot td{background:#0C0B08;color:#E8C04A}
+@media (max-width:1100px){.bd-tiles{grid-template-columns:repeat(3,1fr)}.bd-charts{grid-template-columns:1fr}}

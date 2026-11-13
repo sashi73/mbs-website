@@ -301,6 +301,7 @@ export async function intelPost(action, body, { who, by, audit }) {
       if (audit) await audit(who, `Project ${core}: ${r.record.cr} ${r.record.outcome.toLowerCase()} by ${r.record.by} (${r.record.role}): record and signed PDF kept`);
       return out(200, { ok: true, record: Object.assign({}, r.record, { text: undefined }) });
     }
+    case 'intelPlanDocGet': { const { last } = await import('./plandoc.mjs'); return out(200, { doc: (await last(core)) || null }); }
     case 'intelCrList': return out(200, { records: (await crRecords(core)).map((r) => Object.assign({}, r, { text: undefined })) });
     case 'intelCrGet': {
       const key = str(body.key, 30), f = await kv.getFile(`crpdf:${core}:${key}`);
