@@ -207,8 +207,8 @@
 
 
   /* ---------- ✨ AI query: ask in plain English ---------- */
-  var EXAMPLES = ['How healthy is my portfolio?', 'Which projects are at risk, and why?', 'Status of each program: budget, SPI and CPI', 'Which projects are in each PMBOK phase?',
-    'Which tasks are late, and who is the lead?', 'Projects over budget (CPI under 1)', 'High risks across all projects and their owners', 'Projects finishing in the next 60 days'];
+  var EXAMPLES = ['How healthy is my portfolio?', 'Status of each program: budget, SPI, CPI and forecast finish', 'Which dependencies are clashing or at risk?', 'Which projects are at risk, and why?',
+    'Which programs will finish after their target?', 'Which tasks are late, and who is the lead?', 'Projects over budget (CPI under 1)', 'High risks across all projects and their owners'];
   // v49: licence / insurance states stand out (expired in red, due soon in amber, missing in grey)
   function flagCell(c, v) {
     if (/(_state|^compliance)$/.test(c) && typeof v === 'string') { var k = { expired: ['⚠ EXPIRED', 'bad'], due: ['due soon', 'due'], missing: ['missing', 'miss'], ok: ['✓ ok', 'ok'] }[v]; if (k) return '<span class="sq-st sq-' + k[1] + '">' + k[0] + '</span>'; }

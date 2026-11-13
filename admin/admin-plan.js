@@ -393,9 +393,10 @@
     V().innerHTML = '<div class="card champ-new"><div class="card-h"><h2>＋ New project</h2><a class="btn btn-sm" href="#projects">← All projects</a></div>' +
       '<p class="muted">Give the project a name and a client. Next you pick a template (or a blank plan, or ✨ AI) and Project Champ builds the schedule, Gantt chart, Board, budget, risks and reports.</p>' +
       '<form id="champNew" class="champ-form">' +
+      '<div class="champ-2"><label>Program <small class="muted">(every project belongs to one)</small><select name="progPick" required><option value="">Loading programs…</option></select></label>' +
+      '<label class="champ-newprog" hidden>New program name<input name="program" maxlength="80" placeholder="e.g. Hospital redevelopment"></label></div>' +
       '<label>Project name<input name="name" required maxlength="120" placeholder="e.g. Head office fit-out, ERP rollout, Bridge deck repair"></label>' +
       '<label>Client or sponsor<input name="client" required maxlength="120" placeholder="e.g. Acme Pty Ltd or Internal: Finance"></label>' +
-      '<label>Program <small class="muted">(optional: groups related projects, e.g. “ERP rollout”)</small><input name="program" list="champProgDL" maxlength="80" placeholder="New or existing program"><datalist id="champProgDL"></datalist></label>' +
       '<div class="champ-2"><label>Site or location <small class="muted">(optional)</small><input name="site" maxlength="80" placeholder="e.g. Parramatta NSW"></label>' +
       '<label>Contact phone <small class="muted">(optional)</small><input name="phone" maxlength="40"></label></div>' +
       '<label>Contact email <small class="muted">(optional)</small><input name="email" type="email" maxlength="160"></label>' +
@@ -404,10 +405,18 @@
       '<label class="mod-row"><span><b>🧱 Bill of Materials (BOM)</b><small>For projects with materials to buy (construction, fit-outs, installs)</small></span><span class="bom-switch"><input type="checkbox" name="bom" checked><span class="bom-slider"></span></span></label>' +
       '<label class="mod-row"><span><b>🦺 SWMS</b><small>Safe Work Method Statements for high-risk construction work</small></span><span class="bom-switch"><input type="checkbox" name="swms" checked><span class="bom-slider"></span></span></label></fieldset>' +
       '<div class="actions"><button class="btn btn-gold" type="submit">Create project and plan it →</button></div></form></div>';
-    if (M.champPrograms) M.champPrograms().then(function (L) { var dl = document.getElementById('champProgDL'); if (dl) dl.innerHTML = L.map(function (x) { return '<option value="' + esc(x) + '">'; }).join(''); });
+    var want = ''; try { want = sessionStorage.getItem('champNewProg') || ''; sessionStorage.removeItem('champNewProg'); } catch (e2) {}
+    var pick = $('#champNew').progPick, newBox = $('#champNew .champ-newprog'), newIn = $('#champNew').program;
+    var syncProg = function () { var isNew = pick.value === '__new'; newBox.hidden = !isNew; newIn.required = isNew; if (isNew) setTimeout(function () { newIn.focus(); }, 30); };
+    pick.onchange = syncProg;
+    (M.champPrograms ? M.champPrograms() : Promise.resolve([])).then(function (L) {
+      pick.innerHTML = '<option value="">Choose a program…</option>' + L.map(function (x) { return '<option' + (x === want ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '<option value="__new">＋ New program…</option>';
+      if (!want && L.length === 1) pick.value = L[0];
+      syncProg();
+    });
     $('#champNew').onsubmit = function (e) {
       e.preventDefault(); var f = e.target, b = f.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Creating…';
-      api('planNewProject', { name: f.name.value, client: f.client.value, site: f.site.value, phone: f.phone.value, email: f.email.value, summary: f.summary.value, program: f.program.value, bom: f.bom.checked, swms: f.swms.checked })
+      api('planNewProject', { name: f.name.value, client: f.client.value, site: f.site.value, phone: f.phone.value, email: f.email.value, summary: f.summary.value, program: f.progPick.value === '__new' ? f.program.value : f.progPick.value, bom: f.bom.checked, swms: f.swms.checked })
         .then(function (r) { toast('Project ' + r.ref + ' created'); location.hash = '#plan/' + r.core; })
         .catch(function (err) { fail(err); b.disabled = false; b.textContent = 'Create project and plan it →'; });
     };
@@ -1029,7 +1038,7 @@
       clearTimeout(S.timer); S.timer = null;
       var core = S.core;
       (S.q || Promise.resolve()).then(function () { return M.champDelete([{ core: core, name: p.name, ref: S.job.ref }]); }).then(function (ok) {
-        if (ok) { S.plan = null; S.core = ''; location.hash = '#portfolio'; }
+        if (ok) { S.plan = null; S.core = ''; location.hash = '#programs'; }
       });
     };
     if ($('#modBtn')) $('#modBtn').onclick = function (e) {   // GKH Project Champ: optional modules (BOM, SWMS) on or off

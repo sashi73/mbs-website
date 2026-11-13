@@ -53,14 +53,15 @@
   /* ---------------- programs (a group of related projects) ---------------- */
   function progList() { return (P.data && P.data.programs) || []; }
   function setProgram(c) {
-    M.modal('<h2>📁 Program for “' + esc(c.name) + '”</h2><p class="muted">A program groups related projects (for example “ERP rollout” or “Head office move”). Ask AI and the Summary can then report on the whole program. Leave it empty to take the project out of its program.</p>' +
-      '<form id="progForm"><label style="display:grid;gap:6px;font-weight:700">Program<input id="progIn" list="progDL" maxlength="80" value="' + esc(c.program || '') + '" placeholder="New or existing program"></label>' +
+    M.modal('<h2>🗂 Move “' + esc(c.name) + '” to a program</h2><p class="muted">Every project belongs to one program. Choose another, or type a new program name to create it.</p>' +
+      '<form id="progForm"><label style="display:grid;gap:6px;font-weight:700">Program<input id="progIn" list="progDL" maxlength="80" required value="' + esc(c.program || '') + '" placeholder="Program name"></label>' +
       '<datalist id="progDL">' + progList().map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>' +
       '<div class="actions" style="justify-content:flex-end;margin-top:14px"><button class="btn" type="button" data-close>Cancel</button><button class="btn btn-gold" type="submit">Save</button></div></form>');
     var f = document.getElementById('progForm'), inp = document.getElementById('progIn'); setTimeout(function () { inp.focus(); inp.select(); }, 30);
     f.onsubmit = function (e) {
       e.preventDefault();
-      api('planProgramSet', { core: c.core, program: inp.value }).then(function (r) { M.closeModal(); toast(r.program ? c.name + ' is now in ' + r.program : c.name + ' taken out of its program'); load(); }).catch(fail);
+      if (!inp.value.trim()) { inp.focus(); return; }
+      api('planProgramSet', { core: c.core, program: inp.value.trim() }).then(function (r) { M.closeModal(); toast(c.name + ' is now in ' + r.program); load(); }).catch(fail);
     };
   }
   M.champPrograms = function () { return api('planPipelineList', { today: today() }).then(function (d) { return d.programs || []; }).catch(function () { return []; }); };
@@ -104,7 +105,7 @@
     m.className = 'pmenu';
     m.innerHTML = '<b>Move to…</b>' + COLS.filter(function (x) { return x[0] !== c.phase; }).map(function (x) { return '<button type="button" data-to="' + x[0] + '" style="--pc:' + x[2] + '"><i></i>' + esc(x[1]) + '</button>'; }).join('') +
       (c.pinned ? '<button type="button" data-to="auto" style="--pc:#C9A227"><i></i>Automatic (' + esc(NAME[c.auto]) + ')</button>' : '') +
-      (M.allowed('projects', 'edit') && !(M.me && M.me.scope) ? '<button type="button" data-prog style="--pc:#64748B"><i></i>📁 ' + (c.program ? 'Program: ' + esc(c.program) + '…' : 'Put in a program…') + '</button>' : '') +
+      (M.allowed('projects', 'edit') && !(M.me && M.me.scope) ? '<button type="button" data-prog style="--pc:#64748B"><i></i>🗂 ' + (c.program ? 'Move from ' + esc(c.program) + '…' : 'Put in a program…') + '</button>' : '') +
       (M.allowed('projects', 'edit') && !(M.me && M.me.scope) ? '<hr style="border:0;border-top:1px solid var(--line);margin:4px 0"><button type="button" data-del style="--pc:#DC2626;color:#B91C1C"><i></i>🗑 Delete project…</button>' : '');
     document.body.appendChild(m);
     m.style.top = Math.min(innerHeight - m.offsetHeight - 8, rc.bottom + 4) + 'px'; m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, rc.right - m.offsetWidth)) + 'px';
@@ -208,10 +209,10 @@
         '<td>' + (sp == null ? '–' : '<b class="ev-' + evC(sp) + '-t">' + sp.toFixed(2) + '</b>') + '</td><td>' + (cp == null ? '–' : '<b class="ev-' + evC(cp) + '-t">' + cp.toFixed(2) + '</b>') + '</td>' +
         '<td>' + s2('late') + '</td><td>' + (red ? '<b style="color:#B91C1C">' + red + '</b>' : '0') + '</td></tr>';
     }).join('');
-    var progCard = '<div class="card"><div class="card-h"><h2>By program</h2><span class="sp"></span><a class="btn btn-sm" href="#sql/ask">✨ Ask AI about a program</a></div>' + (progRows ?
+    var progCard = '<div class="card"><div class="card-h"><h2>By program</h2><span class="sp"></span><a class="btn btn-sm" href="#programs">🗂 Open programs</a><a class="btn btn-sm" href="#sql/ask">✨ Ask AI about a program</a></div>' + (progRows ?
       '<div class="table-wrap"><table><thead><tr><th>Program</th><th>Projects</th><th>Budget</th><th class="hide-sm">Earned</th><th class="hide-sm">Spent</th><th>SPI</th><th>CPI</th><th>Late tasks</th><th>At risk</th></tr></thead><tbody>' + progRows + '</tbody></table></div>' +
       (progs[''] ? '<p class="muted cs-note">' + progs[''].length + ' project' + (progs[''].length === 1 ? '' : 's') + ' not in a program.</p>' : '')
-      : '<p class="muted">No programs yet. Group related projects into a program with ⇄ → “Put in a program…” on the Pipeline board, or when you make a new project.</p>') + '</div>';
+      : '<p class="muted">No programs yet. See <a href="#programs">🗂 Programs</a>.</p>') + '</div>';
     host.innerHTML = '<div class="cs-tiles">' + tiles + '</div>' +
       '<div class="cs-grid"><div class="card"><div class="card-h"><h2>Projects by PMBOK phase</h2></div>' + funnel +
       '<p class="muted cs-note">Initiation: no plan yet · Planning: planned, not started · Execution: under way · Monitoring &amp; Evaluation: 80%+ done · Closing: all done. Move a card on the Pipeline board to change it by hand.</p></div>' +

@@ -1,6 +1,7 @@
 // MBS project planner (PMI style, waterfall): one plan per job, stored in Netlify Blobs as plan:<job core>.
 // Scheduling uses working days (Mon-Fri; emergency jobs, and plans with "Weekends allowed" ticked, also Sat and Sun). Tasks: duration, finish-to-start predecessors, "start no earlier than",
 // resource, quantity x unit cost, actual cost, % complete. Plus charter (scope), risks, issues and a baseline.
+import * as PG from './programs.mjs';
 import * as kv from './kv.mjs';
 import * as J from './jobs.mjs';
 import { parseWhen, whenText, sydneyTime } from './calendar.mjs';
@@ -799,16 +800,52 @@ export async function planPost(action, body, { who, by, audit }) {
   // Moving a card on the board pins its phase (kept in "champ-phases"); "Automatic" un-pins it.
   if (action === 'planPipelineList') {
     const day = body.today || new Date().toISOString().slice(0, 10);
-    const cards = await portfolio(day, Array.isArray(body.onlyCores) ? body.onlyCores : null);
-    const programs = [...new Set(cards.map((c) => c.program).filter(Boolean))].sort();
+    const only = Array.isArray(body.onlyCores) ? body.onlyCores : null;
+    const cards = await portfolio(day, only);
+    const reg = only ? await PG.list() : await PG.ensure(cards);   // every project in a program
+    const programs = reg.map((p) => p.name).sort();
     return out(200, { cards, programs, today: day, at: Date.now() });
   }
-  if (action === 'planProgramSet') {   // put a project in a program, or take it out ('')
-    const program = str(body.program, 80).trim();
-    if (!core || !(await J.find(core))) return out(404, { error: 'Project not found' });
-    await J.setProgram(core, program);
-    if (audit) await audit(who, `Project ${core}: ${program ? 'program set to ' + program : 'taken out of its program'}`);
-    return out(200, { ok: true, program });
+  // ---------- Programs (the top level) and the dependency board ----------
+  if (action === 'planProgramList') {
+    const day = body.today || new Date().toISOString().slice(0, 10);
+    const cards = await portfolio(day);
+    const reg = await PG.ensure(cards);
+    for (const c of cards) { c.health = healthOf(c); c.forecast = PG.forecastFinish(c); }
+    const by = Object.fromEntries(cards.map((c) => [c.core, c]));
+    const deps = (await PG.deps()).filter((d) => by[d.from] && by[d.to]).map((d) => ({ ...d, ...PG.depStatus(d, by[d.from], by[d.to]),
+      cross: (by[d.from].program || '') !== (by[d.to].program || '') }));
+    return out(200, { programs: reg, cards, deps, types: PG.TYPES, statuses: PG.STATUS, today: day, at: Date.now() });
+  }
+  if (action === 'planProgramSave') {
+    try { const r = await PG.save(body, who); if (audit) await audit(who, r.renamed ? `Program renamed: ${r.renamed.from} → ${r.renamed.to}` : `Program saved: ${r.program.name}`); return out(200, { ok: true, program: r.program }); }
+    catch (e) { return out(e.code || 500, { error: e.message }); }
+  }
+  if (action === 'planProgramDelete') {
+    try { const r = await PG.remove(str(body.id, 20), str(body.moveTo, 20)); if (audit) await audit(who, `Program deleted${r.moved ? `; ${r.moved} project(s) moved to ${r.to}` : ''}`); return out(200, { ok: true, ...r }); }
+    catch (e) { return out(e.code || 500, { error: e.message }); }
+  }
+  if (action === 'planProgramSet' || action === 'planProgramMove') {   // put a project in a program (it must always be in one)
+    try {
+      let pid = str(body.id || body.program, 80).trim();
+      if (action === 'planProgramSet' && pid && !(await PG.list()).some((p) => p.id === pid || p.name === pid)) pid = (await PG.save({ name: pid }, who)).program.id;   // a new name typed in: make the program
+      const p = await PG.move(core, pid);
+      if (audit) await audit(who, `Project ${core}: moved to program ${p.name}`);
+      return out(200, { ok: true, program: p.name, id: p.id });
+    } catch (e) { return out(e.code || 500, { error: e.message }); }
+  }
+  if (action === 'planDepSave') {
+    try {
+      const cards = await portfolio(new Date().toISOString().slice(0, 10));
+      const d = await PG.depSave(body, Object.fromEntries(cards.map((c) => [c.core, c])), who);
+      if (audit) await audit(who, `Dependency: ${d.from} → ${d.to} (${d.type}${d.lag ? ', lag ' + d.lag + 'd' : ''})`);
+      return out(200, { ok: true, dep: d });
+    } catch (e) { return out(e.code || 500, { error: e.message }); }
+  }
+  if (action === 'planDepDelete') {
+    const n = await PG.depRemove(body.ids || body.id);
+    if (audit && n) await audit(who, `Dependency removed (${n})`);
+    return out(200, { ok: true, removed: n });
   }
   if (action === 'planPhaseSet') {
     const PH = ['init', 'plan', 'exec', 'monitor', 'close'], ph = String(body.phase || '');

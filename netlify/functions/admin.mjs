@@ -6,6 +6,7 @@ import { env, clean } from '../lib/shared.mjs';
 import * as J from '../lib/jobs.mjs';
 import * as kv from '../lib/kv.mjs';
 import * as VIS from '../lib/visitors.mjs';
+import * as PGM from '../lib/programs.mjs';
 import BUILD from '../lib/build-info.mjs';
 import * as A from '../lib/admin-lib.mjs';
 import { period } from '../lib/bot.mjs';
@@ -345,6 +346,7 @@ async function handle(req, context) {
         await J.removeJob(job.core);
         for (const k of ['champ-phases']) await kv.update(k, (cur) => { const m = { ...((cur && cur.map) || {}) }; delete m[job.core]; return { map: m }; }, () => ({ map: {} })).catch(() => {});
         await forgetModules(job.core).catch(() => {});
+        await PGM.forgetProject(job.core).catch(() => {});   // its dependency links go too
         const label = (plan && plan.name) || job.service || job.core;
         await A.audit(who, `${J.refFor(job)}: project deleted ("${label}")`);
         return out(200, { ok: true, name: label });
@@ -354,9 +356,14 @@ async function handle(req, context) {
       case 'planNewProject': {
         const pname = clean(body.name, 120), client = clean(body.client, 120);
         if (!pname || !client) return bad('A project name and a client are needed');
+        // every project belongs to a program: an existing one, or a new name typed in (made here)
+        let prog = clean(body.program, 80).trim();
+        if (!prog) return bad('Choose the program this project belongs to.');
+        const known = (await PGM.list()).find((p) => p.name.toLowerCase() === prog.toLowerCase());
+        if (known) prog = known.name; else prog = (await PGM.save({ name: prog }, who)).program.name;
         const core = await J.nextCore('P');
         await J.create({ core, name: client, phone: clean(body.phone, 40), email: clean(body.email, 160), suburb: clean(body.site, 80), service: pname,
-          summary: clean(body.summary, 1500), program: clean(body.program, 80), source: 'Project Champ' }, by);
+          summary: clean(body.summary, 1500), program: prog, source: 'Project Champ' }, by);
         const r = await J.setStage(core, 'won', by, {});
         const job = (r && r.job) || (await J.find(core));
         if (body.bom === false) await setModule(core, 'bom', false);     // optional modules chosen on the form
