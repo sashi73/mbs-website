@@ -134,9 +134,12 @@ const SYSTEM = 'You are "Project Intelligence" for GKH Project Champ, a project 
   '4) Only when the question asks to work out, assess, list or add risks, also fill "risks" (max 12) and mark critical=true for risks that could delay a critical task or the finish date, false otherwise. ' +
   '5) Only when the question asks for a stakeholder register or who should be involved, also fill "stakeholders" (max 15): name (a person or organisation, or a role if unknown), role, raci R|A|C|I, interest High|Medium|Low, influence High|Medium|Low, engagement (how to keep them engaged). Include existing stakeholders by their ref. ' +
   '6) Only when the question asks to set up, book or organise a meeting/call, also fill "meeting": title, date (YYYY-MM-DD: the date asked for, else the next working day; never a weekend unless asked), start (HH:MM 24h, default 10:00), minutes (default 45), attendees (stakeholder refs like "S1"; all stakeholders if they say "the stakeholders" or "the team"), agenda (4-7 short items for this project now). The console makes the Google Meet invite; do not invent links or email addresses. ' +
+  '7) Only when the question asks to re-plan, re-baseline, stretch, compress or regenerate the schedule or Gantt chart to a new length or finish date, or to change the total budget, also fill "replan": ' +
+  'weeks (the new total length in weeks, or 0), finish (the new finish date YYYY-MM-DD, or ""), budget (the new total budget in dollars, or 0), gates (review, approval or buffer tasks to add: [{"after": task number, "name": "", "days": 1-30}], max 8, only when asked or clearly needed), why (one sentence). ' +
+  'The console then works out the exact new durations and costs from the plan and shows them for change control, so do NOT write out a full task table: in "answer" explain the approach briefly (how the extra time and money should be used, what to watch) in under 150 words. ' +
   'Reply JSON only: {"answer":"markdown","risks":[{"title":"","cause":"","p":1-5,"i":1-5,"response":"Avoid|Mitigate|Transfer|Accept","action":"","owner":"","critical":true}],' +
   '"stakeholders":[{"ref":"S1 or empty","name":"","role":"","raci":"R","interest":"High","influence":"High","engagement":""}],"meeting":null or {"title":"","date":"","start":"","minutes":45,"attendees":["S1"],"agenda":[""]},' +
-  '"sources":["document names used"],"follow_ups":["2-3 short next questions"]}';
+  '"replan":null or {"weeks":0,"finish":"","budget":0,"gates":[{"after":3,"name":"","days":2}],"why":""},"sources":["document names used"],"follow_ups":["2-3 short next questions"]}';
 
 const capOut = () => Math.max(800, Math.min(4000, Number(process.env.AI_INTEL_MAX_TOKENS || 2500) || 2500));
 export async function ask({ core, question, history }, by) {
@@ -189,6 +192,27 @@ export async function ask({ core, question, history }, by) {
     follow_ups: (Array.isArray(o.follow_ups) ? o.follow_ups : []).map((s) => str(s, 160)).filter(Boolean).slice(0, 3),
     tokens: used, today: todayUse, partial: ctx.extracts_are_partial, docs: ctx.documents.length
   };
+  // a re-plan: the targets only; the console works out the task-by-task change from the plan
+  const rp = o.replan;
+  if (rp && typeof rp === 'object') {
+    const ids = plan.tasks.map((t) => t.id);
+    const weeks = Math.max(0, Math.min(520, Math.round(+rp.weeks || 0))), finish = /^\d{4}-\d{2}-\d{2}$/.test(rp.finish || '') ? rp.finish : '';
+    const budget = Math.max(0, Math.min(1e10, Math.round((+String(rp.budget || 0).replace(/[$,\s]/g, '') || 0) * 100) / 100));
+    const gates = (Array.isArray(rp.gates) ? rp.gates : []).slice(0, 8).map((g) => ({ after: ids[Math.round(+g.after || 0) - 1] || '', name: str(g.name, 120) || 'Review gate', days: Math.max(1, Math.min(30, Math.round(+g.days || 2))) })).filter((g) => g.after);
+    if (weeks || finish || budget || gates.length) r.replan = { weeks, finish, budget, gates, why: str(rp.why, 300) };
+  }
+  // the question itself names a new length or budget ("24-week / $380,000 plan"): set the re-plan up even if the model left it out
+  if (!r.replan && /re-?plan|re-?generat|re-?baseline|re-?schedul|re-?model|stretch|extend|compress|shorten|lengthen|gantt|schedule|budget|redraw/i.test(q)) {
+    const wk = /(\d{1,3})\s*-?\s*(?:weeks?|wks?)\b/i.exec(q), mo = /(\d{1,2})\s*-?\s*months?\b/i.exec(q);
+    const bm = /\$\s*([\d,]+(?:\.\d+)?)\s*(k|m|million|thousand)?/i.exec(q) || /\b([\d,]+(?:\.\d+)?)\s*(k|m|million|thousand)\b(?:\s*(?:dollars|budget))?/i.exec(q);
+    let budget = 0;
+    if (bm) { budget = parseFloat(bm[1].replace(/,/g, '')) || 0; const u = (bm[2] || '').toLowerCase(); if (u === 'k' || u === 'thousand') budget *= 1e3; if (u === 'm' || u === 'million') budget *= 1e6; }
+    const weeks = wk ? +wk[1] : mo ? Math.round(+mo[1] * 52 / 12) : 0;
+    // "from 13 weeks to 24 weeks" / "from 125,000 to 380,000": the last number is the new one
+    const allW = [...q.matchAll(/(\d{1,3})\s*-?\s*(?:weeks?|wks?)\b/gi)].map((m) => +m[1]), allB = [...q.matchAll(/\$\s*([\d,]+(?:\.\d+)?)\s*(k|m)?/gi)].map((m) => (parseFloat(m[1].replace(/,/g, '')) || 0) * ((m[2] || '').toLowerCase() === 'k' ? 1e3 : (m[2] || '').toLowerCase() === 'm' ? 1e6 : 1));
+    const W = allW.length > 1 ? allW[allW.length - 1] : weeks, B = allB.length > 1 ? allB[allB.length - 1] : budget;
+    if ((W && W <= 520) || (B && B < 1e10)) r.replan = { weeks: W && W <= 520 ? W : 0, finish: '', budget: B && B < 1e10 ? Math.round(B * 100) / 100 : 0, gates: [], why: 'Taken from the question.' };
+  }
   const m = o.meeting;
   if (m && typeof m === 'object') {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(m.date || '') && m.date >= ctx.today ? m.date : P.addWork(P.nextWork(ctx.today), 1);

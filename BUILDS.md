@@ -43,4 +43,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 32 | 1.0.32| 2026-11-13 08:53| GKH-Project-Champ| `ab89012` | Voice: listening that starts by itself now hears you (sound meter resumed and tuned to the room, never drops a recording silently); short sp |
 | 33 | 1.0.33| 2026-11-13 09:17| GKH-Project-Champ| `ca07b38` | Champ: chat capped at 2000 tokens per question (shorter instructions, recent conversation trimmed to fit, 450-token answers) and a more natu |
 | 34 | 1.0.34| 2026-11-13 09:25| GKH-Project-Champ| `e853f5a` | About page: GKH introduction from gkhconsultancy.com (since 2010, 8 countries, 14 with partners, seven practices, selected national programs |
-| 35 | 1.0.35 | 2026-11-13 20:43 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 35 | 1.0.35| 2026-11-13 20:43| GKH-Project-Champ| `c13152e` | Programs and projects in two levels: Programs are real records (manager, sponsor, objective, status, colour, target dates) and every project |
+| 36 | 1.0.36 | 2026-11-13 21:04 | GKH-Project-Champ | _this commit_ | _see git log_ |

@@ -3095,7 +3095,7 @@
     var g = [];
     var have = function (id) { return p.tasks.some(function (t) { return t.id === id; }); };
     if (a.task_changes.length) g.push(['⏱ Schedule and cost', a.task_changes.map(function (c, i) {
-      var w = []; if (c.durTo !== c.durFrom) w.push('days ' + c.durFrom + ' → <b>' + c.durTo + '</b>'); if (c.notBefore) w.push('not before <b>' + esc(dmy(c.notBefore)) + '</b>'); if (c.extra) w.push('<b>+' + money(c.extra) + '</b>');
+      var w = []; if (c.durTo !== c.durFrom) w.push('days ' + c.durFrom + ' → <b>' + c.durTo + '</b>'); if (c.notBefore) w.push('not before <b>' + esc(dmy(c.notBefore)) + '</b>'); if (c.extra) w.push('<b>' + (c.extra > 0 ? '+' : '−') + money(Math.abs(c.extra)) + '</b>');
       return item('t', i, have(c.id), '<b>#' + (num[c.id] || c.n) + ' ' + esc(c.name) + '</b>: ' + w.join(', ') + (c.why ? '<br><small class="muted">' + esc(c.why) + '</small>' : '') + (have(c.id) ? '' : ' <small class="bad">(task no longer in the plan)</small>'));
     })]);
     if (a.new_tasks.length) g.push(['＋ New tasks', a.new_tasks.map(function (t, i) { return item('n', i, true, '<b>' + esc(t.name) + '</b>: ' + pl(t.days, 'day') + (t.after.length ? ', after #' + t.after.map(function (x) { return num[x]; }).filter(Boolean).join(', #') : '') + (t.cost ? ', ' + money(t.cost) : '') + (t.why ? '<br><small class="muted">' + esc(t.why) + '</small>' : '')); })]);
@@ -3141,6 +3141,11 @@
     p.risks = p.risks || []; p.issues = p.issues || []; p.stakeholders = p.stakeholders || [];
     a.risks.forEach(function (x, i) { if (!picks['r:' + i]) return; n++; p.risks.push({ id: 'r' + Date.now().toString(36) + 'm' + i, title: x.title, cause: x.cause + (x.critical ? ' (affects the critical path)' : '') + tag, p: x.p, i: x.i, response: x.response, action: x.action, owner: x.owner || p.charter.manager || '', review: '', status: 'Open', raised: today() }); });
     a.issues.forEach(function (x, i) { if (!picks['i:' + i]) return; n++; p.issues.push({ id: 'i' + Date.now().toString(36) + 'm' + i, title: x.title, detail: (x.detail + tag).trim(), priority: x.priority, owner: x.owner || p.charter.manager || '', raised: today(), due: x.due || '', status: 'Open', resolution: '' }); });
+    if (a.replan && n) {   // an approved re-plan also moves the Finish by date and the charter budget
+      var Rr = rollup(p, today());
+      if (p.finishBy && Rr.finish) p.finishBy = Rr.finish;
+      if (p.charter && p.charter.budget != null) p.charter.budget = Rr.BAC;
+    }
     a.stakeholders.forEach(function (x, i) { if (!picks['k:' + i]) return; n++; p.stakeholders.push({ id: 's' + Date.now().toString(36) + 'm' + i, name: x.name, role: x.role, raci: x.raci, phone: '', email: '', sub: '' }); });
     return n;
   }
@@ -3179,6 +3184,72 @@
       after();
     };
     var un = box.querySelector('[data-imundo]'); if (un) un.onclick = function () { fitUndo(); after(); };
+  }
+  // ---------- re-plan: a new total length (weeks or a finish date) and/or a new total budget, worked out task by task ----------
+  // Unfinished, non-milestone tasks are stretched (or squeezed) in proportion until the finish date hits the target; review gates are added as tasks;
+  // the budget difference is spread over unfinished tasks in proportion to their cost (or their days when they have no cost). Done tasks never change.
+  function replanImpact(rp) {
+    var base = JSON.parse(JSON.stringify(S.plan)), R0 = rollup(base, today());
+    if (!base.tasks.length || !R0.start) return null;
+    var num = {}; base.tasks.forEach(function (t, i) { num[t.id] = i + 1; });
+    var gates = (rp.gates || []).filter(function (g) { return num[g.after]; }).map(function (g) { return { name: g.name, days: g.days, after: [g.after], cost: 0, why: 'Review or approval gate added by the re-plan' }; });
+    var target = rp.finish || '';
+    if (!target && rp.weeks) { var d = new Date(R0.start + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + rp.weeks * 7 - 1); target = d.toISOString().slice(0, 10); }
+    if (target && target < R0.start) target = '';
+    var open = function (t) { return (t.pct || 0) < 100 && t.dur > 0; };
+    var trial = function (f) {   // stretch factor f → the plan with the gates and new durations
+      var c = JSON.parse(JSON.stringify(base)), by = {}; c.tasks.forEach(function (t) { by[t.id] = t; });
+      var a = { task_changes: [], new_tasks: gates, scope_changes: [], risks: [], issues: [], stakeholders: [], quality: [] };
+      base.tasks.forEach(function (t) { if (!open(t) || f === 1) return; var nd = Math.max(1, Math.round(t.dur * f)); if (nd !== t.dur) a.task_changes.push({ id: t.id, n: num[t.id], name: t.name, durFrom: t.dur, durTo: nd, notBefore: '', extra: 0, why: 'Re-plan' }); });
+      var pk = {}; a.task_changes.forEach(function (_, i) { pk['t:' + i] = 1; }); a.new_tasks.forEach(function (_, i) { pk['n:' + i] = 1; });
+      impactApply(c, a, pk, { tag: '' }); return { a: a, R: rollup(c, today()) };
+    };
+    var best = trial(1);
+    if (target) {   // find the stretch that lands on the target finish (a few rounds: dependencies and rounding)
+      var lo = 0.2, hi = 6, f = Math.max(lo, Math.min(hi, workBetween(R0.start, target) / Math.max(1, workBetween(R0.start, best.R.finish))));
+      for (var k = 0; k < 14; k++) {
+        var t = trial(f), diff = workBetween(R0.start, t.R.finish) - workBetween(R0.start, target);
+        if (Math.abs(diff) < Math.abs(workBetween(R0.start, best.R.finish) - workBetween(R0.start, target))) best = t;
+        if (diff === 0) break;
+        if (diff > 0) hi = f; else lo = f;
+        f = (lo + hi) / 2;
+      }
+    }
+    var a = best.a;
+    // the budget: spread the difference over the unfinished work
+    var B1 = rp.budget > 0 ? rp.budget : 0, cur = best.R.BAC, gap = B1 ? Math.round((B1 - cur) * 100) / 100 : 0;
+    if (gap) {
+      var pool = base.tasks.filter(function (t) { return (t.pct || 0) < 100; }), lab = function (t) { return Math.max(0, (Number(t.qty) || 0) * (Number(t.rate) || 0)); };
+      var w = pool.map(function (t) { return lab(t) || (gap > 0 ? Math.max(1, t.dur) * 0.0001 : 0); }), W = w.reduce(function (x, y) { return x + y; }, 0);
+      if (W > 0) {
+        var left = gap, byChange = {}; a.task_changes.forEach(function (c) { byChange[c.id] = c; });
+        pool.forEach(function (t, i) {
+          if (!w[i]) return;
+          var ex = i === pool.length - 1 ? left : Math.round(gap * w[i] / W * 100) / 100;
+          if (gap < 0) ex = Math.max(ex, -lab(t));   // never below nothing
+          left = Math.round((left - ex) * 100) / 100; if (!ex) return;
+          var c = byChange[t.id]; if (!c) { c = byChange[t.id] = { id: t.id, n: num[t.id], name: t.name, durFrom: t.dur, durTo: t.dur, notBefore: '', extra: 0, why: 'Re-plan' }; a.task_changes.push(c); }
+          c.extra = Math.round((c.extra + ex) * 100) / 100;
+        });
+        if (Math.abs(left) >= 0.01 && a.task_changes.length) { var lc = a.task_changes[a.task_changes.length - 1]; lc.extra = Math.round((lc.extra + left) * 100) / 100; }
+      }
+      a.task_changes.sort(function (x, y) { return x.n - y.n; });
+    }
+    var pk = {}; a.task_changes.forEach(function (_, i) { pk['t:' + i] = 1; }); a.new_tasks.forEach(function (_, i) { pk['n:' + i] = 1; });
+    var c2 = JSON.parse(JSON.stringify(base)); impactApply(c2, a, pk, { tag: '' }); var R1 = rollup(c2, today());
+    var dd = R1.finish > R0.finish ? workBetween(R0.finish, R1.finish) - 1 : -(workBetween(R1.finish, R0.finish) - 1), dc = Math.round((R1.BAC - R0.BAC) * 100) / 100;
+    var wk = function (a1, b1) { return Math.round(((Date.parse(b1) - Date.parse(a1)) / 864e5 + 1) / 7 * 10) / 10; };
+    var lvl = function (x, big) { x = Math.abs(x); return !x ? 'None' : x >= big ? 'High' : x >= big / 3 ? 'Medium' : 'Low'; };
+    a.impact = {
+      time: { level: lvl(dd, 20), text: 'Finish ' + dmy(R0.finish) + ' → ' + dmy(R1.finish) + ' (' + wk(R0.start, R0.finish) + ' → ' + wk(R1.start, R1.finish) + ' weeks).' },
+      cost: { level: lvl(dc, Math.max(1, R0.BAC * 0.3)), text: 'Budget ' + money(R0.BAC) + ' → ' + money(R1.BAC) + (dc ? ' (' + (dc > 0 ? '+' : '−') + money(Math.abs(dc)) + ')' : '') + '.' },
+      scope: { level: gates.length ? 'Low' : 'None', text: gates.length ? pl(gates.length, 'review gate') + ' added to the schedule.' : '' },
+      quality: { level: 'None', text: '' }, risk: { level: dd < 0 ? 'Medium' : 'Low', text: dd < 0 ? 'A shorter schedule adds delivery risk: check resources.' : 'More time: watch for idle teams and drifting scope.' }
+    };
+    a.outcome = 'Re-plan' + (target ? ' to ' + wk(R1.start, R1.finish) + ' weeks (finish ' + dmy(R1.finish) + ')' : '') + (B1 ? (target ? ' and ' : ' to ') + money(R1.BAC) : '');
+    a.summary = [rp.why || ''].filter(Boolean); a.decisions = []; a.actions = []; a.follow_ups = [];
+    a.replan = { weeks: rp.weeks || 0, finish: target, budget: B1, rebaseline: true };
+    return { a: a, R0: R0, R1: R1, target: target, budget: B1 };
   }
   function p0finishBy(R) { return S.plan.finishBy && R.finish && R.finish > S.plan.finishBy; }
 
@@ -3797,6 +3868,11 @@
       var msg = crNo(c) + ' ' + outcome.toLowerCase();
       if (ok && c.items && n) {
         var R0 = rollup(S.plan, today()), k = impactApply(S.plan, c.items, pk, { tag: ' (' + crNo(c) + ')' }), R1 = rollup(S.plan, today());
+        if (c.items.replan && c.items.replan.rebaseline) {   // an approved re-plan is the new performance baseline (PMBOK)
+          var bp = S.plan; schedule(bp); var bt = {}; bp.tasks.forEach(function (t) { bt[t.id] = { es: t.es, ef: t.ef, cost: cost(t) }; });
+          c.prevBaseline = bp.baseline ? { at: bp.baseline.at, finish: bp.baseline.finish, BAC: bp.baseline.BAC } : null;
+          bp.baseline = { at: Date.now(), finish: R1.finish, BAC: R1.BAC, tasks: bt }; crLog(c, 'New baseline set: finish ' + dmy(R1.finish) + ', budget ' + money(R1.BAC));
+        }
         c.status = 'Implemented'; c.implementedAt = Date.now(); crLog(c, 'Added to the plan and registers: ' + pl(k, 'change') + '. Finish ' + dmy(R0.finish) + ' → ' + dmy(R1.finish) + ', budget ' + money(R0.BAC) + ' → ' + money(R1.BAC));
         if (c.source === 'meeting' && c.srcRef) { var mm = (S.plan.meetings || []).filter(function (x) { return x.id === c.srcRef; })[0]; if (mm) mm.applied = Date.now(); }
         msg = crNo(c) + ' approved and added to the plan: ' + pl(k, 'change') + '. Finish ' + dmy(R1.finish) + ', budget ' + money(R1.BAC);
@@ -4266,12 +4342,12 @@
     if (r.risks && r.risks.length) {
       var crit = r.risks.filter(function (x) { return x.critical; }).length;
       h += '<div class="pi-act"><h4>⚠ Suggested risks <small class="muted">(' + crit + ' critical, ' + (r.risks.length - crit) + ' non-critical)</small></h4><div class="table-wrap"><table class="pi-tbl"><thead><tr><th></th><th>Risk</th><th>Path</th><th>P</th><th>I</th><th>Score</th><th>Response</th><th>Action</th></tr></thead><tbody>' +
-        r.risks.map(function (x, k) { var have = (p.risks || []).some(function (y) { return y.title.toLowerCase() === x.title.toLowerCase(); }); return '<tr><td><input type="checkbox" data-rk="' + k + '"' + (have ? ' disabled title="Already in the register"' : ' checked') + '></td><td><b>' + esc(x.title) + '</b><br><small class="muted">' + esc(x.cause) + '</small></td><td>' + (x.critical ? '<span class="pi-crit">⚡ Critical</span>' : '<span class="muted">Non-critical</span>') + '</td><td>' + x.p + '</td><td>' + x.i + '</td><td><b>' + (x.p * x.i) + '</b></td><td>' + esc(x.response) + '</td><td><small>' + esc(x.action) + '</small></td></tr>'; }).join('') +
-        '</tbody></table></div>' + piCrFoot(e, 'r', 'data-addrisks', '➜ Send ticked risks to change control', 'risks') + '</div>';
+        r.risks.map(function (x, k) { var have = (p.risks || []).some(function (y) { return y.title.toLowerCase() === x.title.toLowerCase(); }); return '<tr><td>' + (have ? '<span class="pi-have" title="Already in the Risk register">✓ In register</span>' : '<input type="checkbox" class="pi-cb" data-rk="' + k + '" checked aria-label="Send this risk">') + '</td><td><b>' + esc(x.title) + '</b><br><small class="muted">' + esc(x.cause) + '</small></td><td>' + (x.critical ? '<span class="pi-crit">⚡ Critical</span>' : '<span class="muted">Non-critical</span>') + '</td><td>' + x.p + '</td><td>' + x.i + '</td><td><b>' + (x.p * x.i) + '</b></td><td>' + esc(x.response) + '</td><td><small>' + esc(x.action) + '</small></td></tr>'; }).join('') +
+        '</tbody></table></div>' + (r.risks.some(function (x) { return !(p.risks || []).some(function (y) { return y.title.toLowerCase() === x.title.toLowerCase(); }); }) || (p.changes || []).some(function (c) { return c.srcRef === piCrRef(e, 'r'); }) ? piCrFoot(e, 'r', 'data-addrisks', '➜ Send ticked risks to change control', 'risks') : '<p class="muted" style="margin:8px 0 0">✓ All of these risks are already in the Risk register.</p>') + '</div>';
     }
     if (r.stakeholders && r.stakeholders.length) {
       h += '<div class="pi-act"><h4>👥 Stakeholder register</h4><div class="table-wrap"><table class="pi-tbl"><thead><tr><th></th><th>Name</th><th>Role</th><th>RACI</th><th>Interest</th><th>Influence</th><th>How to engage</th></tr></thead><tbody>' +
-        r.stakeholders.map(function (x, k) { var have = !!x.id || (p.stakeholders || []).some(function (y) { return y.name && y.name.toLowerCase() === x.name.toLowerCase(); }); return '<tr><td><input type="checkbox" data-sk="' + k + '"' + (have ? ' disabled title="Already a stakeholder"' : ' checked') + '></td><td><b>' + esc(x.name) + '</b>' + (have ? ' <small class="muted">(listed)</small>' : '') + '</td><td>' + esc(x.role) + '</td><td><span class="raci raci-' + x.raci + '">' + x.raci + '</span></td><td>' + x.interest + '</td><td>' + x.influence + '</td><td><small>' + esc(x.engagement) + '</small></td></tr>'; }).join('') +
+        r.stakeholders.map(function (x, k) { var have = !!x.id || (p.stakeholders || []).some(function (y) { return y.name && y.name.toLowerCase() === x.name.toLowerCase(); }); return '<tr><td>' + (have ? '<span class="pi-have" title="Already a stakeholder">✓ Listed</span>' : '<input type="checkbox" class="pi-cb" data-sk="' + k + '" checked aria-label="Send this stakeholder">') + '</td><td><b>' + esc(x.name) + '</b>' + (have ? ' <small class="muted">(listed)</small>' : '') + '</td><td>' + esc(x.role) + '</td><td><span class="raci raci-' + x.raci + '">' + x.raci + '</span></td><td>' + x.interest + '</td><td>' + x.influence + '</td><td><small>' + esc(x.engagement) + '</small></td></tr>'; }).join('') +
         '</tbody></table></div>' + piCrFoot(e, 'k', 'data-addsk', '➜ Send ticked stakeholders to change control', 'stakeholders') + '</div>';
     }
     if (r.meeting) {
@@ -4285,6 +4361,14 @@
         (L.missing.length ? '<p class="sk-warn" style="margin:8px 0">No email for ' + esc(L.missing.map(function (x) { return x.name || x.role; }).join(', ')) + ': add it on the Stakeholders tab to invite them.</p>' : '') +
         '<div class="row" style="gap:6px;margin-top:8px"><a class="btn btn-gold btn-sm" data-mgo target="_blank" rel="noopener" href="' + esc(L.gcal) + '">📅 Create in Google Calendar + Meet</a><button class="btn btn-sm" data-mdl>⬇ Invite (.ics)</button><a class="btn btn-sm" data-mmail href="' + esc(L.mail) + '">✉ Email the invite</a><button class="btn btn-sm" data-msave' + (saved ? ' disabled' : '') + '>' + (saved ? '✓ Saved to this project' : '💾 Save to this project') + '</button></div>' +
         '<p class="muted" style="font-size:12px;margin:8px 0 0">Google Calendar opens with the time, guests and agenda filled in and adds the Google Meet video link; press <b>Save</b> there and Google emails the invites. A free Google account allows group calls up to 60 minutes, so 45 minutes fits.</p></div>';
+    }
+    if (r.replan) {
+      var rc = (p.changes || []).filter(function (x) { return x.srcRef === piCrRef(e, 'p'); })[0];
+      if (rc) h += '<div class="pi-act pi-imp"><h4>📐 Re-plan</h4>' + (rc.effect ? '<p><b>Effect:</b> finish ' + esc(dmy(rc.effect.f0)) + ' → <b>' + esc(dmy(rc.effect.f1)) + '</b>, budget ' + money(rc.effect.b0) + ' → <b>' + money(rc.effect.b1) + '</b></p>' : '<p>' + esc(rc.title) + '</p>') + piCrFoot(e, 'p', '', '', '') + '</div>';
+      else {
+        var RP = st.rp || (st.rp = replanImpact(r.replan));
+        h += '<div class="pi-act pi-imp" data-replan><h4>📐 Re-plan: ' + esc(RP ? RP.a.outcome.replace(/^Re-plan /, '') : '') + '</h4>' + (RP ? '<p class="muted" style="margin:-2px 0 8px">Worked out from the plan: unfinished tasks are stretched in proportion' + (RP.budget ? ', and the budget difference is spread over the unfinished work in proportion to its cost' : '') + '. Completed tasks don\'t change. Untick anything that should stay as it is.</p>' + impactHtml(RP.a, null) : '<p class="muted">This plan has no scheduled tasks to re-plan yet.</p>') + '</div>';
+      }
     }
     if (r.impact) { var im = (p.meetings || []).filter(function (x) { return x.id === r.impact.meeting.id; })[0] || null; h += '<div class="pi-act pi-imp">' + impactHtml(r.impact, im) + (im ? '<p style="margin:6px 0 0"><a class="btn btn-sm" href="#plan/' + esc(S.core) + '/comms">📞 Open the meeting log</a></p>' : '') + '</div>'; }
     if (r.swms) h += '<div class="pi-act"><div class="row" style="gap:6px"><a class="btn btn-gold btn-sm" href="#swms/' + esc(S.core) + '">🦺 Open the SWMS</a><button class="btn btn-sm" data-swdl="docx">⬇ Word</button><button class="btn btn-sm" data-swdl="pdf">⬇ PDF</button></div></div>';
@@ -4319,6 +4403,20 @@
           { stakeholders: list.map(function (x) { return { name: x.name, role: x.role || '', raci: x.raci || 'I' }; }) });
       };
       box.querySelectorAll('[data-picropen]').forEach(function (b) { b.onclick = function () { S.crView = b.getAttribute('data-picropen'); location.hash = '#plan/' + S.core + '/change'; }; });
+      var rpb = box.querySelector('[data-replan]');
+      if (rpb && st.rp) {
+        impactWire(rpb, st.rp.a, null, intelTab);
+        var sendR = rpb.querySelector('[data-imcr]');
+        if (sendR) { sendR.textContent = '➜ Send the re-plan to change control'; sendR.onclick = function () {
+          var picks = impactPicks(rpb); if (!Object.keys(picks).length) return toast('Tick the changes to send', true);
+          var a = JSON.parse(JSON.stringify(st.rp.a)), d = st.rp;
+          var c = crNew({ title: a.outcome, desc: 'Finish ' + dmy(d.R0.finish) + ' → ' + dmy(d.R1.finish) + '; budget ' + money(d.R0.BAC) + ' → ' + money(d.R1.BAC) + '.' + (a.summary.length ? '\n' + a.summary.join('\n') : '') + '\nOnce approved and signed, the new schedule and budget become the baseline.',
+            reason: 'Suggested by Project Intelligence in answer to: “' + String(e.q || '').slice(0, 300) + '”', source: 'intel', srcRef: piCrRef(e, 'p'), srcTitle: 'Project Intelligence answer', items: a, picks: picks, priority: 'High',
+            estDays: d.R1.finish && d.R0.finish ? (d.R1.finish > d.R0.finish ? workBetween(d.R0.finish, d.R1.finish) - 1 : -(workBetween(d.R1.finish, d.R0.finish) - 1)) : 0, estCost: Math.round((d.R1.BAC - d.R0.BAC) * 100) / 100 });
+          dirty(crNo(c) + ' raised'); S.crView = c.id; toast(crNo(c) + ' raised: approve and sign it to redraw the Gantt chart and re-baseline the budget');
+          location.hash = '#plan/' + S.core + '/change';
+        }; }
+      }
       if (!r.meeting || !st.meeting || !box.querySelector('[data-mgo]')) return;
       var m = st.meeting;
       var refresh = function () { var L = piMeetLinks(m); box.querySelector('[data-mgo]').href = L.gcal; box.querySelector('[data-mmail]').href = L.mail; };

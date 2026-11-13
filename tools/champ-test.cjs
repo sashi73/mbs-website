@@ -22,6 +22,12 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   // a fake DeepSeek: says back which language and page the assistant was told to use
   const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
     const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
+    if (j.response_format && /Project Intelligence/.test(sys)) {
+      global.INTEL_Q = JSON.parse(j.messages[1].content).question;
+      s2.setHeader('Content-Type', 'application/json');
+      return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ answer: '## Re-plan\nStretch the work and add review gates.', replan: null,
+        risks: [{ title: 'Client sign-off delays at review gates', cause: 'Slow approvals', p: 4, i: 4, response: 'Mitigate', action: 'Agree sign-off SLAs', owner: '', critical: true },
+          { title: 'Team idle during float', cause: 'Gaps', p: 3, i: 3, response: 'Mitigate', action: 'Re-sequence', owner: '', critical: false }], stakeholders: [], meeting: null, sources: [], follow_ups: ['What buffer should be added?'] }) } }], usage: { total_tokens: 900 } })); }
     if (j.response_format && /Translate each value into English/.test(sys)) {
       const f = JSON.parse(j.messages[1].content).fields, EN = { 'சசி': 'Sashi', 'சிவம்': 'Sivam', 'எனக்கு டெமோ வேண்டும்': 'I would like a demo', 'Syarikat Maju': 'Syarikat Maju', 'Saya mahu demo untuk 14 projek pembinaan.': 'I would like a demo for 14 construction projects.', 'Pengurus PMO': 'PMO Manager' };
       const out = {}; for (const k of Object.keys(f)) out[k] = EN[f[k]] || f[k];
@@ -550,6 +556,39 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   pgl = await (await api('planProgramList', { today: new Date().toISOString().slice(0, 10) })).json();
   ok('Dependencies', 'deleting a project removes its links', !pgl.deps.some((d) => d.from === hBuild || d.to === hBuild) && pgl.deps.length === 1);
   for (const c of [hFit, hIT]) await api('planProjectDelete', { core: c });
+
+  // ---- Project Intelligence: re-plan on the fly → change control → sign → the whole plan follows ----
+  const esg = (await (await api('planNewProject', { name: 'ESG baseline study', client: 'National Airlines', program: 'Digital health' })).json()).core;
+  const wd = (n) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  // 13 weeks, $125,120: kick-off, review, interviews, report, handover
+  await api('planSave', { core: esg, plan: { name: 'ESG baseline study', start: wd(7), finishBy: '', charter: { manager: 'Sashi Kumar Sivam', budget: 125120 }, phases: [{ id: 'ph1', name: 'Work' }], tasks: [
+    { id: 'a', name: 'Kick-off and charter', dur: 3, qty: 1, rate: 5120, pct: 0 }, { id: 'b', name: 'Document review', dur: 15, qty: 1, rate: 20000, pred: ['a'], pct: 0 },
+    { id: 'c', name: 'Stakeholder interviews', dur: 20, qty: 1, rate: 40000, pred: ['b'], pct: 0 }, { id: 'd', name: 'Sustainability report', dur: 22, qty: 1, rate: 55000, pred: ['c'], pct: 0 },
+    { id: 'e', name: 'Handover', dur: 5, qty: 1, rate: 5000, pred: ['d'], pct: 0 }, { id: 'f', name: 'Final acceptance', dur: 0, pred: ['e'], pct: 0 }] } });
+  let gp = (await (await api('planGet', { core: esg })).json()).plan;
+  await p.goto(`${BASE}/admin/#plan/${esg}/intel`); await p.reload(); await p.waitForSelector('#piQ', { timeout: 10000 }).catch(() => {});
+  await p.fill('#piQ', 'Can you regenerate the Gantt chart on the 24-week / $380,000 remodelled plan instead?'); await p.click('#piGo');
+  await p.waitForSelector('[data-replan]', { timeout: 30000 }).catch(() => {});
+  const rpT = await p.textContent('#piLog').catch(() => '');
+  ok('Re-plan', 'a re-plan question becomes a worked-out re-plan (24 weeks, $380,000), not just a table', /Re-plan: to 2[34](\.\d)? weeks/.test(rpT) && /\$380,000/.test(rpT), rpT.slice(0, 300));
+  ok('Re-plan', 'the preview shows the new finish and budget before anything changes', /With the ticked changes:.*budget \$125,120\.00 → \$380,000\.00/.test(rpT.replace(/\s+/g, ' ')), (rpT.match(/With the ticked changes:[^·]*·[^)]*\)/) || [''])[0]);
+  ok('Re-plan', 'the risk tick boxes can be ticked and unticked', await (async () => { const cb = await p.$('[data-rk="1"]'); if (!cb) return false; await cb.click(); const off = !(await cb.isChecked()); await cb.click(); return off && (await cb.isChecked()); })());
+  await p.click('[data-replan] [data-imcr]'); await sleep(1500);
+  ok('Re-plan', 'sent to change control as a change request (nothing changed yet)', /\/change$/.test(p.url()) && /CR-\d{3}/.test(await p.textContent('#planBody')));
+  gp = (await (await api('planGet', { core: esg })).json()).plan;
+  ok('Re-plan', 'the plan is unchanged until it is signed', gp.tasks.find((t) => t.id === 'd').dur === 22 && (gp.changes || []).length === 1 && gp.changes[0].status === 'Proposed');
+  await p.click('[data-cra="Approved"]'); await sleep(400);
+  await p.fill('#crSignF [name=by]', 'Sashi Kumar Sivam'); await p.fill('#crSignF [name=sig]', 'Sashi Kumar Sivam'); await p.check('#crSignF [name=go]'); await p.click('#crSignF button[type=submit]'); await sleep(2500);
+  gp = (await (await api('planGet', { core: esg })).json()).plan;
+  const PLX = await import(require('path').resolve('netlify/lib/plan.mjs'));
+  const R1x = PLX.rollup(JSON.parse(JSON.stringify(gp)), new Date().toISOString().slice(0, 10)), wks = Math.round(((Date.parse(R1x.finish) - Date.parse(R1x.start)) / 864e5 + 1) / 7 * 10) / 10;
+  ok('Re-plan', 'signed: the plan is redrawn to about 24 weeks and $380,000', Math.abs(wks - 24) <= 0.6 && Math.abs(R1x.BAC - 380000) < 1 && gp.changes[0].status === 'Implemented', wks + ' weeks, $' + R1x.BAC);
+  ok('Re-plan', 'the approved re-plan becomes the new baseline', gp.baseline && Math.abs(gp.baseline.BAC - 380000) < 1 && gp.baseline.finish === R1x.finish);
+  ok('Re-plan', 'the charter budget follows', Math.abs((gp.charter || {}).budget - 380000) < 1, (gp.charter || {}).budget);
+  ok('Re-plan', 'milestones stay milestones', gp.tasks.find((t) => t.id === 'f').dur === 0);
+  await p.goto(`${BASE}/admin/#plan/${esg}/overview`); await sleep(1500);
+  ok('Re-plan', 'the Overview shows the new budget', /380,000/.test(await p.textContent('#planBody')));
+  await api('planProjectDelete', { core: esg });
 
   // ---- builds ----
   r = await api('me'); const meB = r.ok() ? await r.json() : {};
