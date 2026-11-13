@@ -190,6 +190,12 @@
     c_budget: ['Client budget cut or funding delayed', 2, 4, 'Mitigate', 'Stage the work in milestone payments; agree what can be deferred'],
     c_market: ['Market or partner conditions differ from the research', 3, 3, 'Mitigate', 'Validate with in-country partners before committing'],
     c_quality: ['Data quality is too poor to rely on', 3, 4, 'Mitigate', 'Run a data quality check early; agree estimation methods'],
+    f_budget: ['Spending goes over the budget', 3, 3, 'Mitigate', 'Keep a simple budget sheet; get quotes before booking; hold back 10% for surprises'],
+    f_vendor: ['A supplier or venue cancels or lets you down', 2, 4, 'Mitigate', 'Get bookings in writing; keep a back-up contact for each key supplier'],
+    f_rsvp: ['People reply late, so numbers are unclear', 4, 2, 'Mitigate', 'Set an RSVP date; send one friendly reminder; plan for +10%'],
+    f_weather: ['Bad weather on the day', 3, 3, 'Mitigate', 'Have a rain plan (indoor space, marquee) and check the forecast a week out'],
+    f_ill: ['Someone key is sick or can\'t make it', 2, 3, 'Accept', 'Share the run sheet so a helper can step in'],
+    f_time: ['Things are left to the last minute', 3, 3, 'Mitigate', 'Weekly 15-minute check-in on the plan; tick tasks off as you go'],
     c_travel: ['Travel, visas or time zones slow the team down', 2, 2, 'Mitigate', 'Plan trips early; mix on-site and remote work'],
     weather: ['Rain or wind stops outdoor work', 4, 3, 'Mitigate', 'Check the forecast daily; keep a buffer day'], hidden: ['Hidden damage found once it is opened up', 3, 4, 'Mitigate', 'Agree a contingency and variations in writing up front'],
     supply: ['Materials late or out of stock', 2, 3, 'Mitigate', 'Confirm stock before ordering; order on day 1'], access: ['Access, keys or parking problems on site', 2, 2, 'Avoid', 'Confirm access and parking with the customer before starting'],
@@ -278,6 +284,27 @@
         ['Prepare', [['Value proposition and messaging', 5, 1], ['Launch plan and calendar', 4, 1], ['Sales enablement', 5, 1]]], ['Launch', [['Launch campaign', 20, 1], ['Post-launch review', 3, 1]]]], r: ['c_market', 'c_budget'] },
       { id: 'gtm-tender', n: 'Government tender and bid support', dr: 1700, o: 'Submit a compliant, winning bid on time.', d: 'Bid/no-bid decision; bid plan and compliance matrix; solution and pricing; proposal; red team review', ph: [
         ['Qualify', [['Bid / no-bid decision', 1, 1], ['Bid plan and compliance matrix', 3, 1]]], ['Write', [['Solution and pricing', 8, 2], ['Write the proposal', 10, 2], ['Red team review', 3, 2]]], ['Submit', [['Final submission', 1, 1]]]], r: ['c_people', 'c_signoff'] }] },
+    { c: 'General and fun projects (learn project management)', g: 1, fun: 1, items: [
+      { id: 'fun-birthday', n: 'Birthday party', o: 'Throw a memorable birthday party on the day, within budget, with everyone looked after.', d: 'Guest list; venue; invitations; food and cake; decorations; run sheet for the day', ph: [
+        ['Plan', [['Guest list and theme', 2, 0, 0], ['Book the venue', 3, 0, 400]]], ['Prepare', [['Send invitations and track RSVPs', 10, 0, 30], ['Order food and cake', 2, 0, 900], ['Decorations and party bags', 3, 0, 250], ['Music and games', 2, 0, 150]]],
+        ['The day', [['Set up the venue', 1, 0, 0], ['Party time', 1, 0, 0], ['Pack down and clean up', 1, 0, 0]]]], r: ['f_budget', 'f_rsvp', 'f_vendor', 'f_weather'] },
+      { id: 'fun-wedding', n: 'Wedding', o: 'Plan a wedding that feels like the couple, on the date, within the agreed budget.', d: 'Budget and guest list; venue and celebrant; suppliers booked; invitations; run sheet; thank-you cards', ph: [
+        ['Plan', [['Budget and guest list', 5, 0, 0], ['Book the venue and date', 10, 0, 12000], ['Book the celebrant', 5, 0, 900]]],
+        ['Suppliers', [['Caterer and menu tasting', 10, 0, 15000], ['Photographer and videographer', 5, 0, 4500], ['Music or DJ', 5, 0, 2000], ['Flowers and styling', 5, 0, 3500], ['Attire and rings', 20, 0, 6000]]],
+        ['Guests', [['Save the dates and invitations', 15, 0, 600], ['RSVPs and seating plan', 20, 0, 0]]],
+        ['The day', [['Final run sheet and supplier briefing', 3, 0, 0], ['Rehearsal', 1, 0, 0], ['Wedding day', 1, 0, 0]]], ['After', [['Pay final invoices', 3, 0, 0], ['Thank-you cards', 7, 0, 200]]]], r: ['f_budget', 'f_vendor', 'f_rsvp', 'f_weather', 'f_ill'] },
+      { id: 'fun-holiday', n: 'Family holiday', o: 'Take a relaxed family holiday that everyone enjoys, with no travel surprises.', d: 'Destination and budget; travel and stay booked; documents ready; itinerary; packing list', ph: [
+        ['Plan', [['Pick destination and dates', 3, 0, 0], ['Set the budget', 1, 0, 0]]], ['Book', [['Flights', 2, 0, 3200], ['Accommodation', 2, 0, 2800], ['Travel insurance', 1, 0, 250], ['Passports and visas check', 10, 0, 0]]],
+        ['Prepare', [['Day-by-day itinerary', 3, 0, 0], ['Packing list and pet or house care', 3, 0, 150]]], ['Travel', [['Holiday', 7, 0, 1500]]]], r: ['f_budget', 'f_ill', 'f_weather', 'f_time'] },
+      { id: 'fun-move', n: 'Moving house', o: 'Move into the new home on the planned day, with nothing lost or broken.', d: 'Moving date; removalist booked; packing done; utilities and address changed; old place cleaned', ph: [
+        ['Plan', [['Set the moving date', 1, 0, 0], ['Get removalist quotes and book', 5, 0, 1800]]], ['Prepare', [['Declutter and donate', 10, 0, 0], ['Packing boxes and materials', 1, 0, 150], ['Pack room by room', 10, 0, 0], ['Connect utilities and internet at the new place', 5, 0, 200], ['Change address (bank, licence, mail)', 3, 0, 0]]],
+        ['Move', [['Moving day', 1, 0, 0], ['Unpack the essentials', 2, 0, 0]]], ['Close', [['End-of-lease clean', 1, 0, 450]]]], r: ['f_vendor', 'f_time', 'f_budget'] },
+      { id: 'fun-fundraiser', n: 'Charity or community fundraiser', o: 'Run a community event that meets its fundraising target and leaves everyone wanting to come back.', d: 'Target and permits; venue; sponsors; promotion; volunteers; the event; results report', ph: [
+        ['Plan', [['Set the target and date', 2, 0, 0], ['Council permit and insurance', 10, 0, 350], ['Book the venue', 3, 0, 600]]], ['Prepare', [['Find sponsors and prizes', 15, 0, 0], ['Promote (posters, social media)', 15, 0, 200], ['Recruit and brief volunteers', 10, 0, 100], ['Stalls, food and equipment', 5, 0, 800]]],
+        ['Event', [['Set up', 1, 0, 0], ['Event day', 1, 0, 0], ['Count and bank the money', 1, 0, 0]]], ['Close', [['Thank sponsors and share results', 3, 0, 0]]]], r: ['f_rsvp', 'f_weather', 'f_vendor', 'f_budget'] },
+      { id: 'fun-garden', n: 'Backyard or room makeover (DIY)', o: 'Finish a DIY makeover on time and on budget, and learn how to plan the work.', d: 'Design idea; shopping list; tools; finished makeover; before and after photos', ph: [
+        ['Plan', [['Measure and sketch the design', 2, 0, 0], ['Shopping list and budget', 1, 0, 0]]], ['Prepare', [['Buy materials', 2, 0, 1200], ['Hire or borrow tools', 1, 0, 150]]],
+        ['Do it', [['Clear and prepare the area', 2, 0, 0], ['Build or paint', 4, 0, 0], ['Plants, furniture and finishing touches', 2, 0, 400]]], ['Close', [['Clean up and take before and after photos', 1, 0, 0]]]], r: ['f_budget', 'f_weather', 'f_time'] }] },
     { c: 'Bathroom', items: [
       { id: 'bathroom', n: 'Waterproofing & retiling', legacy: 'bathroom' },
       { id: 'bath-reno', n: 'Full bathroom renovation', m: 6500, s: [St('Strip-out & rubbish removal', 2, 16, 'h', 55, [['Remove fixtures', 0, 1], ['Remove tiles and screed', 0, 2], ['Rubbish removal', 1, 1]]), St('Plumbing & electrical rough-in', 2, 1, 'lot', 2400, [['Plumber rough-in', 0, 1], ['Electrician rough-in', 1, 1]]), St('Wall sheeting & set', 2, 1, 'lot', 1400), St('Screed & falls', 1, 8, 'h', 85), St('Waterproofing membrane', 2, 1, 'lot', 950, [['Primer and bond breaker', 0, 1], ['Membrane, two coats', 0, 2]]), St('Flood test (24 h) & photos', 1, 1, 'h', 90), St('Wall & floor tiling', 4, 32, 'h', 85, [['Floor tiles', 0, 1], ['Wall tiles', 1, 3]]), St('Fit-off: vanity, toilet, tapware, screen', 2, 1, 'lot', 1600), St('Paint ceiling & touch-ups', 1, 6, 'h', 70)], r: ['hidden', 'asbestos', 'supply', 'cure', 'licensed'] },
@@ -363,19 +390,19 @@
   function catalogItem(id) { var f = null; CATALOG.forEach(function (c) { c.items.forEach(function (i) { if (i.id === id) f = { cat: c.c, item: i }; }); }); return f; }
   // GKH consulting project types: kick-off, the phases (a milestone at the end of each), final presentation and acceptance; priced in consultant-days
   function buildConsult(f) {
-    var it = f.item, rows = [], n = 0, key = function () { return 'k' + (++n); }, dr = it.dr || 1600;
-    var row = function (name, d, ppl, after) { var k = key(); rows.push([0, k, name, d, '', Math.round(d * ppl * 10) / 10, 'day', dr, after ? [after] : []]); return k; };
-    var prev = row('Kick-off meeting and project charter', 2, 1, '');
-    prev = row('Data request and stakeholder map', 3, 1, prev);
+    var it = f.item, fun = !it.dr, rows = [], n = 0, key = function () { return 'k' + (++n); }, dr = it.dr || 1600;
+    var row = function (name, d, ppl, after, cost) { var k = key(); rows.push(cost != null ? [0, k, name, d, '', cost ? 1 : 0, cost ? 'lot' : '', cost || 0, after ? [after] : []] : [0, k, name, d, '', Math.round(d * ppl * 10) / 10, 'day', dr, after ? [after] : []]); return k; };
+    var prev = fun ? row('Project charter: the goal, date and budget', 1, 0, '', 0) : row('Kick-off meeting and project charter', 2, 1, '');
+    prev = fun ? row('Stakeholders: who is involved and who decides', 1, 0, prev, 0) : row('Data request and stakeholder map', 3, 1, prev);
     it.ph.forEach(function (ph, i) {
-      ph[1].forEach(function (t) { prev = row(t[0], t[1], t[2], prev); });
+      ph[1].forEach(function (t) { prev = row(t[0], t[1], t[2], prev, fun ? t[3] : null); });
       var km = key(); rows.push([0, km, '✓ Phase ' + (i + 1) + ' complete: ' + ph[0], 0, '', 0, '', 0, [prev]]); prev = km;
     });
-    prev = row('Final presentation and handover', 2, 1, prev);
-    rows.push([0, key(), 'Final acceptance and invoice', 0, '', 0, '', 0, [prev]]);
+    prev = fun ? row('Lessons learned: what went well, what to do differently', 1, 0, prev, 0) : row('Final presentation and handover', 2, 1, prev);
+    rows.push([0, key(), fun ? 'Project closed: celebrate!' : 'Final acceptance and invoice', 0, '', 0, '', 0, [prev]]);
     var t = T(it.n, it.o, '', rows, (it.r || []).map(function (k) { return RISK[k]; }).filter(Boolean));
     t.deliverables = String(it.d || '').split(/;\s*/).map(function (x) { return '- ' + x.charAt(0).toUpperCase() + x.slice(1); }).join('\n');
-    t.acceptance = 'Each deliverable reviewed and signed off by the client at its phase gate; final presentation given; final acceptance signed; invoice issued.';
+    t.acceptance = fun ? 'The day went to plan, bills are paid, everyone has been thanked and the lessons are written down.' : 'Each deliverable reviewed and signed off by the client at its phase gate; final presentation given; final acceptance signed; invoice issued.';
     return t;
   }
   function buildTemplate(id) {
@@ -622,7 +649,8 @@
   }
   var EMERG = /\bemergenc|\burgent|\basap\b|straight away|right away|immediately|burst (pipe|water)|flood(ing|ed)?\b|storm damage|water (is )?(pouring|coming in|everywhere)/i;
   /* ---------- new plan: scope of work + job type / blank / ✨ AI ---------- */
-  var GUESS = [[/sustainability report|\bgri\b|\bissb\b/, 'esg-report'], [/carbon|emission|net.?zero|decarbon/, 'esg-carbon'], [/materiality|esg baseline/, 'esg-baseline'], [/\besg\b/, 'esg-strategy'],
+  var GUESS = [[/birthday/, 'fun-birthday'], [/wedding/, 'fun-wedding'], [/holiday|vacation|\btrip\b/, 'fun-holiday'], [/moving house|move house|relocat/, 'fun-move'], [/fundrais|charity/, 'fun-fundraiser'], [/makeover|\bdiy\b/, 'fun-garden'],
+    [/sustainability report|\bgri\b|\bissb\b/, 'esg-report'], [/carbon|emission|net.?zero|decarbon/, 'esg-carbon'], [/materiality|esg baseline/, 'esg-baseline'], [/\besg\b/, 'esg-strategy'],
     [/\bpmp\b|\bcapm\b/, 'trn-pmp'], [/agile|scrum/, 'trn-agile'], [/train the trainer|capacity building|academy/, 'trn-academy'], [/esg (training|awareness)/, 'trn-esg'],
     [/\berp\b|implementation of|core system/, 'tech-erp'], [/\brfp\b|system selection|vendor (selection|evaluation)/, 'tech-selection'], [/cyber|security review|pdpa|privacy act/, 'tech-cyber'], [/it strategy|digital (roadmap|strategy)/, 'tech-strategy'],
     [/\bpmo\b/, 'ppm-pmo'], [/recovery|turnaround|troubled/, 'ppm-recovery'], [/national (id|program)|e-?government/, 'ppm-national'], [/program management/, 'ppm-program'],
@@ -708,7 +736,7 @@
         '<label class="qchk" title="Tick if the crew can work Saturday and Sunday: the schedule counts every day and finishes sooner"><input type="checkbox" id="tplWeek"' + (S.tplWeek ? ' checked' : '') + '> 📅 Weekends (Sat, Sun) allowed</label>' +
         '<p class="pdates-note">✨ <b>Not sure of the end date?</b> Leave <b>Finish by</b> empty and choose <b>Ask AI to build it</b>: the AI works out the end date for this job. If you set a Finish by date, the plan is checked against it (and ✨ Fit to finish-by can bring it in).</p>' +
       '</div><div class="tpl-grid tmodes">' +
-      [['type', '📋 Pick a project type', CATALOG.reduce(function (a, c) { return a + c.items.length; }, 0) + ' ready-made project types: GKH consulting (ESG, technology, project and program management, training, strategy, change, go-to-market) and construction. Builds tasks, milestones, example costs and risks.'], ['blank', '⬜ Blank plan', 'Two rows to start from. Add your own tasks.'], ['ai', '✨ Ask AI to build it', 'Describe the project (any industry); AI works out the tasks, sub-tasks, costs, scope and risks, plus tips to help you plan.']]
+      [['type', '📋 Pick a project type', CATALOG.reduce(function (a, c) { return a + c.items.length; }, 0) + ' ready-made project types: GKH consulting (ESG, technology, project and program management, training, strategy, change, go-to-market), general and fun projects for learning (birthday, wedding, holiday, moving house) and construction. Builds tasks, milestones, example costs and risks.'], ['blank', '⬜ Blank plan', 'Two rows to start from. Add your own tasks.'], ['ai', '✨ Ask AI to build it', 'Describe the project (any industry); AI works out the tasks, sub-tasks, costs, scope and risks, plus tips to help you plan.']]
         .map(function (m) { return '<button class="tpl tmode' + (S.mode === m[0] ? ' on' : '') + '" data-mode="' + m[0] + '"><b>' + m[1] + '</b><small>' + m[2] + '</small></button>'; }).join('') + '</div>' +
       '<div id="modeBody" style="margin-top:14px"></div>' +
       '<div class="row" style="margin-top:16px;align-items:flex-end"><span class="sp"></span><button class="btn btn-gold" id="tplCreate">Create plan</button></div></div>';
