@@ -178,6 +178,19 @@
 
   /* ---------- job types: 22 common types with sub-types; each builds a starting plan (example rates: change them to yours) ---------- */
   var RISK = {
+    c_data: ['Client data or documents arrive late', 4, 4, 'Mitigate', 'Agree data deadlines at kick-off; escalate weekly; draft with placeholders'],
+    c_signoff: ['Client sign-off at review gates takes longer than planned', 4, 3, 'Mitigate', 'Agree sign-off turnaround (e.g. 5 working days) in the charter; track gate dates'],
+    c_scope: ['Scope creep: extra requests outside the agreed scope', 3, 4, 'Mitigate', 'Log every request; use change control; agree a variation before doing extra work'],
+    c_people: ['Stakeholders not available for interviews or workshops', 3, 3, 'Mitigate', 'Book sessions in a block early; offer remote options'],
+    c_keyperson: ['Key consultant or client lead leaves or is unavailable', 2, 4, 'Mitigate', 'Keep a back-up for each key role; document as you go'],
+    c_resist: ['Resistance to change from staff or managers', 3, 4, 'Mitigate', 'Visible sponsor; change champions; communicate early and often'],
+    c_vendor: ['Vendor or integration delays', 3, 4, 'Mitigate', 'Contract milestones with the vendor; weekly vendor stand-up; test integrations early'],
+    c_reg: ['Regulation or reporting standards change during the project', 2, 3, 'Accept', 'Track the regulator; build flexibility into the framework'],
+    c_adopt: ['Low adoption after go-live or training', 3, 3, 'Mitigate', 'Super-users, refresher sessions and adoption metrics for 90 days'],
+    c_budget: ['Client budget cut or funding delayed', 2, 4, 'Mitigate', 'Stage the work in milestone payments; agree what can be deferred'],
+    c_market: ['Market or partner conditions differ from the research', 3, 3, 'Mitigate', 'Validate with in-country partners before committing'],
+    c_quality: ['Data quality is too poor to rely on', 3, 4, 'Mitigate', 'Run a data quality check early; agree estimation methods'],
+    c_travel: ['Travel, visas or time zones slow the team down', 2, 2, 'Mitigate', 'Plan trips early; mix on-site and remote work'],
     weather: ['Rain or wind stops outdoor work', 4, 3, 'Mitigate', 'Check the forecast daily; keep a buffer day'], hidden: ['Hidden damage found once it is opened up', 3, 4, 'Mitigate', 'Agree a contingency and variations in writing up front'],
     supply: ['Materials late or out of stock', 2, 3, 'Mitigate', 'Confirm stock before ordering; order on day 1'], access: ['Access, keys or parking problems on site', 2, 2, 'Avoid', 'Confirm access and parking with the customer before starting'],
     approval: ['Approval (council / strata / engineer) takes longer than planned', 3, 3, 'Mitigate', 'Lodge early; do not start until approved in writing'], services: ['Hitting pipes, cables or underground services', 2, 4, 'Avoid', 'Locate services first (Dial Before You Dig)'],
@@ -188,6 +201,83 @@
   };
   function St(n, d, q, u, r, subs) { return [n, d, q, u, r, subs || []]; }
   var CATALOG = [
+    { c: 'ESG consulting', g: 1, items: [
+      { id: 'esg-strategy', n: 'ESG strategy and roadmap (AS-IS, To-Be, gap, roadmap)', dr: 1800, o: 'Set a clear ESG direction: where the organisation is today, where it needs to be, the gaps, and a costed roadmap to get there.', d: 'AS-IS ESG assessment; To-Be vision, targets and KPIs; gap analysis register; costed ESG roadmap; ESG governance model', ph: [
+        ['AS-IS assessment', [['Document and data review', 5, 1], ['Stakeholder interviews (E, S, G)', 8, 2], ['AS-IS ESG baseline report', 5, 1]]], ['To-Be design', [['ESG vision, targets and KPIs', 6, 2]]],
+        ['Gap analysis', [['Gap analysis register (AS-IS vs To-Be)', 5, 1]]], ['Roadmap', [['Costed ESG initiatives and roadmap', 6, 2], ['ESG governance and reporting model', 4, 1]]]], r: ['c_data', 'c_signoff', 'c_people', 'c_scope'] },
+      { id: 'esg-baseline', n: 'ESG baseline and materiality assessment', dr: 1800, o: 'Measure current ESG performance and find the topics that matter most to the business and its stakeholders.', d: 'ESG baseline report; peer benchmark; materiality matrix and report', ph: [
+        ['Baseline', [['Document and data review', 5, 2], ['Stakeholder interviews', 8, 2], ['ESG baseline report', 5, 1]]], ['Materiality', [['Peer benchmarking', 5, 1], ['Materiality survey and workshop', 4, 2], ['Materiality matrix and report', 4, 1]]]], r: ['c_data', 'c_people', 'c_quality'] },
+      { id: 'esg-report', n: 'Sustainability report (GRI / ISSB aligned)', dr: 1800, o: 'Publish a credible sustainability report aligned to GRI and ISSB (IFRS S1 and S2), ready for assurance.', d: 'Reporting framework and boundary; data collection templates; sustainability report (about 100 pages); assurance readiness note', ph: [
+        ['Framework', [['Reporting framework and boundary (GRI, ISSB, TCFD)', 4, 1], ['Data collection templates', 3, 1]]], ['Data', [['Collect E, S and G data', 15, 2], ['Data validation and gap fixes', 5, 1]]],
+        ['Reporting', [['Draft the report', 15, 2], ['Client review round 1', 5, 1], ['Revisions and design layout', 6, 2], ['Assurance readiness check', 3, 1]]]], r: ['c_data', 'c_quality', 'c_signoff', 'c_reg'] },
+      { id: 'esg-carbon', n: 'Carbon footprint and decarbonisation plan', dr: 1800, o: 'Measure Scope 1, 2 and 3 emissions and set a costed, science-based pathway to net zero.', d: 'GHG inventory (Scope 1, 2, 3); emissions baseline report; reduction options (MAC curve); net-zero targets; decarbonisation roadmap', ph: [
+        ['Footprint', [['Scope 1 and 2 inventory', 8, 1], ['Scope 3 screening', 8, 2], ['Emissions baseline report', 4, 1]]], ['Pathway', [['Reduction opportunities (MAC curve)', 8, 2], ['Net-zero targets (SBTi aligned)', 4, 1], ['Decarbonisation roadmap and costs', 6, 1]]]], r: ['c_data', 'c_quality', 'c_reg'] }] },
+    { c: 'Technology consulting', g: 1, items: [
+      { id: 'tech-strategy', n: 'IT strategy and digital roadmap', dr: 1700, o: 'Align technology with the business: a target architecture and a funded digital roadmap.', d: 'Current-state assessment; target architecture; options and business case; 3-year digital roadmap', ph: [
+        ['Current state', [['Systems and process review', 8, 2], ['Business unit interviews', 6, 2], ['Current-state architecture', 4, 1]]], ['Future state', [['Target architecture', 6, 1], ['Options and business case', 6, 2]]],
+        ['Roadmap', [['Roadmap and investment plan', 5, 1], ['Board presentation', 2, 1]]]], r: ['c_people', 'c_data', 'c_budget'] },
+      { id: 'tech-selection', n: 'System selection (RFP and vendor evaluation)', dr: 1700, o: 'Choose the right system and vendor through a fair, documented selection process.', d: 'Requirements specification; RFP pack; vendor scoring; recommendation report', ph: [
+        ['Requirements', [['Business requirements workshops', 6, 2], ['Requirements specification', 5, 1]]], ['Market', [['Market scan and long list', 4, 1], ['RFP pack', 5, 1], ['RFP open period', 15, 0.2]]],
+        ['Evaluation', [['Vendor demonstrations and scoring', 6, 2], ['Reference checks', 3, 1], ['Recommendation and negotiation support', 5, 1]]]], r: ['c_vendor', 'c_signoff', 'c_scope'] },
+      { id: 'tech-erp', n: 'ERP or core system implementation', dr: 1700, o: 'Implement the new system on time, with clean data, trained users and a smooth go-live.', d: 'Solution design; configured system; migrated data; tested integrations; trained users; go-live and hypercare', ph: [
+        ['Design', [['Process design workshops', 10, 2], ['Solution design sign-off', 3, 1]]], ['Build', [['Configuration and build', 30, 3], ['Data migration', 15, 2], ['Integrations', 15, 2]]],
+        ['Test', [['System and integration testing', 10, 2], ['User acceptance testing', 10, 2]]], ['Deploy', [['End-user training', 5, 2], ['Go-live and cutover', 3, 3], ['Hypercare', 15, 1]]]], r: ['c_vendor', 'c_quality', 'c_adopt', 'c_scope', 'c_keyperson'] },
+      { id: 'tech-cyber', n: 'Cybersecurity and data protection review', dr: 1700, o: 'Find and fix security and privacy gaps before they become incidents.', d: 'Controls assessment (ISO 27001 / Essential Eight); vulnerability and penetration test results; privacy (PDPA / Privacy Act) review; remediation plan', ph: [
+        ['Assessment', [['Policy and controls review (ISO 27001 / Essential Eight)', 6, 1], ['Vulnerability scan and penetration test', 8, 1], ['Privacy review (PDPA / Privacy Act)', 5, 1]]],
+        ['Report', [['Findings and risk ratings', 4, 1], ['Remediation plan', 4, 1], ['Board briefing', 1, 1]]]], r: ['c_data', 'c_reg', 'c_people'] }] },
+    { c: 'Project and program management', g: 1, items: [
+      { id: 'ppm-pmo', n: 'PMO set-up', dr: 1600, o: 'Stand up a PMO that gives leaders one view of every project and consistent delivery.', d: 'PMO charter and operating model; PMBOK-based methodology and templates; governance and stage gates; Project Champ set up; trained project managers', ph: [
+        ['Design', [['PMO charter and operating model', 6, 1], ['Methodology and templates (PMBOK)', 8, 1], ['Governance and stage gates', 4, 1]]], ['Tools', [['Project Champ set-up and reporting', 5, 1], ['Portfolio intake and prioritisation', 4, 1]]],
+        ['Embed', [['Train the project managers', 4, 2], ['First portfolio review', 2, 1]]]], r: ['c_resist', 'c_adopt', 'c_people'] },
+      { id: 'ppm-recovery', n: 'Project recovery (health check and turnaround)', dr: 1600, o: 'Get a troubled project back under control with a realistic re-plan and tight governance.', d: 'Health check report; root causes; re-plan and new baseline; recovery governance; lessons learned', ph: [
+        ['Diagnose', [['Health check: schedule, cost, scope and risk', 6, 2], ['Stakeholder interviews', 4, 1], ['Root cause analysis', 3, 1]]], ['Recover', [['Re-plan and re-baseline', 5, 1], ['Recovery governance', 3, 1], ['Weekly recovery tracking (6 weeks)', 30, 0.5]]],
+        ['Close', [['Lessons learned', 2, 1]]]], r: ['c_signoff', 'c_keyperson', 'c_budget'] },
+      { id: 'ppm-program', n: 'Program management (several related projects)', dr: 1600, o: 'Deliver a group of related projects as one program, so the benefits arrive together.', d: 'Program charter and benefits map; integrated schedule and dependencies; steering committee; benefits review; closure report', ph: [
+        ['Mobilise', [['Program charter and benefits map', 5, 1], ['Program schedule and dependencies', 5, 1], ['Governance board set-up', 3, 1]]], ['Deliver', [['Program delivery management (3 months)', 60, 1], ['Monthly steering committees', 60, 0.1]]],
+        ['Close', [['Benefits review', 4, 1], ['Program closure report', 3, 1]]]], r: ['c_scope', 'c_vendor', 'c_keyperson', 'c_budget'] },
+      { id: 'ppm-national', n: 'National program (e.g. national ID or e-government)', dr: 1600, o: 'Plan and deliver a national-scale program from feasibility through pilot to national rollout.', d: 'Feasibility study; business case; program plan and WBS; procurement; pilot; national rollout; evaluation', ph: [
+        ['Initiation', [['Feasibility study', 15, 2], ['Business case and funding', 10, 2]]], ['Planning', [['Program plan and WBS', 10, 2], ['Procurement strategy and tenders', 30, 1]]],
+        ['Delivery', [['Pilot rollout', 30, 3], ['National rollout', 90, 3]]], ['Closing', [['Evaluation and handover', 10, 2]]]], r: ['c_vendor', 'c_budget', 'c_reg', 'c_travel', 'c_resist'] }] },
+    { c: 'Training and capacity building', g: 1, items: [
+      { id: 'trn-pmp', n: 'PMP / CAPM exam preparation course', dr: 1400, o: 'Prepare a cohort to pass the PMP or CAPM exam first time.', d: 'Course materials and mock exams; 5-day course; coaching; results report', ph: [
+        ['Prepare', [['Training needs and cohort set-up', 3, 1], ['Course materials and mock exams', 6, 1]]], ['Deliver', [['Classroom course (5 days)', 5, 1], ['Practice exams and coaching', 10, 0.5]]], ['Evaluate', [['Results and certificates', 2, 1]]]], r: ['c_people', 'c_travel'] },
+      { id: 'trn-agile', n: 'Agile and Scrum training (CSM / PMI-ACP)', dr: 1400, o: 'Give teams practical agile skills they use on real work the next week.', d: 'Agile maturity check; course (2 to 3 days); team coaching; adoption report', ph: [
+        ['Prepare', [['Agile maturity check', 3, 1], ['Tailored course and exercises', 4, 1]]], ['Deliver', [['Course delivery (3 days)', 3, 1], ['Team coaching in sprints', 15, 0.5]]], ['Evaluate', [['Adoption and feedback report', 2, 1]]]], r: ['c_adopt', 'c_people'] },
+      { id: 'trn-esg', n: 'ESG awareness and reporting training', dr: 1400, o: 'Build ESG understanding from the board to the teams who collect and report the data.', d: 'Needs analysis; tailored ESG modules; board briefing; staff workshops; assessment report', ph: [
+        ['Design', [['Needs analysis', 3, 1], ['Tailored ESG modules', 5, 1]]], ['Deliver', [['Board briefing', 1, 1], ['Staff workshops (3 cohorts)', 6, 1]]], ['Evaluate', [['Assessment and feedback report', 2, 1]]]], r: ['c_people', 'c_reg'] },
+      { id: 'trn-academy', n: 'Capacity building program (train the trainer)', dr: 1400, o: 'Build in-house capability that lasts after the consultants leave.', d: 'Skills gap assessment; curriculum and learning paths; certified internal trainers; rollout; impact evaluation', ph: [
+        ['Assess', [['Skills gap assessment', 8, 2]]], ['Build', [['Curriculum and learning paths', 10, 1], ['Train the trainers', 10, 2]]], ['Deliver', [['Rollout to staff', 30, 1], ['Mentoring', 30, 0.5]]], ['Evaluate', [['Impact evaluation', 5, 1]]]], r: ['c_keyperson', 'c_adopt', 'c_budget'] }] },
+    { c: 'Strategic planning', g: 1, items: [
+      { id: 'stp-plan', n: 'Corporate strategic plan (3 to 5 years)', dr: 2000, o: 'Agree where the organisation is heading and the few initiatives that will get it there.', d: 'Environmental scan (PESTEL); SWOT and competitor analysis; vision, mission and objectives; strategic initiatives and KPIs; implementation plan', ph: [
+        ['Analyse', [['Environmental scan (PESTEL)', 5, 1], ['Interviews with leaders', 5, 2], ['SWOT and competitor analysis', 5, 1]]], ['Formulate', [['Strategy workshops', 3, 2], ['Vision, mission and objectives', 4, 1], ['Strategic initiatives and KPIs', 5, 1]]],
+        ['Plan', [['Implementation plan and budget', 5, 1], ['Board approval', 2, 1]]]], r: ['c_people', 'c_signoff', 'c_scope'] },
+      { id: 'stp-feasibility', n: 'Feasibility study and business case', dr: 2000, o: 'Decide whether an investment stacks up, with the numbers to back it.', d: 'Market and demand study; technical options; financial model (NPV, IRR); risk and sensitivity analysis; feasibility report', ph: [
+        ['Research', [['Market and demand study', 10, 2], ['Technical options', 6, 1]]], ['Analyse', [['Financial model (NPV, IRR)', 8, 1], ['Risk and sensitivity analysis', 4, 1]]],
+        ['Report', [['Feasibility report and recommendation', 6, 1], ['Investment committee presentation', 1, 1]]]], r: ['c_data', 'c_market', 'c_quality'] },
+      { id: 'stp-national', n: 'National or sector strategy (e.g. e-commerce, ICT park)', dr: 2000, o: 'Shape a national or sector strategy that government and industry can act on.', d: 'Country benchmarks; consultation report; strategic thrusts and policies; implementation roles; strategy document', ph: [
+        ['Discover', [['Benchmark other countries', 8, 2], ['Stakeholder consultations', 10, 2]]], ['Design', [['Strategic thrusts and policies', 10, 2], ['Implementing agencies and roles', 5, 1]]],
+        ['Deliver', [['Strategy document', 10, 2], ['Ministerial launch', 2, 1]]]], r: ['c_people', 'c_signoff', 'c_travel', 'c_reg'] },
+      { id: 'stp-okr', n: 'Strategy execution (balanced scorecard and OKRs)', dr: 2000, o: 'Turn the strategy into measurable goals that every division tracks.', d: 'Company OKRs; divisional scorecards; performance dashboard; quarterly business review', ph: [
+        ['Translate', [['Strategy into OKRs', 5, 1], ['Scorecards for each division', 8, 2]]], ['Embed', [['Performance dashboard set-up', 5, 1], ['First quarterly business review', 2, 1]]]], r: ['c_adopt', 'c_resist'] }] },
+    { c: 'Change management', g: 1, items: [
+      { id: 'chg-transform', n: 'Organisational transformation', dr: 1600, o: 'Lead people through a major change so it sticks.', d: 'Change impact assessment; readiness analysis; change strategy and roadmap; communication plan; champions network; adoption report', ph: [
+        ['Assess', [['Change impact assessment', 6, 1], ['Stakeholder and readiness analysis', 5, 1]]], ['Plan', [['Change strategy and roadmap', 5, 1], ['Communication plan', 4, 1]]],
+        ['Deliver', [['Change champions network', 10, 1], ['Communications and engagement', 40, 0.5]]], ['Sustain', [['Adoption measurement', 5, 1], ['Reinforcement plan', 3, 1]]]], r: ['c_resist', 'c_adopt', 'c_keyperson'] },
+      { id: 'chg-system', n: 'Change management for a system rollout (ADKAR)', dr: 1600, o: 'Make sure people are ready, able and willing to use the new system from day one.', d: 'ADKAR assessment; training needs analysis; communication and training plans; super-user network; adoption survey', ph: [
+        ['Prepare', [['ADKAR assessment', 4, 1], ['Training needs analysis', 4, 1], ['Communication and training plans', 4, 1]]], ['Support', [['Super-user network', 10, 0.5], ['Go-live support', 5, 2]]], ['Measure', [['Adoption survey', 3, 1]]]], r: ['c_adopt', 'c_resist', 'c_vendor'] },
+      { id: 'chg-restructure', n: 'Restructure and new operating model', dr: 1600, o: 'Move to a new structure fairly, with clear roles and minimal disruption.', d: 'Current structure review; target operating model; role mapping and job descriptions; consultation; transition plan', ph: [
+        ['Design', [['Current structure review', 5, 1], ['Target operating model', 8, 2], ['Role mapping and job descriptions', 8, 1]]], ['Transition', [['Consultation process', 15, 0.5], ['Transition and implementation', 20, 1]]]], r: ['c_resist', 'c_reg', 'c_keyperson'] },
+      { id: 'chg-culture', n: 'Culture and engagement program', dr: 1600, o: 'Shift culture and engagement with measurable results.', d: 'Culture survey; focus group findings; values and behaviours; leadership coaching; pulse survey results', ph: [
+        ['Diagnose', [['Culture survey', 5, 1], ['Focus groups', 5, 1]]], ['Shape', [['Values and behaviours', 5, 1], ['Leadership coaching', 20, 0.5]]], ['Measure', [['Pulse survey', 3, 1]]]], r: ['c_resist', 'c_people'] }] },
+    { c: 'Go-to-market', g: 1, items: [
+      { id: 'gtm-entry', n: 'Market entry strategy (new country)', dr: 1700, o: 'Decide how to enter a new market, with whom, and what it will take.', d: 'Market sizing and segments; regulatory and licensing scan; competitor analysis; entry mode and partners; business plan', ph: [
+        ['Research', [['Market sizing and segments', 8, 2], ['Regulatory and licensing scan', 5, 1], ['Competitor analysis', 5, 1]]], ['Strategy', [['Entry mode and partners', 5, 1], ['Pricing and channel strategy', 4, 1], ['Business plan and financials', 6, 1]]]], r: ['c_market', 'c_reg', 'c_travel'] },
+      { id: 'gtm-partner', n: 'Partner and distributor search', dr: 1700, o: 'Find and sign the right local partners.', d: 'Partner criteria; screened long list; due diligence reports; introductions; partner agreement support', ph: [
+        ['Search', [['Partner criteria', 3, 1], ['Long list and screening', 6, 1], ['Due diligence', 8, 1]]], ['Sign', [['Introductions and meetings', 10, 1], ['Partner agreement support', 5, 1]]]], r: ['c_market', 'c_travel'] },
+      { id: 'gtm-launch', n: 'Product or service launch', dr: 1700, o: 'Launch with a clear message, ready sales teams and a measurable campaign.', d: 'Value proposition and messaging; launch plan; sales enablement kit; campaign; post-launch review', ph: [
+        ['Prepare', [['Value proposition and messaging', 5, 1], ['Launch plan and calendar', 4, 1], ['Sales enablement', 5, 1]]], ['Launch', [['Launch campaign', 20, 1], ['Post-launch review', 3, 1]]]], r: ['c_market', 'c_budget'] },
+      { id: 'gtm-tender', n: 'Government tender and bid support', dr: 1700, o: 'Submit a compliant, winning bid on time.', d: 'Bid/no-bid decision; bid plan and compliance matrix; solution and pricing; proposal; red team review', ph: [
+        ['Qualify', [['Bid / no-bid decision', 1, 1], ['Bid plan and compliance matrix', 3, 1]]], ['Write', [['Solution and pricing', 8, 2], ['Write the proposal', 10, 2], ['Red team review', 3, 2]]], ['Submit', [['Final submission', 1, 1]]]], r: ['c_people', 'c_signoff'] }] },
     { c: 'Bathroom', items: [
       { id: 'bathroom', n: 'Waterproofing & retiling', legacy: 'bathroom' },
       { id: 'bath-reno', n: 'Full bathroom renovation', m: 6500, s: [St('Strip-out & rubbish removal', 2, 16, 'h', 55, [['Remove fixtures', 0, 1], ['Remove tiles and screed', 0, 2], ['Rubbish removal', 1, 1]]), St('Plumbing & electrical rough-in', 2, 1, 'lot', 2400, [['Plumber rough-in', 0, 1], ['Electrician rough-in', 1, 1]]), St('Wall sheeting & set', 2, 1, 'lot', 1400), St('Screed & falls', 1, 8, 'h', 85), St('Waterproofing membrane', 2, 1, 'lot', 950, [['Primer and bond breaker', 0, 1], ['Membrane, two coats', 0, 2]]), St('Flood test (24 h) & photos', 1, 1, 'h', 90), St('Wall & floor tiling', 4, 32, 'h', 85, [['Floor tiles', 0, 1], ['Wall tiles', 1, 3]]), St('Fit-off: vanity, toilet, tapware, screen', 2, 1, 'lot', 1600), St('Paint ceiling & touch-ups', 1, 6, 'h', 70)], r: ['hidden', 'asbestos', 'supply', 'cure', 'licensed'] },
@@ -271,10 +361,28 @@
   ];
   var APPROVAL = { council: ['Council / CDC approval (check if needed)', 10], strata: ['Strata / owner approval', 5], engineer: ['Engineer inspection & design', 5] };
   function catalogItem(id) { var f = null; CATALOG.forEach(function (c) { c.items.forEach(function (i) { if (i.id === id) f = { cat: c.c, item: i }; }); }); return f; }
+  // GKH consulting project types: kick-off, the phases (a milestone at the end of each), final presentation and acceptance; priced in consultant-days
+  function buildConsult(f) {
+    var it = f.item, rows = [], n = 0, key = function () { return 'k' + (++n); }, dr = it.dr || 1600;
+    var row = function (name, d, ppl, after) { var k = key(); rows.push([0, k, name, d, '', Math.round(d * ppl * 10) / 10, 'day', dr, after ? [after] : []]); return k; };
+    var prev = row('Kick-off meeting and project charter', 2, 1, '');
+    prev = row('Data request and stakeholder map', 3, 1, prev);
+    it.ph.forEach(function (ph, i) {
+      ph[1].forEach(function (t) { prev = row(t[0], t[1], t[2], prev); });
+      var km = key(); rows.push([0, km, '✓ Phase ' + (i + 1) + ' complete: ' + ph[0], 0, '', 0, '', 0, [prev]]); prev = km;
+    });
+    prev = row('Final presentation and handover', 2, 1, prev);
+    rows.push([0, key(), 'Final acceptance and invoice', 0, '', 0, '', 0, [prev]]);
+    var t = T(it.n, it.o, '', rows, (it.r || []).map(function (k) { return RISK[k]; }).filter(Boolean));
+    t.deliverables = String(it.d || '').split(/;\s*/).map(function (x) { return '- ' + x.charAt(0).toUpperCase() + x.slice(1); }).join('\n');
+    t.acceptance = 'Each deliverable reviewed and signed off by the client at its phase gate; final presentation given; final acceptance signed; invoice issued.';
+    return t;
+  }
   function buildTemplate(id) {
     var f = catalogItem(id); if (!f) return TEMPLATES.blank;
     var it = f.item;
     if (it.legacy) return TEMPLATES[it.legacy];
+    if (it.ph) return buildConsult(f);
     var rows = [], n = 0, key = function () { return 'k' + (++n); };
     var k1 = key(); rows.push([0, k1, 'Site inspection & measure', 1, '', 2, 'h', 90, []]);
     var k2 = key(); rows.push([0, k2, 'Quote accepted', 0, '', 0, '', 0, [k1]]);
@@ -514,7 +622,14 @@
   }
   var EMERG = /\bemergenc|\burgent|\basap\b|straight away|right away|immediately|burst (pipe|water)|flood(ing|ed)?\b|storm damage|water (is )?(pouring|coming in|everywhere)/i;
   /* ---------- new plan: scope of work + job type / blank / ✨ AI ---------- */
-  var GUESS = [[/exhaust|\bfan\b/, 'exhaust-fan'], [/shower.{0,40}leak|leak.{0,40}shower/, 'shower-leak'], [/vanity|toilet|tapware|\btaps?\b/, 'vanity'], [/bathroom.{0,40}(waterproof|retil)|(waterproof|retil).{0,40}bathroom/, 'bathroom'], [/bathroom|ensuite/, 'bath-reno'],
+  var GUESS = [[/sustainability report|\bgri\b|\bissb\b/, 'esg-report'], [/carbon|emission|net.?zero|decarbon/, 'esg-carbon'], [/materiality|esg baseline/, 'esg-baseline'], [/\besg\b/, 'esg-strategy'],
+    [/\bpmp\b|\bcapm\b/, 'trn-pmp'], [/agile|scrum/, 'trn-agile'], [/train the trainer|capacity building|academy/, 'trn-academy'], [/esg (training|awareness)/, 'trn-esg'],
+    [/\berp\b|implementation of|core system/, 'tech-erp'], [/\brfp\b|system selection|vendor (selection|evaluation)/, 'tech-selection'], [/cyber|security review|pdpa|privacy act/, 'tech-cyber'], [/it strategy|digital (roadmap|strategy)/, 'tech-strategy'],
+    [/\bpmo\b/, 'ppm-pmo'], [/recovery|turnaround|troubled/, 'ppm-recovery'], [/national (id|program)|e-?government/, 'ppm-national'], [/program management/, 'ppm-program'],
+    [/feasibility|business case/, 'stp-feasibility'], [/okr|balanced scorecard/, 'stp-okr'], [/national strategy|sector strategy|ict park/, 'stp-national'], [/strategic plan/, 'stp-plan'],
+    [/adkar|system rollout/, 'chg-system'], [/restructur|operating model/, 'chg-restructure'], [/culture|engagement/, 'chg-culture'], [/change management|transformation/, 'chg-transform'],
+    [/market entry|new country/, 'gtm-entry'], [/distributor|partner search/, 'gtm-partner'], [/tender|\bbid\b/, 'gtm-tender'], [/launch|go.to.market/, 'gtm-launch'],
+    [/exhaust|\bfan\b/, 'exhaust-fan'], [/shower.{0,40}leak|leak.{0,40}shower/, 'shower-leak'], [/vanity|toilet|tapware|\btaps?\b/, 'vanity'], [/bathroom.{0,40}(waterproof|retil)|(waterproof|retil).{0,40}bathroom/, 'bathroom'], [/bathroom|ensuite/, 'bath-reno'],
     [/splashback/, 'splashback'], [/benchtop/, 'benchtop'], [/kitchen/, 'kitchen-reno'], [/laundry/, 'laundry-reno'], [/concrete cancer|spall/, 'concrete-cancer'], [/balcony/, 'wp-balcony'], [/planter/, 'wp-planter'],
     [/basement/, 'wp-retaining'], [/retaining/, 'retaining'], [/crack/, 'crack-repair'], [/render/, 'render-repair'], [/composite/, 'deck-composite'], [/deck.{0,30}pergola|pergola.{0,30}deck/, 'deck'], [/re-?oil|deck.{0,30}(repair|rot)/, 'deck-repair'], [/deck/, 'deck-timber'],
     [/insulated|patio/, 'pergola-insulated'], [/pergola/, 'pergola-timber'], [/colorbond/, 'fence-colorbond'], [/fence/, 'fence-timber'], [/\bgate/, 'gate'], [/gutter|downpipe/, 'gutters'], [/roof.{0,40}leak|leak.{0,40}roof/, 'roof-leak'], [/roof/, 'roof-restore'],
@@ -533,7 +648,7 @@
     var inScope = String(scope || '').trim();
     if (t.scope) inScope = inScope ? inScope + '\n\nTypical work: ' + t.scope : t.scope;
     return { name: t.name, start: start, phases: [{ id: 'ph1', name: 'Work' }], tasks: tasks,
-      charter: { objective: t.objective, inScope: inScope, outScope: extra.outScope || '', deliverables: extra.deliverables || '', acceptance: extra.acceptance || 'Work complete, inspected and accepted by the customer; site clean; invoice issued.', assumptions: extra.assumptions || '', notes: extra.notes || '',
+      charter: { objective: t.objective, inScope: inScope, outScope: extra.outScope || '', deliverables: extra.deliverables || t.deliverables || '', acceptance: extra.acceptance || t.acceptance || 'Work complete, inspected and accepted by the customer; site clean; invoice issued.', assumptions: extra.assumptions || '', notes: extra.notes || '',
         budget: r2(tasks.reduce(function (a, x) { return a + cost(x); }, 0)), customer: job.name || '', manager: '' },
       risks: t.risks.map(function (r, i) { return { id: 'r' + (i + 1), title: r[0], cause: r[5] || '', p: r[1], i: r[2], response: r[3], action: r[4], owner: '', review: '', status: 'Open', raised: today() }; }),
       issues: [], baseline: null };
@@ -561,7 +676,7 @@
     return p;
   }
   function typeOptions(sel) {
-    return '<option value="">Choose a job type…</option>' + CATALOG.map(function (c) { return '<optgroup label="' + esc(c.c) + '">' + c.items.map(function (i) { return '<option value="' + i.id + '"' + (i.id === sel ? ' selected' : '') + '>' + esc(i.n) + '</option>'; }).join('') + '</optgroup>'; }).join('');
+    return '<option value="">Choose a project type…</option>' + CATALOG.map(function (c) { return '<optgroup label="' + esc(c.c) + '">' + c.items.map(function (i) { return '<option value="' + i.id + '"' + (i.id === sel ? ' selected' : '') + '>' + esc(i.n) + '</option>'; }).join('') + '</optgroup>'; }).join('');
   }
   function rid() { var a = new Uint8Array(12); (window.crypto || window.msCrypto).getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
   function previewHtml(p, tips, full) {
@@ -580,7 +695,7 @@
     var j = S.job, scope0 = j.scope || '';
     var guess = guessType(j.title + ' ' + scope0);
     S.mode = 'type'; S.aiDraft = null; S.aiId = ''; S.aiText = ''; S.tplType = ''; S.aiFinish = ''; S.tplWeek = false; S.coolZero = false; S.datesTouched = false; S.lastDates = '';
-    V().innerHTML = '<div class="row" style="margin-bottom:14px"><a class="btn btn-sm" href="#job/' + esc(j.core) + '">← ' + esc(j.ref) + '</a><h2 style="font-size:22px">Plan this job: ' + esc(j.name) + ': ' + esc(j.title || j.service || 'Job') + '</h2></div>' +
+    V().innerHTML = '<div class="row" style="margin-bottom:14px"><a class="btn btn-sm" href="#job/' + esc(j.core) + '">← ' + esc(j.ref) + '</a><h2 style="font-size:22px">Plan this project: ' + esc(j.name) + ': ' + esc(j.title || j.service || 'Job') + '</h2></div>' +
       '<div class="card"><h2>1. What the project must deliver (scope of work)</h2>' +
       '<p class="jobline"><span class="ref">' + esc(j.ref) + '</span> <b>' + esc(j.title || '') + '</b>' + [j.suburb, j.source ? 'from ' + j.source : ''].filter(Boolean).map(function (x) { return ' · ' + esc(x); }).join('') + '</p>' +
       '<p class="muted" style="margin:0 0 8px">The tasks (WBS) and Gantt chart are built from this, so it is needed. It is filled in from the project description: check it and add what is missing (objective, deliverables, where, constraints, budget, deadline).</p>' +
@@ -593,7 +708,7 @@
         '<label class="qchk" title="Tick if the crew can work Saturday and Sunday: the schedule counts every day and finishes sooner"><input type="checkbox" id="tplWeek"' + (S.tplWeek ? ' checked' : '') + '> 📅 Weekends (Sat, Sun) allowed</label>' +
         '<p class="pdates-note">✨ <b>Not sure of the end date?</b> Leave <b>Finish by</b> empty and choose <b>Ask AI to build it</b>: the AI works out the end date for this job. If you set a Finish by date, the plan is checked against it (and ✨ Fit to finish-by can bring it in).</p>' +
       '</div><div class="tpl-grid tmodes">' +
-      [['type', '📋 Pick a project type', CATALOG.length + ' ready-made project types, each with sub-types. Builds tasks, sub-tasks, example costs and risks.'], ['blank', '⬜ Blank plan', 'Two rows to start from. Add your own tasks.'], ['ai', '✨ Ask AI to build it', 'Describe the project (any industry); AI works out the tasks, sub-tasks, costs, scope and risks, plus tips to help you plan.']]
+      [['type', '📋 Pick a project type', CATALOG.reduce(function (a, c) { return a + c.items.length; }, 0) + ' ready-made project types: GKH consulting (ESG, technology, project and program management, training, strategy, change, go-to-market) and construction. Builds tasks, milestones, example costs and risks.'], ['blank', '⬜ Blank plan', 'Two rows to start from. Add your own tasks.'], ['ai', '✨ Ask AI to build it', 'Describe the project (any industry); AI works out the tasks, sub-tasks, costs, scope and risks, plus tips to help you plan.']]
         .map(function (m) { return '<button class="tpl tmode' + (S.mode === m[0] ? ' on' : '') + '" data-mode="' + m[0] + '"><b>' + m[1] + '</b><small>' + m[2] + '</small></button>'; }).join('') + '</div>' +
       '<div id="modeBody" style="margin-top:14px"></div>' +
       '<div class="row" style="margin-top:16px;align-items:flex-end"><span class="sp"></span><button class="btn btn-gold" id="tplCreate">Create plan</button></div></div>';

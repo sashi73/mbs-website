@@ -130,6 +130,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.goto(`${BASE}/about.html`); await sleep(400);
   const ab = await p.textContent('main, body');
   ok('About', 'About page: GKH intro, practices, selected work and the team (Sashi)', /Global Knowledge House/.test(ab) && /Since 2010|since 2010/i.test(ab) && /Seven practices/.test(ab) && /National ID rollout/.test(ab) && /Sashi Kumar Sivam/.test(ab) && /CEO and Co-Founder/.test(ab) && await p.isVisible('.c-person-photo span'));
+  ok('About', 'links to the GKH website', await p.$$eval('a[data-gkh-link]', (a) => a.length === 1 && a[0].href === 'https://gkhconsultancy.com/' && a[0].target === '_blank').catch(() => false));
   ok('About', 'About is in the main menu on every page', (await p.$$('.menu a[href="about.html"]')).length === 1);
   // ---- home: the "Ask Champ" box ----
   await p.goto(`${BASE}/index.html`); await sleep(400);
@@ -390,7 +391,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Programs', 'New project: the program comes first and is required', (await p.getAttribute('#champNew [name=progPick]', 'required')) !== null);
   await p.click('#champNew button[type=submit]'); await sleep(300);
   ok('Programs', 'a project cannot be created without a program', /#projects\/new/.test(p.url()));
-  await p.selectOption('#champNew [name=progPick]', '__new'); await p.fill('#champNew [name=program]', 'Head office move');
+  await p.selectOption('#champNew [name=progPick]', '__new'); await sleep(150); await p.fill('#champNew [name=program]', 'Head office move');
   await p.fill('#champNew [name=name]', 'Head office fit-out');
   await p.fill('#champNew [name=client]', 'Acme Pty Ltd');
   await p.fill('#champNew [name=site]', 'Parramatta NSW');
@@ -656,6 +657,26 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   r0 = await p.request.post(`${BASE}/.netlify/functions/chat`, { data: { mode: 'visitor', id: VID, forget: true } });
   r = await api('visitorList'); const vl2 = r.ok() ? await r.json() : { list: [] };
   ok('Visitors', '"forget me" removes the visitor', !vl2.list.some((v) => v.id === VID));
+
+  // ---- GKH project types: 7 practices × 4 types; picking one builds phases, milestones, consultant-day costs and risks ----
+  const gk = (await (await api('planNewProject', { name: 'Airline ESG strategy', client: 'National Airlines', program: 'Digital health' })).json()).core;
+  await p.goto(`${BASE}/admin/#plan/${gk}`); await p.reload(); await p.waitForSelector('[data-mode=type]', { timeout: 10000 }).catch(() => {});
+  await p.click('[data-mode=type]').catch(() => {}); await p.waitForSelector('#tplType', { timeout: 5000 }).catch(() => {});
+  const groups = await p.$$eval('#tplType optgroup', (g) => g.map((x) => [x.label, x.querySelectorAll('option').length])).catch(() => []);
+  const gkh = ['ESG consulting', 'Technology consulting', 'Project and program management', 'Training and capacity building', 'Strategic planning', 'Change management', 'Go-to-market'];
+  ok('Project types', 'the chooser lists the 7 GKH practices first, 4 project types each', gkh.every((c, i) => groups[i] && groups[i][0] === c && groups[i][1] === 4), JSON.stringify(groups.slice(0, 8)));
+  await p.selectOption('#tplType', 'esg-strategy').catch(() => {}); await sleep(600);
+  const gpv = await p.textContent('#tplPrev').catch(() => '');
+  ok('Project types', 'the preview shows the ESG phases (AS-IS, To-Be, gap, roadmap)', /AS-IS/.test(gpv) && /Gap analysis/.test(gpv) && /roadmap/i.test(gpv), gpv.slice(0, 200));
+  await p.click('#tplCreate').catch(() => {}); await sleep(2500);
+  const gp2 = (await (await api('planGet', { core: gk })).json()).plan || {};
+  const tk = gp2.tasks || [];
+  ok('Project types', 'the plan has kick-off, a milestone per phase and final acceptance', /Kick-off/.test((tk[0] || {}).name) && tk.filter((x) => /^✓ Phase \d complete/.test(x.name) && x.dur === 0).length === 4 && /Final acceptance/.test((tk[tk.length - 1] || {}).name), tk.map((x) => x.name).join(' | ').slice(0, 300));
+  const bac = tk.reduce((a2, x) => a2 + (x.qty || 0) * (x.rate || 0), 0);
+  ok('Project types', 'costed in consultant-days ($118,800 for the ESG strategy)', Math.abs(bac - 118800) < 1, bac);
+  ok('Project types', 'the charter carries the deliverables and consulting acceptance', /Gap analysis register/.test((gp2.charter || {}).deliverables || '') && /phase gate/.test((gp2.charter || {}).acceptance || ''), JSON.stringify(gp2.charter || {}).slice(0, 200));
+  ok('Project types', 'consulting risks are added', (gp2.risks || []).some((x) => /data or documents arrive late/.test(x.title || x.t || JSON.stringify(x))), JSON.stringify(gp2.risks || []).slice(0, 200));
+  await api('planProjectDelete', { core: gk });
 
   // ---- console: no chat bubble (AI is built in), Ask AI about programs ----
   await p.goto(`${BASE}/admin/#portfolio`); await sleep(800);

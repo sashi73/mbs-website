@@ -45,4 +45,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 34 | 1.0.34| 2026-11-13 09:25| GKH-Project-Champ| `e853f5a` | About page: GKH introduction from gkhconsultancy.com (since 2010, 8 countries, 14 with partners, seven practices, selected national programs |
 | 35 | 1.0.35| 2026-11-13 20:43| GKH-Project-Champ| `c13152e` | Programs and projects in two levels: Programs are real records (manager, sponsor, objective, status, colour, target dates) and every project |
 | 36 | 1.0.36| 2026-11-13 21:04| GKH-Project-Champ| `18851fa` | Project Intelligence re-plan on the fly: a re-plan question (new length, finish date or budget, review gates) becomes a worked-out task-by-t |
-| 37 | 1.0.37 | 2026-11-13 21:34 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 37 | 1.0.37| 2026-11-13 21:34| GKH-Project-Champ| `869499c` | Project page (was Job): Client & project details, the stage path Pre-sales → Proposal submitted → Invoiced (milestone payments 1 to 12, amou |
+| 38 | 1.0.38 | 2026-11-13 22:03 | GKH-Project-Champ | _this commit_ | _see git log_ |
