@@ -47,4 +47,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 36 | 1.0.36| 2026-11-13 21:04| GKH-Project-Champ| `18851fa` | Project Intelligence re-plan on the fly: a re-plan question (new length, finish date or budget, review gates) becomes a worked-out task-by-t |
 | 37 | 1.0.37| 2026-11-13 21:34| GKH-Project-Champ| `869499c` | Project page (was Job): Client & project details, the stage path Pre-sales → Proposal submitted → Invoiced (milestone payments 1 to 12, amou |
 | 38 | 1.0.38| 2026-11-13 22:03| GKH-Project-Champ| `eb9f6c2` | Project types: 7 GKH practices x 4 consulting types; About links to the GKH website |
-| 39 | 1.0.39 | 2026-11-14 00:18 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 39 | 1.0.39| 2026-11-14 00:18| GKH-Project-Champ| `4935df7` | Project types: General and fun projects for learning project management |
+| 40 | 1.0.40 | 2026-11-14 01:11 | GKH-Project-Champ | _this commit_ | _see git log_ |

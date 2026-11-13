@@ -556,6 +556,25 @@
         .catch(function (err) { fail(err); b.disabled = false; b.textContent = 'Create project and plan it →'; });
     };
   }
+  // GKH Project Champ: the project list grouped by program, each group headed by its key (PG-002), so linked projects sit together
+  function byProgram(plans) {
+    var G = {}, order = [];
+    plans.forEach(function (p) {
+      var k = p.programKey || ('~' + (p.program || ''));
+      if (!G[k]) { G[k] = { key: p.programKey || '', id: p.programId || '', name: p.program || '', color: p.programColor || '#64748B', list: [] }; order.push(k); }
+      G[k].list.push(p);
+    });
+    return order.sort(function (a, b) { return a < b ? -1 : a > b ? 1 : 0; }).map(function (k) { return G[k]; });
+  }
+  function progRow(g) {
+    if (!g.name) return '<tr class="pg-row"><td colspan="8"><b>Not in a program</b></td></tr>';
+    var L = g.list, BAC = L.reduce(function (s, p) { return s + (p.BAC || 0); }, 0), hr = L.reduce(function (s, p) { return s + (p.highRisks || 0); }, 0);
+    var fin = L.map(function (p) { return p.finish; }).filter(Boolean).sort().pop();
+    var spis = L.map(function (p) { return p.SPI; }).filter(function (v) { return v != null; }), low = spis.length ? Math.min.apply(null, spis) : null;
+    return '<tr class="pg-row" style="--pg:' + esc(g.color) + '"><td colspan="8"><div class="pg-rowin">' + (g.key ? '<span class="pgref">' + esc(g.key) + '</span>' : '') + '<b>' + esc(g.name) + '</b>' +
+      '<small class="muted">' + L.length + ' project' + (L.length === 1 ? '' : 's') + (BAC ? ' · ' + money(BAC) + ' budget' : '') + (fin ? ' · last finish ' + esc(prettyY(fin)) : '') + (low != null ? ' · lowest SPI ' + low.toFixed(2) : '') + (hr ? ' · <b style="color:#C2410C">' + hr + ' high risk' + (hr === 1 ? '' : 's') + '</b>' : '') + '</small>' +
+      '<span class="sp"></span>' + (g.id ? '<a class="btn btn-sm" href="#programs/' + esc(g.id) + '" title="Open the program: roadmap and dependencies">🔗 Program →</a>' : '') + '</div></td></tr>';
+  }
   function projects(args) {
     if (args && args[0] === 'new') return newProjectForm();
     return api('planList', { today: today() }).then(function (d) {
@@ -564,11 +583,13 @@
         V().innerHTML = '<div class="card"><div class="card-h"><h2>Project plans (' + d.plans.length + ')</h2>' +
           '<div class="row">' + (avail.length ? '<select id="newPlanJob" style="width:auto;max-width:min(560px,100%)"><option value="">Plan an existing project…</option>' + avail.map(function (x) { return '<option value="' + esc(x.core) + '">' + esc(jobLabel(x)) + '</option>'; }).join('') + '</select><button class="btn btn-sm" id="newPlanGo">Plan it</button>' : '') + '<a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div></div><div id="jobPeek" hidden></div>' +
           (d.plans.length ? '<div class="table-wrap"><table><thead><tr><th>Project</th><th>Progress</th><th class="hide-sm">Finish</th><th title="Schedule Performance Index: work done ÷ work planned by today">SPI <small class="muted" style="text-transform:none;letter-spacing:0">(time)</small></th><th title="Cost Performance Index: value of work done ÷ actual cost">CPI <small class="muted" style="text-transform:none;letter-spacing:0">(cost)</small></th><th class="hide-sm">Risks</th><th class="hide-sm">Issues</th><th></th></tr></thead><tbody>' +
-            d.plans.map(function (p) {
-              return '<tr class="click" data-plan="' + esc(p.core) + '"><td><b>' + esc(p.name) + '</b><br><small class="muted"><span class="ref">' + esc(p.ref) + '</span> · ' + esc(p.customer) + '</small></td>' +
+            byProgram(d.plans).map(function (g) {
+              return progRow(g) + g.list.map(function (p) {
+              return '<tr class="click' + (p.programKey ? ' pg-member' : '') + '" data-plan="' + esc(p.core) + '"' + (p.programKey ? ' style="--pg:' + esc(p.programColor || '#64748B') + '"' : '') + '><td><b>' + esc(p.name) + '</b><br><small class="muted"><span class="ref">' + esc(p.ref) + '</span>' + (p.programKey ? ' · <span class="pgref" style="--pg:' + esc(p.programColor || '#64748B') + '" title="Program: ' + esc(p.program) + '">' + esc(p.programKey) + '</span>' : '') + ' · ' + esc(p.customer) + '</small></td>' +
                 '<td style="min-width:140px"><div class="pbar"><span style="width:' + p.pct + '%"></span></div><small>' + p.pct + '% · ' + p.done + '/' + p.total + ' tasks' + (p.late ? ' · <b style="color:#C2410C">' + p.late + ' late</b>' : '') + '</small></td>' +
                 '<td class="hide-sm">' + esc(prettyY(p.finish)) + '</td><td class="evcell">' + evChip('SPI', p.SPI) + '</td><td class="evcell">' + evChip('CPI', p.CPI) + '</td>' +
                 '<td class="hide-sm">' + p.openRisks + (p.highRisks ? ' <b style="color:#C2410C">(' + p.highRisks + ' high)</b>' : '') + '</td><td class="hide-sm">' + p.openIssues + '</td><td><button class="btn btn-sm" data-pdel="' + esc(p.core) + '" data-pname="' + esc(p.name) + '" title="Delete this project">🗑</button></td></tr>';
+            }).join('');
             }).join('') + '</tbody></table></div>' + evLegend() : (avail.length ? '<div class="empty champ-empty"><b>' + avail.length + ' project' + (avail.length > 1 ? 's' : '') + ' waiting for a plan.</b><br>Pick one in “Plan an existing project…” above, or <a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div>' : '<div class="empty champ-empty"><b>No projects yet.</b><br>Start your first one: <a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div>')) + '</div>';
         V().querySelectorAll('[data-plan]').forEach(function (tr) { tr.onclick = function () { location.hash = '#plan/' + tr.getAttribute('data-plan'); }; });
         V().querySelectorAll('[data-pdel]').forEach(function (b) {

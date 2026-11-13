@@ -13,6 +13,7 @@ import * as J from './jobs.mjs';
 import * as P from './plan.mjs';
 import { llmJson, usage, checkLimit, llmSetup, sydToday } from './ai.mjs';
 import * as SWMS from './swms.mjs';
+import * as PG from './programs.mjs';
 
 const str = (s, max = 300) => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
@@ -121,12 +122,39 @@ export async function context(job, plan, question) {
   ctx.contracts = ctx.contracts.map((c) => ({ type: c.type, with: c.with, document: (docs.find((d) => d.id === c.document) || {}).name || '' }));
   ctx.document_extracts = pick.chunks.map((c) => ({ doc: c.doc, page: c.page || undefined, text: c.text }));
   ctx.extracts_are_partial = pick.partial;
+  try { ctx.program = await programContext(job, today, sc); } catch { ctx.program = null; }
   return { ctx, stakeholders: people };
+}
+
+// GKH Project Champ: the program this project belongs to, with every project in it (dates, progress, earned value, risks)
+// and the dependencies between them, so program questions ("compare the end dates of all the projects in this program") can be answered.
+// Other projects go by reference, name and figures only: no client names, phone numbers or emails.
+async function programContext(job, today, sc) {
+  if (!job.program) return null;
+  const [cards, programs, deps] = await Promise.all([P.portfolio(today), PG.keyed(), PG.deps()]);
+  const pg = programs.find((p) => p.name.toLowerCase() === job.program.toLowerCase());
+  const mine = cards.filter((c) => (c.program || '').toLowerCase() === job.program.toLowerCase());
+  const PHASE = { init: 'Initiation', plan: 'Planning', exec: 'Execution', monitor: 'Monitoring & Evaluation', close: 'Closing' };
+  const cores = new Set(mine.map((c) => c.core)), byCore = Object.fromEntries(cards.map((c) => [c.core, c]));
+  const projects = mine.map((c) => ({ ref: c.ref, name: sc(c.name), this_project: c.core === job.core, has_plan: !!c.hasPlan, phase: PHASE[c.phase] || c.phase,
+    start: c.start || '', finish: c.finish || '', forecast_finish: PG.forecastFinish(c) || '', pct_complete: c.pct || 0, tasks_done: c.done || 0, tasks_total: c.total || 0, tasks_late: c.late || 0,
+    budget_BAC: c.BAC || 0, actual_cost: c.AC || 0, SPI: c.SPI, CPI: c.CPI, open_risks: c.openRisks || 0, high_risks: c.highRisks || 0, open_issues: c.openIssues || 0 }))
+    .sort((a, b) => (a.finish || '9999') < (b.finish || '9999') ? -1 : 1);
+  const links = deps.filter((d) => cores.has(d.from) || cores.has(d.to)).filter((d) => byCore[d.from] && byCore[d.to]).map((d) => {
+    const st = PG.depStatus(d, byCore[d.from], byCore[d.to]);
+    return { from: byCore[d.from].ref, to: byCore[d.to].ref, type: PG.TYPES[d.type] || d.type, lag_days: d.lag || 0, status: st.status, why: sc(st.why), outside_program: !(cores.has(d.from) && cores.has(d.to)) };
+  });
+  const sum = (k) => projects.reduce((a, x) => a + (x[k] || 0), 0);
+  const ends = projects.map((x) => x.forecast_finish || x.finish).filter(Boolean).sort();
+  return { key: pg ? pg.key : '', name: sc(job.program), manager: pg ? sc(pg.manager) : '', sponsor: pg ? sc(pg.sponsor) : '', objective: pg ? sc(pg.objective) : '', status: pg ? (PG.STATUS[pg.status] || pg.status) : '',
+    target_start: pg ? pg.start : '', target_finish: pg ? pg.finish : '', projects_count: projects.length, total_budget_BAC: sum('budget_BAC'), total_actual_cost: sum('actual_cost'),
+    latest_finish: ends[ends.length - 1] || '', projects, dependencies: links };
 }
 
 const SYSTEM = 'You are "Project Intelligence" for GKH Project Champ, a project management platform used by project teams in construction, facilities, IT, ESG and business change. ' +
   'You are an experienced construction project manager (PMBOK, PRINCE2) and you know NSW building contracts (Home Building Act 1989, HIA and Master Builders contracts, AS 4000/AS 4902), WHS and the NCC. ' +
   'Answer the question about THIS project using the project data and the document extracts given. Rules: ' +
+  '0) The project belongs to a program (field "program": its key such as PG-002, name, and every project in it with dates, progress, SPI/CPI, budget, risks, and the dependencies between them). For questions about the program, the other projects, comparing projects or cross-project dependencies, answer from "program" and name projects by name and ref; never say the other projects are not provided when "program" lists them. ' +
   '1) Use the real tasks, dates, costs, critical path (critical=true tasks drive the finish date), risks, issues and stakeholders. Quote task numbers (#3) and dates as D Month YYYY. Australian spelling, $1,234.56. ' +
   '2) Documents: when you use a document, name it (and the page when given). If the answer is not in the documents or the data, say so plainly instead of guessing. When extracts_are_partial is true you only see the most relevant parts. ' +
   'For contract questions add one short line: this is general information, not legal advice. ' +

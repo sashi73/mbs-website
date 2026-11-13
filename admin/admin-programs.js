@@ -70,7 +70,7 @@
         '<div class="pg-grid" id="pgGrid"></div>';
       var draw = function () {
         var q = Q.q.trim().toLowerCase();
-        var list = R.filter(function (x) { return !q || (x.p.name + ' ' + x.p.manager + ' ' + x.p.sponsor + ' ' + x.r.list.map(function (c) { return c.name + ' ' + c.ref; }).join(' ')).toLowerCase().indexOf(q) >= 0; })
+        var list = R.filter(function (x) { return !q || (x.p.name + ' ' + (x.p.key || '') + ' ' + x.p.manager + ' ' + x.p.sponsor + ' ' + x.r.list.map(function (c) { return c.name + ' ' + c.ref; }).join(' ')).toLowerCase().indexOf(q) >= 0; })
           .sort(function (a, b) { var k = { red: 0, amber: 1, green: 2, grey: 3 }; return (a.p.status === 'closed') - (b.p.status === 'closed') || k[a.r.health] - k[b.r.health] || a.p.name.localeCompare(b.p.name); });
         el.querySelector('#pgGrid').innerHTML = list.length ? list.map(progCard).join('') : '<div class="empty">No program matches that.</div>';
         el.querySelectorAll('[data-pg]').forEach(function (c) { c.onclick = function (e) { if (e.target.closest('a')) return; location.hash = '#programs/' + c.getAttribute('data-pg'); }; });
@@ -84,7 +84,7 @@
     var p = x.p, r = x.r, st = D.statuses[p.status] || 'Active';
     var top = r.list.slice().sort(function (a, b) { var k = { red: 0, amber: 1, grey: 2, green: 3 }; return k[a.health] - k[b.health]; }).slice(0, 4);
     return '<article class="pg-card" data-pg="' + esc(p.id) + '" style="--pg:' + esc(p.color || '#C9A227') + '" tabindex="0">' +
-      '<div class="pg-top">' + rag(r.health) + '<h3>' + esc(p.name) + '</h3><span class="pg-st pg-' + esc(p.status || 'active') + '">' + esc(st) + '</span></div>' +
+      '<div class="pg-top">' + rag(r.health) + (p.key ? '<span class="pgref">' + esc(p.key) + '</span>' : '') + '<h3>' + esc(p.name) + '</h3><span class="pg-st pg-' + esc(p.status || 'active') + '">' + esc(st) + '</span></div>' +
       (p.manager || p.sponsor ? '<p class="pg-who">' + [p.manager ? 'Manager: ' + esc(p.manager) : '', p.sponsor ? 'Sponsor: ' + esc(p.sponsor) : ''].filter(Boolean).join(' · ') + '</p>' : '') +
       '<div class="pbar"><span style="width:' + r.pct + '%"></span></div><div class="pg-nums"><span><b>' + r.pct + '%</b> complete</span><span><b>' + r.n + '</b> project' + (r.n === 1 ? '' : 's') + '</span><span><b>' + money(r.BAC) + '</b></span></div>' +
       '<div class="pg-nums"><span>SPI ' + (r.spi == null ? '–' : '<b class="ev-' + evC(r.spi) + '-t">' + r.spi.toFixed(2) + '</b>') + '</span><span>CPI ' + (r.cpi == null ? '–' : '<b class="ev-' + evC(r.cpi) + '-t">' + r.cpi.toFixed(2) + '</b>') + '</span><span>' + pretty(r.start) + ' → ' + pretty(r.finish) + '</span></div>' +
@@ -102,7 +102,7 @@
       var r = roll(p), ed = canEdit(), others = D.programs.filter(function (x) { return x.id !== p.id; });
       el.innerHTML = head('programs') +
         '<div class="pg-hero" style="--pg:' + esc(p.color || '#C9A227') + '"><a href="#programs" class="muted">← All programs</a>' +
-        '<div class="pg-hero-t">' + rag(r.health) + '<h1>' + esc(p.name) + '</h1><span class="pg-st pg-' + esc(p.status || 'active') + '">' + esc(D.statuses[p.status] || 'Active') + '</span><span class="sp"></span>' +
+        '<div class="pg-hero-t">' + rag(r.health) + (p.key ? '<span class="pgref pgref-lg" title="Program reference key: shown on every project in this program">' + esc(p.key) + '</span>' : '') + '<h1>' + esc(p.name) + '</h1><span class="pg-st pg-' + esc(p.status || 'active') + '">' + esc(D.statuses[p.status] || 'Active') + '</span><span class="sp"></span>' +
         (ed ? '<button class="btn btn-sm" id="pgEdit">✎ Edit program</button><button class="btn btn-sm" id="pgDel">🗑 Delete</button>' : '') + '</div>' +
         (p.objective ? '<p class="pg-obj">' + esc(p.objective) + '</p>' : '') +
         '<p class="pg-who">' + [p.manager ? '<b>Program manager:</b> ' + esc(p.manager) : '', p.sponsor ? '<b>Sponsor:</b> ' + esc(p.sponsor) : '', p.start || p.finish ? '<b>Target:</b> ' + pretty(p.start) + ' → ' + pretty(p.finish) : ''].filter(Boolean).join(' &nbsp;·&nbsp; ') + '</p></div>' +

@@ -163,3 +163,19 @@ body.db-linking .db-bar{outline:2px dashed #C9A227;outline-offset:2px}
 .stg-flow li.on{background:#FEF6DA;color:#3A2E08;box-shadow:inset 0 0 0 2px #C9A227}.stg-flow li.on i{background:#C9A227;border-color:#C9A227;color:#14110a}
 @media (max-width:700px){.stg-flow{grid-template-columns:1fr 1fr}}
 .stg-inv select{width:auto}.stg-inv input{max-width:180px}
+
+/* Program reference key (PG-002): links projects in the same program on the board, the lists and the program pages */
+.pgref{display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;font-size:11px;line-height:1.5;color:#fff;background:var(--pg,#64748B);border-radius:5px;padding:0 6px;white-space:nowrap;vertical-align:1px}
+.pgref-lg{font-size:13px;padding:1px 8px;margin-right:6px}
+.pg-top .pgref{margin-right:2px}
+.pc-prog{display:flex;align-items:center;gap:6px;color:#334155;background:color-mix(in srgb,var(--pg,#64748B) 12%,#fff);border:1px solid color-mix(in srgb,var(--pg,#64748B) 35%,#fff)}
+.pc-prog .pgkey{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;color:#fff;background:var(--pg,#64748B);border-radius:4px;padding:0 5px;flex:none}
+.pc-prog .pgname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.pc-prog .pgn{flex:none;margin-left:auto;font-weight:700;color:#475569}
+.pcard[data-pg]{border-left:4px solid var(--pg)}
+.pboard.pg-focus .pcard:not(.pg-lit){opacity:.45;transition:opacity .15s}
+.pcard.pg-lit{box-shadow:0 0 0 2px var(--pg),0 4px 12px rgba(0,0,0,.10)}
+tr.pg-row td{background:color-mix(in srgb,var(--pg,#94A3B8) 9%,#fff);border-top:2px solid var(--pg,#CBD5E1);padding:7px 10px}
+.pg-rowin{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pg-rowin .sp{flex:1}
+tr.pg-member td:first-child{box-shadow:inset 4px 0 0 var(--pg)}

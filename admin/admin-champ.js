@@ -79,14 +79,22 @@
     if (c.pinned) w('📌 Moved by hand', 'grey');
     return f.join('');
   }
+  // the program reference key (PG-002), name and how many projects share it, in the program's colour
+  function progTag(c) {
+    if (!c.program) return '';
+    var n = c.programCount || 1;
+    return '<div class="pc-prog" style="--pg:' + esc(c.programColor || '#64748B') + '" title="Program ' + esc((c.programKey ? c.programKey + ': ' : '') + c.program) + (n > 1 ? ' · ' + n + ' linked projects (hover to see them)' : '') + '">' +
+      (c.programKey ? '<span class="pgkey">' + esc(c.programKey) + '</span>' : '📁') + '<span class="pgname">' + esc(c.program) + '</span>' + (n > 1 ? '<span class="pgn">🔗 ' + n + '</span>' : '') + '</div>';
+  }
+  M.champProgTag = progTag;
   function card(c) {
     var a = age(c.since);
     var planBit = c.hasPlan ? '<div class="pc-plan"><div class="pbar"><span style="width:' + Math.min(100, c.pct) + '%"></span></div><div class="pc-pl"><span>' + c.pct + '% · ' + c.done + '/' + c.total + ' tasks</span>' +
       (c.SPI != null ? '<span class="pc-ev ev-' + evC(c.SPI) + '" title="SPI (schedule): green 1.00 or more, yellow 0.90–0.99, red below 0.90"><i class="evdot"></i>SPI ' + c.SPI.toFixed(2) + '</span>' : '') + '</div>' +
       (c.finish ? '<div class="pc-fin">Finish ' + esc(pretty(c.finish)) + '</div>' : '') + '</div>' : '';
-    return '<div class="pcard" data-core="' + esc(c.core) + '" tabindex="0" role="link" title="Open ' + esc(c.ref) + ' (drag it to another phase to move it)">' +
+    return '<div class="pcard" data-core="' + esc(c.core) + '"' + (c.programKey ? ' data-pg="' + esc(c.programKey) + '" style="--pg:' + esc(c.programColor || '#64748B') + '"' : '') + ' tabindex="0" role="link" title="Open ' + esc(c.ref) + ' (drag it to another phase to move it)">' +
       '<div class="pc-top"><span class="ref">' + esc(c.ref) + '</span><span class="pc-age" title="Days since the project was created">' + (a ? a + 'd' : 'today') + '</span><button class="pc-move" type="button" data-move title="Move to another phase (or drag the card)" aria-label="Move">⇄</button></div>' +
-      (c.program ? '<div class="pc-prog" title="Program">📁 ' + esc(c.program) + '</div>' : '') +
+      progTag(c) +
       '<b class="pc-name">' + esc(c.name) + '</b><div class="pc-title">' + esc(c.client) + '</div>' +
       '<div class="pc-meta">' + [c.site ? esc(c.site) : '', c.BAC ? '<b>' + money(c.BAC) + '</b> <small>budget</small>' : ''].filter(Boolean).join(' · ') + '</div>' +
       planBit + '<div class="pc-flags">' + flags(c) + '</div>' +
@@ -148,7 +156,7 @@
   }
   function filtered() {
     var q = P.q.toLowerCase().trim();
-    return P.data.cards.filter(function (c) { return (!P.prog || (P.prog === '-' ? !c.program : c.program === P.prog)) && (!q || (c.ref + ' ' + c.name + ' ' + c.client + ' ' + c.site + ' ' + (c.program || '')).toLowerCase().indexOf(q) >= 0); });
+    return P.data.cards.filter(function (c) { return (!P.prog || (P.prog === '-' ? !c.program : c.program === P.prog)) && (!q || (c.ref + ' ' + c.name + ' ' + c.client + ' ' + c.site + ' ' + (c.program || '') + ' ' + (c.programKey || '')).toLowerCase().indexOf(q) >= 0); });
   }
   function drawBoard(host) {
     var cards = filtered(), byCore = {};
@@ -164,6 +172,15 @@
       var go = function (e) { if (P.dragging || e.target.closest('.pc-plink,.pc-move')) return; location.hash = '#plan/' + el.getAttribute('data-core'); };
       el.addEventListener('click', go);
       el.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(e); });
+    });
+    // hover or focus a card: the other projects in the same program light up, wherever they are on the board
+    var lit = function (key, on) { host.querySelectorAll('.pcard[data-pg="' + key + '"]').forEach(function (x) { x.classList.toggle('pg-lit', on); }); host.querySelector('#pboard').classList.toggle('pg-focus', on); };
+    host.querySelectorAll('.pcard[data-pg]').forEach(function (el) {
+      var k = el.getAttribute('data-pg');
+      el.addEventListener('mouseenter', function () { if (!P.dragging) lit(k, true); });
+      el.addEventListener('mouseleave', function () { lit(k, false); });
+      el.addEventListener('focus', function () { lit(k, true); });
+      el.addEventListener('blur', function () { lit(k, false); });
     });
     bindDrag(host, byCore);
   }
@@ -194,7 +211,7 @@
     var canDel = M.allowed('projects', 'edit') && !(M.me && M.me.scope);
     var rows = cards.slice().sort(function (a, b) { return rank[health(a)] - rank[health(b)] || ORDER.indexOf(a.phase) - ORDER.indexOf(b.phase); }).map(function (c) {
       var h = health(c), col = COLS[ORDER.indexOf(c.phase)];
-      return '<tr class="click" data-plan="' + esc(c.core) + '">' + (canDel ? '<td class="cs-pick"><input type="checkbox" data-pick="' + esc(c.core) + '" aria-label="Select ' + esc(c.name) + '"></td>' : '') + '<td><span class="cs-rag cs-' + h + '" title="' + HN[h] + '"></span></td><td><b>' + esc(c.name) + '</b><br><small class="muted"><span class="ref">' + esc(c.ref) + '</span> · ' + esc(c.client) + '</small></td>' +
+      return '<tr class="click" data-plan="' + esc(c.core) + '">' + (canDel ? '<td class="cs-pick"><input type="checkbox" data-pick="' + esc(c.core) + '" aria-label="Select ' + esc(c.name) + '"></td>' : '') + '<td><span class="cs-rag cs-' + h + '" title="' + HN[h] + '"></span></td><td><b>' + esc(c.name) + '</b><br><small class="muted"><span class="ref">' + esc(c.ref) + '</span>' + (c.programKey ? ' · <span class="pgref" style="--pg:' + esc(c.programColor || '#64748B') + '" title="Program: ' + esc(c.program) + '">' + esc(c.programKey) + '</span>' : '') + ' · ' + esc(c.client) + '</small></td>' +
         '<td><span class="cs-chip" style="--pc:' + col[2] + '">' + esc(col[1]) + '</span></td>' +
         '<td style="min-width:130px">' + (c.hasPlan ? '<div class="pbar"><span style="width:' + c.pct + '%"></span></div><small>' + c.pct + '% · ' + c.done + '/' + c.total + '</small>' : '<small class="muted">No plan yet</small>') + '</td>' +
         '<td class="hide-sm">' + esc(pretty(c.finish)) + '</td><td>' + (c.SPI == null ? '–' : '<b class="ev-' + evC(c.SPI) + '-t">' + c.SPI.toFixed(2) + '</b>') + '</td><td>' + (c.CPI == null ? '–' : '<b class="ev-' + evC(c.CPI) + '-t">' + c.CPI.toFixed(2) + '</b>') + '</td>' +
@@ -238,7 +255,7 @@
     P.el.querySelectorAll('[data-tab]').forEach(function (t) { t.classList.toggle('on', t.getAttribute('data-tab') === P.tab); });
     var ps = P.el.querySelector('#pbProg'), pl = progList();
     if (P.prog && P.prog !== '-' && pl.indexOf(P.prog) < 0) { P.prog = ''; store('champProg', ''); }
-    ps.innerHTML = '<option value="">📁 All programs</option>' + pl.map(function (x) { return '<option value="' + esc(x) + '"' + (x === P.prog ? ' selected' : '') + '>📁 ' + esc(x) + '</option>'; }).join('') + (pl.length ? '<option value="-"' + (P.prog === '-' ? ' selected' : '') + '>Not in a program</option>' : '');
+    ps.innerHTML = '<option value="">📁 All programs</option>' + pl.map(function (x) { return '<option value="' + esc(x) + '"' + (x === P.prog ? ' selected' : '') + '>📁 ' + esc(((P.data.programKeys || {})[x] ? P.data.programKeys[x] + ' · ' : '') + x) + '</option>'; }).join('') + (pl.length ? '<option value="-"' + (P.prog === '-' ? ' selected' : '') + '>Not in a program</option>' : '');
     ps.hidden = !pl.length;
     if (P.tab === 'summary') drawSummary(host); else drawBoard(host);
   }

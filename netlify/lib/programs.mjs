@@ -1,5 +1,5 @@
 // GKH Project Champ: Programs (the top level) and dependencies between projects.
-// Programs: kv 'champ-programs' { list: [{ id, name, manager, sponsor, objective, status, color, start, finish, created, updated }] }.
+// Programs: kv 'champ-programs' { list: [{ id, key, name, manager, sponsor, objective, status, color, start, finish, created, updated }] }.
 // A project belongs to exactly one program (the program's name is kept on the project as job.program).
 // Dependencies: kv 'champ-deps' { list: [{ id, from, to, type: 'FS'|'SS'|'FF', lag, note, created, by }] } between projects (cores).
 import * as kv from './kv.mjs';
@@ -15,6 +15,28 @@ const s = (v, n) => String(v == null ? '' : v).replace(/[\u0000-\u001f<>]/g, ' '
 const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
 
 export async function list() { return ((await kv.get('champ-programs').catch(() => null)) || { list: [] }).list; }
+
+// Reference key: PG-001, PG-002 ... given once and never reused, so linked projects can be spotted on the board, the lists and in AI answers.
+const keyNum = (k) => { const m = /^PG-(\d+)$/.exec(k || ''); return m ? +m[1] : 0; };
+function giveKeys(cur) {   // oldest first, so the first program made gets PG-001
+  let n = Math.max(0, Number(cur.lastKey) || 0, ...cur.list.map((p) => keyNum(p.key)));
+  for (const p of cur.list.slice().sort((a, b) => (a.created || 0) - (b.created || 0))) if (!p.key) p.key = 'PG-' + String(++n).padStart(3, '0');
+  cur.lastKey = n; return cur;
+}
+export async function keyed() {   // the programs, every one with its key (older programs get theirs the first time this runs)
+  const L = await list();
+  if (L.every((p) => p.key)) return L;
+  await kv.update('champ-programs', giveKeys, { list: [] });
+  return list();
+}
+// What a project card needs to show its program: key, name, colour, and how many projects share it.
+export function tagCards(cards, programs) {
+  const by = Object.fromEntries(programs.map((p) => [p.name.toLowerCase(), p])), n = {};
+  for (const c of cards) if (c.program) n[c.program.toLowerCase()] = (n[c.program.toLowerCase()] || 0) + 1;
+  for (const c of cards) { const p = c.program && by[c.program.toLowerCase()];
+    if (p) Object.assign(c, { programId: p.id, programKey: p.key || '', programColor: p.color || '', programCount: n[c.program.toLowerCase()] || 1 }); }
+  return cards;
+}
 export async function deps() { return ((await kv.get('champ-deps').catch(() => null)) || { list: [] }).list; }
 
 // Every project in a program, and every program used by a project on the register (older builds kept programs as a free label).
@@ -27,7 +49,7 @@ export async function ensure(cards) {
     await kv.update('champ-programs', (cur) => {
       for (const n of missing) if (!cur.list.some((p) => p.name.toLowerCase() === n.toLowerCase()))
         cur.list.push({ id: id(), name: n, manager: '', sponsor: '', objective: n === DEFAULT ? 'Projects not yet grouped into a program.' : '', status: 'active', color: COLORS[cur.list.length % COLORS.length], start: '', finish: '', created: Date.now(), updated: Date.now() });
-      return cur;
+      return giveKeys(cur);
     }, { list: [] });
   }
   for (const c of orphans) { await J.setProgram(c.core, DEFAULT); c.program = DEFAULT; }
@@ -44,7 +66,7 @@ export async function save(body, who) {
     if (clash) throw Object.assign(new Error(`There is already a program called “${clash.name}”.`), { code: 409 });
     let p = pid ? cur.list.find((x) => x.id === pid) : null;
     if (pid && !p) throw Object.assign(new Error('That program is no longer there.'), { code: 404 });
-    if (!p) { p = { id: id(), created: Date.now(), color: COLORS[cur.list.length % COLORS.length] }; cur.list.push(p); }
+    if (!p) { giveKeys(cur); p = { id: id(), key: 'PG-' + String((cur.lastKey = (Number(cur.lastKey) || 0) + 1)).padStart(3, '0'), created: Date.now(), color: COLORS[cur.list.length % COLORS.length] }; cur.list.push(p); }
     if (p.name && p.name !== name) renamed = { from: p.name, to: name };
     Object.assign(p, { name, manager: s(body.manager, 80), sponsor: s(body.sponsor, 80), objective: s(body.objective, 600), status: STATUS[body.status] ? body.status : (p.status || 'active'),
       color: /^#[0-9a-f]{6}$/i.test(body.color || '') ? body.color : p.color, start: day(body.start), finish: day(body.finish), updated: Date.now(), updatedBy: who || '' });

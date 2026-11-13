@@ -791,8 +791,10 @@ export async function planPost(action, body, { who, by, audit }) {
     const [jobList, planList] = await Promise.all([J.all(), list()]);
     const jobs = Object.fromEntries(jobList.map((j) => [j.core, j]));
     const only = Array.isArray(body.onlyCores) ? body.onlyCores : null;   // v91: a sub-contractor sees only their project
-    const plans = planList.filter((p) => !only || only.includes(p.core)).map((p) => ({ core: p.core, name: p.name, ref: jobs[p.core] ? jobs[p.core].ref : p.core, customer: jobs[p.core] ? jobs[p.core].name : '', updated: p.updated, ...rollup(p, body.today || today) }));
-    return out(200, { plans: plans.sort((a, b) => (b.updated || 0) - (a.updated || 0)) });
+    const plans = planList.filter((p) => !only || only.includes(p.core)).map((p) => ({ core: p.core, name: p.name, ref: jobs[p.core] ? jobs[p.core].ref : p.core, customer: jobs[p.core] ? jobs[p.core].name : '', program: (jobs[p.core] && jobs[p.core].program) || '', updated: p.updated, ...rollup(p, body.today || today) }));
+    const programs = await PG.keyed();   // GKH Project Champ: each row carries its program's key, so linked projects show together
+    PG.tagCards(plans, programs);
+    return out(200, { plans: plans.sort((a, b) => (b.updated || 0) - (a.updated || 0)), programs: programs.map((p) => ({ id: p.id, key: p.key, name: p.name, color: p.color, status: p.status })) });
   }
   // ---------- GKH Project Champ: portfolio Summary and Pipeline board, by the PMBOK life cycle ----------
   // Initiation: no plan yet. Planning: a plan, no work done and not started. Execution: work under way (under 80%).
@@ -802,15 +804,19 @@ export async function planPost(action, body, { who, by, audit }) {
     const day = body.today || new Date().toISOString().slice(0, 10);
     const only = Array.isArray(body.onlyCores) ? body.onlyCores : null;
     const cards = await portfolio(day, only);
-    const reg = only ? await PG.list() : await PG.ensure(cards);   // every project in a program
+    if (!only) await PG.ensure(cards);   // every project in a program
+    const reg = await PG.keyed();
+    PG.tagCards(cards, reg);   // program key, colour and project count on every card
     const programs = reg.map((p) => p.name).sort();
-    return out(200, { cards, programs, today: day, at: Date.now() });
+    return out(200, { cards, programs, programKeys: Object.fromEntries(reg.map((p) => [p.name, p.key])), today: day, at: Date.now() });
   }
   // ---------- Programs (the top level) and the dependency board ----------
   if (action === 'planProgramList') {
     const day = body.today || new Date().toISOString().slice(0, 10);
     const cards = await portfolio(day);
-    const reg = await PG.ensure(cards);
+    await PG.ensure(cards);
+    const reg = await PG.keyed();
+    PG.tagCards(cards, reg);
     for (const c of cards) { c.health = healthOf(c); c.forecast = PG.forecastFinish(c); }
     const by = Object.fromEntries(cards.map((c) => [c.core, c]));
     const deps = (await PG.deps()).filter((d) => by[d.from] && by[d.to]).map((d) => ({ ...d, ...PG.depStatus(d, by[d.from], by[d.to]),
