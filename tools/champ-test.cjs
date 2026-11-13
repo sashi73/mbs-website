@@ -680,6 +680,17 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Project types', 'costed in consultant-days ($118,800 for the ESG strategy)', Math.abs(bac - 118800) < 1, bac);
   ok('Project types', 'the charter carries the deliverables and consulting acceptance', /Gap analysis register/.test((gp2.charter || {}).deliverables || '') && /phase gate/.test((gp2.charter || {}).acceptance || ''), JSON.stringify(gp2.charter || {}).slice(0, 200));
   ok('Project types', 'consulting risks are added', (gp2.risks || []).some((x) => /data or documents arrive late/.test(x.title || x.t || JSON.stringify(x))), JSON.stringify(gp2.risks || []).slice(0, 200));
+  const pgOf = async (core) => { const d = await (await api('planProgramList', { today: new Date().toISOString().slice(0, 10) })).json(); const ids = Object.fromEntries(d.programs.map((x) => [x.id, x.name])); const c = d.cards.find((x) => x.core === core) || {}; return { prog: ids[c.program] || c.program, deps: d.deps }; };
+  ok('Programs', 'picking an ESG type puts the project in the ESG consulting program', (await pgOf(gk)).prog === 'ESG consulting', (await pgOf(gk)).prog);
+  const gk2 = (await (await api('planNewProject', { name: 'Airline sustainability report', client: 'National Airlines', program: 'Digital health' })).json()).core;
+  await p.goto(`${BASE}/admin/#plan/${gk2}`); await p.reload(); await p.waitForSelector('[data-mode=type]', { timeout: 10000 }).catch(() => {});
+  await p.click('[data-mode=type]').catch(() => {}); await p.waitForSelector('#tplType', { timeout: 5000 }).catch(() => {});
+  await p.selectOption('#tplType', 'esg-report').catch(() => {}); await p.waitForSelector('#tplAfter option[value="' + gk + '"]', { state: 'attached', timeout: 8000 }).catch(() => {});
+  ok('Programs', 'the chooser offers to link it to the other project in ESG consulting', await p.$('#tplAfter option[value="' + gk + '"]').then((x) => !!x).catch(() => false), await p.textContent('#tplLink').catch(() => ''));
+  await p.selectOption('#tplAfter', gk).catch(() => {}); await p.click('#tplCreate').catch(() => {}); await sleep(3000);
+  const L2 = await pgOf(gk2);
+  ok('Programs', 'both projects sit in the same program, linked finish-to-start on the Dependency board', L2.prog === 'ESG consulting' && L2.deps.some((d) => d.from === gk && d.to === gk2 && d.type === 'FS'), JSON.stringify([L2.prog, L2.deps.map((d) => [d.from, d.to, d.type])]));
+  await api('planProjectDelete', { core: gk2 });
   await api('planProjectDelete', { core: gk });
 
   // ---- console: no chat bubble (AI is built in), Ask AI about programs ----

@@ -738,6 +738,33 @@
       '<ol class="tpltasks">' + p.tasks.map(function (t) { return '<li>' + (t.dur === 0 ? '◆ ' : '') + esc(t.name) + ' <small class="muted">' + (t.dur === 0 ? 'milestone' : pl(t.dur, 'day')) + (t.subs && t.subs.length ? ' · ' + pl(t.subs.length, 'sub-task') : '') + '</small></li>'; }).join('') + '</ol>' +
       scopeBox + riskBox + (!full && p.risks.length ? '<div class="muted" style="font-size:12.5px"><b>Risks:</b> ' + p.risks.map(function (r) { return esc(r.title); }).join(' · ') + '</div>' : '') + '</div>';
   }
+  // a project type belongs to a program of the same name, so related projects sit together and can be linked on the Dependency board
+  function typeProgram(id) { var f = catalogItem(id); if (!f) return ''; var c = CATALOG.filter(function (x) { return x.c === f.cat; })[0]; return c && c.g ? f.cat.replace(/\s*\(.*\)\s*$/, '') : ''; }
+  function linkBox(v) {
+    var el = $('#tplLink'); if (!el) return; var pg = typeProgram(v); if (!pg) { el.innerHTML = ''; return; }
+    (S.pgl || (S.pgl = api('planProgramList', { today: today() }).catch(function () { S.pgl = null; return { programs: [], cards: [] }; }))).then(function (d) {
+      if (!$('#tplLink') || S.tplType !== v) return;
+      var ids = {}; (d.programs || []).forEach(function (p) { ids[p.id] = p.name; });
+      var pn = function (c) { return ids[c.program] || c.program || ''; };
+      var me = (d.cards || []).filter(function (c) { return c.core === S.core; })[0], cur = me ? pn(me) : '';
+      var mates = (d.cards || []).filter(function (c) { return c.core !== S.core && pn(c) === pg; });
+      el.innerHTML = '<div class="tpl-link" style="margin:12px 0 4px;padding:12px 14px;border:1px solid var(--line,#e5e2d8);border-radius:12px;display:grid;gap:8px">' +
+        '<b>🔗 Program and links</b>' +
+        (cur === pg ? '<span>✓ Already in the <b>' + esc(pg) + '</b> program.</span>' :
+          '<label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="tplProgOn" checked> <span>Put this project in the <b>' + esc(pg) + '</b> program' + (cur ? ' <small class="muted">(now in ' + esc(cur) + ')</small>' : '') + '. Related projects then sit together on the Programs page and the Dependency board.</span></label>') +
+        '<label style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">Link it to <select id="tplAfter" style="width:auto;max-width:320px"><option value="">no other project</option>' +
+          mates.map(function (c) { return '<option value="' + esc(c.core) + '">' + esc(c.name) + '</option>'; }).join('') + '</select>' +
+          '<select id="tplDepType" style="width:auto"><option value="FS">starts after it finishes</option><option value="SS">starts at the same time</option><option value="FF">finishes at the same time</option></select></label>' +
+        (mates.length ? '' : '<small class="muted">No other projects in ' + esc(pg) + ' yet. Create the next one from this type and you can link them here.</small>') + '</div>';
+    });
+  }
+  function linkUp(L) {
+    if (!L) return Promise.resolve();
+    var p = L.prog ? api('planProgramSet', { core: S.core, id: L.prog }) : Promise.resolve();
+    return p.then(function () { if (L.after) return api('planDepSave', { from: L.after, to: S.core, type: L.type || 'FS' }); })
+      .then(function () { S.pgl = null; if (L.prog || L.after) toast((L.prog ? 'Added to the ' + L.prog + ' program' : 'Linked') + (L.after ? ' and linked on the Dependency board' : '')); })
+      .catch(function (e) { toast('Plan created, but the program link failed: ' + (e.message || e), true); });
+  }
   function chooser() {
     setTimeout(function () { dateBoxes(V()); }, 0);
     $('#title').textContent = 'Project plan';
@@ -767,8 +794,8 @@
       create.disabled = false; create.textContent = 'Create plan';
       if (S.mode === 'type') {
         mb.innerHTML = '<label style="display:grid;gap:4px;font-weight:700">Project type<select id="tplType" style="max-width:520px">' + typeOptions(S.tplType || guess) + '</select></label>' +
-          (guess && !S.tplType ? '<small class="muted">Suggested from the description. Change it if it\'s not right.</small>' : '') + '<div id="tplPrev"></div>';
-        var show = function () { var v = $('#tplType').value; S.tplType = v; $('#tplPrev').innerHTML = v ? previewHtml(newPlan(buildTemplate(v), j, $('#tplStart').value || today(), '')) : ''; };
+          (guess && !S.tplType ? '<small class="muted">Suggested from the description. Change it if it\'s not right.</small>' : '') + '<div id="tplLink"></div><div id="tplPrev"></div>';
+        var show = function () { var v = $('#tplType').value; S.tplType = v; $('#tplPrev').innerHTML = v ? previewHtml(newPlan(buildTemplate(v), j, $('#tplStart').value || today(), '')) : ''; linkBox(v); };
         $('#tplType').onchange = show; show();
       } else if (S.mode === 'blank') {
         mb.innerHTML = '<p class="muted" style="margin:0">A plan with a site inspection and a handover. Add tasks, milestones and sub-tasks yourself on the Schedule tab.</p>';
@@ -886,7 +913,8 @@
       var btn = this; btn.disabled = true;
       plan.emergency = !!$('#tplEmerg').checked; plan.weekends = !!($('#tplWeek') && $('#tplWeek').checked); plan.coolOff = S.coolZero && !plan.emergency ? 0 : 3;
       S.plan = plan; S.rev = 0; S.tab = 'schedule';
-      api('planSave', { core: S.core, plan: S.plan, rev: 0, note: note }).then(function (r) { S.plan = normalise(r.plan); S.rev = r.plan.rev; S.aiDraft = null; S.chain = null; loadChain(); S.aiText = ''; S.tplType = ''; toast('Plan created'); history.replaceState(null, '', '#plan/' + S.core + '/schedule'); render(); }).catch(function (e) { btn.disabled = false; S.plan = null; fail(e); });
+      var link = S.mode === 'type' && $('#tplLink') && typeProgram(S.tplType || $('#tplType').value) ? { prog: $('#tplProgOn') && $('#tplProgOn').checked ? typeProgram($('#tplType').value) : '', after: $('#tplAfter') ? $('#tplAfter').value : '', type: $('#tplDepType') ? $('#tplDepType').value : 'FS' } : null;
+      api('planSave', { core: S.core, plan: S.plan, rev: 0, note: note }).then(function (r) { return linkUp(link).then(function () { return r; }); }).then(function (r) { S.plan = normalise(r.plan); S.rev = r.plan.rev; S.aiDraft = null; S.chain = null; loadChain(); S.aiText = ''; S.tplType = ''; toast('Plan created'); history.replaceState(null, '', '#plan/' + S.core + '/schedule'); render(); }).catch(function (e) { btn.disabled = false; S.plan = null; fail(e); });
     };
   }
 
