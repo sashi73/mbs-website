@@ -14,7 +14,7 @@
   function b64(blob) { return new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(String(r.result).replace(/^data:[^,]*,/, '')); }; r.readAsDataURL(blob); }); }
 
   /* ---------- the Gantt chart as a picture ---------- */
-  function gantt(s, maxRows) {
+  function gantt(s, maxRows) { var gg = (s && s.gantt) || {}, GW = gg.words || {};
     var g = s.gantt; if (!g || !g.rows || !g.rows.length) return null;
     var rows = g.rows.slice(0, maxRows || 40), more = g.rows.length - rows.length;
     var W = 1800, LW = 560, top = 58, rh = 30, foot = 46, H = top + rows.length * rh + (more ? 26 : 0) + foot;
@@ -27,7 +27,7 @@
     x.fillStyle = '#F6F3EA'; x.fillRect(0, 0, W, top); x.fillStyle = '#1F1D18';
     var lastM = '';
     for (var i = 0; i < days; i++) {
-      var d = new Date(f0 + i * DAY), dx = LW + i * dw, wd = d.getUTCDay(), m = d.toLocaleDateString('en-AU', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+      var d = new Date(f0 + i * DAY), dx = LW + i * dw, wd = d.getUTCDay(), m = d.toLocaleDateString(gg.locale || 'en-AU', { month: 'short', year: '2-digit', timeZone: 'UTC' });
       if (days <= 70 && (wd === 0 || wd === 6)) { x.fillStyle = '#F4F4F2'; x.fillRect(dx, top, dw, rows.length * rh); }
       if (m !== lastM) { lastM = m; x.fillStyle = '#1F1D18'; x.font = '700 17px Arial'; x.fillText(m, dx + 3, 17); x.strokeStyle = '#D6D0C1'; x.beginPath(); x.moveTo(dx, 0); x.lineTo(dx, top + rows.length * rh); x.stroke(); }
       if (wd === 1 && (days <= 200 || d.getUTCDate() <= 7)) { x.fillStyle = '#6B665A'; x.font = '15px Arial'; x.fillText(days <= 200 ? String(d.getUTCDate()) : '', dx + 2, 42); x.strokeStyle = '#EEE9DC'; x.beginPath(); x.moveTo(dx, 30); x.lineTo(dx, top + rows.length * rh); x.stroke(); }
@@ -51,8 +51,8 @@
       if (r.crit) { x.strokeStyle = '#EA580C'; x.lineWidth = 2.5; x.strokeRect(a, by, Math.max(3, b - a), bh); x.lineWidth = 1; }
       if (r.level === 1 && b - a > 0) { x.fillStyle = '#4B4739'; x.font = '13px Arial'; x.fillText((r.pct || 0) + '%', Math.min(b + 5, W - 60), y + rh / 2); }
     });
-    if (more) { x.fillStyle = '#6B665A'; x.font = 'italic 15px Arial'; x.fillText('… and ' + more + ' more rows (see the plan)', 10, top + rows.length * rh + 13); }
-    if (g.today && g.today >= g.from && g.today <= g.to) { var tx = X(g.today) + dw / 2; x.strokeStyle = '#DC2626'; x.lineWidth = 2; x.setLineDash([6, 4]); x.beginPath(); x.moveTo(tx, 26); x.lineTo(tx, top + rows.length * rh); x.stroke(); x.setLineDash([]); x.lineWidth = 1; x.fillStyle = '#DC2626'; x.font = '700 13px Arial'; x.fillText('Today', tx + 4, 30); }
+    if (more) { x.fillStyle = '#6B665A'; x.font = 'italic 15px Arial'; x.fillText((GW.more ? GW.more.replace('{n}', more) : '… and ' + more + ' more rows (see the plan)'), 10, top + rows.length * rh + 13); }
+    if (g.today && g.today >= g.from && g.today <= g.to) { var tx = X(g.today) + dw / 2; x.strokeStyle = '#DC2626'; x.lineWidth = 2; x.setLineDash([6, 4]); x.beginPath(); x.moveTo(tx, 26); x.lineTo(tx, top + rows.length * rh); x.stroke(); x.setLineDash([]); x.lineWidth = 1; x.fillStyle = '#DC2626'; x.font = '700 13px Arial'; x.fillText(GW.today || 'Today', tx + 4, 30); }
     // legend
     var ly = H - foot / 2, lx = 10, item = function (col, t, kind) {
       if (kind === 'm') { x.fillStyle = col; x.beginPath(); x.moveTo(lx + 8, ly - 8); x.lineTo(lx + 16, ly); x.lineTo(lx + 8, ly + 8); x.lineTo(lx, ly); x.closePath(); x.fill(); }
@@ -61,7 +61,7 @@
       else { x.fillStyle = col; x.fillRect(lx, ly - 7, 22, 14); }
       x.fillStyle = '#4B4739'; x.font = '15px Arial'; x.fillText(t, lx + 28, ly); lx += 40 + x.measureText(t).width;
     };
-    item('#94A3B8', '0%'); item('#F59E0B', '25%'); item('#2563EB', '50%'); item('#7C3AED', '75%'); item('#16A34A', '100% done'); item('#DC2626', 'Late'); item('#EA580C', 'Critical path', 'c'); item('#1F1D18', 'Milestone', 'm'); item('#DC2626', 'Today', 't');
+    item('#94A3B8', '0%'); item('#F59E0B', '25%'); item('#2563EB', '50%'); item('#7C3AED', '75%'); item('#16A34A', GW.done || '100% done'); item('#DC2626', GW.late || 'Late'); item('#EA580C', GW.critical || 'Critical path', 'c'); item('#1F1D18', GW.milestone || 'Milestone', 'm'); item('#DC2626', GW.today || 'Today', 't');
     return { url: c.toDataURL('image/png'), jpg: c.toDataURL('image/jpeg', 0.88), w: W, h: H };
   }
 

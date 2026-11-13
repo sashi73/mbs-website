@@ -674,7 +674,15 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Documents', 'in Bahasa Melayu the AI writes the narrative in Malay', /Bahasa Melayu/.test(global.PLANDOC_SYS || ''));
   const plm = await dl('#pdPdf', '/tmp/champ-plan-ms.pdf').catch((e) => (console.log('plan ms dl: ' + e.message), ''));
   let msTxt = ''; try { msTxt = execSync('pdftotext -l 6 /tmp/champ-plan-ms.pdf -').toString(); } catch (e) {}
-  ok('Documents', 'the Malay plan has the Malay narrative and translated headings', /Pasukan projek/.test(msTxt) && /\[Bahas|Kandungan|Ringkasan/.test(msTxt), msTxt.slice(0, 200).replace(/\s+/g, ' '));
+  ok('Documents', 'the Malay plan has the Malay narrative and translated headings', /Pasukan projek/.test(msTxt) && /\[Bahas/.test(msTxt), msTxt.slice(0, 200).replace(/\s+/g, ' '));
+  ok('Documents', 'no English left: "Contents", "Inside this plan" and the dates are in Malay too', /\[Bahas\] Contents/.test(msTxt) && /\[BAHAS\] INSIDE THIS PLAN/i.test(msTxt) && !/(^|[^\]] )Contents/m.test(msTxt.replace(/\[Bahas\] Contents/g, '')), (msTxt.match(/.{0,30}Contents.{0,10}/g) || []).join(' | '));
+  // 🎨 colour schemes: pick Ocean, the plan comes out in navy and sky blue (no AI used)
+  await p.selectOption('#pdLang', 'en'); await p.click('[data-thm=ocean]'); await sleep(1500);
+  const plo = await dl('#pdPdf', '/tmp/champ-plan-ocean.pdf').catch(() => '');
+  let cov = ''; try { execSync('pdftoppm -r 20 -png -f 1 -l 1 /tmp/champ-plan-ocean.pdf /tmp/ocean'); cov = execSync("python3 -c \"from PIL import Image;import glob;im=Image.open(sorted(glob.glob('/tmp/ocean*.png'))[0]).convert('RGB');print(im.getpixel((5,5)))\"").toString().trim(); } catch (e) { cov = e.message; }
+  gp = (await (await api('planGet', { core: esg })).json()).plan;
+  ok('Documents', 'a colour scheme (Ocean) is kept with the project and the plan comes out in it', gp.docTheme === 'ocean' && /\((\d+), (\d+), (\d+)\)/.test(cov) && (() => { const m = cov.match(/(\d+), (\d+), (\d+)/); return +m[3] > +m[1] + 15; })(), gp.docTheme + ' ' + cov);
+  await p.click('[data-thm=champ]'); await sleep(800);
   await p.selectOption('#pdLang', 'ta');
   const [pop] = await Promise.all([p.waitForEvent('popup', { timeout: 30000 }).catch(() => null), p.click('#pdPdf')]);
   if (pop) await pop.waitForFunction(() => document.documentElement.lang === 'ta', null, { timeout: 30000 }).catch(() => {});

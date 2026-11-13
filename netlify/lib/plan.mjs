@@ -199,6 +199,7 @@ function clean(p, core) {
       doc: str(m.doc, 30), analysed: Number(m.analysed) || 0, applied: Number(m.applied) || 0, notes: str(m.notes, 1000), cr: str(m.cr, 20) })),
     // v82: 🔁 change control: change requests (CR-001 ...): raised, assessed, reviewed (change control meeting), approved / rejected / deferred, implemented
     changes: (Array.isArray(p.changes) ? p.changes : []).slice(0, 200).map(crClean).filter(Boolean),
+    docTheme: (() => { const t = p.docTheme; if (typeof t === 'string') return /^[a-z]{2,12}$/.test(t) ? t : undefined; if (t && typeof t === 'object') { const h = (x) => (/^#[0-9a-fA-F]{6}$/.test(String(x || '')) ? String(x) : null); return h(t.ink) && h(t.accent) ? { ink: h(t.ink), accent: h(t.accent) } : undefined; } return undefined; })(),   // 🎨 document colour scheme
     budgetCfg: (() => { const b = p.budgetCfg && typeof p.budgetCfg === 'object' ? p.budgetCfg : null; if (!b) return undefined; const pc = (v, d) => (isNaN(Number(v)) ? d : Math.max(0, Math.min(100, Number(v))));   // 💰 Budget settings
       const cats = ['Labour', 'Materials', 'Subcontractors', 'Equipment', 'Travel and expenses', 'Other'], cat = {};
       for (const [k, v] of Object.entries(b.cat && typeof b.cat === 'object' ? b.cat : {}).slice(0, 600)) if (/^[\w-]{1,30}$/.test(k) && cats.includes(v)) cat[k] = v;

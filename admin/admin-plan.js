@@ -2916,8 +2916,9 @@
     var mk = Object.keys(months).sort(); return { cfg: b, R: R, base: r2_(base), cont: cont, res: res, total: total, price: price, gst: gst, inc: r2_(price + gst), byCat: byCat, byPh: byPh, tasks: tasks,
       months: mk.map(function (m) { return { m: m, v: r2_(months[m]) }; }), approved: (p.charter || {}).budget || 0 };
   }
-  var mon = function (m) { return new Date(m + '-01T00:00:00Z').toLocaleDateString('en-AU', { month: 'short', year: '2-digit', timeZone: 'UTC' }); };
+  var mon = function (m) { var loc = { en: 'en-AU', zh: 'zh-CN', tl: 'fil-PH', ms: 'ms-MY', km: 'km-KH' }[typeof DOCL === 'string' ? DOCL : 'en'] || DOCL; try { return new Date(m + '-01T00:00:00Z').toLocaleDateString(loc, { month: 'short', year: '2-digit', timeZone: 'UTC' }); } catch (e) { return m; } };
   function budgetTab() {
+    DOCL = 'en';
     var p = S.plan, B = $('#planBody'), K = budgetCalc(p), b = K.cfg, ro = !!(M.me && M.me.scope && (M.me.mods || {}).projects !== 'edit');
     var pct = function (k, lab, tip) { return '<label class="bd-in" title="' + esc(tip) + '">' + lab + '<span><input type="number" min="0" max="100" step="0.5" data-bcfg="' + k + '" value="' + b[k] + '"' + (ro ? ' disabled' : '') + '> %</span></label>'; };
     var img = function (kind, data, alt) { try { var c = M.studio ? M.studio.chart({ kind: kind, data: data }) : null; return c ? '<img class="bd-ch" alt="' + esc(alt) + '" src="' + c.png + '">' : ''; } catch (e) { return ''; } };
@@ -2966,6 +2967,20 @@
   }
 
   /* ---------- 🎨 designed documents: shared pieces ---------- */
+  // 🎨 the colour scheme of the charter and the plan (kept with the project, so the whole team gets the same look)
+  function docTheme() { var t = S.plan.docTheme; return t && typeof t === 'object' ? t : t || 'champ'; }
+  function themePick() {
+    var cur = docTheme(), T = (M.studio && M.studio.themes()) || [], cus = typeof cur === 'object' ? cur : { ink: '#1E293B', accent: '#0EA5E9' };
+    return '<div class="full thm"><span class="thm-l">Colour scheme</span><div class="thm-row">' + T.map(function (t) {
+        return '<button type="button" class="thm-b' + (cur === t.id ? ' on' : '') + '" data-thm="' + t.id + '" title="' + esc(t.name) + '"><i style="background:linear-gradient(135deg,' + t.ink + ' 0 55%,' + t.accent + ' 55% 78%,' + t.light + ' 78%)"></i><small>' + esc(t.name) + '</small></button>'; }).join('') +
+      '<span class="thm-b thm-c' + (typeof cur === 'object' ? ' on' : '') + '" data-thm="custom" title="Your own colours"><i class="thm-ci"><input type="color" data-thc="ink" value="' + esc(cus.ink) + '" title="Dark colour (title bands, cover)"><input type="color" data-thc="accent" value="' + esc(cus.accent) + '" title="Accent colour (lines, labels, charts)"></i><small>Your colours</small></span></div></div>';
+  }
+  function themeWire(box) {
+    var set = function (v) { S.plan.docTheme = v; dirty('document colours'); box.querySelectorAll('.thm-b').forEach(function (b) { b.classList.toggle('on', typeof v === 'object' ? b.getAttribute('data-thm') === 'custom' : b.getAttribute('data-thm') === v); }); };
+    box.querySelectorAll('button[data-thm]').forEach(function (b) { b.onclick = function () { set(b.getAttribute('data-thm')); }; });
+    var cs = function () { set({ ink: box.querySelector('[data-thc=ink]').value, accent: box.querySelector('[data-thc=accent]').value }); };
+    box.querySelectorAll('[data-thc]').forEach(function (i) { i.oninput = cs; i.onclick = function () { if (typeof docTheme() !== 'object') cs(); }; });
+  }
   function docLang() { var l = (window.ChampI18n && window.ChampI18n.get && window.ChampI18n.get()) || 'en'; return l; }
   function langSelect(id, l) { var L = (window.ChampI18n && window.ChampI18n.langs) || [['en', 'English']]; return '<label>Language<select id="' + id + '" data-noi18n>' + L.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === l ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label>'; }
   function ganttOf(p, R, crit, rows, t0) { var clean = function (n) { return String(n || '').replace(/^[✓◆\s]+/, ''); };
@@ -2978,7 +2993,8 @@
     return { p: p, c: c, t0: t0, R: R, crit: crit, rows: rows, dur: dur, weeks: wk, miles: miles, K: K, clean: clean, unit: all ? 'day' : 'working day', ref: S.job.ref || '', program: S.job.program || '',
       sponsor: c.customer || S.job.name || '', pm: c.manager || 'To be confirmed', v: c.docVersion || '1.0', st: c.docStatus || 'Draft' };
   }
-  var fd = function (s) { return s ? new Date(s + 'T00:00:00Z').toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) : 'To be set'; };
+  var DOCL = 'en';   // the language of the document being made: dates are written in it
+  var fd = function (s) { var loc = { en: 'en-AU', zh: 'zh-CN', tl: 'fil-PH', ms: 'ms-MY', km: 'km-KH' }[DOCL] || DOCL; try { return s ? new Date(s + 'T00:00:00Z').toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) : 'To be set'; } catch (e) { return s; } };
   function shStakeRows(p, contacts) { return (p.stakeholders || []).filter(function (x) { return x.name || x.role; }).map(function (x) { var r = [{ t: x.name || '', b: true }, x.role || '', { t: x.raci || '', center: true }]; if (contacts) r.push(x.email || ''); return r; }); }
   function riskRows(p, n) { return (p.risks || []).filter(function (x) { return x.status !== 'Closed' && x.title; }).sort(function (a, b) { return b.p * b.i - a.p * a.i; }).slice(0, n).map(function (x) { var sc = x.p * x.i; return [x.title, { t: String(sc), rag: sc >= 15 ? 'R' : sc >= 8 ? 'A' : 'G' }, x.response + (x.action ? ': ' + x.action : ''), x.owner || '']; }); }
   function heatOf(p) { var cells = {}; (p.risks || []).forEach(function (r) { if (r.status === 'Closed' || !r.p || !r.i) return; var k = r.p + 'x' + r.i; cells[k] = (cells[k] || 0) + 1; }); return { cells: cells }; }
@@ -2993,6 +3009,7 @@
 
   /* ---------- 📜 the project charter, designed (at most 4 pages) ---------- */
   function charterDoc(o, lim, lang) {
+    DOCL = lang || 'en';
     var F = docFacts(), p = F.p, c = F.c, R = F.R, K = F.K, L = [1, 0.75, 0.5, 0.35][lim || 0], n = 0, ch = function (title, kicker, blocks, lead) { return { no: ++n, title: title, kicker: kicker, lead: lead, blocks: blocks.filter(Boolean) }; };
     var miles = F.miles.slice(0, Math.max(4, Math.round(12 * L))).map(function (x) { var late = x.t.pct < 100 && x.t.ef < F.t0; return [F.clean(x.t.name).replace(/^Phase \d+ complete:\s*/i, ''), fd(x.t.es), { t: x.t.pct >= 100 ? 'Done' : late ? 'Late' : 'Planned', rag: x.t.pct >= 100 ? 'G' : late ? 'R' : undefined, center: true }]; });
     var signers = [{ role: 'Project sponsor', name: F.sponsor }, { role: 'Project manager', name: c.manager || '' }];
@@ -3018,6 +3035,7 @@
 
   /* ---------- 📘 the project management plan, designed (about 20 pages) ---------- */
   function planDoc(N, lang) {
+    DOCL = lang || 'en';
     var F = docFacts(), p = F.p, c = F.c, R = F.R, K = F.K, n = 0, S2 = (N && N.sections) || {}, nl = N && N.lang === lang;   // narrative already in this language: not translated again
     var T = function (text) { return text ? { t: 'p', text: text, noTr: nl } : null; };
     var ch = function (title, kicker, blocks, lead, blurb) { return { no: ++n, title: title, kicker: kicker, lead: lead, blurb: blurb, blocks: blocks.filter(Boolean) }; };
@@ -3082,13 +3100,13 @@
   function planDocDialog() {
     var core = S.core, last = S.pdoc && S.pdoc.core === core ? S.pdoc.doc : null, l = docLang();
     M.modal('<h2>📘 Project management plan</h2><p class="muted" style="margin:4px 0 10px">A designed plan of about 20 pages: cover, contents, three parts (define, plan, control and close), 13 chapters with the Gantt chart, budget charts, cash flow, risk heat map and registers, and an approval page. ✨ The AI writes the narrative from this plan (up to 50,000 tokens, about 1 to 3 minutes). Download it as PDF or Word.</p>' +
-      '<div class="form ch-form">' + langSelect('pdLang', l) + '<div class="full" id="pdState" style="font-size:13px"></div></div>' +
+      '<div class="form ch-form">' + themePick() + langSelect('pdLang', l) + '<div class="full" id="pdState" style="font-size:13px"></div></div>' +
       '<div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-gold" id="pdAi" type="button">✨ Write the narrative with AI</button><button class="btn" id="pdPdf" type="button">⬇ PDF</button><button class="btn" id="pdDocx" type="button">⬇ Word</button><span class="muted" id="pdMsg" style="font-size:12.5px"></span></div>' +
       '<div class="actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Close</button></div>');
-    var state = function () { var d = S.pdoc && S.pdoc.doc, e = $('#pdState'); if (!e) return; e.innerHTML = d ? '✓ Narrative written ' + esc(new Date(d.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })) + ' by ' + esc(d.by || '') + ' · ' + (d.lang && d.lang !== 'en' ? esc((window.ChampI18n && window.ChampI18n.name(d.lang)) || d.lang) + ' · ' : '') + Number(d.tokens || 0).toLocaleString('en-AU') + ' tokens' + (d.partial ? ' · <span class="warn">' + esc(d.partial) + '</span>' : '') + '. Write it again after big changes to the plan.' : '<span class="warn">No AI narrative yet:</span> the plan can still be made from the plan data, but ✨ the AI adds the executive summary, objectives, deliverables and the management plans.'; };
-    state();
+    var state = function () { var d = S.pdoc && S.pdoc.doc, e = $('#pdState'); if (!e) return; e.innerHTML = d ? '✓ Narrative written ' + esc(new Date(d.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })) + ' by ' + esc(d.by || '') + ' · ' + (d.lang && d.lang !== 'en' ? esc((window.ChampI18n && window.ChampI18n.name(d.lang)) || d.lang) + ' · ' : '') + Number(d.tokens || 0).toLocaleString('en-AU') + ' tokens' + (d.partial ? ' · <span class="warn">' + esc(d.partial) + '</span>' : '') + '. Write it again after big changes to the plan.' + ((d.lang || 'en') !== ($('#pdLang') ? $('#pdLang').value : 'en') ? '<br><span class="warn">⚠ The narrative is in ' + esc((window.ChampI18n && window.ChampI18n.name(d.lang || 'en')) || d.lang) + '. ' + ($('#pdLang').value === 'en' ? 'Press ✨ to write it again in English, otherwise it stays in ' + esc((window.ChampI18n && window.ChampI18n.name(d.lang)) || d.lang) + '.' : 'It will be translated; for the best wording press ✨ to write it in ' + esc(window.ChampI18n.name($('#pdLang').value)) + '.') + '</span>' : '') : '<span class="warn">No AI narrative yet:</span> the plan can still be made from the plan data, but ✨ the AI adds the executive summary, objectives, deliverables and the management plans.'; };
+    state(); themeWire($('#modal')); $('#pdLang').onchange = state;
     var busy = false, msg = $('#pdMsg');
-    var make = function (fmt) { if (busy) return; busy = true; var lang = $('#pdLang').value; genDoc(planDoc(S.pdoc && S.pdoc.doc, lang), fmt, msg).catch(function (e) { msg.innerHTML = ''; fail(e); }).then(function () { busy = false; }); };
+    var make = function (fmt) { if (busy) return; busy = true; var lang = $('#pdLang').value; var D = planDoc(S.pdoc && S.pdoc.doc, lang); D.theme = docTheme(); genDoc(D, fmt, msg).catch(function (e) { msg.innerHTML = ''; fail(e); }).then(function () { busy = false; }); };
     $('#pdPdf').onclick = function () { make('pdf'); }; $('#pdDocx').onclick = function () { make('docx'); };
     $('#pdAi').onclick = function () {
       if (busy) return; busy = true; var b = this, id = rid(), lang = $('#pdLang').value, K = budgetCalc(S.plan), t0 = Date.now(); b.disabled = true; msg.innerHTML = '<span class="ask-think">✨ The AI is writing the plan in three parts at once (about 1 to 3 minutes)…</span>';
@@ -3106,7 +3124,7 @@
   function charterDialog() {
     var p = S.plan, c = p.charter, o = chOpts();
     M.modal('<h2>📄 Project charter</h2><p class="muted" style="margin:4px 0 10px">A sign-off document from this plan: objective, scope, deliverables, acceptance criteria, milestones, the Gantt chart, critical path, stakeholder register, risks and budget, with signature lines. Download it as PDF, or as Word to change it.</p>' +
-      '<div class="form ch-form">' + langSelect('chLang', docLang()) + '<label>Version<input id="chV" maxlength="10" value="' + esc(c.docVersion || '1.0') + '"></label><label>Status<select id="chS">' + ['Draft', 'For approval', 'Approved'].map(function (x) { return '<option' + ((c.docStatus || 'Draft') === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label></div>' +
+      '<div class="form ch-form">' + themePick() + langSelect('chLang', docLang()) + '<label>Version<input id="chV" maxlength="10" value="' + esc(c.docVersion || '1.0') + '"></label><label>Status<select id="chS">' + ['Draft', 'For approval', 'Approved'].map(function (x) { return '<option' + ((c.docStatus || 'Draft') === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label></div>' +
       '<b style="font-size:13px;display:block;margin:10px 0 4px">Include</b><div class="ch-opts">' + CH_OPT.map(function (x) { return '<label class="qchk' + (x[0] === 'contacts' ? ' ch-sub' : '') + '"><input type="checkbox" data-cho="' + x[0] + '"' + (o[x[0]] ? ' checked' : '') + '> ' + esc(x[1]) + '</label>'; }).join('') + '</div>' +
       '<p class="muted" style="font-size:12px;margin:8px 0 0">Always included: project at a glance, objective, scope in and out, deliverables, acceptance criteria, assumptions, and the approval and sign-off block.</p>' +
       '<div class="row" style="gap:6px;margin-top:12px"><button class="btn" id="chPrev" type="button">👁 Preview</button><button class="btn btn-gold" id="chPdf" type="button">⬇ PDF</button><button class="btn" id="chDocx" type="button">⬇ Word (to edit)</button><span class="muted" id="chMsg" style="font-size:12.5px"></span></div>' +
@@ -3117,13 +3135,14 @@
       document.querySelectorAll('[data-cho]').forEach(function (b) { o[b.getAttribute('data-cho')] = b.checked; }); try { localStorage.setItem('mbsCharterOpt', JSON.stringify(o)); } catch (e) {} };
     var msg = function (t) { $('#chMsg').innerHTML = t ? '<span class="ask-think">' + esc(t) + '</span>' : ''; };
     var busy = false, go = function (fmt, preview) { if (busy) return; busy = true; keep(); var lang = $('#chLang').value, el = $('#chMsg');
-      var D0 = charterDoc(o, 0, lang);
+      var D0 = charterDoc(o, 0, lang); D0.theme = docTheme();
       if (fmt === 'docx' || M.studio.needsPrint(D0)) { genDoc(D0, fmt, el).catch(function (e) { msg(''); fail(e); }).then(function () { busy = false; }); return; }
       var win = preview ? window.open('', '_blank') : null;
       msg('Designing the charter' + (lang !== 'en' ? ' in ' + window.ChampI18n.name(lang) : '') + '…');
-      var tryLim = function (lim, D) { return M.studio.pdf(D).then(function (r) { if (r.pages > 4 && lim < 3) return tryLim(lim + 1, charterDoc(o, lim + 1, lang)); return r; }); };   // at most 4 pages: tables and the Gantt chart shrink until it fits
+      var tryLim = function (lim, D) { return M.studio.pdf(D).then(function (r) { if (r.pages > 4 && lim < 3) { var D2 = charterDoc(o, lim + 1, lang); D2.theme = docTheme(); return tryLim(lim + 1, D2); } return r; }); };   // at most 4 pages: tables and the Gantt chart shrink until it fits
       tryLim(0, D0).then(function (r) { if (preview) { var u = URL.createObjectURL(r.blob); if (win) win.location = u; else M.report.save(r.blob, r.name); } else M.report.save(r.blob, r.name); msg(''); toast('Charter ready: ' + pl(r.pages, 'page')); })
         .catch(function (e) { msg(''); fail(e); }).then(function () { busy = false; }); };
+    themeWire($('#modal'));
     $('#chPrev').onclick = function () { go('pdf', true); }; $('#chPdf').onclick = function () { go('pdf'); }; $('#chDocx').onclick = function () { go('docx'); };
     $('#chV').onchange = keep; $('#chS').onchange = keep;
     $('#chUp').onchange = function () { var f = this.files[0]; this.value = ''; if (!f) return; msg('Reading “' + f.name + '”…'); var core = S.core;
