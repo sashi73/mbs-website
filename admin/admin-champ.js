@@ -314,7 +314,7 @@
   /* ---------------- Customers > Visitors: people who introduced themselves to Champ (potential customers) ---------------- */
   var VS = { q: '', sel: {} };
   var LNAME = { en: 'English', ms: 'Bahasa Melayu', id: 'Bahasa Indonesia', ta: 'தமிழ் Tamil', zh: '中文 Chinese', hi: 'हिन्दी Hindi', ar: 'العربية Arabic', fa: 'فارسی Persian', vi: 'Tiếng Việt', th: 'ไทย Thai',
-    tl: 'Filipino', ja: '日本語 Japanese', ko: '한국어 Korean', es: 'Español', fr: 'Français', de: 'Deutsch', pt: 'Português', sw: 'Kiswahili', rw: 'Kinyarwanda' };
+    tl: 'Filipino', ja: '日本語 Japanese', ko: '한국어 Korean', es: 'Español', fr: 'Français', de: 'Deutsch', pt: 'Português', sw: 'Kiswahili', rw: 'Kinyarwanda', km: 'ខ្មែរ Khmer' };
   // typed in another language: the English is shown, the original underneath
   function origNote(v, keys) {
     var o = v.original || {}, got = keys.filter(function (k) { return o[k]; });

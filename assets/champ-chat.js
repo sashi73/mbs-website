@@ -9,7 +9,7 @@
   var ASSET = where === 'console' ? '../assets/' : 'assets/';
   var LANGS = [['auto', '🌐 Auto (your language)'], ['en', 'English'], ['ms', 'Bahasa Melayu'], ['id', 'Bahasa Indonesia'], ['ta', 'தமிழ்'], ['zh', '简体中文'], ['hi', 'हिन्दी'],
     ['ar', 'العربية'], ['fa', 'فارسی'], ['vi', 'Tiếng Việt'], ['th', 'ไทย'], ['tl', 'Filipino'], ['ja', '日本語'], ['ko', '한국어'], ['es', 'Español'], ['fr', 'Français'],
-    ['de', 'Deutsch'], ['pt', 'Português'], ['sw', 'Kiswahili'], ['rw', 'Kinyarwanda']];
+    ['de', 'Deutsch'], ['pt', 'Português'], ['sw', 'Kiswahili'], ['rw', 'Kinyarwanda'], ['km', 'ខ្មែរ (Khmer)']];
   var RTL = { ar: 1, fa: 1 };
   var HELLO = {
     auto: 'Hi, I\'m Champ 👋 Ask me about Project Champ, or anything on project, program and portfolio management. I answer in your language.',
@@ -31,7 +31,8 @@
     de: 'Hallo, ich bin Champ 👋 Fragen Sie mich zu Project Champ oder zu Projekt-, Programm- und Portfoliomanagement.',
     pt: 'Olá, sou o Champ 👋 Pergunte sobre o Project Champ ou sobre gestão de projetos, programas e portfólios.',
     sw: 'Habari, mimi ni Champ 👋 Niulize kuhusu Project Champ, au usimamizi wa miradi, programu na portfolio.',
-    rw: 'Muraho, ndi Champ 👋 Mumbaze ibyerekeye Project Champ, cyangwa imicungire y\'imishinga, porogaramu na portfolio.'
+    rw: 'Muraho, ndi Champ 👋 Mumbaze ibyerekeye Project Champ, cyangwa imicungire y\'imishinga, porogaramu na portfolio.',
+    km: 'សួស្តី ខ្ញុំគឺ Champ 👋 សួរខ្ញុំអំពី Project Champ ឬការគ្រប់គ្រងគម្រោង កម្មវិធី និងផលប័ត្រ។'
   };
   var CHIPS = where === 'console'
     ? ['How do I start a new project?', 'How does the Pipeline board work?', 'Explain SPI and CPI', 'How do I set a baseline?']
@@ -76,7 +77,7 @@
     ta: ['tamil', 'thamil', 'tamizh', 'தமிழ்'], zh: ['chinese', 'mandarin', '中文', '普通话', '汉语', '华语', '简体中文'], hi: ['hindi', 'हिन्दी', 'हिंदी'], ar: ['arabic', 'العربية', 'عربي', 'عربية'],
     fa: ['persian', 'farsi', 'parsi', 'فارسی', 'پارسی'], vi: ['vietnamese', 'tiếng việt', 'tieng viet'], th: ['thai', 'ไทย', 'ภาษาไทย'], tl: ['filipino', 'tagalog'], ja: ['japanese', '日本語', 'にほんご'],
     ko: ['korean', '한국어'], es: ['spanish', 'español', 'espanol', 'castellano'], fr: ['french', 'français', 'francais'], de: ['german', 'deutsch'], pt: ['portuguese', 'português', 'portugues'],
-    sw: ['swahili', 'kiswahili'], rw: ['kinyarwanda', 'ikinyarwanda'] };
+    sw: ['swahili', 'kiswahili'], rw: ['kinyarwanda', 'ikinyarwanda'], km: ['khmer', 'cambodian', 'kmer', 'ខ្មែរ', 'ភាសាខ្មែរ'] };
   function near(a, b) {   // one letter off (an extra, a missing or a wrong letter)
     if (Math.abs(a.length - b.length) > 1) return false;
     var i = 0, j = 0, d = 0;
@@ -463,7 +464,7 @@
     }
 
     // ---- 🎤 Champ's ears: speak in any of your voice languages; Champ switches to it and answers aloud ----
-    var STT_ALL = ['en', 'ta', 'ms', 'id', 'fa', 'zh', 'hi', 'ar', 'vi', 'th', 'tl', 'ja', 'ko', 'es', 'fr', 'de', 'sw'];   // Portuguese: “Any language” mode only (refused in a list by Azure in australiaeast)
+    var STT_ALL = ['en', 'ta', 'ms', 'id', 'fa', 'zh', 'hi', 'ar', 'vi', 'th', 'tl', 'ja', 'ko', 'es', 'fr', 'de', 'sw', 'km'];   // Portuguese: “Any language” mode only (refused in a list by Azure in australiaeast)
     function sttAny() { return ls('champSttMode') === 'any'; }
     function sttLangs() { try { var v = JSON.parse(ls('champSttLangs') || 'null'); if (Array.isArray(v) && v.length) return v.filter(function (x) { return STT_ALL.indexOf(x) >= 0; }); } catch (e) {} return ['en', 'ta', 'ms', 'fa']; }
     function voiceLangsPanel() {

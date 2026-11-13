@@ -1555,7 +1555,7 @@
       if (!t.es) return '';
       var late = t.pct < 100 && t.ef < t0, left = x(t.es), w = (daysBetween(t.es, t.ef) + 1) * dayW;
       var b = base && base.es ? '<span class="gbase" style="left:' + x(base.es) + 'px;width:' + ((daysBetween(base.es, base.ef) + 1) * dayW) + 'px" title="Baseline"></span>' : '';
-      var lab = '<span class="glab" style="left:' + ((t.dur === 0 ? left + dayW : left + w) + 4) + 'px">' + (t.dur === 0 ? esc(pretty(t.es)) + ' ' : '') + '<b class="gpct">' + t.pct + '%</b> ' + esc(resShort(t)) + '</span>';
+      var lab = '<span class="glab" style="left:' + ((t.dur === 0 ? left + dayW : left + w) + 4) + 'px">' + stkBtn(t, 'pin') + (t.dur === 0 ? esc(pretty(t.es)) + ' ' : '') + '<b class="gpct">' + t.pct + '%</b> ' + esc(resShort(t)) + '</span>';
       if (t.dur === 0) return b + '<span class="gmile' + (t.pct >= 100 ? ' done' : '') + '" style="left:' + (left + dayW / 2 - 7) + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' · ' + stName[t.status]) + '"></span>' + lab;
       return b + '<span class="gbar st-' + t.status + ' pb-' + pband(t.pct) + (late ? ' late' : '') + '" style="left:' + left + 'px;width:' + w + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' – ' + pretty(t.ef) + ' · ' + stName[t.status] + ' ' + t.pct + '%') + '"><span class="gfill" style="width:' + t.pct + '%"></span></span>' + lab;
     };
@@ -1577,7 +1577,7 @@
     rows.forEach(function (r) {
       var t = r.t, late = t.pct < 100 && t.ef < t0, base = p.baseline && p.baseline.tasks ? p.baseline.tasks[t.id] : null;
       var subs = t.subs || [], open = subs.length && !S.closed[t.id];
-      html += '<tr data-tid="' + esc(t.id) + '" class="' + (t.pct >= 100 ? 'tdone' : '') + (late ? ' tlate' : '') + (t.dur === 0 ? ' tmile' : '') + (subs.length ? ' tparent' : '') + '"><td class="muted nowrap">' + '<span class="grip" data-grip title="Drag up or down to move this task">⠿</span>' + (subs.length ? '<button class="subtog" type="button" data-tog title="' + (open ? 'Hide' : 'Show') + ' sub-tasks">' + (open ? '▾' : '▸') + '</button>' : '') + '<input class="posin" data-pos inputmode="numeric" value="' + r.n + '" title="Type a number to move this task there (1 = first)"></td>' +
+      html += '<tr data-tid="' + esc(t.id) + '" class="' + (t.pct >= 100 ? 'tdone' : '') + (late ? ' tlate' : '') + (t.dur === 0 ? ' tmile' : '') + (subs.length ? ' tparent' : '') + '"><td class="muted nowrap">' + '<span class="grip" data-grip title="Drag up or down to move this task">⠿</span>' + (subs.length ? '<button class="subtog" type="button" data-tog title="' + (open ? 'Hide' : 'Show') + ' sub-tasks">' + (open ? '▾' : '▸') + '</button>' : '') + '<input class="posin" data-pos inputmode="numeric" value="' + r.n + '" title="Type a number to move this task there (1 = first)">' + stkBtn(t, 'row') + '</td>' +
         '<td><input type="checkbox" data-k="done"' + (t.pct >= 100 ? ' checked' : '') + ' title="Done" style="width:auto"></td>' +
         '<td><div class="tname"><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"><button class="tdel" type="button" data-del title="Delete this task' + (subs.length ? ' and its ' + pl(subs.length, 'sub-task') : '') + '" aria-label="Delete task">🗑</button><button class="pkbtn" type="button" data-pick title="' + (matsOf(t).length ? 'Materials from stock (' + matsOf(t).length + '): change them' : 'Add materials from stock (any number, each with a quantity)') + '">📦</button></div>' + stockChip(t) +
           (t.dur === 0 ? '' : '<button class="subadd" type="button" data-addsub title="Break this task into smaller steps (they stay inside its dates)">＋ sub-task' + (subs.length ? ' · ' + subs.filter(function (x) { return x.status === 'done'; }).length + '/' + subs.length + ' done' : '') + '</button>') + '</td>' +
@@ -2469,6 +2469,52 @@
       '<span class="kseg" title="Priority">' + PRIO.map(function (x) { return '<button type="button" class="kseg-' + PL[x] + (prio === x ? ' on' : '') + '" data-k="p:' + key + ':' + x + '" title="' + x + ' priority">' + PL[x] + '</button>'; }).join('') + '</span>' +
       '<button type="button" class="kptb' + (pts ? ' on' : '') + '" data-k="n:' + key + '" title="Story points">' + (pts ? pts + ' pts' : 'pts') + '</button></div>';
   }
+  /* ---------- 🗒 sticky notes on tasks (Kanban and Gantt): ad hoc remarks the team can read; red urgent, amber semi-urgent, green fine ---------- */
+  var STK = { R: ['Urgent', '#DC2626'], A: ['Semi-urgent', '#D97706'], G: ['Fine', '#16A34A'] };
+  function stkOpen(t) { return (t.stickies || []).filter(function (n) { return !n.done; }); }
+  function stkTop(t) { var o = stkOpen(t); return o.some(function (n) { return n.c === 'R'; }) ? 'R' : o.some(function (n) { return n.c === 'A'; }) ? 'A' : o.length ? 'G' : ''; }
+  function stkBtn(t, kind) {   // kind: 'row' (schedule table), 'pin' (Gantt bar), 'card' (Kanban)
+    var all = t.stickies || [], o = stkOpen(t), c = stkTop(t), last = o[o.length - 1];
+    if (kind === 'pin') return all.length ? '<button type="button" class="gstk stk-' + (c || 'X') + '" data-stk="' + esc(t.id) + '" title="' + esc(pl(o.length, 'open note') + (last ? ': ' + last.text.slice(0, 80) : '')) + '">🗒' + (o.length > 1 ? o.length : '') + '</button>' : '';
+    if (kind === 'card') return all.length ? '<button type="button" class="kstk stk-' + (c || 'X') + '" data-stk="' + esc(t.id) + '" title="Open the notes"><b>🗒 ' + (o.length ? (STK[c] || STK.G)[0] : 'Resolved') + '</b><span>' + esc(last ? last.text : all[all.length - 1].text) + '</span>' + (all.length > 1 ? '<i>' + all.length + '</i>' : '') + '</button>'
+      : '<button type="button" class="kstk-add" data-stk="' + esc(t.id) + '" title="Add a sticky note for the team">🗒 ＋ note</button>';
+    return '<button type="button" class="stkb stk-' + (c || 'X') + (all.length ? '' : ' none') + '" data-stk="' + esc(t.id) + '" title="' + (all.length ? esc(pl(o.length, 'open note') + ' (click to read or add)') : 'Add a sticky note for the team') + '">🗒' + (o.length ? ' ' + o.length : '') + '</button>';
+  }
+  function stkPanel(tid, anchor) {
+    var p = S.plan, t = p.tasks.filter(function (x) { return x.id === tid; })[0]; if (!t) return;
+    var old = document.getElementById('stkPop'); if (old) old.remove();
+    var n = ordered().filter(function (x) { return x.t.id === tid; })[0], me = (M.me && (M.me.name || M.me.user)) || 'Admin', ro = !!(M.me && M.me.scope && (M.me.mods || {}).projects !== 'edit');
+    var pop = document.createElement('div'); pop.id = 'stkPop'; pop.className = 'stkpop' + (S.stkBig ? ' big' : ''); document.body.appendChild(pop);
+    var when = function (ms) { return new Date(ms).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); };
+    var draw = function () {
+      var L = (t.stickies || []).slice().sort(function (a, b) { return (a.done - b.done) || (b.at - a.at); }), col = S.stkCol || 'G';
+      pop.innerHTML = '<div class="stk-h"><b>🗒 Notes</b><span class="stk-t">#' + (n ? n.n : '') + ' ' + esc(String(t.name).replace(/^[✓◆\s]+/, '')) + '</span><span class="sp"></span><button type="button" class="stk-x" data-sbig title="' + (S.stkBig ? 'Make smaller' : 'Expand') + '">' + (S.stkBig ? '⤡' : '⤢') + '</button><button type="button" class="stk-x" data-sclose title="Close">✕</button></div>' +
+        '<div class="stk-list">' + (L.length ? L.map(function (x) { return '<div class="stk-n stk-' + x.c + (x.done ? ' done' : '') + '" data-nid="' + esc(x.id) + '"><div class="stk-m"><span class="stk-tag">' + STK[x.c][0] + '</span><small>' + esc(x.by || '') + ' · ' + esc(when(x.at)) + (x.done ? ' · resolved' + (x.doneBy ? ' by ' + esc(x.doneBy) : '') : '') + '</small><span class="sp"></span>' +
+            (ro ? '' : '<button type="button" data-sdone title="' + (x.done ? 'Open again' : 'Mark as resolved') + '">' + (x.done ? '↺' : '✓') + '</button><button type="button" data-sdel title="Delete this note">🗑</button>') + '</div><div class="stk-tx">' + esc(x.text).replace(/\n/g, '<br>') + '</div></div>'; }).join('') : '<p class="muted" style="margin:6px 2px">No notes yet. Leave a remark for the team: what is happening, what is blocked, what to watch.</p>') + '</div>' +
+        (ro ? '' : '<div class="stk-add"><textarea id="stkTx" rows="' + (S.stkBig ? 4 : 2) + '" maxlength="1500" placeholder="Write a note for the team…"></textarea><div class="stk-row">' +
+          ['R', 'A', 'G'].map(function (k) { return '<button type="button" class="stk-c stk-' + k + (col === k ? ' on' : '') + '" data-scol="' + k + '" title="' + STK[k][0] + '"><i></i>' + STK[k][0] + '</button>'; }).join('') + '<span class="sp"></span><button type="button" class="btn btn-sm btn-gold" data-sadd>Add note</button></div></div>');
+      var place = function () { var r = anchor && document.body.contains(anchor) ? anchor.getBoundingClientRect() : null, w = pop.offsetWidth, h = pop.offsetHeight;
+        if (S.stkBig || !r) { pop.style.left = Math.max(10, (innerWidth - w) / 2) + 'px'; pop.style.top = Math.max(10, (innerHeight - h) / 2) + 'px'; return; }
+        var x = Math.min(innerWidth - w - 10, Math.max(10, r.left)), y = r.bottom + 6; if (y + h > innerHeight - 10) y = Math.max(10, r.top - h - 6); pop.style.left = x + 'px'; pop.style.top = y + 'px'; };
+      place();
+      var save = function (what) { dirty('note on #' + (n ? n.n : '') + ': ' + what); var keep = S.stkBig; setTimeout(function () { render(); var a2 = document.querySelector('[data-stk="' + tid + '"]'); anchor = a2 || anchor; S.stkBig = keep; draw(); }, 0); };
+      pop.querySelector('[data-sclose]').onclick = function () { pop.remove(); };
+      pop.querySelector('[data-sbig]').onclick = function () { S.stkBig = !S.stkBig; pop.classList.toggle('big', S.stkBig); draw(); };
+      pop.querySelectorAll('[data-scol]').forEach(function (b) { b.onclick = function () { S.stkCol = b.getAttribute('data-scol'); pop.querySelectorAll('[data-scol]').forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
+      var add = pop.querySelector('[data-sadd]'); if (add) add.onclick = function () { var tx = $('#stkTx').value.trim(); if (!tx) { $('#stkTx').focus(); return; }
+        t.stickies = (t.stickies || []).concat([{ id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), c: S.stkCol || 'G', text: tx, by: me, at: Date.now(), done: false }]); save('added (' + STK[S.stkCol || 'G'][0].toLowerCase() + ')'); };
+      pop.querySelectorAll('[data-sdone]').forEach(function (b) { b.onclick = function () { var x = (t.stickies || []).filter(function (q) { return q.id === b.closest('[data-nid]').getAttribute('data-nid'); })[0]; if (!x) return; x.done = !x.done; x.doneBy = x.done ? me : ''; save(x.done ? 'resolved' : 'opened again'); }; });
+      pop.querySelectorAll('[data-sdel]').forEach(function (b) { b.onclick = function () { var id = b.closest('[data-nid]').getAttribute('data-nid'); t.stickies = (t.stickies || []).filter(function (q) { return q.id !== id; }); save('deleted'); }; });
+      var ta = $('#stkTx'); if (ta) { ta.onkeydown = function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) add.onclick(); }; setTimeout(function () { ta.focus(); }, 30); }
+    };
+    draw();
+  }
+  if (!window.__champStk) { window.__champStk = true;
+    document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-stk]'); if (b && S.plan) { e.preventDefault(); e.stopPropagation(); stkPanel(b.getAttribute('data-stk'), b); return; }
+      var pop = document.getElementById('stkPop'); if (pop && !pop.contains(e.target) && !S.stkBig) pop.remove(); }, true);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { var pop = document.getElementById('stkPop'); if (pop) pop.remove(); } });
+    window.addEventListener('hashchange', function () { var pop = document.getElementById('stkPop'); if (pop && !/^#plan\//.test(location.hash)) pop.remove(); });
+  }
   function board() {
     var p = S.plan, t0 = today(), F = bfState();
     var owners = []; p.tasks.forEach(function (t) { [ownerOf(t)].concat((t.subs || []).map(function (x) { return x.owner; })).forEach(function (n) { if (n && owners.indexOf(n) < 0) owners.push(n); }); });
@@ -2503,6 +2549,7 @@
             ((t.res || []).length ? '<span class="kcrew" title="Crew on this task (from the Schedule): ' + esc(resText(t)) + '">' + esc(resShort(t)) + '</span>' : '') +
             (tp ? '<span class="ktp" title="' + (subs.length ? 'Theme points: the stories added up' : 'Points') + '">' + tp + ' pts</span>' : '') + '</div>' +
             '<div class="kth-r"><div class="kdates">' + esc(pretty(t.es)) + (t.dur > 1 ? ' – ' + esc(pretty(t.ef)) : '') + '</div><div class="kdays">' + (t.dur ? pl(t.dur, 'day') : 'Milestone') + '</div>' + (rg.txt ? '<div class="kdue kdue-' + rg.c + '">' + esc(rg.txt) + '</div>' : '') + '</div></div>' +
+          stkBtn(t, 'card') +
           (subs.length ? '<div class="kstories">' + shown.map(function (x) { var d = subDates(t, x), sr = kRag(d.es, d.ef, x.status === 'done', t0);
               return '<div class="kst' + (x.status === 'done' ? ' done' : '') + '" data-sid="' + esc(x.id) + '"><div class="kst-h"><i class="kd kd-' + sr.c + '" title="' + esc(pretty(d.es) + (d.ef !== d.es ? ' – ' + pretty(d.ef) : '') + (sr.txt ? ' · ' + sr.txt : '')) + '"></i><span class="kst-n">' + esc(x.name) + kInfo('s:' + x.id, x.desc) + '</span>' +
                 '<span class="kst-d kst-d-' + sr.c + '">' + esc(kShort(d.es, d.ef)) + (sr.txt ? ' <b>(' + esc(sr.txt.charAt(0).toLowerCase() + sr.txt.slice(1)) + ')</b>' : '') + '</span><button type="button" class="kdel-s" data-kdels title="Delete this story" aria-label="Delete story">🗑</button></div>' + kSteps(t, x) + kCtl('s:' + x.id, x.owner, x.priority, x.points) + '</div>'; }).join('') +

@@ -9,7 +9,7 @@ export const VOICES = {
   zh: ['zh-CN', 'zh-CN-XiaoxiaoNeural'], hi: ['hi-IN', 'hi-IN-SwaraNeural'], ar: ['ar-AE', 'ar-AE-FatimaNeural'], fa: ['fa-IR', 'fa-IR-DilaraNeural'],
   vi: ['vi-VN', 'vi-VN-HoaiMyNeural'], th: ['th-TH', 'th-TH-PremwadeeNeural'], tl: ['fil-PH', 'fil-PH-BlessicaNeural'], ja: ['ja-JP', 'ja-JP-NanamiNeural'],
   ko: ['ko-KR', 'ko-KR-SunHiNeural'], es: ['es-ES', 'es-ES-ElviraNeural'], fr: ['fr-FR', 'fr-FR-DeniseNeural'], de: ['de-DE', 'de-DE-KatjaNeural'],
-  pt: ['pt-BR', 'pt-BR-FranciscaNeural'], sw: ['sw-KE', 'sw-KE-ZuriNeural']
+  pt: ['pt-BR', 'pt-BR-FranciscaNeural'], sw: ['sw-KE', 'sw-KE-ZuriNeural'], km: ['km-KH', 'km-KH-SreymomNeural']
 };
 const xml = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
 // what to say: no markdown symbols, links read as their name

@@ -27,7 +27,7 @@
   var EDGES = [['S', 'B'], ['S', 'C'], ['B', 'D'], ['C', 'D'], ['C', 'E'], ['D', 'F'], ['D', 'G'], ['E', 'G'], ['F', 'H'], ['G', 'H'], ['H', 'T']];
   // words on the intro, in the visitor's language (picked on the start screen; translated once and cached)
   var LANGS = [['en', 'English'], ['ms', 'Bahasa Melayu'], ['id', 'Bahasa Indonesia'], ['ta', 'தமிழ்'], ['zh', '简体中文'], ['hi', 'हिन्दी'], ['ar', 'العربية'], ['fa', 'فارسی'], ['vi', 'Tiếng Việt'],
-    ['th', 'ไทย'], ['tl', 'Filipino'], ['ja', '日本語'], ['ko', '한국어'], ['es', 'Español'], ['fr', 'Français'], ['de', 'Deutsch'], ['pt', 'Português'], ['sw', 'Kiswahili'], ['rw', 'Kinyarwanda']];
+    ['th', 'ไทย'], ['tl', 'Filipino'], ['ja', '日本語'], ['ko', '한국어'], ['es', 'Español'], ['fr', 'Français'], ['de', 'Deutsch'], ['pt', 'Português'], ['sw', 'Kiswahili'], ['rw', 'Kinyarwanda'], ['km', 'ខ្មែរ (Khmer)']];
   var TX = { sub: 'Every project, from initiation to closing.', go: 'Tap to enter', hint: 'Best with sound', pick: 'Choose your language',
     plan: 'Plan', planS: 'Scope, WBS, budget and risks: drafted by AI', sch: 'Schedule', schS: 'Gantt chart, milestones and baseline',
     cp: 'Critical path', cpS: 'Zero float. No surprises.', tag1: 'Plan it. Schedule it.', tag2: 'Deliver it.', son: 'Sound on', soff: 'Sound off', skip: 'Skip intro' };

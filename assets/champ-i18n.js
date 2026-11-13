@@ -8,7 +8,7 @@
   var API = '/.netlify/functions/chat';
   var LANGS = [['en', 'English', 'EN'], ['ms', 'Bahasa Melayu', 'MS'], ['id', 'Bahasa Indonesia', 'ID'], ['ta', 'தமிழ்', 'TA'], ['zh', '简体中文', '中文'], ['hi', 'हिन्दी', 'HI'],
     ['ar', 'العربية', 'AR'], ['fa', 'فارسی', 'FA'], ['vi', 'Tiếng Việt', 'VI'], ['th', 'ไทย', 'TH'], ['tl', 'Filipino', 'TL'], ['ja', '日本語', 'JA'], ['ko', '한국어', 'KO'],
-    ['es', 'Español', 'ES'], ['fr', 'Français', 'FR'], ['de', 'Deutsch', 'DE'], ['pt', 'Português', 'PT'], ['sw', 'Kiswahili', 'SW'], ['rw', 'Kinyarwanda', 'RW']];
+    ['es', 'Español', 'ES'], ['fr', 'Français', 'FR'], ['de', 'Deutsch', 'DE'], ['pt', 'Português', 'PT'], ['sw', 'Kiswahili', 'SW'], ['rw', 'Kinyarwanda', 'RW'], ['km', 'ខ្មែរ (Khmer)', 'KM']];
   var BY = {}; LANGS.forEach(function (l) { BY[l[0]] = l; });
   var isConsole = /\/admin\//.test(location.pathname);
   var ls = function (k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } };

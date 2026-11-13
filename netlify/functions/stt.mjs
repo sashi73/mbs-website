@@ -7,7 +7,7 @@ import { env, cors, json } from '../lib/shared.mjs';
 // our language codes → the locale Azure listens for (pt-BR is refused by fast transcription in australiaeast; pt-PT works)
 export const LOCALES = {
   en: 'en-AU', ta: 'ta-IN', ms: 'ms-MY', id: 'id-ID', fa: 'fa-IR', zh: 'zh-CN', hi: 'hi-IN', ar: 'ar-AE', vi: 'vi-VN', th: 'th-TH',
-  tl: 'fil-PH', ja: 'ja-JP', ko: 'ko-KR', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', pt: 'pt-PT', sw: 'sw-KE'   // pt: only heard in 'any' mode (Azure refuses it in a list here)
+  tl: 'fil-PH', ja: 'ja-JP', ko: 'ko-KR', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', pt: 'pt-PT', sw: 'sw-KE', km: 'km-KH'   // pt: only heard in 'any' mode (Azure refuses it in a list here)
 };
 const BACK = Object.fromEntries(Object.entries(LOCALES).map(([k, v]) => [v.split('-')[0], k]));
 const MAX_BYTES = 4 * 1024 * 1024;   // about 2 minutes of speech; a question is a few seconds

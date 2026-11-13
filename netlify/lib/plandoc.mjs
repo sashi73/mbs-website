@@ -18,7 +18,7 @@ const BASE = 'You are a senior project manager (PMP, PRINCE2) writing sections o
   'Never invent people, amounts or dates that are not in the data; where something is not known write what will be done to settle it. Use **bold** for key points, "- " for bullets. No emoji. Money as $1,234. Dates as D Month YYYY. ' +
   'Reply JSON only, with exactly the keys asked for.';
 
-const LANG = { ms: 'Bahasa Melayu (Malay)', id: 'Bahasa Indonesia', ta: 'Tamil', zh: 'Simplified Chinese', hi: 'Hindi', ar: 'Arabic', fa: 'Persian', vi: 'Vietnamese', th: 'Thai', tl: 'Filipino', ja: 'Japanese', ko: 'Korean', es: 'Spanish', fr: 'French', de: 'German', pt: 'Portuguese', sw: 'Kiswahili', rw: 'Kinyarwanda' };
+const LANG = { ms: 'Bahasa Melayu (Malay)', id: 'Bahasa Indonesia', ta: 'Tamil', zh: 'Simplified Chinese', hi: 'Hindi', ar: 'Arabic', fa: 'Persian', vi: 'Vietnamese', th: 'Thai', tl: 'Filipino', ja: 'Japanese', ko: 'Korean', es: 'Spanish', fr: 'French', de: 'German', pt: 'Portuguese', sw: 'Kiswahili', rw: 'Kinyarwanda', km: 'Khmer (Cambodian)' };
 const PARTS = [
   { keys: 'A', ask: 'Write: "executive_summary" (220-280 words: what, why, when, cost, how it is run, the main risks), "background" (120-180 words), "objectives" (4-6 items {"objective":"SMART objective","measure":"how success is measured"}), ' +
     '"success_criteria" (4-6 short strings), "scope_statement" (130-180 words: what is delivered and the boundaries), "approach" (180-240 words: methodology, phases and how the work flows, with "- " bullets for the phases), ' +

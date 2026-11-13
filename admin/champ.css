@@ -200,3 +200,35 @@ tr.pg-member td:first-child{box-shadow:inset 4px 0 0 var(--pg)}
 .bd-tbl input{width:90px;text-align:right}.bd-tbl select{width:auto;max-width:170px}
 .bd-tbl tfoot td{font-weight:600;background:#FBF8EC}.bd-tbl tr.bd-tot td{background:#0C0B08;color:#E8C04A}
 @media (max-width:1100px){.bd-tiles{grid-template-columns:repeat(3,1fr)}.bd-charts{grid-template-columns:1fr}}
+
+/* 🗒 sticky notes on tasks (Kanban and Gantt) */
+.stk-R{--stk:#DC2626;--stkbg:#FEE2E2}.stk-A{--stk:#D97706;--stkbg:#FEF3C7}.stk-G{--stk:#16A34A;--stkbg:#DCFCE7}.stk-X{--stk:#A39E92;--stkbg:#F1EEE6}
+.stkb{border:0;background:var(--stkbg);color:var(--stk);border-radius:6px;padding:1px 6px;font:700 11.5px/1.6 inherit;cursor:pointer;margin-left:4px;white-space:nowrap}
+.stkb.none{background:transparent;color:#B9B3A4;opacity:.55}.stkb.none:hover,tr:hover .stkb.none{opacity:1;background:#FFF8E1;color:#8A6A00}
+.gstk{pointer-events:auto;border:0;background:var(--stkbg);color:var(--stk);border:1.5px solid var(--stk);border-radius:6px;padding:0 4px;font:700 10.5px/1.5 inherit;cursor:pointer;margin-right:4px;vertical-align:middle}
+.kstk{display:flex;align-items:center;gap:8px;width:100%;margin:8px 0 2px;padding:7px 10px;border:0;border-left:4px solid var(--stk);border-radius:8px;background:#FFF9DB;box-shadow:0 1px 0 rgba(0,0,0,.06),0 6px 14px -10px rgba(120,90,0,.5);cursor:pointer;text-align:left;font:inherit;transform:rotate(-.4deg)}
+.kstk b{flex:none;font-size:11px;color:var(--stk);text-transform:uppercase;letter-spacing:.03em}
+.kstk span{flex:1;min-width:0;font-size:12.5px;color:#3F3B30;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kstk i{font-style:normal;flex:none;background:var(--stk);color:#fff;border-radius:99px;font-size:10.5px;font-weight:700;padding:0 6px}
+.kstk:hover{transform:none;background:#FFF4C2}
+.kstk-add{display:block;margin:6px 0 0;border:1px dashed #E3DDD0;background:transparent;color:#A39E92;border-radius:8px;padding:3px 8px;font:600 11.5px inherit;cursor:pointer;opacity:0;transition:opacity .15s}
+.kcard:hover .kstk-add{opacity:1}.kstk-add:hover{color:#8A6A00;border-color:#C9A227;background:#FFF8E1}
+.stkpop{position:fixed;z-index:2147483000;width:360px;max-height:min(70vh,560px);display:flex;flex-direction:column;background:#FFF9DB;border:1px solid #EADFA8;border-radius:12px;box-shadow:0 20px 50px -18px rgba(60,45,0,.55);color:#1F1D18;font-size:13px}
+.stkpop.big{width:min(720px,94vw);max-height:84vh}
+.stk-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #EADFA8}
+.stk-h .stk-t{color:#6B665A;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.stk-h .sp,.stk-m .sp,.stk-row .sp{flex:1}
+.stk-x{border:0;background:transparent;cursor:pointer;font-size:14px;color:#6B665A;padding:2px 6px;border-radius:6px}.stk-x:hover{background:#F5EBC0}
+.stk-list{overflow:auto;padding:8px 10px;display:grid;gap:8px}
+.stk-n{background:#fff;border-left:4px solid var(--stk);border-radius:8px;padding:7px 10px;box-shadow:0 1px 0 rgba(0,0,0,.05)}
+.stk-n.done{opacity:.55}.stk-n.done .stk-tx{text-decoration:line-through}
+.stk-m{display:flex;align-items:center;gap:6px;margin-bottom:3px}.stk-m small{color:#8A867C;font-size:11px}
+.stk-m button{border:0;background:transparent;cursor:pointer;color:#8A867C;font-size:12px;padding:0 4px;border-radius:5px}.stk-m button:hover{background:#F1EEE6;color:#1F1D18}
+.stk-tag{background:var(--stkbg);color:var(--stk);border-radius:99px;font-size:10.5px;font-weight:800;padding:1px 8px;text-transform:uppercase;letter-spacing:.03em}
+.stk-tx{white-space:normal;line-height:1.45;word-break:break-word}
+.stk-add{border-top:1px solid #EADFA8;padding:10px 12px;display:grid;gap:8px}
+.stk-add textarea{width:100%;resize:vertical;border:1px solid #EADFA8;border-radius:8px;padding:7px 9px;background:#fff;font:inherit}
+.stk-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.stk-c{display:inline-flex;align-items:center;gap:5px;border:1px solid #E3DDD0;background:#fff;border-radius:99px;padding:3px 9px;font:600 11.5px inherit;cursor:pointer;color:#4B4739}
+.stk-c i{width:9px;height:9px;border-radius:50%;background:var(--stk)}.stk-c.on{border-color:var(--stk);background:var(--stkbg);color:var(--stk)}
+html.dark .stkpop,body.dark .stkpop{color:#1F1D18}

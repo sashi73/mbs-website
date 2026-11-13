@@ -6,7 +6,7 @@ export const LANGS = {
   en: 'English', ms: 'Bahasa Melayu', id: 'Bahasa Indonesia', ta: 'Tamil (தமிழ்)', zh: 'Simplified Chinese (简体中文)',
   hi: 'Hindi (हिन्दी)', ar: 'Arabic (العربية)', fa: 'Persian (فارسی)', vi: 'Vietnamese (Tiếng Việt)', th: 'Thai (ไทย)',
   tl: 'Filipino (Tagalog)', ja: 'Japanese (日本語)', ko: 'Korean (한국어)', es: 'Spanish (Español)', fr: 'French (Français)',
-  de: 'German (Deutsch)', pt: 'Portuguese (Português)', sw: 'Swahili (Kiswahili)', rw: 'Kinyarwanda'
+  de: 'German (Deutsch)', pt: 'Portuguese (Português)', sw: 'Swahili (Kiswahili)', rw: 'Kinyarwanda', km: 'Khmer (ខ្មែរ), the language of Cambodia'
 };
 
 export const PRODUCT = `
