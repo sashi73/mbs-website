@@ -9,6 +9,7 @@ import LOGO from './logo-png.mjs';
 import { business, pdfLib } from './pdf.mjs';
 import * as PLAN from './plan.mjs';
 import * as PGM from './programs.mjs';
+import { crRecords } from './plan-intel.mjs';
 import * as INV from './inventory.mjs';
 import * as SUB from './subbies.mjs';
 import { regionOf } from './sydney-regions.mjs';
@@ -35,6 +36,7 @@ export const KEYS = {
   projects: { pk: 'project_id', cols: { project_id: (r) => r.job, job_id: (r) => r.job }, fk: { job_id: 'jobs' } },
   programs: { pk: 'program_id', cols: { program_id: (r) => r.program } },
   dependencies: { pk: 'dependency_id', cols: { dependency_id: (r) => r.id } },
+  change_records: { pk: 'record_id', cols: { record_id: (r) => r.record_id, job_id: (r) => r.job }, fk: { job_id: 'jobs' } },
   quotes: { pk: 'quote_id', cols: { quote_id: (r) => r.id, job_id: (r) => r.job, customer_id: (r, x) => x.custOfJob[r.job] || '' }, fk: { job_id: 'jobs', customer_id: 'customers', invoice_id: 'invoices' } },
   invoices: { pk: 'invoice_id', cols: { invoice_id: (r) => r.id, job_id: (r) => r.job, customer_id: (r, x) => x.custOfJob[r.job] || '', quote_id: (r) => r.from_quote || '' }, fk: { job_id: 'jobs', customer_id: 'customers', quote_id: 'quotes' } },
   items: { pk: 'line_id', cols: { line_id: (r) => r.doc_id + '/' + r.line, quote_id: (r) => (/^q/i.test(r.doc_type) ? r.doc_id : ''), invoice_id: (r) => (/^i/i.test(r.doc_type) ? r.doc_id : '') }, fk: { quote_id: 'quotes', invoice_id: 'invoices' } },
@@ -73,6 +75,7 @@ export const SCHEMA = {
   projects: ['job', 'project_ref', 'project_name', 'client', 'program', 'phase', 'health', 'pct_complete', 'tasks_done', 'tasks_total', 'late_tasks', 'budget', 'planned_value', 'earned_value', 'actual_cost',
     'spi', 'cpi', 'forecast_cost', 'start', 'finish', 'forecast_finish', 'open_risks', 'high_risks', 'open_issues', 'has_plan', 'created'],
   programs: ['program', 'status', 'manager', 'sponsor', 'objective', 'projects', 'at_risk', 'watch', 'on_track', 'pct_complete', 'budget', 'planned_value', 'earned_value', 'actual_cost', 'spi', 'cpi', 'start', 'forecast_finish', 'target_finish', 'dependencies', 'dependency_problems'],
+  change_records: ['record_id', 'job', 'project', 'program', 'cr', 'title', 'decision', 'approved_by', 'role', 'signed', 'decided', 'finish_before', 'finish_after', 'budget_before', 'budget_after', 'days', 'cost', 'applied_directly', 'status', 'note', 'pdf_kept', 'recorded_by'],
   dependencies: ['id', 'from_project', 'from_program', 'to_project', 'to_program', 'type', 'lag_days', 'status', 'buffer_days', 'cross_program', 'explanation', 'note'],
   jobs: ['ref', 'core', 'customer', 'stage', 'name', 'phone', 'email', 'suburb', 'service', 'program', 'trade', 'source', 'best_time', 'created', 'created_month', 'quote_inc', 'invoice_inc',
     'called_date', 'quoted_date', 'won_date', 'completed_date', 'invoiced_date', 'paid_date', 'lost_date', 'lost_reason', 'photos', 'notes'],
@@ -238,7 +241,10 @@ export async function tables() {
       spi: PV > 0 ? Math.round((EV / PV) * 100) / 100 : null, cpi: AC > 0 ? Math.round((EV / AC) * 100) / 100 : null, start: st[0] || '', forecast_finish: fin[fin.length - 1] || '', target_finish: p.finish || '',
       dependencies: dl.length, dependency_problems: dl.filter((d) => d.status === 'Clash' || d.status === 'At risk').length };
   });
-  const all = { projects, programs, dependencies, customers, jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves, subcontractors, sub_trades, plan_stakeholders, plan_contracts };
+  const change_records = (await crRecords().catch(() => [])).map((r) => ({ record_id: r.key, job: r.core, project: (cardBy[r.core] || {}).name || r.project, program: (cardBy[r.core] || {}).program || r.program || '', cr: r.cr, title: r.title,
+    decision: r.outcome, approved_by: r.by, role: r.role, signed: !!r.sig, decided: d10(r.at), finish_before: r.f0, finish_after: r.f1, budget_before: r.b0, budget_after: r.b1, days: r.days, cost: r.cost,
+    applied_directly: !!r.direct, status: r.status, note: r.note, pdf_kept: !!r.hasPdf, recorded_by: r.recordedBy }));
+  const all = { projects, programs, dependencies, change_records, customers, jobs, quotes, invoices, items, payments, expenses, reminders, visits, plan_tasks, plan_subtasks, plan_risks, plan_issues, inventory, suppliers, supplier_prices, stock_moves, subcontractors, sub_trades, plan_stakeholders, plan_contracts };
   return withKeys(all, { custOfJob: custOf });
 }
 
@@ -289,6 +295,7 @@ export async function narrative({ title, sql, columns, rows, focus }) {
 // short notes per table (only the tables a question needs are sent, to keep each AI call small)
 const NOTE = {
   programs: 'one row per program (the top level; every project belongs to one): roll-up of its projects: health counts, % complete weighted by budget, $ budget/earned/spent, spi/cpi, forecast_finish vs target_finish, dependency_problems; join projects.program = programs.program',
+  change_records: 'one row per change control decision kept on record (signed PDF kept): cr CR-001, decision Approved|Rejected|Deferred, approved_by and role (who decided), signed true when a signature was typed, decided date, finish_before/after, budget_before/after, days and cost effect, applied_directly true when applied with Fit to finish-by without a board review; job = jobs.core, join projects.job',
   dependencies: 'links between projects: from_project must happen before to_project (type finish to start|start to start|finish to finish, lag_days); status Clash (plans already clash)|At risk|OK|Done|No dates; buffer_days (negative = late); cross_program true when the two projects are in different programs; explanation in plain English',
   projects: 'start here for project, program and portfolio questions; job = jobs.core = plan_tasks.job; program = group of related projects (blank = none); phase Initiation|Planning|Execution|Monitoring & Evaluation|Closing (PMBOK); health On track|Watch|At risk|Not planned; budget/planned_value/earned_value/actual_cost $; spi/cpi earned value indexes (1 = on plan, under 0.9 = trouble); portfolio = all projects',
   jobs: 'one row per project record: core = id for joins, ref = project number, stage new (Pre-sales)|quoted (Proposal submitted)|won (Awarded)|invoiced (milestone payment invoiced)|paid (Signed off and closed)|lost, created = enquiry date, *_date = date it reached that stage, quote_inc/invoice_inc $ inc GST, name = customer',
@@ -313,6 +320,7 @@ const NOTE = {
 const WORDS = {
   projects: /project|program|portfolio|phase|initiat|planning|execution|monitor|closing|health|on track|at risk|rag|spi|cpi|earned|budget|overrun|over budget|behind|status|pmo|overall|summary/i,
   programs: /program|portfolio|pmo|overall|sponsor|benefit|roll-?up/i,
+  change_records: /change|variation|\bcr\b|cr-\d|approv|sign|decision|reject|defer|baseline|board|ccb/i,
   dependencies: /depend|link|block|wait|clash|conflict|critical|knock-?on|impact|before|after|predecessor|successor|slip|delay/i,
   customers: /customer|client|repeat|loyal|most (orders|jobs)|biggest|spend|lapsed|win back|regular/i,
   quotes: /quot/i, invoices: /invoic|owe|owing|unpaid|overdue|paid|debt|balance|bill/i, items: /line item|items? on (the|a|my) (quote|invoice)/i, payments: /pay|paid|received|income|revenue|cash/i,
@@ -336,7 +344,7 @@ export function pickTables(question, extraSql = '') {
   return Object.keys(SCHEMA).filter((t) => chosen.has(t) && CHAMP_TABLES.has(t));
 }
 // GKH Project Champ: only the project tables (the MBS business tables, such as quotes and invoices, are always empty here)
-export const CHAMP_TABLES = new Set(['projects', 'programs', 'dependencies', 'jobs', 'plan_tasks', 'plan_subtasks', 'plan_risks', 'plan_issues', 'plan_stakeholders', 'plan_contracts', 'inventory', 'subcontractors', 'sub_trades']);
+export const CHAMP_TABLES = new Set(['projects', 'programs', 'dependencies', 'change_records', 'jobs', 'plan_tasks', 'plan_subtasks', 'plan_risks', 'plan_issues', 'plan_stakeholders', 'plan_contracts', 'inventory', 'subcontractors', 'sub_trades']);
 const champOnly = (o) => Object.fromEntries(Object.entries(o).filter(([t]) => CHAMP_TABLES.has(t)));
 
 function sydneyDates(now = Date.now()) {

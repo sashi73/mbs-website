@@ -23,7 +23,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
     const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
     if (j.response_format && /Project Intelligence/.test(sys)) {
-      global.INTEL_Q = JSON.parse(j.messages[1].content).question;
+      global.INTEL_Q = JSON.parse(j.messages[1].content).question; global.INTEL_CTX = JSON.parse(j.messages[1].content);
       s2.setHeader('Content-Type', 'application/json');
       return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ answer: '## Re-plan\nStretch the work and add review gates.', replan: null,
         risks: [{ title: 'Client sign-off delays at review gates', cause: 'Slow approvals', p: 4, i: 4, response: 'Mitigate', action: 'Agree sign-off SLAs', owner: '', critical: true },
@@ -69,7 +69,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await ctx.addInitScript(() => { if (!/intro=1/.test(location.search)) try { sessionStorage.setItem('champIntroSeen', '1'); } catch (e) {} });   // the intro has its own checks
   const p = await ctx.newPage();
   const errors = [];
-  p.on('pageerror', (e) => errors.push(p.url() + ' :: ' + e.message));
+  p.on('pageerror', (e) => errors.push(p.url() + ' :: ' + e.message + ' @ ' + String(e.stack || '').split('\n').slice(1, 3).join(' | ')));
   const api = (action, data = {}, headers = { 'X-MBS-Admin': '1' }) => p.request.post(`${BASE}/.netlify/functions/admin`, { data: { action, ...data }, headers });
 
   // ---- public site ----
@@ -617,6 +617,22 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Re-plan', 'milestones stay milestones', gp.tasks.find((t) => t.id === 'f').dur === 0);
   await p.goto(`${BASE}/admin/#plan/${esg}/overview`); await sleep(1500);
   ok('Re-plan', 'the Overview shows the new budget', /380,000/.test(await p.textContent('#planBody')));
+  // the decision is kept for good: database record + signed PDF, readable by the team, SQL and Project Intelligence
+  await sleep(2500);
+  const recs = (await (await api('intelCrList', { core: esg })).json()).records || [];
+  ok('Change records', 'the approval is kept in the database: CR-001, approved by Sashi Kumar Sivam, signed, with its effect', recs.length === 1 && recs[0].cr === 'CR-001' && recs[0].outcome === 'Approved' && recs[0].by === 'Sashi Kumar Sivam' && !!recs[0].sig && Math.abs(recs[0].b1 - 380000) < 1, JSON.stringify(recs).slice(0, 300));
+  const rpdf = recs[0] ? await (await api('intelCrGet', { core: esg, key: recs[0].key })).json() : {};
+  ok('Change records', 'the signed change request PDF is stored and can be downloaded', /^JVBERi/.test(rpdf.file || '') && /\.pdf$/.test(rpdf.name || ''), (rpdf.name || '') + ' ' + String(rpdf.file || rpdf.error || '').slice(0, 20));
+  await p.goto(`${BASE}/admin/#plan/${esg}/change`); await p.waitForSelector('[data-crpdf]', { timeout: 10000 }).catch(() => {}); await sleep(2000);
+  gp = (await (await api('planGet', { core: esg })).json()).plan;
+  ok('Change records', 'the plan marks the change request as recorded (no duplicate record)', gp.changes[0].recorded === recs[0].at && ((await (await api('intelCrList', { core: esg })).json()).records || []).length === 1, JSON.stringify([gp.changes.map((c) => [c.id, c.recorded, c.decision && c.decision.at]), recs.map((r) => [r.crId, r.at])]));
+  ok('Change records', 'Change control lists the decision records with a PDF download', /Decision records \(1\)/.test(await p.textContent('#planBody').catch(() => '')) && !!(await p.$('[data-crpdf]')));
+  await p.goto(`${BASE}/admin/#plan/${esg}/intel`); await p.reload(); await p.waitForSelector('#piQ', { timeout: 10000 }).catch(() => {});
+  global.INTEL_CTX = null; await p.fill('#piQ', 'List all the approved changes in this project'); await p.click('#piGo'); for (let i = 0; i < 60 && !global.INTEL_CTX; i++) await sleep(500);
+  const IC = global.INTEL_CTX || {};
+  ok('Change records', 'Project Intelligence sees the change register and the signed records (who approved)', (IC.change_requests || []).some((c) => c.cr === 'CR-001' && c.decision && c.decision.by === 'Sashi Kumar Sivam' && c.decision.signed) && (IC.change_records || []).some((c) => c.cr === 'CR-001' && c.by === 'Sashi Kumar Sivam' && c.signed_pdf_kept), JSON.stringify([IC.change_requests, IC.change_records]).slice(0, 300));
+  const sq = await (await api('sqlData')).json();
+  ok('Change records', 'the change_records table can be queried (who approved what)', ((sq.data || {}).change_records || []).some((r) => r.cr === 'CR-001' && r.approved_by === 'Sashi Kumar Sivam' && r.decision === 'Approved' && r.signed), JSON.stringify((sq.data || {}).change_records || sq.error).slice(0, 200));
   await api('planProjectDelete', { core: esg });
 
   // ---- builds ----
@@ -692,6 +708,22 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Programs', 'both projects sit in the same program, linked finish-to-start on the Dependency board', L2.prog === 'ESG consulting' && L2.deps.some((d) => d.from === gk && d.to === gk2 && d.type === 'FS'), JSON.stringify([L2.prog, L2.deps.map((d) => [d.from, d.to, d.type])]));
   await api('planProjectDelete', { core: gk2 });
   await api('planProjectDelete', { core: gk });
+  // a wedding with a 2-week Finish by: phases run side by side and the durations are squeezed to fit; no cooling-off, no emergency
+  const wd2 = (await (await api('planNewProject', { name: 'Our wedding', client: 'Family', program: 'Digital health' })).json()).core;
+  const d0 = new Date(); d0.setUTCDate(d0.getUTCDate() + 7); const st0 = d0.toISOString().slice(0, 10); d0.setUTCDate(d0.getUTCDate() + 13); const fb0 = d0.toISOString().slice(0, 10);
+  await p.goto(`${BASE}/admin/#plan/${wd2}`); await p.reload(); await p.waitForSelector('[data-mode=type]', { timeout: 10000 }).catch(() => {});
+  ok('Schedule', 'no Emergency tick when creating a plan', !(await p.isVisible('#tplEmerg').catch(() => false)) && !/Emergency/.test(await p.textContent('#view').catch(() => '')));
+  await p.fill('#tplStart', st0); await p.fill('#aiFinish', fb0); await p.check('#tplWeek').catch(() => {});
+  await p.click('[data-mode=type]').catch(() => {}); await p.waitForSelector('#tplType', { timeout: 5000 }).catch(() => {});
+  await p.selectOption('#tplType', 'fun-wedding').catch(() => {}); await sleep(600); await p.click('#tplCreate').catch(() => {}); await sleep(2500);
+  const wp = (await (await api('planGet', { core: wd2 })).json()).plan || { tasks: [] };
+  const WR = PLX.rollup(JSON.parse(JSON.stringify(wp)), new Date().toISOString().slice(0, 10));
+  ok('Schedule', 'a wedding with a 2-week Finish by now fits it (was 119 days)', WR.finish && WR.finish <= fb0 && /squeezed/.test((wp.charter || {}).assumptions || ''), WR.start + ' → ' + WR.finish + ' (finish by ' + fb0 + ')');
+  ok('Schedule', 'the costs stay the same ($44,700)', Math.abs(WR.BAC - 44700) < 1, WR.BAC);
+  await p.goto(`${BASE}/admin/#plan/${wd2}/schedule`); await sleep(2000);
+  const sv = await p.textContent('#planBody').catch(() => '');
+  ok('Schedule', 'no Cooling-off or Emergency on the schedule', !/Cooling-off|cooling-off|Emergency/.test(sv) && !(await p.isVisible('#pEmerg').catch(() => false)), (sv.match(/.{40}(Cooling|Emergency).{40}/) || [''])[0]);
+  await api('planProjectDelete', { core: wd2 });
 
   // ---- console: no chat bubble (AI is built in), Ask AI about programs ----
   await p.goto(`${BASE}/admin/#portfolio`); await sleep(800);

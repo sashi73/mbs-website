@@ -20,6 +20,27 @@ const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
 const out = (status, body) => new Response(JSON.stringify(body), { status, headers: H });
 const MAX_TEXT = 400000, MAX_FILE = 3.5 * 1024 * 1024, MAX_DOCS = 30, CONTEXT_CHARS = 36000;
 
+// ---------- change control records (signed decisions, kept for good) ----------
+//   champ-cr-records           one row per decision: who approved, when, the effect, the plan's CR number (all projects)
+//   crpdf:<core>:<key>         the signed change request PDF, exactly as it was at the decision
+const CR_MAX = 5000, CR_PDF_MAX = 4 * 1024 * 1024;
+export async function crRecords(core) { const L = ((await kv.get('champ-cr-records')) || { list: [] }).list; return core ? L.filter((r) => r.core === core) : L; }
+async function crSave(job, body, who) {
+  const c = body.cr || {}, dec = c.decision || {}, num = Math.max(0, Math.round(Number(c.num) || 0));
+  if (!num || !dec.outcome) return { error: 'A change request with a decision is needed' };
+  const at = Number(dec.at) || Date.now(), key = 'r' + at.toString(36) + num.toString(36);
+  let hasPdf = false;
+  if (body.file) { const buf = Buffer.from(String(body.file), 'base64'); if (buf.length && buf.length <= CR_PDF_MAX) { await kv.putFile(`crpdf:${job.core}:${key}`, buf, { name: str(body.name, 160) || `CR-${num}.pdf`, type: 'application/pdf' }); hasPdf = true; } }
+  const e = c.effect || {}, n = (x) => Math.round((Number(x) || 0) * 100) / 100;
+  const rec = { key, core: job.core, project: str(body.project, 160), program: str(job.program || '', 120), cr: 'CR-' + String(num).padStart(3, '0'), crId: str(c.id, 30), num,
+    title: str(c.title, 300), desc: str(c.desc, 2000), reason: str(c.reason, 2000), source: str(c.source, 20), raisedBy: str(c.raisedBy, 80), raisedAt: Number(c.raisedAt) || 0,
+    outcome: str(dec.outcome, 30), status: str(c.status, 30), by: str(dec.by, 80), role: str(dec.role, 60), sig: str(dec.sig, 80), at, note: str(dec.note, 1000),
+    implementedAt: Number(c.implementedAt) || 0, f0: str(e.f0, 10), f1: str(e.f1, 10), b0: n(e.b0), b1: n(e.b1), days: Math.round(Number(e.days) || 0), cost: n(e.cost), est: !!e.est,
+    direct: !!c.direct, recordedBy: str(who, 80), recordedAt: Date.now(), hasPdf, text: str(body.text, 6000) };
+  await kv.update('champ-cr-records', (x) => { x.list = (x.list || []).filter((r) => !(r.core === rec.core && r.crId === rec.crId && r.at === rec.at)).concat([rec]).slice(-CR_MAX); return x; }, () => ({ list: [] }));
+  return { record: rec };
+}
+
 // ---------- documents ----------
 async function docList(core) { return ((await kv.get('pdocs:' + core)) || { docs: [] }).docs; }
 export async function upload(core, f, by) {
@@ -108,6 +129,12 @@ export async function context(job, plan, question) {
     stakeholders: people.map((x, i) => ({ ref: 'S' + (i + 1), name: sc(x.name), role: sc(x.role), raci: x.raci, has_email: /@/.test(x.email || '') })),
     meetings: (plan.meetings || []).slice(-12).map((m) => ({ title: sc(m.title), date: m.date, start: m.start, minutes: m.minutes, platform: m.platform || 'google', status: m.status || 'Scheduled', transcript: !!m.doc, analysed: !!m.analysed })),
     contracts: (plan.contracts || []).map((c) => ({ type: c.type, with: c.type === 'Customer' ? 'the customer' : sc(c.party), document: c.docs[0] || '' })),
+    change_requests: (plan.changes || []).slice().sort((a, b) => a.num - b.num).slice(-60).map((c) => ({ cr: 'CR-' + String(c.num).padStart(3, '0'), title: sc(c.title), status: c.status, raised: c.raisedAt ? new Date(c.raisedAt).toISOString().slice(0, 10) : '',
+      raised_by: sc(c.raisedBy), description: sc(c.desc).slice(0, 600), reason: sc(c.reason).slice(0, 400), applied_directly: !!c.direct,
+      decision: c.decision ? { outcome: c.decision.outcome, by: c.decision.by, role: c.decision.role, signed: !!c.decision.sig, date: new Date(c.decision.at).toISOString().slice(0, 10), note: sc(c.decision.note).slice(0, 400) } : null,
+      effect: c.effect ? { finish_before: c.effect.f0, finish_after: c.effect.f1, budget_before: c.effect.b0, budget_after: c.effect.b1, days: c.effect.days, cost: c.effect.cost } : null,
+      added_to_plan: c.implementedAt ? new Date(c.implementedAt).toISOString().slice(0, 10) : '' })),
+    change_records: [],
     documents: []
   };
   const docs = await docList(job.core);
@@ -122,6 +149,8 @@ export async function context(job, plan, question) {
   ctx.contracts = ctx.contracts.map((c) => ({ type: c.type, with: c.with, document: (docs.find((d) => d.id === c.document) || {}).name || '' }));
   ctx.document_extracts = pick.chunks.map((c) => ({ doc: c.doc, page: c.page || undefined, text: c.text }));
   ctx.extracts_are_partial = pick.partial;
+  try { ctx.change_records = (await crRecords(job.core)).slice(-60).map((r) => ({ cr: r.cr, title: sc(r.title), decision: r.outcome, by: r.by, role: r.role, signed: !!r.sig, date: new Date(r.at).toISOString().slice(0, 10),
+    finish_before: r.f0, finish_after: r.f1, budget_before: r.b0, budget_after: r.b1, applied_directly: r.direct, signed_pdf_kept: r.hasPdf, note: sc(r.note).slice(0, 300) })); } catch { ctx.change_records = []; }
   try { ctx.program = await programContext(job, today, sc); } catch { ctx.program = null; }
   return { ctx, stakeholders: people };
 }
@@ -155,6 +184,7 @@ const SYSTEM = 'You are "Project Intelligence" for GKH Project Champ, a project 
   'You are an experienced construction project manager (PMBOK, PRINCE2) and you know NSW building contracts (Home Building Act 1989, HIA and Master Builders contracts, AS 4000/AS 4902), WHS and the NCC. ' +
   'Answer the question about THIS project using the project data and the document extracts given. Rules: ' +
   '0) The project belongs to a program (field "program": its key such as PG-002, name, and every project in it with dates, progress, SPI/CPI, budget, risks, and the dependencies between them). For questions about the program, the other projects, comparing projects or cross-project dependencies, answer from "program" and name projects by name and ref; never say the other projects are not provided when "program" lists them. ' +
+  '0b) Change control: "change_requests" is the project change register (every CR with status, who raised it, the decision: outcome, by whom, role, signed, date, and its effect on finish and budget); "change_records" are the signed decision records kept in the database (with the signed PDF). For questions about changes, approvals or who approved what, answer from these (CR numbers, approver name and role, date, effect). A change "applied_directly" was applied with Fit to finish-by by that person without a change control board review: say so. ' +
   '1) Use the real tasks, dates, costs, critical path (critical=true tasks drive the finish date), risks, issues and stakeholders. Quote task numbers (#3) and dates as D Month YYYY. Australian spelling, $1,234.56. ' +
   '2) Documents: when you use a document, name it (and the page when given). If the answer is not in the documents or the data, say so plainly instead of guessing. When extracts_are_partial is true you only see the most relevant parts. ' +
   'For contract questions add one short line: this is general information, not legal advice. ' +
@@ -265,6 +295,17 @@ export async function intelPost(action, body, { who, by, audit }) {
       const r = await upload(core, body, by); if (r.error) return out(400, r);
       if (audit) await audit(who, `Project ${core}: document uploaded for Project Intelligence: ${r.doc.name}`);
       return out(200, r);
+    }
+    case 'intelCrRecord': {
+      const r = await crSave(job, body, by || who); if (r.error) return out(400, r);
+      if (audit) await audit(who, `Project ${core}: ${r.record.cr} ${r.record.outcome.toLowerCase()} by ${r.record.by} (${r.record.role}): record and signed PDF kept`);
+      return out(200, { ok: true, record: Object.assign({}, r.record, { text: undefined }) });
+    }
+    case 'intelCrList': return out(200, { records: (await crRecords(core)).map((r) => Object.assign({}, r, { text: undefined })) });
+    case 'intelCrGet': {
+      const key = str(body.key, 30), f = await kv.getFile(`crpdf:${core}:${key}`);
+      if (!f) return out(404, { error: 'The PDF for that record was not found' });
+      return out(200, { name: f.metadata.name || key + '.pdf', type: 'application/pdf', file: f.buf.toString('base64') });
     }
     case 'intelDocDelete': { await remove(core, str(body.id, 20)); if (audit) await audit(who, `Project ${core}: document deleted from Project Intelligence`); return out(200, { ok: true }); }
     case 'intelDocFile': {

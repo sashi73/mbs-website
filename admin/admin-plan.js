@@ -64,8 +64,9 @@
   }
   // When can the work start (same rule as the server)? Emergency: straight away, the same day as the site inspection.
   // Otherwise: quote accepted (until then: the quote date) + cooling-off (default 3 business days). "Work starts" can only make it later.
-  function coolOf(p) { return p.coolOff == null || p.coolOff === '' ? 3 : Math.max(0, Math.min(10, Math.round(+p.coolOff) || 0)); }
+  function coolOf(p) { return 0; }   // Project Champ: no cooling-off period (that was the builder's consumer-law rule)
   function gateOf(p) {
+    p.emergency = false;   // Project Champ: no emergency mode
     ALL = !!(p.emergency || p.weekends);
     var re = /^\d{4}-\d{2}-\d{2}$/, ws = re.test(p.workStart || '') ? nextWork(p.workStart) : '';
     if (p.emergency) return { date: ws, why: ws ? 'work' : 'emergency' };
@@ -79,9 +80,9 @@
     var G = gateOf(p), c = coolOf(p), g = p.gate, days = c + ' business day' + (c === 1 ? '' : 's');
     if (p.emergency) return '🚨 <b>Emergency:</b> the work can start straight away, the same day as the site inspection, and Saturday and Sunday are work days' + (G.date ? '; "Work starts" set to <b>' + esc(dmy(G.date)) + '</b>' : '') + '.';
     var w = G.why === 'work' ? '📅 Work starts <b>' + esc(dmy(G.date)) + '</b> ("Work starts" date). ' : '';
-    if (!g) return w + 'Once there is a quote, the work waits for it to be accepted plus a cooling-off period of ' + days + ' (tick Emergency to start straight away).';
-    if (g.accepted) return w + '✅ Quote <b>' + esc(g.id) + '</b> accepted on ' + esc(dmy(g.date)) + '; after the ' + days + ' cooling-off the work starts <b>' + esc(dmy(gateDate(p))) + '</b>.';
-    return w + '🔒 Quote <b>' + esc(g.id) + '</b> is not accepted yet. The work waits for acceptance plus ' + days + ' cooling-off: assuming acceptance on the quote date (' + esc(dmy(g.date)) + '), the work starts <b>' + esc(dmy(gateDate(p))) + '</b>. It moves if the customer accepts later.';
+    if (!g) return w + 'Once there is a quote or proposal, the work waits for it to be accepted.';
+    if (g.accepted) return w + '✅ Quote <b>' + esc(g.id) + '</b> accepted on ' + esc(dmy(g.date)) + '; the work starts <b>' + esc(dmy(gateDate(p))) + '</b>.';
+    return w + '🔒 Quote <b>' + esc(g.id) + '</b> is not accepted yet. The work waits for acceptance: assuming acceptance on the quote date (' + esc(dmy(g.date)) + '), the work starts <b>' + esc(dmy(gateDate(p))) + '</b>. It moves if the client accepts later.';
   }
   function schedule(p) {
     ALL = !!(p.emergency || p.weekends);   // emergency, or "Weekends (Sat, Sun) allowed": weekends are work days
@@ -287,24 +288,24 @@
     { c: 'General and fun projects (learn project management)', g: 1, fun: 1, items: [
       { id: 'fun-birthday', n: 'Birthday party', o: 'Throw a memorable birthday party on the day, within budget, with everyone looked after.', d: 'Guest list; venue; invitations; food and cake; decorations; run sheet for the day', ph: [
         ['Plan', [['Guest list and theme', 2, 0, 0], ['Book the venue', 3, 0, 400]]], ['Prepare', [['Send invitations and track RSVPs', 10, 0, 30], ['Order food and cake', 2, 0, 900], ['Decorations and party bags', 3, 0, 250], ['Music and games', 2, 0, 150]]],
-        ['The day', [['Set up the venue', 1, 0, 0], ['Party time', 1, 0, 0], ['Pack down and clean up', 1, 0, 0]]]], r: ['f_budget', 'f_rsvp', 'f_vendor', 'f_weather'] },
+        ['The day', [['Set up the venue', 1, 0, 0], ['Party time', 1, 0, 0], ['Pack down and clean up', 1, 0, 0]], 'seq']], r: ['f_budget', 'f_rsvp', 'f_vendor', 'f_weather'] },
       { id: 'fun-wedding', n: 'Wedding', o: 'Plan a wedding that feels like the couple, on the date, within the agreed budget.', d: 'Budget and guest list; venue and celebrant; suppliers booked; invitations; run sheet; thank-you cards', ph: [
         ['Plan', [['Budget and guest list', 5, 0, 0], ['Book the venue and date', 10, 0, 12000], ['Book the celebrant', 5, 0, 900]]],
         ['Suppliers', [['Caterer and menu tasting', 10, 0, 15000], ['Photographer and videographer', 5, 0, 4500], ['Music or DJ', 5, 0, 2000], ['Flowers and styling', 5, 0, 3500], ['Attire and rings', 20, 0, 6000]]],
         ['Guests', [['Save the dates and invitations', 15, 0, 600], ['RSVPs and seating plan', 20, 0, 0]]],
-        ['The day', [['Final run sheet and supplier briefing', 3, 0, 0], ['Rehearsal', 1, 0, 0], ['Wedding day', 1, 0, 0]]], ['After', [['Pay final invoices', 3, 0, 0], ['Thank-you cards', 7, 0, 200]]]], r: ['f_budget', 'f_vendor', 'f_rsvp', 'f_weather', 'f_ill'] },
+        ['The day', [['Final run sheet and supplier briefing', 3, 0, 0], ['Rehearsal', 1, 0, 0], ['Wedding day', 1, 0, 0]], 'seq'], ['After', [['Pay final invoices', 3, 0, 0], ['Thank-you cards', 7, 0, 200]]]], r: ['f_budget', 'f_vendor', 'f_rsvp', 'f_weather', 'f_ill'] },
       { id: 'fun-holiday', n: 'Family holiday', o: 'Take a relaxed family holiday that everyone enjoys, with no travel surprises.', d: 'Destination and budget; travel and stay booked; documents ready; itinerary; packing list', ph: [
         ['Plan', [['Pick destination and dates', 3, 0, 0], ['Set the budget', 1, 0, 0]]], ['Book', [['Flights', 2, 0, 3200], ['Accommodation', 2, 0, 2800], ['Travel insurance', 1, 0, 250], ['Passports and visas check', 10, 0, 0]]],
         ['Prepare', [['Day-by-day itinerary', 3, 0, 0], ['Packing list and pet or house care', 3, 0, 150]]], ['Travel', [['Holiday', 7, 0, 1500]]]], r: ['f_budget', 'f_ill', 'f_weather', 'f_time'] },
       { id: 'fun-move', n: 'Moving house', o: 'Move into the new home on the planned day, with nothing lost or broken.', d: 'Moving date; removalist booked; packing done; utilities and address changed; old place cleaned', ph: [
         ['Plan', [['Set the moving date', 1, 0, 0], ['Get removalist quotes and book', 5, 0, 1800]]], ['Prepare', [['Declutter and donate', 10, 0, 0], ['Packing boxes and materials', 1, 0, 150], ['Pack room by room', 10, 0, 0], ['Connect utilities and internet at the new place', 5, 0, 200], ['Change address (bank, licence, mail)', 3, 0, 0]]],
-        ['Move', [['Moving day', 1, 0, 0], ['Unpack the essentials', 2, 0, 0]]], ['Close', [['End-of-lease clean', 1, 0, 450]]]], r: ['f_vendor', 'f_time', 'f_budget'] },
+        ['Move', [['Moving day', 1, 0, 0], ['Unpack the essentials', 2, 0, 0]], 'seq'], ['Close', [['End-of-lease clean', 1, 0, 450]]]], r: ['f_vendor', 'f_time', 'f_budget'] },
       { id: 'fun-fundraiser', n: 'Charity or community fundraiser', o: 'Run a community event that meets its fundraising target and leaves everyone wanting to come back.', d: 'Target and permits; venue; sponsors; promotion; volunteers; the event; results report', ph: [
         ['Plan', [['Set the target and date', 2, 0, 0], ['Council permit and insurance', 10, 0, 350], ['Book the venue', 3, 0, 600]]], ['Prepare', [['Find sponsors and prizes', 15, 0, 0], ['Promote (posters, social media)', 15, 0, 200], ['Recruit and brief volunteers', 10, 0, 100], ['Stalls, food and equipment', 5, 0, 800]]],
-        ['Event', [['Set up', 1, 0, 0], ['Event day', 1, 0, 0], ['Count and bank the money', 1, 0, 0]]], ['Close', [['Thank sponsors and share results', 3, 0, 0]]]], r: ['f_rsvp', 'f_weather', 'f_vendor', 'f_budget'] },
+        ['Event', [['Set up', 1, 0, 0], ['Event day', 1, 0, 0], ['Count and bank the money', 1, 0, 0]], 'seq'], ['Close', [['Thank sponsors and share results', 3, 0, 0]]]], r: ['f_rsvp', 'f_weather', 'f_vendor', 'f_budget'] },
       { id: 'fun-garden', n: 'Backyard or room makeover (DIY)', o: 'Finish a DIY makeover on time and on budget, and learn how to plan the work.', d: 'Design idea; shopping list; tools; finished makeover; before and after photos', ph: [
         ['Plan', [['Measure and sketch the design', 2, 0, 0], ['Shopping list and budget', 1, 0, 0]]], ['Prepare', [['Buy materials', 2, 0, 1200], ['Hire or borrow tools', 1, 0, 150]]],
-        ['Do it', [['Clear and prepare the area', 2, 0, 0], ['Build or paint', 4, 0, 0], ['Plants, furniture and finishing touches', 2, 0, 400]]], ['Close', [['Clean up and take before and after photos', 1, 0, 0]]]], r: ['f_budget', 'f_weather', 'f_time'] }] },
+        ['Do it', [['Clear and prepare the area', 2, 0, 0], ['Build or paint', 4, 0, 0], ['Plants, furniture and finishing touches', 2, 0, 400]], 'seq'], ['Close', [['Clean up and take before and after photos', 1, 0, 0]]]], r: ['f_budget', 'f_weather', 'f_time'] }] },
     { c: 'Bathroom', items: [
       { id: 'bathroom', n: 'Waterproofing & retiling', legacy: 'bathroom' },
       { id: 'bath-reno', n: 'Full bathroom renovation', m: 6500, s: [St('Strip-out & rubbish removal', 2, 16, 'h', 55, [['Remove fixtures', 0, 1], ['Remove tiles and screed', 0, 2], ['Rubbish removal', 1, 1]]), St('Plumbing & electrical rough-in', 2, 1, 'lot', 2400, [['Plumber rough-in', 0, 1], ['Electrician rough-in', 1, 1]]), St('Wall sheeting & set', 2, 1, 'lot', 1400), St('Screed & falls', 1, 8, 'h', 85), St('Waterproofing membrane', 2, 1, 'lot', 950, [['Primer and bond breaker', 0, 1], ['Membrane, two coats', 0, 2]]), St('Flood test (24 h) & photos', 1, 1, 'h', 90), St('Wall & floor tiling', 4, 32, 'h', 85, [['Floor tiles', 0, 1], ['Wall tiles', 1, 3]]), St('Fit-off: vanity, toilet, tapware, screen', 2, 1, 'lot', 1600), St('Paint ceiling & touch-ups', 1, 6, 'h', 70)], r: ['hidden', 'asbestos', 'supply', 'cure', 'licensed'] },
@@ -395,8 +396,9 @@
     var prev = fun ? row('Project charter: the goal, date and budget', 1, 0, '', 0) : row('Kick-off meeting and project charter', 2, 1, '');
     prev = fun ? row('Stakeholders: who is involved and who decides', 1, 0, prev, 0) : row('Data request and stakeholder map', 3, 1, prev);
     it.ph.forEach(function (ph, i) {
-      ph[1].forEach(function (t) { prev = row(t[0], t[1], t[2], prev, fun ? t[3] : null); });
-      var km = key(); rows.push([0, km, '✓ Phase ' + (i + 1) + ' complete: ' + ph[0], 0, '', 0, '', 0, [prev]]); prev = km;
+      var par = fun && ph[2] !== 'seq', ends = [], from = prev;   // fun projects: the tasks in a phase run side by side (book the caterer while the invitations go out)
+      ph[1].forEach(function (t) { var k = row(t[0], t[1], t[2], par ? from : prev, fun ? t[3] : null); if (par) ends.push(k); else prev = k; });
+      var km = key(); rows.push([0, km, '✓ Phase ' + (i + 1) + ' complete: ' + ph[0], 0, '', 0, '', 0, par ? ends : [prev]]); prev = km;
     });
     prev = fun ? row('Lessons learned: what went well, what to do differently', 1, 0, prev, 0) : row('Final presentation and handover', 2, 1, prev);
     rows.push([0, key(), fun ? 'Project closed: celebrate!' : 'Final acceptance and invoice', 0, '', 0, '', 0, [prev]]);
@@ -668,7 +670,8 @@
     if (out.days && !out.finish) out.finish = addWork(nextWork(st || base), out.days - 1);
     return out;
   }
-  var EMERG = /\bemergenc|\burgent|\basap\b|straight away|right away|immediately|burst (pipe|water)|flood(ing|ed)?\b|storm damage|water (is )?(pouring|coming in|everywhere)/i;
+  var EMERG = /(?!)/;   // Project Champ: no emergency mode
+  var EMERG_OLD = /\bemergenc|\burgent|\basap\b|straight away|right away|immediately|burst (pipe|water)|flood(ing|ed)?\b|storm damage|water (is )?(pouring|coming in|everywhere)/i;
   /* ---------- new plan: scope of work + job type / blank / ✨ AI ---------- */
   var GUESS = [[/birthday/, 'fun-birthday'], [/wedding/, 'fun-wedding'], [/holiday|vacation|\btrip\b/, 'fun-holiday'], [/moving house|move house|relocat/, 'fun-move'], [/fundrais|charity/, 'fun-fundraiser'], [/makeover|\bdiy\b/, 'fun-garden'],
     [/sustainability report|\bgri\b|\bissb\b/, 'esg-report'], [/carbon|emission|net.?zero|decarbon/, 'esg-carbon'], [/materiality|esg baseline/, 'esg-baseline'], [/\besg\b/, 'esg-strategy'],
@@ -765,6 +768,20 @@
       .then(function () { S.pgl = null; if (L.prog || L.after) toast((L.prog ? 'Added to the ' + L.prog + ' program' : 'Linked') + (L.after ? ' and linked on the Dependency board' : '')); })
       .catch(function (e) { toast('Plan created, but the program link failed: ' + (e.message || e), true); });
   }
+  // a ready-made type is a typical length; when a Finish by date is given, squeeze the durations to fit it (costs stay the same: more hands, same work)
+  function fitTemplate(plan) {
+    if (!plan.finishBy) return '';
+    var R = rollup(plan, today()); if (!R.finish || R.finish <= plan.finishBy) return '';
+    var span = function (Q) { return workBetween(Q.start, Q.finish); }, need = span(R), avail = workBetween(R.start, plan.finishBy);
+    if (avail < 1) return '';
+    var orig = plan.tasks.map(function (t) { return t.dur; }), f = avail / need;
+    for (var k = 0; k < 12; k++) {
+      plan.tasks.forEach(function (t, i) { if (orig[i] > 0) { t.dur = Math.max(1, Math.round(orig[i] * f)); if (t.subs) fitSubs(t); } });
+      R = rollup(plan, today()); if (R.finish <= plan.finishBy) break; f *= 0.85;
+    }
+    var got = span(R);
+    return 'Durations squeezed from ' + pl(need, 'working day') + ' to ' + pl(got, 'working day') + ' to finish by ' + dmy(plan.finishBy) + (R.finish > plan.finishBy ? ' (still ' + pl(workBetween(plan.finishBy, R.finish) - 1, 'day') + ' over: every task is already at its shortest)' : '') + '.';
+  }
   function chooser() {
     setTimeout(function () { dateBoxes(V()); }, 0);
     $('#title').textContent = 'Project plan';
@@ -780,7 +797,7 @@
       '<div class="row pdates">' +
         '<label style="display:grid;gap:4px;font-weight:700">Start date<input type="date" id="tplStart" value="' + today() + '" style="width:auto"></label>' +
         '<label style="display:grid;gap:4px;font-weight:700"><span>Finish by <small class="muted" style="font-weight:400">(optional)</small></span><input type="date" id="aiFinish" value="' + esc(S.aiFinish || '') + '" style="width:auto"></label>' +
-        '<label class="qchk emergpick" title="No cooling-off: the work can start straight away, the same day as the site inspection"><input type="checkbox" id="tplEmerg"' + (j.emergency || EMERG.test((j.title || '') + ' ' + scope0) ? ' checked' : '') + '> 🚨 Urgent start <small class="muted">(start straight away; otherwise the plan allows 3 business days after approval before work starts)</small></label>' +
+        '<input type="checkbox" id="tplEmerg" hidden>' +
         '<label class="qchk" title="Tick if the crew can work Saturday and Sunday: the schedule counts every day and finishes sooner"><input type="checkbox" id="tplWeek"' + (S.tplWeek ? ' checked' : '') + '> 📅 Weekends (Sat, Sun) allowed</label>' +
         '<p class="pdates-note">✨ <b>Not sure of the end date?</b> Leave <b>Finish by</b> empty and choose <b>Ask AI to build it</b>: the AI works out the end date for this job. If you set a Finish by date, the plan is checked against it (and ✨ Fit to finish-by can bring it in).</p>' +
       '</div><div class="tpl-grid tmodes">' +
@@ -911,7 +928,8 @@
       var fb2 = $('#aiFinish') ? $('#aiFinish').value : '';
       if (fb2) { plan.finishBy = fb2; plan.charter.assumptions = ('Customer wants it finished by ' + dmy(fb2) + '.\n' + (plan.charter.assumptions || '')).trim(); }
       var btn = this; btn.disabled = true;
-      plan.emergency = !!$('#tplEmerg').checked; plan.weekends = !!($('#tplWeek') && $('#tplWeek').checked); plan.coolOff = S.coolZero && !plan.emergency ? 0 : 3;
+      plan.emergency = false; plan.weekends = !!($('#tplWeek') && $('#tplWeek').checked); plan.coolOff = 0;
+      if (S.mode === 'type') { var squeezed = fitTemplate(plan); if (squeezed) { plan.charter.assumptions = (squeezed + '\n' + (plan.charter.assumptions || '')).trim(); note += '; ' + squeezed; } }
       S.plan = plan; S.rev = 0; S.tab = 'schedule';
       var link = S.mode === 'type' && $('#tplLink') && typeProgram(S.tplType || $('#tplType').value) ? { prog: $('#tplProgOn') && $('#tplProgOn').checked ? typeProgram($('#tplType').value) : '', after: $('#tplAfter') ? $('#tplAfter').value : '', type: $('#tplDepType') ? $('#tplDepType').value : 'FS' } : null;
       api('planSave', { core: S.core, plan: S.plan, rev: 0, note: note }).then(function (r) { return linkUp(link).then(function () { return r; }); }).then(function (r) { S.plan = normalise(r.plan); S.rev = r.plan.rev; S.aiDraft = null; S.chain = null; loadChain(); S.aiText = ''; S.tplType = ''; toast('Plan created'); history.replaceState(null, '', '#plan/' + S.core + '/schedule'); render(); }).catch(function (e) { btn.disabled = false; S.plan = null; fail(e); });
@@ -1164,8 +1182,14 @@
     if (addRisks) (f.risks || []).forEach(function (r, i) { p.risks.push({ id: 'r' + Date.now().toString(36) + i, title: r.title, cause: r.cause, p: r.p, i: r.i, response: r.response, action: r.action, owner: (p.charter || {}).manager || '', review: '', status: 'Open', raised: today() }); });
     p.charter = p.charter || {};
     p.charter.assumptions = ('Schedule brought in to finish by ' + dmy(f.finishBy) + ' (' + pl(f.changes.length, 'task') + ' changed' + (weekends ? ', Saturday and Sunday work' : '') + (f.extraTotal ? ', extra cost ' + money(f.extraTotal) + ' ex GST' : '') + ').\n' + (p.charter.assumptions || '')).trim().slice(0, 2000);
-    M.closeModal(); dirty('AI fitted the plan to finish by ' + f.finishBy); render();
-    var Rn = rollup(p, today());
+    var Rn = rollup(p, today()), R0f = rollup(S.fitUndo.plan, today()), me = bomMe();
+    var fc = crNew({ title: 'Schedule brought in to finish by ' + dmy(f.finishBy), source: 'fit', direct: true, raisedBy: me, status: 'Implemented', implementedAt: Date.now(),
+      desc: pl(f.changes.length, 'task') + ' changed' + (weekends ? ', Saturday and Sunday work allowed' : '') + (f.extraTotal ? ', extra cost ' + money(f.extraTotal) + ' ex GST' : '') + '.',
+      reason: 'Fit the plan to the Finish by date.', estDays: R0f.finish && Rn.finish ? (Rn.finish < R0f.finish ? -workBetween(Rn.finish, R0f.finish) : workBetween(R0f.finish, Rn.finish)) : 0, estCost: Rn.BAC - R0f.BAC });
+    fc.decision = { by: me, role: 'Project manager', at: Date.now(), note: 'Applied directly with ✨ Fit to finish-by (no change control board review).', sig: '', outcome: 'Approved' };
+    fc.effect = { days: fc.estDays, cost: fc.estCost, f0: R0f.finish || '', f1: Rn.finish || '', b0: R0f.BAC || 0, b1: Rn.BAC || 0, est: false };
+    crLog(fc, 'Applied directly by ' + me + ' with Fit to finish-by');
+    M.closeModal(); dirty('AI fitted the plan to finish by ' + f.finishBy + ' (' + crNo(fc) + ')'); render(); crRecord(fc, true);
     toast('Plan updated: finishes ' + dmy(Rn.finish) + (Rn.finish <= f.finishBy ? ', on time' : '') + '. Press ↶ Undo the AI changes to put it back.');
   }
   function fitUndo() {
@@ -1521,9 +1545,9 @@
       return b + '<span class="gbar st-' + t.status + ' pb-' + pband(t.pct) + (late ? ' late' : '') + '" style="left:' + left + 'px;width:' + w + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' – ' + pretty(t.ef) + ' · ' + stName[t.status] + ' ' + t.pct + '%') + '"><span class="gfill" style="width:' + t.pct + '%"></span></span>' + lab;
     };
     var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button><button class="btn btn-sm est-ai" id="estAi" type="button" title="AI fills in indicative costs from Australian and international benchmarks: a reference only, to review and change">✨ Indicative costs</button>' +
-      '<div class="qgate' + (p.emergency ? ' emerg' : p.gate && p.gate.accepted ? ' ok' : '') + '"><div class="qrow"><label class="qchk" title="Emergency work (burst pipe, storm damage, a leak that is doing damage): no cooling-off, the work can start straight away, the same day as the site inspection"><input type="checkbox" id="pEmerg"' + (p.emergency ? ' checked' : '') + '> 🚨 Emergency</label>' +
+      '<div class="qgate' + (p.emergency ? ' emerg' : p.gate && p.gate.accepted ? ' ok' : '') + '"><div class="qrow"><input type="checkbox" id="pEmerg" hidden>' +
         '<label class="qchk" title="' + (p.emergency ? 'Emergency jobs already work Saturday and Sunday' : 'Tick if the crew can work Saturday and Sunday on this job: the schedule then counts every day and finishes sooner') + '"><input type="checkbox" id="pWeek"' + (p.emergency || p.weekends ? ' checked' : '') + (p.emergency ? ' disabled' : '') + '> 📅 Weekends (Sat, Sun) allowed</label>' +
-        '<label class="qchk" title="Days after the quote is accepted before the work can start. The full cooling-off period is 5 business days; most customers agree to start after 3.">Cooling-off <select id="pCool"' + (p.emergency ? ' disabled' : '') + '>' + [0, 1, 2, 3, 4, 5].map(function (n) { return '<option value="' + n + '"' + (coolOf(p) === n ? ' selected' : '') + '>' + n + (n === 3 ? ' (usual)' : n === 5 ? ' (full period)' : '') + '</option>'; }).join('') + '</select> business days</label></div><div>' + gateText(p) + '</div></div>' +
+        '<select id="pCool" hidden><option value="0" selected>0</option></select></div><div>' + gateText(p) + '</div></div>' +
       fitBar(p, R) + estBanner(p) +
       '<span class="muted phint" style="font-size:12.5px">To move a task, type its new number in <b>#</b> (1 = first) or drag <b>⠿</b>. Sub-tasks move inside their own task. Days are working days (' + (p.emergency ? 'emergency: every day, Saturday and Sunday included' : p.weekends ? 'weekends allowed: every day, Saturday and Sunday included' : 'Mon–Fri') + '). “After #” = starts when those rows finish. Moving a card on the Board updates the % here.</span>' +
       '<div class="pdline" title="Project start, Work starts and Finish by: the plan\'s dates follow them">' +
@@ -3450,7 +3474,7 @@
   var CR_DONE = { Approved: 1, Implemented: 1, Rejected: 1, Deferred: 1 };
   var CR_CLS = { Proposed: 'cr-p', 'Under review': 'cr-r', 'CCB meeting': 'cr-m', Approved: 'cr-a', Implemented: 'cr-i', Rejected: 'cr-x', Deferred: 'cr-d' };
   var CR_ROLES = ['Project manager', 'Project director', 'Sponsor (customer)', 'Change control board (chair)'];
-  var CR_SRC = { manual: '✍ Raised by hand', meeting: '📞 From a meeting', intel: '🧠 From Project Intelligence' };
+  var CR_SRC = { manual: '✍ Raised by hand', meeting: '📞 From a meeting', intel: '🧠 From Project Intelligence', fit: '✨ Fit to finish-by (applied directly)' };
   function crNo(c) { return 'CR-' + ('00' + c.num).slice(-3); }
   function crNew(o) {
     var p = S.plan; p.changes = p.changes || [];
@@ -3460,6 +3484,36 @@
     p.changes.push(c); return c;
   }
   function crLog(c, what) { c.log = (c.log || []).concat([{ at: Date.now(), what: what }]).slice(-40); }
+  // every decision is kept for good: the signed change request as a PDF plus a database record (who decided, when, the effect),
+  // so the team can open it any time, query it (change_records) and Project Intelligence can read it
+  function crRecord(c, quiet) {
+    if (!c || !c.decision || !M.report || !M.report.pdf) return Promise.resolve(null);
+    S.crBusy = S.crBusy || {}; var bk = c.id + '@' + c.decision.at; if (S.crBusy[bk]) return S.crBusy[bk];   // already being kept
+    var core = S.core, snap = crSnapshot(c), pr;
+    var text = [snap.title, S.plan.name].concat(snap.sections.map(function (x) { return x.title + ': ' + (x.rows ? x.rows.map(function (r) { return Array.isArray(r) ? r.map(function (v) { return v && v.t != null ? v.t : v; }).join(' ') : ''; }).join('; ') : x.text || ''); })).join('\n');
+    pr = M.report.pdf(snap).then(function (r) {
+      return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).replace(/^data:[^,]*,/, '')); }; rd.readAsDataURL(r.blob); }).then(function (b64) {
+        return api('intelCrRecord', { core: core, project: S.plan.name, name: r.name, file: b64, text: text,
+          cr: { id: c.id, num: c.num, title: c.title, desc: c.desc, reason: c.reason, source: c.source, raisedBy: c.raisedBy, raisedAt: c.raisedAt, status: c.status, decision: c.decision, effect: c.effect || null, implementedAt: c.implementedAt || 0, direct: !!c.direct } });
+      });
+    }).then(function (d) {
+      if (S.core === core) { c.recorded = d.record.at; c.recKey = d.record.key; S.crRecs = null; dirty(crNo(c) + ' record kept'); if (S.tab === 'change' && $('#planBody') && location.hash.indexOf('#plan/' + core) === 0) changeTab(); }
+      if (!quiet) toast('📁 ' + crNo(c) + ' kept on record with the signed PDF');
+      return d.record;
+    }).catch(function (e) { if (!quiet) toast('The decision is saved in the plan, but the PDF record could not be kept: ' + (e.message || e) + '. Open Change control to try again.', true); return null; })
+      .then(function (x) { delete S.crBusy[bk]; return x; });
+    S.crBusy[bk] = pr; return pr;
+  }
+  function crBackfill() {   // decisions made before records were kept (or whose record failed): keep them now, one at a time
+    if (S.crFilling || M.me && M.me.scope) return; var todo = (S.plan.changes || []).filter(function (c) { return c.decision && !c.recorded && !(S.crBusy && S.crBusy[c.id + '@' + c.decision.at]); }); if (!todo.length) return;
+    S.crFilling = true; var core = S.core;
+    api('intelCrList', { core: core }).then(function (d) {   // already on record (e.g. the page was left before the plan saved the mark): just mark it
+      var have = {}; (d.records || []).forEach(function (r) { have[r.crId + '@' + r.at] = r; });
+      var marked = 0; todo = todo.filter(function (c) { var r = have[c.id + '@' + c.decision.at]; if (r) { c.recorded = r.at; c.recKey = r.key; marked++; return false; } return true; });
+      if (marked && S.core === core) dirty('change records marked');
+      return todo.reduce(function (pr, c) { return pr.then(function () { if (S.core === core) return crRecord(c, true); }); }, Promise.resolve());
+    }).then(function () { S.crFilling = false; if (S.core === core && todo.length) toast('📁 ' + pl(todo.length, 'earlier decision') + ' kept on record with signed PDFs'); }, function () { S.crFilling = false; });
+  }
   function crPicks(c) {   // what goes ahead: the ticked items (all of them if never changed)
     var a = c.items; if (!a) return {};
     var all = {}; [['t', a.task_changes], ['n', a.new_tasks], ['s', a.scope_changes], ['r', a.risks], ['i', a.issues], ['k', a.stakeholders], ['q', a.quality]].forEach(function (x) { (x[1] || []).forEach(function (_, i) { all[x[0] + ':' + i] = 1; }); });
@@ -3976,6 +4030,25 @@
     B.querySelectorAll('tr[data-crid]').forEach(function (tr) { tr.onclick = function () { S.crView = S.crView === tr.getAttribute('data-crid') ? '' : tr.getAttribute('data-crid'); changeTab(); var k = $('#crCard'); if (k) k.scrollIntoView({ block: 'start', behavior: 'smooth' }); }; });
     $('#crAdd').onclick = crAddDialog; $('#crMeet').onclick = function () { crMeetDialog(); }; $('#crReg').onclick = function () { crDocDialog(null); };
     if (cur) crWire(cur);
+    crRecCard(); crBackfill();
+  }
+  function crRecCard() {
+    var core = S.core, pb = $('#planBody'); if (!pb) return; var box = document.createElement('div'); box.className = 'card cr-recs'; box.id = 'crRecs'; pb.appendChild(box);
+    box.innerHTML = '<div class="card-h"><h2>📁 Decision records</h2></div><p class="muted">Loading…</p>';
+    (S.crRecs && S.crRecs.core === core ? Promise.resolve(S.crRecs) : api('intelCrList', { core: core }).then(function (d) { S.crRecs = { core: core, list: d.records || [] }; return S.crRecs; })).then(function (R) {
+      var el = $('#crRecs'); if (!el || S.core !== core) return;
+      var L = R.list.slice().sort(function (a, b) { return b.at - a.at; });
+      el.innerHTML = '<div class="card-h"><h2>📁 Decision records (' + L.length + ')</h2></div>' +
+        '<p class="muted" style="margin:-4px 0 10px">Every approval, rejection or deferral is kept in the database with its signed PDF and who decided. Open them here, query them in Ask (table <code>change_records</code>), and Project Intelligence reads them.</p>' +
+        (L.length ? '<div class="table-wrap"><table class="rt"><thead><tr><th>CR</th><th>Change</th><th>Decision</th><th>By</th><th>Date</th><th>Effect</th><th></th></tr></thead><tbody>' + L.map(function (r) {
+          return '<tr><td class="nowrap"><b>' + esc(r.cr) + '</b></td><td>' + esc(r.title) + (r.direct ? '<br><small class="muted">Applied directly (no board review)</small>' : '') + '</td><td>' + esc(r.outcome) + '</td>' +
+            '<td>' + esc(r.by) + '<br><small class="muted">' + esc(r.role) + (r.sig ? ' · signed' : '') + '</small></td><td class="nowrap">' + esc(new Date(r.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })) + '</td>' +
+            '<td class="nowrap"><small>' + (r.f0 || r.f1 ? 'Finish ' + esc(dmy(r.f0)) + ' → ' + esc(dmy(r.f1)) + '<br>' : '') + (r.b0 || r.b1 ? 'Budget ' + money(r.b0) + ' → ' + money(r.b1) : '') + '</small></td>' +
+            '<td>' + (r.hasPdf ? '<button class="btn btn-sm" type="button" data-crpdf="' + esc(r.key) + '">⬇ PDF</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>'
+          : '<div class="empty">No decisions yet. When a change request is approved, rejected or deferred, its signed PDF is kept here.</div>');
+      el.querySelectorAll('[data-crpdf]').forEach(function (b) { b.onclick = function () { b.disabled = true; api('intelCrGet', { core: core, key: b.getAttribute('data-crpdf') }).then(function (f) {
+        var bin = atob(f.file), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); M.report.save(new Blob([u], { type: 'application/pdf' }), f.name); }).catch(fail).then(function () { b.disabled = false; }); }; });
+    }).catch(function (e) { var el = $('#crRecs'); if (el) el.innerHTML = '<div class="card-h"><h2>📁 Decision records</h2></div><p class="bad">' + esc(e.message || e) + '</p>'; });
   }
   function crCard(c) {
     var lock = CR_DONE[c.status], d = crDelta(c), dec = c.decision;
@@ -4070,7 +4143,7 @@
         msg = crNo(c) + ' approved and added to the plan: ' + pl(k, 'change') + '. Finish ' + dmy(R1.finish) + ', budget ' + money(R1.BAC);
       }
       S.crUndo = { core: S.core, id: c.id, plan: snap };
-      M.closeModal(); dirty(msg); changeTab(); toast(msg);
+      M.closeModal(); dirty(msg); changeTab(); toast(msg); crRecord(c);
     };
   }
   function crMeetDialog(ids) {
@@ -4471,7 +4544,7 @@
     return { gcal: g, teams: teams, zoom: 'https://zoom.us/meeting/schedule', open: plat === 'teams' ? teams : plat === 'zoom' ? 'https://zoom.us/meeting/schedule' : g, ics: ics, mail: mail, emails: emails, missing: who.filter(function (x) { return !/@/.test(x.email || ''); }), when: when, name: pn };
   }
   function intelTab() {
-    var B = $('#planBody');
+    var B = $('#planBody'); if (!B) return;   // the answer came back after leaving the project
     if (!S.intel || S.intel.core !== S.core) {
       B.innerHTML = '<div class="empty">Loading Project Intelligence…</div>';
       api('intelGet', { core: S.core }).then(function (d) { S.intel = { core: S.core, docs: d.docs, log: d.log, open: {} }; if (S.tab === 'intel') intelTab(); }).catch(fail);

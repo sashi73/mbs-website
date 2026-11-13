@@ -56,7 +56,7 @@ export function gatedTasks(plan) {
 //   Emergency ticked: straight away (the same day as the site inspection).
 //   Otherwise: once the quote is accepted plus a cooling-off period (default 3 business days; the full period is 5).
 //   Until the quote is accepted the plan assumes acceptance on the quote date. A "Work starts" date can only make it later.
-export const coolOf = (plan) => (plan.coolOff == null || plan.coolOff === '' ? 3 : Math.max(0, Math.min(10, Math.round(Number(plan.coolOff)) || 0)));
+export const coolOf = () => 0;   // Project Champ: no cooling-off period
 export function gateOf(plan) {
   const A = allDays(plan), ymd = /^\d{4}-\d{2}-\d{2}$/, ws = ymd.test(plan.workStart || '') ? nextWork(plan.workStart, A) : '';
   if (plan.emergency) return { date: ws, why: ws ? 'work' : 'emergency' };
@@ -171,7 +171,7 @@ function clean(p, core) {
   for (const t of tasks) t.pred = t.pred.filter((x) => tIds.has(x) && x !== t.id);
   const c = p.charter || {};
   const res = {
-    core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart), finishBy: ymdOk(p.finishBy), emergency: !!p.emergency, weekends: !!p.weekends, coolOff: int(p.coolOff, 0, 10, 3), estAuto: str(p.estAuto, 30),
+    core, name: str(p.name, 120) || 'Project plan', start: ymdOk(p.start) || new Date().toISOString().slice(0, 10), workStart: ymdOk(p.workStart), finishBy: ymdOk(p.finishBy), emergency: false, weekends: !!p.weekends, coolOff: int(p.coolOff, 0, 10, 3), estAuto: str(p.estAuto, 30),
     charter: { objective: str(c.objective, 1500), inScope: str(c.inScope, 3000), outScope: str(c.outScope, 2000), deliverables: str(c.deliverables, 2000),
       acceptance: str(c.acceptance, 2000), assumptions: str(c.assumptions, 2000), notes: str(c.notes, 3000), background: str(c.background, 3000), budget: r2(c.budget), customer: str(c.customer, 120), manager: str(c.manager, 80),
       // v73: the charter document: its version and status
@@ -234,7 +234,7 @@ function crClean(c) {
   const picks = {}; for (const [k, v] of Object.entries(c.picks && typeof c.picks === 'object' ? c.picks : {}).slice(0, 200)) if (/^[tnsrikq]:\d{1,3}$/.test(k)) picks[k] = v ? 1 : 0;
   const d = c.decision && typeof c.decision === 'object' ? c.decision : null;
   return { id: str(c.id, 20).replace(/[^\w-]/g, '') || 'cr' + Math.random().toString(36).slice(2, 8), num: int(c.num, 1, 9999, 1), title: str(c.title, 200) || 'Change request', desc: str(c.desc, 4000), reason: str(c.reason, 2000),
-    source: ['manual', 'meeting', 'intel'].includes(c.source) ? c.source : 'manual', srcRef: str(c.srcRef, 30), srcTitle: str(c.srcTitle, 200), raisedBy: str(c.raisedBy, 80), raisedAt: Number(c.raisedAt) || Date.now(),
+    source: ['manual', 'meeting', 'intel', 'fit'].includes(c.source) ? c.source : 'manual', direct: !!c.direct, recorded: Number(c.recorded) || 0, recKey: str(c.recKey, 30), srcRef: str(c.srcRef, 30), srcTitle: str(c.srcTitle, 200), raisedBy: str(c.raisedBy, 80), raisedAt: Number(c.raisedAt) || Date.now(),
     priority: ['Low', 'Medium', 'High', 'Urgent'].includes(c.priority) ? c.priority : 'Medium', status: CR_ST.includes(c.status) ? c.status : 'Proposed',
     estDays: int(c.estDays, -999, 999, 0), estCost: r2(c.estCost), items, picks, ccb: ymdOk(c.ccb),
     decision: d ? { by: str(d.by, 80), role: str(d.role, 60), at: Number(d.at) || Date.now(), note: str(d.note, 1000), sig: str(d.sig, 80), outcome: ['Approved', 'Rejected', 'Deferred'].includes(d.outcome) ? d.outcome : 'Approved' } : null,
