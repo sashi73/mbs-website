@@ -9,7 +9,9 @@ import * as CU from './customers.mjs';
 
 export const STAGES = ['new', 'called', 'quoted', 'won', 'completed', 'invoiced', 'paid', 'lost'];
 export const OPEN = ['new', 'called', 'quoted', 'won', 'completed', 'invoiced'];
-export const LABEL = { new: 'New enquiry', called: 'Called', quoted: 'Quoted', won: 'Job won', completed: 'Completed', invoiced: 'Invoiced', paid: 'Paid', lost: 'Lost' };
+export const LABEL = { new: 'Pre-sales', called: 'Pre-sales', quoted: 'Proposal submitted', won: 'Awarded', completed: 'Awarded', invoiced: 'Invoiced', paid: 'Signed off and closed', lost: 'Lost' };
+// GKH Project Champ: a project moves Pre-sales → Proposal submitted → Invoiced (milestone payments 1 to 12) → Signed off and closed
+export const CHAMP_FLOW = ['new', 'quoted', 'invoiced', 'paid'];
 export const ICON = { new: '🆕', called: '📞', quoted: '💬', won: '✅', completed: '🏁', invoiced: '🧾', paid: '💰', lost: '❌' };
 const TIME_FIELD = { called: 'called_at', quoted: 'quoted_at', won: 'won_at', completed: 'completed_at', invoiced: 'invoiced_at', paid: 'paid_at', lost: 'lost_at' };
 
@@ -136,7 +138,13 @@ export async function setStage(input, stage, by, extra = {}) {
     if (TIME_FIELD[stage]) job[TIME_FIELD[stage]] = now;
     let text = LABEL[stage];
     if (stage === 'quoted' && extra.amount) { job.quote = { amount: extra.amount, gst: gstOf(extra.amount), at: now }; text += ` ${money(extra.amount)} inc GST`; }
-    if (stage === 'invoiced' && extra.amount) { job.invoice = { amount: extra.amount, gst: gstOf(extra.amount), at: now }; text += ` ${money(extra.amount)} inc GST`; }
+    if (stage === 'invoiced' && extra.milestone) {   // a milestone payment invoiced (1 to 12)
+      job.milestone = extra.milestone;
+      job.milestones = (job.milestones || []).filter((m) => m.n !== extra.milestone).concat([{ n: extra.milestone, amount: extra.amount || 0, at: now, by }]).sort((a, b) => a.n - b.n);
+      if (extra.amount) job.invoice = { amount: extra.amount, gst: gstOf(extra.amount), at: now };
+      text = `Invoiced: milestone payment ${extra.milestone}${extra.amount ? ' ' + money(extra.amount) : ''}`;
+    } else if (stage === 'invoiced' && extra.amount) { job.invoice = { amount: extra.amount, gst: gstOf(extra.amount), at: now }; text += ` ${money(extra.amount)} inc GST`; }
+    if (stage === 'quoted' && !extra.amount) text = 'Proposal submitted';
     if (stage === 'lost' && extra.reason) { job.lost_reason = extra.reason; text += `: ${extra.reason}`; }
     const after = refFor(job);
     if (after !== before) text += ` (${before} → ${after})`;

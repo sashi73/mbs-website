@@ -557,6 +557,34 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Dependencies', 'deleting a project removes its links', !pgl.deps.some((d) => d.from === hBuild || d.to === hBuild) && pgl.deps.length === 1);
   for (const c of [hFit, hIT]) await api('planProjectDelete', { core: c });
 
+  // ---- the Project page: Pre-sales → Proposal submitted → Invoiced (milestone 1-12) → Signed off and closed ----
+  const prj = (await (await api('planNewProject', { name: 'Airline ESG report', client: 'National Airlines', program: 'Digital health' })).json()).core;
+  let pj = (await (await api('job', { ref: prj })).json()).job;
+  ok('Project page', 'a new project starts in Pre-sales', pj.stage === 'new');
+  await p.goto(`${BASE}/admin/#job/${prj}`); await p.reload(); await p.waitForSelector('.stg-flow', { timeout: 8000 }).catch(() => {});
+  let pv = await p.textContent('#view');
+  ok('Project page', 'called Project (not Job), with the four stages and no trade or photos', (await p.textContent('#title')) === 'Project' && /← Projects/.test(pv) && /Client & project/.test(pv) &&
+    JSON.stringify(await p.$$eval('.stg-flow li span', (x) => x.map((e) => e.firstChild.textContent))) === JSON.stringify(['Pre-sales', 'Proposal submitted', 'Invoiced', 'Signed off and closed']) && !/Trade|Plumbing|Photos/.test(pv), pv.slice(0, 200));
+  await p.click('[data-stage="quoted"]'); await p.fill('#stageForm [name=amount]', '380000'); await p.click('#stageForm button'); await sleep(1200);
+  pj = (await (await api('job', { ref: prj })).json()).job;
+  ok('Project page', 'Proposal submitted, with its value', pj.stage === 'quoted' && pj.quote && pj.quote.amount === 380000);
+  r = await api('stage', { ref: prj, stage: 'invoiced' }); ok('Project page', 'an invoice needs its milestone number', r.status() === 400);
+  await p.click('[data-stage="invoiced"]'); await sleep(300);
+  ok('Project page', 'Invoiced asks which milestone payment, 1 to 12', (await p.$$('#stageForm [name=milestone] option')).length === 12 && (await p.inputValue('#stageForm [name=milestone]')) === '1');
+  await p.fill('#stageForm [name=amount]', '95000'); await p.click('#stageForm button'); await sleep(1200);
+  await p.click('[data-stage="invoiced"]'); await sleep(300);
+  ok('Project page', 'the next milestone is offered next', (await p.inputValue('#stageForm [name=milestone]')) === '2');
+  await p.selectOption('#stageForm [name=milestone]', '3'); await p.click('#stageForm button'); await sleep(1200);
+  pv = await p.textContent('#view');
+  if (process.env.SHOTS) { await p.setViewportSize({ width: 1300, height: 900 }); await p.screenshot({ path: '/tmp/intro/projectpage.png' }); await p.setViewportSize({ width: 1280, height: 900 }); }
+  ok('Project page', 'milestone payments are listed, and the chip shows the latest', /Payment 1/.test(pv) && /Payment 3/.test(pv) && /Invoiced: milestone 3/.test(await p.textContent('h2 + .chip')) && /2 of up to 12/.test(pv));
+  let bd = (await (await api('planPipelineList', { today: new Date().toISOString().slice(0, 10) })).json()).cards.find((c) => c.core === prj);
+  ok('Project page', 'an invoiced milestone does not close the project', bd && bd.phase !== 'close', bd && bd.phase);
+  await p.click('[data-stage="paid"]'); await p.click('#stageForm button'); await sleep(1200);
+  bd = (await (await api('planPipelineList', { today: new Date().toISOString().slice(0, 10) })).json()).cards.find((c) => c.core === prj);
+  ok('Project page', 'Signed off and closed moves it to Closing', (await (await api('job', { ref: prj })).json()).job.stage === 'paid' && bd && bd.phase === 'close');
+  await api('planProjectDelete', { core: prj });
+
   // ---- Project Intelligence: re-plan on the fly → change control → sign → the whole plan follows ----
   const esg = (await (await api('planNewProject', { name: 'ESG baseline study', client: 'National Airlines', program: 'Digital health' })).json()).core;
   const wd = (n) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };

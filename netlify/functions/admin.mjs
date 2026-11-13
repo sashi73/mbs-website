@@ -238,11 +238,13 @@ async function handle(req, context) {
         const stage = String(body.stage || '');
         if (!J.STAGES.includes(stage)) return bad('Unknown stage');
         const extra = {};
-        if (stage === 'quoted' || stage === 'invoiced') { extra.amount = num(body.amount); if (!extra.amount) return bad('Please enter the amount (inc GST)'); }
+        // Project Champ: the proposal value is optional; an invoice is a milestone payment (1 to 12), its amount optional
+        if (stage === 'quoted' || stage === 'invoiced') extra.amount = num(body.amount) || 0;
+        if (stage === 'invoiced') { extra.milestone = Math.round(Number(body.milestone) || 0); if (extra.milestone < 1 || extra.milestone > 12) return bad('Choose the milestone payment (1 to 12)'); }
         if (stage === 'lost') extra.reason = clean(body.reason, 200);
         const r = await J.setStage(body.ref, stage, by, extra);
         if (r.error) return bad(r.error === 'not found' ? 'Job not found' : r.error, 404);
-        await A.audit(who, `${r.after}: ${J.LABEL[stage]}${extra.amount ? ' ' + J.money(extra.amount) : ''}`);
+        await A.audit(who, `${r.after}: ${J.LABEL[stage]}${extra.milestone ? ' (milestone payment ' + extra.milestone + ')' : ''}${extra.amount ? ' ' + J.money(extra.amount) : ''}`);
         return out(200, { job: { ...r.job, ref: J.refFor(r.job) }, before: r.before, after: r.after });
       }
       case 'note': {
@@ -364,8 +366,7 @@ async function handle(req, context) {
         const core = await J.nextCore('P');
         await J.create({ core, name: client, phone: clean(body.phone, 40), email: clean(body.email, 160), suburb: clean(body.site, 80), service: pname,
           summary: clean(body.summary, 1500), program: prog, source: 'Project Champ' }, by);
-        const r = await J.setStage(core, 'won', by, {});
-        const job = (r && r.job) || (await J.find(core));
+        const job = await J.find(core);   // a new project starts in Pre-sales
         if (body.bom === false) await setModule(core, 'bom', false);     // optional modules chosen on the form
         if (body.swms === false) await setModule(core, 'swms', false);
         await A.audit(who, `${J.refFor(job)}: project created (${pname})`);

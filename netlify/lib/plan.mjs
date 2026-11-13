@@ -747,7 +747,7 @@ export function healthOf(c) {
 export async function portfolio(day, only = null) {
   const [jobList, plans, pins] = await Promise.all([J.all(), list(), kv.get('champ-phases').catch(() => null)]);
   const jobs = Object.fromEntries(jobList.map((j) => [j.core, j])), pin = (pins && pins.map) || {};
-  const auto = (r, j) => { if (!r) return 'init'; if (j && ['completed', 'invoiced', 'paid'].includes(j.stage)) return 'close';
+  const auto = (r, j) => { if (j && j.stage === 'paid') return 'close'; if (!r) return 'init';   // Project Champ: only Signed off and closed closes it (invoices are milestone payments)
     if (r.total && r.done >= r.total) return 'close'; if (r.pct >= 80) return 'monitor'; if (r.pct > 0 || r.done > 0 || (r.start && r.start < day && r.total)) return 'exec'; return 'plan'; };
   const cards = [], seen = new Set();
   for (const p of plans) {
@@ -759,7 +759,7 @@ export async function portfolio(day, only = null) {
   }
   if (!only) for (const j of jobList) {
     if (seen.has(j.core) || j.stage === 'lost' || !(j.source === 'Project Champ' || J.OPEN.includes(j.stage))) continue;
-    cards.push({ core: j.core, ref: J.refFor(j), name: jobTitle(j), client: j.name || '', site: j.suburb || '', program: j.program || '', since: j.created || 0, updated: j.updated || 0, hasPlan: false, auto: 'init', phase: pin[j.core] || 'init', pinned: !!pin[j.core],
+    cards.push({ core: j.core, ref: J.refFor(j), name: jobTitle(j), client: j.name || '', site: j.suburb || '', program: j.program || '', since: j.created || 0, updated: j.updated || 0, hasPlan: false, auto: j.stage === 'paid' ? 'close' : 'init', phase: pin[j.core] || (j.stage === 'paid' ? 'close' : 'init'), pinned: !!pin[j.core],
       pct: 0, done: 0, total: 0, late: 0, BAC: 0, AC: 0, EV: 0, PV: 0, SPI: null, CPI: null, start: '', finish: '', openRisks: 0, highRisks: 0, openIssues: 0 });
   }
   return cards;

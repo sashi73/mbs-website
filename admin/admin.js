@@ -4,9 +4,11 @@
   var API = '../.netlify/functions/admin';
   var STAGES = ['new', 'called', 'quoted', 'won', 'completed', 'invoiced', 'paid', 'lost'];
   var OPEN = ['new', 'called', 'quoted', 'won', 'completed', 'invoiced'];
-  var LABEL = { new: 'New enquiry', called: 'Called', quoted: 'Quoted', won: 'Job won', completed: 'Completed', invoiced: 'Invoiced', paid: 'Paid', lost: 'Lost' };
+  // GKH Project Champ: Pre-sales → Proposal submitted → Invoiced (milestone payments 1 to 12) → Signed off and closed
+  var LABEL = { new: 'Pre-sales', called: 'Pre-sales', quoted: 'Proposal submitted', won: 'Awarded', completed: 'Awarded', invoiced: 'Invoiced', paid: 'Signed off and closed', lost: 'Lost' };
+  var CHAMP_STAGES = ['new', 'quoted', 'invoiced', 'paid', 'lost'];
   var COLOR = { new: '#3B82F6', called: '#8B5CF6', quoted: '#F59E0B', won: '#10B981', completed: '#14B8A6', invoiced: '#6366F1', paid: '#16A34A', lost: '#9CA3AF' };
-  var NEXT = { new: ['called', 'quoted', 'lost'], called: ['quoted', 'lost'], quoted: ['won', 'lost'], won: ['completed', 'invoiced'], completed: ['invoiced'], invoiced: ['paid'], paid: [], lost: [] };
+  var NEXT = { new: ['quoted', 'lost'], called: ['quoted', 'lost'], quoted: ['invoiced', 'lost'], won: ['invoiced'], completed: ['invoiced'], invoiced: ['invoiced', 'paid'], paid: [], lost: ['new'] };
   var TRADES = { B: 'Building & renovations', C: 'Concrete & cracks', W: 'Waterproofing & leaks', R: 'Roofing & gutters', T: 'Tiling', D: 'Doors & windows', G: 'Gyprock & plaster', O: 'Outdoor: decks, pergolas & fencing', F: 'Painting & finishes', E: 'Electrical', P: 'Plumbing', S: 'Storm damage', M: 'General maintenance' };
   var STORES = { 'mbs-jobs': 'Live database', 'mbs-jobs-test': 'Test database', 'mbs-visits': 'Visitor counter' };
 
@@ -166,7 +168,7 @@
 
   /* ---------------- router ---------------- */
   var VIEWS = { dashboard: dashboard, jobs: jobs, job: jobView, new: newJob, reminders: reminders, reports: reports, data: dataExplorer, activity: activity, analytics: analytics };
-  var TITLES = { dashboard: 'Dashboard', jobs: 'Jobs', job: 'Job', new: 'New job', reminders: 'Reminders', reports: 'Reports', data: 'Data explorer', activity: 'Activity log', analytics: 'Analytics & AI' };
+  var TITLES = { dashboard: 'Dashboard', jobs: 'Projects', job: 'Project', new: 'New project', reminders: 'Reminders', reports: 'Reports', data: 'Data explorer', activity: 'Activity log', analytics: 'Analytics & AI' };
   var NAVKEY = { job: 'jobs' };
   function route() {
     if ($('#app').hidden) return;
@@ -272,27 +274,36 @@
   function jobView(args) {
     return api('job', { ref: args[0] }).then(function (d) {
       var j = d.job, next = NEXT[j.stage] || [];
-      var q = j.quote, inv = j.invoice;
+      var q = j.quote, inv = j.invoice, ms = j.milestones || [];
+      $('#title').textContent = 'Project'; document.title = 'Project ' + j.ref + ' · GKH Project Champ';
+      var stLabel = LABEL[j.stage] + (j.stage === 'invoiced' && j.milestone ? ': milestone ' + j.milestone : '');
+      var nextLabel = function (s) { return s === 'invoiced' ? (j.stage === 'invoiced' ? '🧾 Invoice the next milestone' : '🧾 Invoiced (milestone payment)') : s === 'paid' ? '✅ Signed off and closed' : s === 'quoted' ? '📨 Proposal submitted' : s === 'lost' ? 'Lost' : s === 'new' ? '↺ Back to Pre-sales' : LABEL[s]; };
       view.innerHTML =
-        '<div class="row" style="margin-bottom:14px"><a class="btn btn-sm" href="#jobs">← Jobs</a><h2 style="font-size:22px">' + esc(j.ref) + '</h2>' + chip(j.stage) + '<span class="sp"></span>' +
+        '<div class="row" style="margin-bottom:14px"><a class="btn btn-sm" href="#projects">← Projects</a><h2 style="font-size:22px">' + esc(j.ref) + '</h2><span class="chip st-' + esc(j.stage) + '">' + esc(stLabel) + '</span><span class="sp"></span>' +
           (j.phone ? '<a class="btn btn-sm" href="tel:' + esc(tel(j.phone)) + '">📞 Call</a><a class="btn btn-sm" href="sms:' + esc(tel(j.phone)) + '">💬 SMS</a>' : '') +
           (j.email ? '<a class="btn btn-sm" href="mailto:' + esc(j.email) + '">✉ Email</a>' : '') +
           (j.mapsUrl ? '<a class="btn btn-sm" href="' + esc(j.mapsUrl) + '" target="_blank" rel="noopener">🗺 Directions</a>' : '') + '</div>' +
         '<div class="grid two">' +
           '<div class="grid" style="align-content:start">' +
-            '<div class="card"><h2>Customer &amp; job</h2><dl class="kv">' +
-              kv('Name', j.name) + kv('Phone', j.phone) + kv('Email', j.email) + kv('Suburb', j.suburb) + kv('Service', j.service) +
-              kv('Trade', j.trade ? j.trade + ' · ' + (TRADES[j.trade] || '') : '') + kv('Best time', j.best_time) + kv('Source', j.source) + kv('Created', date(j.created)) +
-              (q ? kv('Quote', money(q.amount) + ' inc GST (GST ' + money(q.gst || gst(q.amount)) + ')') : '') +
-              (inv ? kv('Invoice', money(inv.amount) + ' inc GST (GST ' + money(inv.gst || gst(inv.amount)) + ', ex GST ' + money(inv.amount - (inv.gst || gst(inv.amount))) + ')') : '') +
+            '<div class="card"><h2>Client &amp; project</h2><dl class="kv">' +
+              kv('Client', j.name) + kv('Phone', j.phone) + kv('Email', j.email) + kv('Location', j.suburb) + kv('Project', j.service) + kv('Program', j.program) +
+              kv('Source', j.source) + kv('Created', date(j.created)) +
+              (q && q.amount ? kv('Proposal value', money(q.amount)) : '') +
               (j.lost_reason ? kv('Lost because', j.lost_reason) : '') +
             '</dl>' + (j.summary ? '<h2 style="margin:16px 0 6px">Details</h2><p style="margin:0;white-space:pre-wrap">' + esc(j.summary) + '</p>' : '') + '</div>' +
-            '<div class="card"><h2>Move this job along</h2><div class="actions" id="stageBtns">' +
-              (next.length ? next.map(function (s) { return '<button class="btn ' + (s === 'lost' ? '' : 'btn-gold') + '" data-stage="' + s + '">' + esc(LABEL[s]) + '</button>'; }).join('') : '<span class="muted">This job is ' + esc(LABEL[j.stage].toLowerCase()) + '.</span>') +
-              '<span class="sp"></span><select id="anyStage" aria-label="Set any stage" style="width:auto"><option value="">Set any stage…</option>' + STAGES.map(function (s) { return '<option value="' + s + '">' + LABEL[s] + '</option>'; }).join('') + '</select>' +
-            '</div><div id="stageForm"></div></div>' +
-            '<div class="card"><h2>Photos (' + ((j.photos || []).length) + ')</h2>' + ((j.photos || []).length ? '<div class="photos">' + j.photos.map(function (p) {
-                var src = API + '?action=photo&key=' + encodeURIComponent(p.key); return '<a href="' + src + '" target="_blank" rel="noopener"><img src="' + src + '" alt="Job photo" loading="lazy"></a>'; }).join('') + '</div>' : '<p class="muted" style="margin:0">No photos.</p>') + '</div>' +
+            '<div class="card"><h2>Project stage</h2>' +
+              '<ol class="stg-flow">' + ['new', 'quoted', 'invoiced', 'paid'].map(function (s, i) {
+                var order = { new: 0, called: 0, quoted: 1, won: 1, completed: 1, invoiced: 2, paid: 3 }, at = order[j.stage], cls = j.stage === 'lost' ? '' : i < at ? 'done' : i === at ? 'on' : '';
+                return '<li class="' + cls + '"><i>' + (cls === 'done' ? '✓' : i + 1) + '</i><span>' + esc(LABEL[s]) + (s === 'invoiced' && ms.length ? '<small>' + ms.length + ' of up to 12 milestone payments</small>' : '') + '</span></li>'; }).join('') + '</ol>' +
+              (j.stage === 'lost' ? '<p class="muted" style="margin:6px 0 0">This project was lost' + (j.lost_reason ? ': ' + esc(j.lost_reason) : '') + '.</p>' : '') +
+              '<div class="actions" id="stageBtns" style="margin-top:12px">' +
+              (next.length ? next.map(function (s) { return '<button class="btn ' + (s === 'lost' || s === 'new' ? '' : 'btn-gold') + '" data-stage="' + s + '">' + esc(nextLabel(s)) + '</button>'; }).join('') : '<span class="muted">This project is ' + esc(stLabel.toLowerCase()) + '.</span>') +
+              '<span class="sp"></span><select id="anyStage" aria-label="Set any stage" style="width:auto"><option value="">Set any stage…</option>' + CHAMP_STAGES.map(function (s) { return '<option value="' + s + '">' + LABEL[s] + '</option>'; }).join('') + '</select>' +
+            '</div><div id="stageForm"></div>' +
+            (ms.length ? '<h3 style="margin:14px 0 6px;font-size:14px">🧾 Milestone payments invoiced</h3><div class="table-wrap"><table><thead><tr><th>Milestone</th><th>Amount</th><th>Invoiced</th></tr></thead><tbody>' +
+              ms.map(function (m) { return '<tr><td><b>Payment ' + m.n + '</b></td><td>' + (m.amount ? money(m.amount) : '<span class="muted">–</span>') + '</td><td>' + esc(date(m.at)) + '</td></tr>'; }).join('') +
+              (ms.some(function (m) { return m.amount; }) ? '<tr><td><b>Total</b></td><td><b>' + money(ms.reduce(function (a, m) { return a + (m.amount || 0); }, 0)) + '</b></td><td></td></tr>' : '') + '</tbody></table></div>' : '') +
+            '</div>' +
           '</div>' +
           '<div class="grid" style="align-content:start">' +
             '<div class="card"><h2>Reminders</h2>' + (d.reminders.length ? '<div class="list">' + d.reminders.map(remItem).join('') + '</div>' : '<p class="muted" style="margin:0 0 6px">None set.</p>') +
@@ -305,18 +316,28 @@
         '</div>';
       var core = j.core;
       var go = function (stage, extra) {
-        return api('stage', Object.assign({ ref: core, stage: stage }, extra || {})).then(function (r) { toast(LABEL[stage] + (r.after !== r.before ? ' · now ' + r.after : '')); route(); }).catch(fail);
+        return api('stage', Object.assign({ ref: core, stage: stage }, extra || {})).then(function (r) { toast(LABEL[stage] + (extra && extra.milestone ? ': milestone payment ' + extra.milestone : '') + (r.after !== r.before ? ' · now ' + r.after : '')); route(); }).catch(fail);
       };
       var askStage = function (stage) {
         var box = $('#stageForm');
-        if (stage === 'quoted' || stage === 'invoiced') {
-          box.innerHTML = '<form class="inline-form"><b>' + (stage === 'quoted' ? 'Quote' : 'Invoice') + ' amount (inc GST)</b><input name="amount" inputmode="decimal" placeholder="e.g. 4500" required><span class="muted" id="gstHint"></span><button class="btn btn-sm btn-gold">Save</button></form>';
+        if (stage === 'invoiced') {   // a milestone payment: which one (1 to 12), and the amount if you want to record it
+          var done = {}; ms.forEach(function (m) { done[m.n] = 1; });
+          var nx = 1; while (done[nx] && nx < 12) nx++;
+          box.innerHTML = '<form class="inline-form stg-inv"><b>Milestone payment</b><select name="milestone" required>' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (n) { return '<option value="' + n + '"' + (n === nx ? ' selected' : '') + '>' + n + (done[n] ? ' (already invoiced)' : '') + '</option>'; }).join('') + '</select>' +
+            '<input name="amount" inputmode="decimal" placeholder="Amount (optional)"><button class="btn btn-sm btn-gold">Mark invoiced</button></form>';
+          var fi = box.querySelector('form');
+          fi.onsubmit = function (e) { e.preventDefault(); go('invoiced', { milestone: +fi.milestone.value, amount: fi.amount.value }); };
+          fi.milestone.focus();
+        } else if (stage === 'quoted') {
+          box.innerHTML = '<form class="inline-form"><b>Proposal value</b><input name="amount" inputmode="decimal" placeholder="optional, e.g. 380000"><button class="btn btn-sm btn-gold">Proposal submitted</button></form>';
           var f = box.querySelector('form');
-          f.amount.oninput = function () { var n = Number(f.amount.value.replace(/[$,]/g, '')); $('#gstHint').textContent = n > 0 ? 'GST ' + money(gst(n)) + ' · ex GST ' + money(n - gst(n)) : ''; };
-          f.onsubmit = function (e) { e.preventDefault(); go(stage, { amount: f.amount.value }); };
+          f.onsubmit = function (e) { e.preventDefault(); go('quoted', { amount: f.amount.value }); };
           f.amount.focus();
+        } else if (stage === 'paid') {
+          box.innerHTML = '<form class="inline-form"><b>Sign off and close this project?</b><span class="muted">It moves to Closing on the Pipeline board.</span><button class="btn btn-sm btn-gold">✅ Signed off and closed</button></form>';
+          box.querySelector('form').onsubmit = function (e) { e.preventDefault(); go('paid'); };
         } else if (stage === 'lost') {
-          box.innerHTML = '<form class="inline-form"><b>Why was it lost?</b><input name="reason" placeholder="optional, e.g. too expensive"><button class="btn btn-sm btn-danger">Mark lost</button></form>';
+          box.innerHTML = '<form class="inline-form"><b>Why was it lost?</b><input name="reason" placeholder="optional, e.g. went with another supplier"><button class="btn btn-sm btn-danger">Mark lost</button></form>';
           var g = box.querySelector('form'); g.onsubmit = function (e) { e.preventDefault(); go('lost', { reason: g.reason.value }); }; g.reason.focus();
         } else { go(stage); }
       };
