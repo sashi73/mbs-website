@@ -153,12 +153,57 @@ html.i18n-busy body::after{content:"Translating…";position:fixed;top:14px;left
 header.site .ct-ctl{margin-left:12px}
 @media (max-width:900px){header.site .ct-quick{padding:2px}.ct-lang{height:34px}.ct-btn.ct-in{width:34px;height:34px}}
 
-/* ---------- scripts that Manrope does not cover ---------- */
-html[lang=ta] body{font-family:'Manrope','Noto Sans Tamil','Tamil Sangam MN','Latha',system-ui,sans-serif}
-html[lang=my] body{font-family:'Manrope','Noto Sans Myanmar','Myanmar Text','Myanmar Sangam MN','Padauk',system-ui,sans-serif;line-height:1.75}
-html[lang=bn] body{font-family:'Manrope','Noto Sans Bengali','Bangla Sangam MN','Vrinda',system-ui,sans-serif}
+/* ---------- scripts that Manrope does not cover ----------
+   Myanmar, Bengali and Tamil use Noto Sans served from this site (the browser only downloads them for those characters),
+   so every phone shows the same, correct Unicode lettering (no Zawgyi look-alikes, no missing-glyph boxes). */
+@font-face{font-family:'MBS Myanmar';font-style:normal;font-weight:400;font-display:swap;src:url(fonts/noto-sans-myanmar-myanmar-400-normal.woff2) format('woff2');unicode-range:U+1000-109F,U+200C-200D,U+25CC,U+A9E0-A9FF,U+AA60-AA7F}
+@font-face{font-family:'MBS Myanmar';font-style:normal;font-weight:500 700;font-display:swap;src:url(fonts/noto-sans-myanmar-myanmar-700-normal.woff2) format('woff2');unicode-range:U+1000-109F,U+200C-200D,U+25CC,U+A9E0-A9FF,U+AA60-AA7F}
+@font-face{font-family:'MBS Myanmar';font-style:normal;font-weight:800 900;font-display:swap;src:url(fonts/noto-sans-myanmar-myanmar-900-normal.woff2) format('woff2');unicode-range:U+1000-109F,U+200C-200D,U+25CC,U+A9E0-A9FF,U+AA60-AA7F}
+@font-face{font-family:'MBS Bengali';font-style:normal;font-weight:400;font-display:swap;src:url(fonts/noto-sans-bengali-bengali-400-normal.woff2) format('woff2');unicode-range:U+0951-0952,U+0964-0965,U+0980-09FE,U+1CD0,U+1CD2,U+1CD5-1CD6,U+1CD8,U+1CE1,U+1CEA,U+1CED,U+1CF2,U+1CF5-1CF7,U+200C-200D,U+20B9,U+25CC,U+A8F1}
+@font-face{font-family:'MBS Bengali';font-style:normal;font-weight:500 900;font-display:swap;src:url(fonts/noto-sans-bengali-bengali-700-normal.woff2) format('woff2');unicode-range:U+0951-0952,U+0964-0965,U+0980-09FE,U+1CD0,U+1CD2,U+1CD5-1CD6,U+1CD8,U+1CE1,U+1CEA,U+1CED,U+1CF2,U+1CF5-1CF7,U+200C-200D,U+20B9,U+25CC,U+A8F1}
+@font-face{font-family:'MBS Tamil';font-style:normal;font-weight:400;font-display:swap;src:url(fonts/noto-sans-tamil-tamil-400-normal.woff2) format('woff2');unicode-range:U+0964-0965,U+0B82-0BFA,U+200C-200D,U+20B9,U+25CC}
+@font-face{font-family:'MBS Tamil';font-style:normal;font-weight:500 900;font-display:swap;src:url(fonts/noto-sans-tamil-tamil-700-normal.woff2) format('woff2');unicode-range:U+0964-0965,U+0B82-0BFA,U+200C-200D,U+20B9,U+25CC}
+html[lang=my]{--fx-script:'MBS Myanmar'}html[lang=bn]{--fx-script:'MBS Bengali'}html[lang=ta]{--fx-script:'MBS Tamil'}
 html[lang=zh] body{font-family:'Manrope','PingFang SC','Noto Sans SC','Microsoft YaHei',system-ui,sans-serif}
-html:is([lang=ta],[lang=my],[lang=bn]) :is(h1,h2,h3){letter-spacing:0;word-break:break-word}
+
+/* Myanmar, Bengali and Tamil stack marks above and below the letters, so the website's tight, spaced-out, all-capitals
+   display style pulls them apart. For these languages: one even typeface everywhere (Latin letters and numbers stay in
+   Manrope), no extra letter spacing, no capitals, room between lines, headings sized to the words rather than the poster
+   style, and words kept whole at line ends. */
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) body,
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) body :is(h1,h2,h3,h4,h5,p,a,b,strong,span,li,small,em,label,button,.display,.eyebrow,.lead){
+  font-family:'Manrope',var(--fx-script),system-ui,sans-serif!important;font-stretch:100%!important;letter-spacing:0!important;text-transform:none!important;
+  line-break:strict;overflow-wrap:normal;word-break:normal;hyphens:none}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) body{line-height:1.7}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) :is(p,li,.lead){line-height:1.85}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) :is(.display,h1,h2,h3,.ticker b,.tile-in h3,.sector-in b,.trust-label b,.facts b,.stat b,.cta h2){
+  line-height:1.45!important;font-weight:800!important;text-wrap:balance;padding-block:.06em}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) .hero h1{font-size:clamp(2rem,3.6vw,3.3rem)!important}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) :is(.sec-head h2,.cta h2,.phero h1,.creds h2,.split h2){font-size:clamp(1.8rem,3.8vw,3.2rem)!important}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) :is(.ticker b,.tile-in h3){font-size:clamp(22px,2.6vw,34px)!important}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) :is(.sector-in b,.trust-label b,.facts b){font-size:clamp(18px,1.8vw,24px)!important}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) :is(.eyebrow,.facts span,.rows span,.pitem .tag,.plaque-kind,.creds-lic span,.col h3,.fgrid h4,.askfx-label,.trust-label span){font-size:13px!important;font-weight:700}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) .menu a{font-size:14px}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) :is(p,.lead){text-wrap:pretty}
+html[lang=my]:not(.fx-console) :is(h1,h2,h3,p,li,.lead,.display){word-spacing:.08em}
+/* header and buttons: words stay on one line; the menu tightens up to make room */
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) :is(.menu a,.nav-login span,.ct-lang,.btn){white-space:nowrap}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) .menu{gap:clamp(12px,1.4vw,22px)}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) .menu a{font-size:13.5px}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) header.site .nav{gap:12px}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) header.site :is(.btn,.nav-call){padding-inline:18px;font-size:13.5px}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) .btn{padding-inline:24px;line-height:1.35}
+@media (max-width:640px){html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) .btn{white-space:normal;text-wrap:balance;padding:10px 22px;max-width:100%}}
+/* the hero text uses the full width (the English poster headline sizes it otherwise) */
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) .hero .hero-in{box-sizing:border-box;flex:0 0 auto;width:100%!important}
+@media (min-width:761px){html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) .hero .hero-in{width:min(980px,68vw)!important;padding-right:40px;padding-bottom:96px!important;margin:0}}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) .hero .lead{font-size:16px}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) .hero .hero-row{width:100%}
+html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) .hero .lead{max-width:min(620px,100%)}
+@media (max-width:640px){html:is([lang=my],[lang=bn],[lang=ta]):not(.fx-console) .hero h1{font-size:clamp(1.9rem,8.4vw,2.6rem)!important}}
+/* the console keeps its own layout; it only needs the typeface and room between lines */
+html.fx-console:is([lang=my],[lang=bn],[lang=ta]) body{font-family:'Manrope',var(--fx-script),system-ui,sans-serif;line-height:1.6}
+html.fx-console:is([lang=my],[lang=bn],[lang=ta]) :is(.side-h,th,.eyebrow,label){letter-spacing:0!important;text-transform:none!important}
 
 /* ---------- Mr. Fixit: language toggle at the top of the chat ---------- */
 .fx-tlang{flex:none;max-width:128px;height:32px;padding:0 8px;border-radius:999px;border:1px solid rgba(212,175,55,.55);background:#141414;color:#F3EFE6;font:700 12px/1 'Manrope',system-ui,sans-serif;cursor:pointer}
