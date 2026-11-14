@@ -425,6 +425,25 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     await p.goto(`${BASE}/admin/#plan/${ap}/schedule`); await sleep(800); await p.click('[data-dact=charter]').catch(() => {}); await audit('Charter window');
     await p.evaluate(() => { localStorage.removeItem('champLang'); localStorage.removeItem('champChatLang'); });
     await api('planProjectDelete', { core: ap });
+    if (process.env.SHOTS) {   // 📱 screenshots of the console on a phone (390 × 844) and a tablet, for design work
+      fs.mkdirSync('/tmp/shots', { recursive: true });
+      const sc = (await (await api('planNewProject', { name: 'Hospital ERP rollout', client: 'Northside Health', program: 'Digital health' })).json()).core;
+      const T0 = [['Kick-off and charter', 2, 100], ['Requirements workshops', 5, 60], ['Solution design', 6, 20], ['Configuration and build', 15, 0], ['Data migration', 10, 0], ['User acceptance testing', 8, 0], ['Go-live', 1, 0]];
+      await api('planSave', { core: sc, plan: { name: 'Hospital ERP rollout', start: '2026-11-02', phases: [{ id: 'ph1', name: 'Work' }], tasks: T0.map((t, i) => ({ id: 't' + i, phase: 'ph1', name: t[0], dur: t[1], pred: i ? ['t' + (i - 1)] : [], qty: t[1] * 8, unit: 'h', rate: 150, pct: t[2], status: t[2] >= 100 ? 'done' : t[2] ? 'doing' : 'todo', res: i % 2 ? ['Priya Shah'] : ['Tom Walsh'] })),
+        risks: [{ id: 'r1', title: 'Key users not available for testing', p: 3, i: 4, response: 'Mitigate', status: 'Open' }] } });
+      for (const [w, h, tag] of [[390, 844, 'phone'], [820, 1180, 'tablet']]) {
+        const mp = await ctx.newPage(); await mp.setViewportSize({ width: w, height: h });
+        const shot = async (name, url, act) => { await mp.goto(`${BASE}${url}`); await sleep(1800); if (act) { await act(mp).catch(() => {}); await sleep(1200); } await mp.screenshot({ path: `/tmp/shots/${tag}-${name}.png`, fullPage: false }); };
+        await shot('home', '/index.html'); await shot('login', '/login.html');
+        await shot('programs', '/admin/#programs'); await shot('summary', '/admin/#portfolio/summary'); await shot('pipeline', '/admin/#portfolio/board'); await shot('projects', '/admin/#projects');
+        await shot('overview', `/admin/#plan/${sc}/overview`); await shot('schedule', `/admin/#plan/${sc}/schedule`); await shot('board', `/admin/#plan/${sc}/board`); await shot('budget', `/admin/#plan/${sc}/budget`);
+        await shot('risks', `/admin/#plan/${sc}/risks`); await shot('people', '/admin/#people'); await shot('users', '/admin/#users');
+        await shot('menu', '/admin/#programs', async (q) => { const b = await q.$('#menuBtn, .menu-btn, #sideToggle, .burger, [aria-label*="menu" i]'); if (b) await b.click(); });
+        await shot('askchamp', '/admin/#programs', async (q) => { await q.click('#cgBtn'); });
+        await mp.close();
+      }
+      console.log('SHOTS done'); try { srv.kill(); } catch (e) {} process.exit(0);
+    }
     if (process.env.AUDIT_ONLY) { try { srv.kill(); } catch (e) {} const bad = results.filter((x) => !x.pass); for (const x of results) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(`\n${results.length - bad.length}/${results.length} passed`); process.exit(0); }
     await p.goto(`${BASE}/admin/#programs`); await p.reload(); await p.waitForSelector('#app:not([hidden])', { timeout: 10000 }).catch(() => {}); await sleep(800);
   }
@@ -865,6 +884,28 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       await p.fill('#champNew [name=name]', 'Scope 3 baseline'); await p.click('#champNew [type=submit]'); await p.waitForURL(/#plan\//, { timeout: 10000 }).catch(() => {});
       const core = (p.url().match(/#plan\/([^/]+)/) || [])[1]; const job = core ? ((await (await api('planGet', { core })).json()).job || {}) : {};
       ok('Programs', 'the new project keeps the sponsor and project manager from the program', job.sponsor === 'Board of Directors' && job.manager === 'Sashi Kumar Sivam' && job.name === 'National Airlines', JSON.stringify(job).slice(0, 200)); }
+    // 📱 on a phone: bottom bar, no brand bar, the project's tools under ⋯ More, the schedule as cards, the Board swipes
+    { const mp = await ctx.newPage(); await mp.setViewportSize({ width: 390, height: 844 }); const plc = (await (await api('planList')).json()).plans.find((x) => x.name !== 'x') || {};
+      await mp.goto(`${BASE}/admin/#plan/${plc.core}/schedule`); await mp.waitForSelector('#mNav', { timeout: 10000 }).catch(() => {}); await sleep(1500);
+      const m1 = await mp.evaluate(() => ({ nav: !!document.querySelector('#mNav') && getComputedStyle(document.querySelector('#mNav')).display !== 'none', brand: getComputedStyle(document.querySelector('.gkh-bar')).display, cards: document.querySelectorAll('.mps-c').length, del: (() => { const d = document.getElementById('planDel'); return d ? getComputedStyle(d).display : 'x'; })(), fab: (() => { const b = document.getElementById('cgBtn'); return b ? getComputedStyle(b).display : 'none'; })() }));
+      const pmErr = await mp.click('.ph-more', { timeout: 5000 }).then(() => '').catch((e) => e.message.slice(0, 120)); await sleep(300);
+      const delShown = await mp.evaluate(() => getComputedStyle(document.getElementById('planDel')).display !== 'none');
+      const dbg = await mp.evaluate(() => { const d = document.getElementById('planDel'); return d.parentNode.className + ' | ' + d.getAttribute('style') + ' | ' + document.querySelectorAll('.plan-head').length; });
+      const tid = await mp.getAttribute('.mps-c', 'data-tid').catch(() => ''); await mp.click('.mps-c [data-pv="50"]').catch(() => {}); await sleep(2500);
+      const tk = (((await (await api('planGet', { core: plc.core })).json()).plan || {}).tasks || []).find((t) => t.id === tid) || {};
+      ok('Phone', 'a phone gets a bottom bar (no brand bar, no floating button), the schedule as cards, and the project tools behind ⋯ More', m1.nav && m1.brand === 'none' && m1.cards > 0 && m1.del === 'none' && delShown && m1.fab === 'none', JSON.stringify(m1) + ' more:' + pmErr + ' dbg:' + dbg);
+      ok('Phone', 'one tap sets a task\'s progress on the phone (saved)', tk.pct === 50, JSON.stringify(tk).slice(0, 120));
+      await mp.click('#mpsGantt').catch(() => {}); await sleep(800); const gantt = !!(await mp.$('table.gt')); await mp.click('#mpsList').catch(() => {}); await sleep(500);
+      ok('Phone', 'the Gantt chart is one tap away, and back to the list', gantt && !!(await mp.$('.mps-c')));
+      await mp.goto(`${BASE}/admin/#plan/${plc.core}/board`); await sleep(1500);
+      const kb = await mp.evaluate(() => { const k = document.querySelector('.kanban'); return k ? { flex: getComputedStyle(k).display, over: k.scrollWidth > k.clientWidth } : null; });
+      ok('Phone', 'the Board swipes column by column', kb && kb.flex === 'flex' && kb.over, JSON.stringify(kb));
+      await mp.click('#mNav [data-m=champ]').catch(() => {}); await sleep(1200);
+      ok('Phone', 'the 🎙 Champ button in the bottom bar opens Ask Champ', await mp.evaluate(() => { const pn = document.getElementById('cgPanel'); return !!pn && !pn.hidden; }));
+      await mp.click('#mNav [data-m=proj]').catch(() => {}); await sleep(800);
+      ok('Phone', 'Projects in the bottom bar opens the project list', /#projects$/.test(mp.url()), mp.url());
+      await mp.close();
+      ok('Phone', 'a computer keeps the full console (no bottom bar)', await p.evaluate(() => { const n = document.getElementById('mNav'); return !n || getComputedStyle(n).display === 'none'; })); }
     // 🎙 Ask Champ in the dashboard: ask how, and Champ points at each place to click
     { await p.goto(`${BASE}/admin/#projects`); await p.waitForSelector('#cgBtn', { timeout: 8000 }).catch(() => {});
       await p.click('#cgBtn').catch(() => {}); await p.waitForSelector('#cgMic', { timeout: 5000 }).catch(() => {});

@@ -79,12 +79,18 @@
   // ---------- 🔊 Champ's voice (Azure, the same voice as the website): reads replies and every step aloud ----------
   var V = { audio: null, n: 0, on: (function () { try { return localStorage.getItem('cgVoice') !== 'off'; } catch (e) { return true; } })() };
   function hush() { V.n++; if (V.audio) { try { V.audio.pause(); } catch (e) {} V.audio = null; } }
+  // phones (iPhone above all) only let a page play sound that starts from a tap: one player, woken by the first tap, then reused
+  var SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  function unlock() { if (V.el) return; try { V.el = new Audio(); V.el.setAttribute('playsinline', ''); V.el.src = SILENT; var pr = V.el.play(); if (pr && pr.catch) pr.catch(function () {}); } catch (e) { V.el = null; } }
+  document.addEventListener('pointerdown', function (e) { if (e.target.closest && e.target.closest('#cgPanel, #cgBtn, #mNav, .cg-tip')) unlock(); }, true);
   function speak(text) {
     hush(); if (!V.on || !text) return; var n = V.n, el = $('#cgVoice');
     fetch('/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: String(text).slice(0, 1500), lang: lang() }) })
       .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(j.error || 'Champ’s voice is not available right now.'); }); return r.blob(); })
-      .then(function (bl) { if (n !== V.n) return; V.audio = new Audio(URL.createObjectURL(bl)); if (el) el.classList.add('talk'); V.audio.onended = function () { if (el) el.classList.remove('talk'); }; return V.audio.play(); })
-      .catch(function (e) { if (el) el.classList.remove('talk'); if (n === V.n && !V.warned) { V.warned = true; say('bot', '🔇 ' + (/play|interact|NotAllowed/i.test(e.message) ? 'Tap 🔊 to let me speak.' : e.message)); } });
+      .then(function (bl) { if (n !== V.n) return; var a = V.el || new Audio(); a.src = URL.createObjectURL(bl); V.audio = a; if (el) el.classList.add('talk'); a.onended = function () { if (el) el.classList.remove('talk'); }; return a.play(); })
+      .catch(function (e) { if (el) el.classList.remove('talk'); if (window.console) console.warn('Champ voice:', e && e.message);
+        // the browser blocked sound until you tap something: say so once; anything else stays quiet (the words are on the screen)
+        if (n === V.n && !V.warned && e && (e.name === 'NotAllowedError' || /interact|NotAllowed|user gesture/i.test(e.message || ''))) { V.warned = true; tr(['Tap 🔊 so I can speak.']).then(function (x) { say('bot', '🔇 ' + x[0]); }); } });
   }
   function voiceBtn() { var b = $('#cgVoice'); if (b) { b.textContent = V.on ? '🔊' : '🔇'; b.title = V.on ? 'Champ speaks: tap to mute' : 'Muted: tap so Champ speaks'; } }
 
@@ -251,7 +257,7 @@
     if (SR && !mic.azure) {
       var got = '', failed = false; sr = new SR(); sr.lang = SRL[lang()] || 'en-AU'; sr.interimResults = true; sr.maxAlternatives = 1; sr.continuous = false;
       sr.onresult = function (e) { got = Array.prototype.map.call(e.results, function (r) { return r[0].transcript; }).join(' '); $('#cgQ').value = got; };
-      sr.onerror = function (e) { failed = true; if (e.error === 'not-allowed' || e.error === 'service-not-allowed') reply('The microphone is blocked. Allow it in the browser (the 🔒 next to the address), or type your question.'); else if (e.error === 'network' || e.error === 'language-not-supported') { mic.azure = true; } };
+      sr.onerror = function (e) { failed = true; if (e.error === 'not-allowed') reply('The microphone is blocked. Allow it in the browser (the 🔒 next to the address), or type your question.'); else if (e.error === 'network' || e.error === 'language-not-supported' || e.error === 'service-not-allowed' || e.error === 'audio-capture') { mic.azure = true; } else if (e.error === 'no-speech' || e.error === 'aborted') failed = false; };
       sr.onend = function () { sr = null; m.classList.remove('rec'); var q = got.trim(); $('#cgQ').value = ''; if (q) ask(q); else if (mic.azure && failed) mic(); else if (!failed) reply('I did not catch that. Tap the microphone and ask again, or type it.', true); };
       try { sr.start(); m.classList.add('rec'); return; } catch (e) { sr = null; mic.azure = true; }
     }

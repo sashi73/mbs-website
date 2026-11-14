@@ -207,16 +207,20 @@
     function sayable(t) {   // what the voice reads: no emoji, icons or markdown symbols
       return String(t || '').replace(/[\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D\u20E3]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDFFF]/g, '').replace(/[*_#`>|~]+/g, ' ').replace(/[ \t]{2,}/g, ' ').trim();
     }
+    // phones (iPhone above all) only play sound that starts from a tap: one player, woken by the first tap on Champ, then reused
+    var player = null;
+    document.addEventListener('pointerdown', function (e) { if (player || !(e.target.closest && e.target.closest('.cc-box, .cc-fab, .cc-launch, [class*="cc-"]'))) return;
+      try { player = new Audio(); player.setAttribute('playsinline', ''); player.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA='; var pr = player.play(); if (pr && pr.catch) pr.catch(function () {}); } catch (x) { player = null; } }, true);
     function speak(text, L, b, idx, done) {
       stopVoice(); text = sayable(text); if (!voiceOk || NOVOICE[L] || !text) { if (done) done(); return; }
       speakingIdx = idx == null ? -1 : idx;
       if (b) { speakingBtn = b; b.classList.add('on'); b.textContent = T(UI.stop); }
       fetch('/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text, lang: L }) })
         .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { if (r.status === 503) { voiceOk = false; log.querySelectorAll('.cc-say').forEach(function (x) { x.remove(); }); box.querySelector('.cc-voice').hidden = true; } throw new Error(j.error || 'Voice unavailable'); }); return r.blob(); })
-        .then(function (bl) { if (b && speakingBtn !== b) return; audio = new Audio(URL.createObjectURL(bl)); audio.onended = function () { stopVoice(); if (done) done(); }; return audio.play(); })
+        .then(function (bl) { if (b && speakingBtn !== b) return; audio = player || new Audio(); audio.src = URL.createObjectURL(bl); audio.onended = function () { stopVoice(); if (done) done(); }; return audio.play(); })
         .catch(function (e) {
           stopVoice(); if (done) done();
-          if (e && e.name === 'NotAllowedError') return;   // the browser wants a click first: the 🔊 Listen button is there for that
+          if (e && (e.name === 'NotAllowedError' || e.name === 'NotSupportedError' || e.name === 'AbortError')) return;   // the browser wants a tap first (the 🔊 Listen button is there for that), or the sound was cut off: no error box
           bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err');
         });
     }
@@ -489,8 +493,26 @@
     function stopRec() { if (rec && rec.state !== 'inactive') rec.stop(); }
     function cleanRec() { clearTimeout(recTimer); if (vad) { try { vad.ctx.close(); } catch (e) {} vad = null; } if (recStream) recStream.getTracks().forEach(function (t) { t.stop(); }); recStream = null; }
     var recQuiet = false;
+    // the browser's own speech recognition first (Chrome, Edge, Safari): quick and steady in the language Champ is speaking.
+    // Azure (Champ's ears) when the browser has none, when it fails, or while Champ still has to work out your language.
+    var SRL = { en: 'en-AU', ms: 'ms-MY', id: 'id-ID', ta: 'ta-IN', zh: 'zh-CN', hi: 'hi-IN', ar: 'ar-AE', fa: 'fa-IR', vi: 'vi-VN', th: 'th-TH', tl: 'fil-PH', ja: 'ja-JP', ko: 'ko-KR', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', pt: 'pt-BR', sw: 'sw-KE', km: 'km-KH' };
+    var srNo = false, srOn = null;
+    function srListen(quiet) {
+      var SRc = window.SpeechRecognition || window.webkitSpeechRecognition, r = new SRc(), got = '', err = '';
+      r.lang = SRL[curL()] || 'en-AU'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1; srOn = r; wake.pause(); stopVoice();
+      r.onresult = function (e) { got = Array.prototype.map.call(e.results, function (x) { return x[0].transcript; }).join(' '); ta.value = got; };
+      r.onerror = function (e) { err = e.error || 'error'; };
+      r.onend = function () { srOn = null; micState(''); ta.value = ''; wake.resume(); var q = got.trim();
+        if (q) { emptyRuns = 0; handle(q, true, curL()); return; }
+        if (err === 'network' || err === 'language-not-supported' || err === 'service-not-allowed' || err === 'audio-capture') { srNo = true; return startRec(quiet); }   // the browser cannot: Azure listens
+        if (err === 'not-allowed') { bubble('bot', '<p>' + esc(T(UI.micBlocked)) + '</p>', 'cc-err'); return; }
+        if (!quiet) bubble('bot', '<p>' + esc(T(UI.notHeard)) + '</p>', 'cc-err'); else if (++emptyRuns < 2) listenNext(); else emptyRuns = 0; };
+      try { r.start(); micState('rec'); return true; } catch (e) { srOn = null; srNo = true; return false; }
+    }
     function startRec(quiet) {
       if (rec && rec.state === 'recording') return;
+      if (srOn) return;
+      if (!srNo && (window.SpeechRecognition || window.webkitSpeechRecognition) && !(obActive() && vis.step === 'lang') && !sttAny() && srListen(quiet)) return;
       recQuiet = !!quiet; wake.pause();
       if (!navigator.mediaDevices || !window.MediaRecorder) { bubble('bot', '<p>' + esc(T(UI.micBlocked)) + '</p>', 'cc-err'); return; }
       stopVoice();
@@ -598,6 +620,7 @@
       else if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name: 'microphone' }).then(function (p) { if (p.state === 'granted') { ls('champHandsFree', '1'); wake.start(); } }).catch(function () {});
     }
     mic.onclick = function () {
+      if (srOn) { try { srOn.stop(); } catch (e) {} return; }
       if (rec && rec.state === 'recording') return stopRec();
       if (mic.classList.contains('busy')) return;
       if (where === 'site' && !handsFree()) { ls('champHandsFree', '1'); wake.start(); var o = log.querySelector('[data-ob="mic"]'); if (o) o.remove(); }   // you talk to Champ: it keeps listening after each answer

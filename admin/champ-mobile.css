@@ -1,0 +1,95 @@
+/* GKH Project Champ on a phone (700px and narrower): simpler, bigger targets, one thing at a time.
+   Tablets (701–1100px) keep the full console with roomier, two-column layouts. */
+
+/* ---------- the bottom bar ---------- */
+#mNav{display:none}
+body.is-phone #mNav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:34;background:rgba(20,18,12,.97);backdrop-filter:blur(8px);border-top:1px solid #3A3528;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+#mNav button{background:none;border:0;color:#CFC6AE;display:flex;flex-direction:column;align-items:center;gap:2px;font:700 10.5px/1.1 'Manrope',system-ui,sans-serif;padding:4px 0;cursor:pointer;min-height:48px}
+#mNav button span{font-size:20px;line-height:1}#mNav button.on{color:#F5D77A}#mNav button.on span{transform:translateY(-1px)}
+#mNav .m-champ span{display:grid;place-items:center;width:46px;height:46px;margin-top:-20px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#F5D77A,#C9A227);box-shadow:0 6px 16px rgba(201,162,39,.5);border:3px solid #14120C}
+#mNav .m-champ img{width:34px;height:34px;border-radius:50%}
+
+@media (max-width:700px){
+  /* the brand bar and the extra header buttons fold away; the header stays small and sticky */
+  .gkh-bar{display:none!important}
+  header.top{position:sticky;top:0;z-index:20;min-height:50px;padding:6px 10px!important;gap:8px}
+  header.top h1{font-size:17px!important;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header.top .top-new{display:none!important}
+  header.top .menu-btn{display:none}
+  .view{padding:12px 10px calc(92px + env(safe-area-inset-bottom))!important}
+  body.is-phone #cgBtn{display:none!important}
+  body.is-phone #cgPanel{left:8px;right:8px;width:auto;bottom:calc(78px + env(safe-area-inset-bottom));max-height:calc(100vh - 150px)}
+  .side{width:280px!important}
+
+  /* cards and grids: one column, roomy, thumb-sized buttons */
+  .grid.two,.grid.three,.cmapwrap,.pi-wrap{grid-template-columns:minmax(0,1fr)!important}
+  .kpis,.ckpis,.pkpis{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+  .kpi .v,.pkpis .v{font-size:20px!important}
+  .card{padding:12px!important;border-radius:14px}
+  .btn{min-height:38px}.btn-sm{min-height:34px}
+  input,select,textarea{font-size:16px!important}   /* no zoom-in on iPhone */
+  .row{flex-wrap:wrap}
+  .tabs{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;gap:6px!important;padding-bottom:4px}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs .tab{flex:none;white-space:nowrap}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+  /* a project: title on top, Costing + Saved + ⋯ More; the rest only when you ask for it */
+  .plan-head{gap:6px!important}
+  .plan-head h2{flex:1 1 100%;font-size:19px!important;margin:0!important}
+  .plan-head>.muted{flex:1 1 100%;font-size:12.5px}
+  .plan-head>a.btn,.plan-head>.mod-wrap,.plan-head>#planBase,.plan-head>#planWide,.plan-head>#planXls,.plan-head>#planCsv,.plan-head>#planDel,.plan-head>#planTrData,.plan-head>.btn:not(#planQuote):not(.ph-more){display:none}
+  .plan-head.more>a.btn,.plan-head.more>.mod-wrap,.plan-head.more>.btn,.plan-head.more>#planBase,.plan-head.more>#planWide,.plan-head.more>#planXls,.plan-head.more>#planCsv,.plan-head.more>#planDel,.plan-head.more>#planTrData{display:inline-flex!important}
+  .plan-head .sp{display:none}
+  #planTabs{position:sticky;top:50px;z-index:15;background:var(--bg,#F6F3EA);margin:0 -10px 10px!important;padding:6px 10px!important;box-shadow:0 6px 10px -10px rgba(0,0,0,.4)}
+  /* the documents bar: three buttons in one row that scrolls; the numbers: a strip you swipe */
+  .vchain.docs3{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto;gap:6px;border:0!important;background:none!important;padding:0!important;margin-bottom:8px;scrollbar-width:none}
+  .vchain.docs3::-webkit-scrollbar{display:none}
+  .vchain.docs3 .vstep{flex:none!important;padding:0!important;border:0!important;background:none!important}
+  .vchain.docs3 .vstep>b,.vchain.docs3 .vstep>small{display:none}
+  .vchain.docs3 .vstep .btn{white-space:nowrap}
+  .pkpis{display:flex!important;overflow-x:auto;scroll-snap-type:x mandatory;gap:8px!important;scrollbar-width:none;margin-bottom:8px}
+  .pkpis::-webkit-scrollbar{display:none}
+  .pkpis>.card{flex:0 0 62%;scroll-snap-align:start;padding:8px 10px!important}
+  .pkpis .s,.pkpis table,.pkpis .kpi-sub{display:none}
+  .pkpis .v{font-size:17px!important}
+  .evkey{display:none}
+  .tr-ban small{display:none}
+
+  /* the Board: swipe from column to column */
+  .kanban{display:flex!important;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;gap:10px!important;padding-bottom:6px}
+  .kcol{flex:0 0 86%;scroll-snap-align:start;max-height:none!important}
+  .kbar{flex-wrap:wrap}.kbar input[type=search]{flex:1 1 100%}
+  .pcol{flex-basis:86vw!important}
+
+  /* windows fill the screen, their buttons stay in reach */
+  .modal{padding:0!important;align-items:flex-end!important}
+  .modal-card{width:100%!important;max-width:none!important;max-height:92vh!important;border-radius:18px 18px 0 0!important;padding:16px 14px calc(16px + env(safe-area-inset-bottom))!important}
+  .modal-card .actions{position:sticky;bottom:-16px;background:inherit;padding-top:10px;margin-bottom:-4px}
+  .form{grid-template-columns:1fr!important}
+  .us-rpick,.pp-rep-r{grid-template-columns:1fr!important}
+  .cg-tip{left:10px!important;right:10px;width:auto!important}
+}
+
+/* ---------- 📋 the schedule as a list of cards (phone) ---------- */
+.mps-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.mps{display:flex;flex-direction:column;gap:8px}
+.mps-ph{margin:10px 2px 0;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#8A6D1E}
+.mps-c{background:#fff;border:1px solid #E7E1D2;border-left:5px solid #16A34A;border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.mps-c.mps-a{border-left-color:#D97706}.mps-c.mps-r{border-left-color:#DC2626}.mps-c.done{opacity:.7}
+.mps-t{display:flex;gap:8px;align-items:baseline}.mps-t b{flex:1;font-size:15px;line-height:1.3}.mps-n{color:#8A6D1E;font-weight:800;font-size:12px}
+.mps-m{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px;color:#5B5547}.mps-late{color:#B91C1C;font-weight:700}
+.mps-p{display:flex;align-items:center;gap:8px}.mps-bar2{flex:1;height:8px;border-radius:99px;background:#F1EEE6;overflow:hidden}.mps-bar2 i{display:block;height:100%;background:linear-gradient(90deg,#C9A227,#16A34A)}
+.mps-q{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.mps-q button{border:1px solid #E7E1D2;background:#FFFCF2;border-radius:10px;padding:8px 0;font:700 12px/1 'Manrope',system-ui,sans-serif;cursor:pointer;color:#3F3A2E;min-height:36px}
+.mps-q button.on{background:#1F1D18;color:#F5D77A;border-color:#1F1D18}
+
+/* ---------- tablets: the full console, laid out with room to breathe ---------- */
+@media (min-width:701px) and (max-width:1100px){
+  .gkh-bar small{display:none}
+  .kpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  .kanban{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .tabs{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:thin}
+  .tabs .tab{flex:none}
+  .plan-head h2{flex:1 1 100%}
+}

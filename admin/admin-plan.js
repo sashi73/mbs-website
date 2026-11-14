@@ -1344,7 +1344,7 @@
     if (MODS[S.tab] === false) S.tab = 'overview';
     var sub = !!(M.me && M.me.scope), hide = sub ? ' style="display:none"' : '';   // v91: a sub-contractor signed in to this project
     V().innerHTML = (sub ? '<div class="plan-subbie">👷 Signed in as a sub-contractor (' + esc(M.me.name || M.me.user) + ') for project <b>' + esc(S.job.ref) + '</b>. ' + ((M.me.mods || {}).projects === 'edit' ? 'You can update this project.' : 'View only.') + '</div>' : '') +
-      '<div class="row" style="margin-bottom:12px">' + (sub ? '' : '<a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>') +
+      '<div class="row plan-head" style="margin-bottom:12px">' + (sub ? '' : '<a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>') +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
       (sub ? '' : '<span class="mod-wrap"><button type="button" class="btn btn-sm mod-btn" id="modBtn" aria-haspopup="true" aria-expanded="false" title="Switch optional modules on or off for this project">⚙ Modules <small>' + ['bom', 'swms'].filter(function (m) { return (S.mods || {})[m] !== false; }).map(function (m) { return m.toUpperCase(); }).join(' · ') + '</small></button></span>') + '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote"' + hide + ' title="Work out the costing for this project: cost by phase and category (with the signed-off BOM), contingency, reserve and cash flow">💰 Costing</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel"' + hide + ' title="Delete this project and everything in it">🗑 Delete project</button></div>' +
       '<div id="planChain"></div>' +
@@ -1364,6 +1364,9 @@
       at.parentNode.insertBefore(b, at); })();   // GKH Project Champ: budgeting instead of quotes
     trBanner();
     drawDocs();
+    // 📱 phone: the project's tools fold into one "⋯ More" button; the tabs scroll sideways
+    if (phone()) { var ph = V().querySelector('.plan-head'); if (ph && !ph.querySelector('.ph-more')) { var mb = document.createElement('button'); mb.type = 'button'; mb.className = 'btn btn-sm ph-more'; mb.textContent = '⋯ More'; mb.onclick = function () { S.phMore = !S.phMore; ph.classList.toggle('more', S.phMore); mb.textContent = S.phMore ? '✕ Less' : '⋯ More'; }; if (S.phMore) { ph.classList.add('more'); mb.textContent = '✕ Less'; } ph.appendChild(mb); }
+      var on = V().querySelector('#planTabs .tab.on'); if (on && on.scrollIntoView) try { on.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch (e) {} }
     $('#planXls').onclick = function () { exportExcel(); };
     $('#planCsv').onclick = function () { ganttCsvDialog(); };
     $('#planDel').onclick = function () {   // GKH Project Champ: delete the whole project
@@ -1401,7 +1404,7 @@
         p.baseline = { at: Date.now(), finish: R.finish, BAC: R.BAC, tasks: tasks }; saveNow('baseline set'); toast('Baseline set'); render();
       });
     };
-    ({ overview: overview, schedule: scheduleTab, budget: budgetTab, critical: criticalTab, board: board, bom: bomTab, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, change: changeTab, intel: intelTab }[S.tab] || scheduleTab)(R);
+    ({ overview: overview, schedule: function (R2) { return phone() && !S.phoneGantt ? phoneSchedule(R2) : scheduleTab(R2); }, budget: budgetTab, critical: criticalTab, board: board, bom: bomTab, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, change: changeTab, intel: intelTab }[S.tab] || scheduleTab)(R);
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
@@ -1633,6 +1636,29 @@
     d.querySelector('button').onclick = function () { d.remove(); clearTimeout(S.undoT); fn(); toast('Undone'); };
     S.undoT = setTimeout(function () { d.remove(); }, 9000);
   }
+  // 📱 on a phone the schedule is a list of cards: name, dates, who, cost, progress you set with one tap; the Gantt is a tap away
+  function phone() { return window.matchMedia && window.matchMedia('(max-width: 700px)').matches; }
+  function phoneSchedule(R) {
+    var p = S.plan, t0 = today(), rows = ordered(), ro = !!(M.me && M.me.scope && (M.me.mods || {}).projects !== 'edit');
+    var ph = {}; (p.phases || []).forEach(function (x) { ph[x.id] = x.name; }); var lastPh = null;
+    $('#planBody').innerHTML = '<div class="mps-bar"><b>' + pl(rows.length, 'task') + '</b><span class="muted">' + R.pct + '% done · finish ' + esc(pretty(R.finish)) + '</span><span class="sp"></span><button class="btn btn-sm" type="button" id="mpsGantt">📊 Gantt</button>' + (ro ? '' : '<button class="btn btn-sm btn-gold" type="button" id="mpsAdd">＋ Task</button>') + '</div>' +
+      '<div class="mps">' + rows.map(function (r) {
+        var t = r.t, rg = kRag(t.es, t.ef, t.pct >= 100, t0), subs = t.subs || [], head = t.phase && t.phase !== lastPh && ph[t.phase] ? '<p class="mps-ph">' + esc(ph[t.phase]) + '</p>' : ''; lastPh = t.phase;
+        return head + '<div class="mps-c mps-' + rg.c + (t.pct >= 100 ? ' done' : '') + '" data-tid="' + esc(t.id) + '"><div class="mps-t"><span class="mps-n">#' + r.n + '</span><b>' + esc(t.name) + '</b>' + stkBtn(t, 'row') + '</div>' +
+          '<div class="mps-m"><span>📅 ' + esc(pretty(t.es)) + (t.dur > 1 ? ' – ' + esc(pretty(t.ef)) : '') + (t.dur ? ' · ' + pl(t.dur, 'day') : ' · ◆ milestone') + '</span>' + ((t.res || []).length ? '<span>👤 ' + esc(resShort(t)) + '</span>' : '') + (cost(t) ? '<span>💲 ' + money(cost(t)) + '</span>' : '') + (rg.txt && t.pct < 100 ? '<span class="mps-late">' + esc(rg.txt) + '</span>' : '') + (subs.length ? '<span>' + subs.filter(function (x) { return x.status === 'done'; }).length + '/' + subs.length + ' stories</span>' : '') + '</div>' +
+          '<div class="mps-p"><div class="mps-bar2"><i style="width:' + (t.pct || 0) + '%"></i></div><b>' + (t.pct || 0) + '%</b></div>' +
+          (ro ? '' : '<div class="mps-q">' + [0, 25, 50, 75, 100].map(function (v) { return '<button type="button" data-pv="' + v + '"' + ((t.pct || 0) === v ? ' class="on"' : '') + '>' + (v === 100 ? '✓ Done' : v + '%') + '</button>'; }).join('') + '</div>') + '</div>';
+      }).join('') + '</div>';
+    var B = $('#planBody');
+    $('#mpsGantt').onclick = function () { S.phoneGantt = true; render(); };
+    var ad = $('#mpsAdd'); if (ad) ad.onclick = function () { var last = p.tasks[p.tasks.length - 1], t = { id: 't' + Date.now().toString(36), phase: (last && last.phase) || 'ph1', name: 'New task', dur: 1, res: [], lead: '', resource: '', qty: 0, unit: '', rate: 0, actual: 0, pct: 0, status: 'todo', pred: last ? [last.id] : [], snet: '', notes: '' };
+      M.modal('<h2>＋ Task</h2><form class="form" id="mpsF"><label class="full">Task<input name="n" required maxlength="160" placeholder="e.g. Book the venue"></label><label>Days<input name="d" type="number" min="1" max="999" value="1"></label><label>Cost ($)<input name="c" type="number" min="0" step="any" value="0"></label><div class="full actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" type="submit">Add</button></div></form>');
+      var F = $('#mpsF'); setTimeout(function () { F.n.focus(); }, 30);
+      F.onsubmit = function (e) { e.preventDefault(); t.name = F.n.value.trim().slice(0, 160) || 'New task'; t.dur = Math.max(1, Math.min(999, parseInt(F.d.value, 10) || 1)); var c = Number(F.c.value) || 0; if (c) { t.qty = 1; t.unit = 'lot'; t.rate = c; }
+        p.tasks.push(t); M.closeModal(); dirty('Task added: ' + t.name); render(); }; };
+    B.querySelectorAll('[data-pv]').forEach(function (b) { b.onclick = function () { var t = p.tasks.filter(function (x) { return x.id === b.closest('[data-tid]').getAttribute('data-tid'); })[0]; if (!t) return; var v = +b.getAttribute('data-pv');
+      if ((t.subs || []).length) { setStatus(t, statusFromPct(v)); } t.pct = v; t.status = statusFromPct(v); dirty(t.name + ' ' + v + '%'); render(); }; });
+  }
   function scheduleTab(R) {
     var p = S.plan, rows = ordered(), num = {}, idOf = {};
     rows.forEach(function (r) { num[r.t.id] = r.n; idOf[r.n] = r.t.id; });
@@ -1660,7 +1686,7 @@
       if (t.dur === 0) return b + '<span class="gmile' + (t.pct >= 100 ? ' done' : '') + '" style="left:' + (left + dayW / 2 - 7) + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' · ' + stName[t.status]) + '"></span>' + lab;
       return b + '<span class="gbar st-' + t.status + ' pb-' + pband(t.pct) + (late ? ' late' : '') + '" style="left:' + left + 'px;width:' + w + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' – ' + pretty(t.ef) + ' · ' + stName[t.status] + ' ' + t.pct + '%') + '"><span class="gfill" style="width:' + t.pct + '%"></span></span>' + lab;
     };
-    var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px"><button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button><button class="btn btn-sm est-ai" id="estAi" type="button" title="AI fills in indicative costs from Australian and international benchmarks: a reference only, to review and change">✨ Indicative costs</button>' +
+    var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px">' + (phone() ? '<button class="btn btn-sm" id="mpsList" type="button">📋 List</button>' : '') + '<button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button><button class="btn btn-sm est-ai" id="estAi" type="button" title="AI fills in indicative costs from Australian and international benchmarks: a reference only, to review and change">✨ Indicative costs</button>' +
       '<div class="qgate' + (p.emergency ? ' emerg' : p.gate && p.gate.accepted ? ' ok' : '') + '"><div class="qrow"><input type="checkbox" id="pEmerg" hidden>' +
         '<label class="qchk" title="' + (p.emergency ? 'Emergency jobs already work Saturday and Sunday' : 'Tick if the crew can work Saturday and Sunday on this job: the schedule then counts every day and finishes sooner') + '"><input type="checkbox" id="pWeek"' + (p.emergency || p.weekends ? ' checked' : '') + (p.emergency ? ' disabled' : '') + '> 📅 Weekends (Sat, Sun) allowed</label>' +
         '<select id="pCool" hidden><option value="0" selected>0</option></select></div><div>' + gateText(p) + '</div></div>' +
@@ -1909,6 +1935,7 @@
       setTimeout(function () { var i = $('#planBody tr[data-tid="' + t.id + '"] [data-k=name]'); if (i) { i.focus(); i.select(); } }, 30);
     };
     $('#addTask').onclick = function () { add(false); };
+    var ml = $('#mpsList'); if (ml) ml.onclick = function () { S.phoneGantt = false; render(); };
     B.querySelectorAll('[data-addend]').forEach(function (b) { b.onclick = function () { add(false); }; });
     B.querySelectorAll('[data-addendm]').forEach(function (b) { b.onclick = function () { add(true); }; });
     B.querySelectorAll('[data-ins]').forEach(function (b) { b.onclick = function () { add(false, task(b)); }; });
