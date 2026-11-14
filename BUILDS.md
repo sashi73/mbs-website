@@ -68,4 +68,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 57 | 1.0.57| 2026-11-14 19:50| GKH-Project-Champ| `38c8792` | Champ: picking a program on New project fills in its details |
 | 58 | 1.0.58| 2026-11-14 21:07| GKH-Project-Champ| `3538926` | Champ: Kubernetes, Docker, Docker+Kubernetes templates; Kanban full view as one picture |
 | 59 | 1.0.59| 2026-11-14 21:37| GKH-Project-Champ| `334d792` | Champ: Ask Champ in the dashboard: tap the mic, ask how, and Champ shows you where to click |
-| 60 | 1.0.60 | 2026-11-14 22:51 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 60 | 1.0.60| 2026-11-14 22:51| GKH-Project-Champ| `53aec51` | Champ: Ask Champ speaks, says hello, picks a language, has a menu and answers project questions |
+| 61 | 1.0.61 | 2026-11-15 00:05 | GKH-Project-Champ | _this commit_ | _see git log_ |

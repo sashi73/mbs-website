@@ -366,3 +366,6 @@ body.is-subbie [data-nav=programs],body.is-subbie [data-nav=deps],body.is-subbie
 .cgp-v{border:1px solid #E7E1D2;background:#FFFCF2;border-radius:99px;width:32px;height:30px;cursor:pointer;font-size:15px}.cgp-v.talk{border-color:#C9A227;box-shadow:0 0 0 3px rgba(201,162,39,.3);animation:cgTalk .8s ease-in-out infinite alternate}
 @keyframes cgTalk{to{box-shadow:0 0 0 6px rgba(201,162,39,.12)}}
 .cgp-x{margin-left:0}
+/* 🌐 translate the project's own data (task names ...) into the console language */
+.tr-ban{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px;padding:10px 14px;border-radius:14px;background:linear-gradient(90deg,#FFF8E1,#FFFDF7);border:1px solid #F0D98A}
+.tr-ban>span{font-size:22px}.tr-ban>div{flex:1;min-width:240px;display:flex;flex-direction:column;gap:2px}.tr-ban small{color:#6B5313;font-size:12.5px}

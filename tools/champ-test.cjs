@@ -1122,6 +1122,21 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Language', 'console menu translated', /\[Bahas/.test(await p.textContent('.side-nav')), (await p.textContent('.side-nav')).slice(0, 160) + ' / lang=' + (await p.evaluate(() => localStorage.getItem('champLang'))));
   const dataCell = await p.$$eval('#view table', (ts) => { const t = ts[ts.length - 1]; const c = t && t.querySelector('tbody tr td:nth-child(3)'); return c ? c.textContent : ''; }).catch(() => '');
   ok('Language', 'project names are shown in the chosen language too (no half-English screens), codes kept', /^\[Bahas\] \S/.test(dataCell) && /PP-\d/.test(dataCell), dataCell);
+  { const pls = []; const tc = (await (await api('planNewProject', { name: 'Office move', client: 'Acme', program: 'Digital health' })).json()).core;
+    await api('planSave', { core: tc, plan: { name: 'Office move', start: '2026-12-01', phases: [{ id: 'ph1', name: 'Work' }], tasks: [['Pack the boxes', 2], ['Book the truck', 1], ['Move the desks', 2], ['Set up the network', 3]].map((t, i) => ({ id: 't' + i, phase: 'ph1', name: t[0], dur: t[1], pred: i ? ['t' + (i - 1)] : [], qty: 0, rate: 0, pct: 0 })) } });
+    await p.goto(`${BASE}/admin/#plan/${tc}/schedule`); await p.waitForSelector('#trBan', { timeout: 10000 }).catch(() => {});
+    const ban = await p.textContent('#trBan').catch(() => '');
+    await p.click('#trGo').catch(() => {}); await p.waitForSelector('#okBtn', { timeout: 5000 }).catch(() => {}); await p.click('#okBtn').catch(() => {}); await sleep(4000);
+    const tp = (await (await api('planGet', { core: tc })).json()).plan || { tasks: [] };
+    const gName = await p.$$eval('table.gt [data-k=name]', (L) => L.slice(0, 3).map((x) => x.value)).catch(() => []);
+    ok('Language', 'the console in another language offers to translate the whole project; one click and the Gantt task names are in that language (saved, banner gone)', !!ban && tp.dataLang === 'ms' && tp.tasks.every((t) => /^\[Bahas\]/.test(t.name) || !/\p{L}/u.test(t.name)) && gName.length && gName.every((n) => /^\[Bahas\]/.test(n)) && !(await p.$('#trBan')), JSON.stringify({ tc, n: pls.length, url: p.url(), ban: ban.slice(0, 60), lang: tp.dataLang, g: gName })); }
+  { await p.evaluate(() => { try { sessionStorage.removeItem('cgHello'); } catch (e) {} const pn = document.getElementById('cgPanel'); if (pn) pn.remove(); }); await p.goto(`${BASE}/admin/#projects`); await sleep(800);
+    await p.click('#cgBtn').catch(() => {}); await sleep(2500); await p.click('#cgMenuBtn').catch(() => {}); await sleep(800);
+    const g = await p.evaluate(() => ({ hello: (document.getElementById('cgLog') || {}).textContent || '', menu: Array.from(document.querySelectorAll('#cgMenu [data-cgt]')).map((b) => b.textContent), hint: (document.getElementById('cgHint') || {}).textContent || '' }));
+    await p.click('#cgMenu [data-cgt="calendar"]').catch(() => {}); await sleep(2500);
+    const tip = await p.textContent('.cg-tip').catch(() => '');
+    ok('Guide', 'Ask Champ in another language: the hello, the menu, the hints and every guide step are in that language (nothing blank)', /\[Bahas\]/.test(g.hello) && g.menu.length >= 15 && g.menu.every((t) => /\[Bahas\] \S/.test(t)) && /\[Bahas\]/.test(g.hint) && /\[Bahas\] \S/.test(tip), JSON.stringify({ h: g.hello.slice(0, 60), m: g.menu.slice(0, 3), tip: tip.slice(0, 80) }));
+    await p.click('#cgEnd').catch(() => {}); await p.evaluate(() => { const pn = document.getElementById('cgPanel'); if (pn) pn.hidden = true; }); }
   await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=en]'); await sleep(300);
   await p.evaluate(() => { localStorage.removeItem('champChatLang'); localStorage.removeItem('champLang'); });
 

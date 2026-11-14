@@ -7,7 +7,11 @@
   var M = window.MBS; if (!M) return;
   var api = M.api, esc = M.esc, $ = function (s) { return document.querySelector(s); };
   var lang = function () { return (window.ChampI18n && window.ChampI18n.get()) || 'en'; };
-  var tr = function (list) { return window.ChampI18n && window.ChampI18n.strings && lang() !== 'en' ? window.ChampI18n.strings(list, lang()).catch(function () { return list; }) : Promise.resolve(list); };
+  // ChampI18n.strings answers with { english: translated }: turn it back into the list, in order (English when a piece has none)
+  var tr = function (list) {
+    if (!(window.ChampI18n && window.ChampI18n.strings) || lang() === 'en') return Promise.resolve(list);
+    return window.ChampI18n.strings(list, lang()).then(function (map) { map = map || {}; return list.map(function (t) { var k = String(t || '').trim(); return map[k] || t; }); }).catch(function () { return list; });
+  };
   var planHash = function () { var m = location.hash.match(/^#plan\/([^/]+)/); return m ? m[1] : ''; };
   var tab = function (t) { return 'a.tab[href$="/' + t + '"]'; };
 
@@ -135,7 +139,7 @@
       G.el = el; cur.hidden = false; sp.hidden = !el;
       if (el) { try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); } }
       setTimeout(function () { place(); cur.classList.remove('tap'); setTimeout(function () { cur.classList.add('tap'); }, 750); }, 320);
-      if (!el) { $('#cgSay').textContent += ' ' + '(It is not on this screen right now: open the page first, or press Next.)'; return; }
+      if (!el) { tr(['(It is not on this screen right now: open the page first, or press Next.)']).then(function (x) { $('#cgSay').textContent += ' ' + x[0]; }); return; }
       if (s.plan) { if (G.auto) autoGo(); return; }   // opening a project moves the guide on by itself
       // clicking the real thing moves the guide on
       var h = function () { setTimeout(function () { if (G.tour === tour && G.i === i) step(i + 1); }, 450); };

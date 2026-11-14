@@ -1362,6 +1362,7 @@
       b.onclick = translateData;
       if (S.trUndo && S.trUndo.core === S.core) { b.textContent = '↶ Undo translation'; b.title = 'Put the project data back as it was before the translation'; b.onclick = function () { if (!S.trUndo || S.trUndo.core !== S.core) return; S.plan = S.trUndo.plan; S.trUndo = null; dirty('translation undone'); render(); toast('Translation undone'); }; }
       at.parentNode.insertBefore(b, at); })();   // GKH Project Champ: budgeting instead of quotes
+    trBanner();
     drawDocs();
     $('#planXls').onclick = function () { exportExcel(); };
     $('#planCsv').onclick = function () { ganttCsvDialog(); };
@@ -3211,6 +3212,23 @@
     box.querySelectorAll('[data-thc]').forEach(function (i) { i.oninput = cs; i.onclick = function () { if (typeof docTheme() !== 'object') cs(); }; });
   }
   // 🌐 the project's data (typed or drafted in another language) into the console language, in one go: task names, phases, risks, issues, stakeholder roles, charter, BOM lines
+  // 🌐 the console is in another language but this project's tasks are not: offer to translate the whole project
+  // (Gantt, Kanban, risks, charter, BOM) in one click, with undo. "Keep as it is" hides it for this project and language.
+  window.addEventListener('champ:lang', function () { setTimeout(function () { if (S.plan && /^#plan\//.test(location.hash)) trBanner(); }, 300); });
+  function trBanner() {
+    var l = (window.ChampI18n && window.ChampI18n.get()) || 'en', p = S.plan, old = $('#trBan'); if (old) old.remove();
+    if (!p || l === 'en' && !p.dataLang || p.dataLang === l || (M.me && M.me.scope && (M.me.mods || {}).projects !== 'edit')) return;
+    if (l === 'en' && p.dataLang) return;   // back in English: the Undo button is there
+    var key = 'trKeep:' + S.core + ':' + l; try { if (localStorage.getItem(key)) return; } catch (e) {}
+    var n = 0; dataStrings(p, function () { n++; }); if (n < 2) return;
+    var name = window.ChampI18n.name ? window.ChampI18n.name(l) : l, host = $('#planBody'); if (!host) return;
+    var d = document.createElement('div'); d.id = 'trBan'; d.className = 'tr-ban';
+    d.innerHTML = '<span>🌐</span><div><b>Show this project in ' + esc(name) + '?</b><small>The screens are in ' + esc(name) + ', but the task names, phases, risks, the charter and the BOM are still in their own words. Translate them all once: the Gantt chart, the Board and the documents then read in ' + esc(name) + '. You can undo it.</small></div>' +
+      '<button type="button" class="btn btn-sm btn-gold" id="trGo">🌐 Translate the project</button><button type="button" class="btn btn-sm" id="trKeep">Keep as it is</button>';
+    host.parentNode.insertBefore(d, host);
+    $('#trGo').onclick = translateData;
+    $('#trKeep').onclick = function () { try { localStorage.setItem(key, '1'); } catch (e) {} d.remove(); };
+  }
   function dataStrings(p, fn) {   // fn(text, set) for each piece of project data people read
     var f = function (o, k) { if (o && typeof o[k] === 'string' && /\p{L}/u.test(o[k]) && !/@/.test(o[k])) fn(o[k], function (v) { o[k] = v; }); };
     f(p, 'name'); (p.phases || []).forEach(function (x) { f(x, 'name'); });
@@ -3232,7 +3250,7 @@
       var snap = JSON.parse(JSON.stringify(p));
       window.ChampI18n.strings(list, l).then(function (map) {
         var n = 0; jobs.forEach(function (j) { var changed = false, v = j[0].map(function (x) { var k = x.body.trim(), tr = map[k]; if (tr && tr !== k) { changed = true; n++; return x.pre + tr; } return x.pre + x.body; }).join('\n'); if (changed) j[1](v); });
-        S.trUndo = { core: S.core, plan: snap }; dirty('project data translated (' + l + ')'); render();
+        S.trUndo = { core: S.core, plan: snap }; p.dataLang = l; dirty('project data translated (' + l + ')'); render();
         toast(pl(n, 'piece') + ' translated. “Undo translation” puts it back.');
       }).catch(fail);
     });
