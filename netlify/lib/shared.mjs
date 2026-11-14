@@ -130,7 +130,9 @@ export const SPEECH_LANGS = {
   vi: { name: 'Vietnamese',                    locale: 'vi-VN', voice: 'vi-VN-NamMinhNeural' },
   el: { name: 'Greek',                         locale: 'el-GR', voice: 'el-GR-NestorasNeural' },
   fa: { name: 'Persian (Farsi)',               locale: 'fa-IR', voice: 'fa-IR-FaridNeural' },
-  ms: { name: 'Malay (Bahasa Melayu, Malaysia)', locale: 'ms-MY', voice: 'ms-MY-YasminNeural' }
+  ms: { name: 'Malay (Bahasa Melayu, Malaysia)', locale: 'ms-MY', voice: 'ms-MY-YasminNeural' },
+  my: { name: 'Burmese (Myanmar)',             locale: 'my-MM', voice: 'my-MM-ThihaNeural' },
+  bn: { name: 'Bengali (Bangladesh)',          locale: 'bn-BD', voice: 'bn-BD-PradeepNeural' }
 };
 
 const TRANSLATE_PROMPT = (language) => `Translate the message into natural, friendly spoken ${language}, as a helpful local tradesperson would say it out loud.
@@ -255,7 +257,7 @@ export async function writeBrief(lead, extra = {}) {
 
 // Strip any "thinking" text some models include, so customers only see the answer.
 // Removes tired stock phrases from Mr. Fixit's answers, whatever the AI writes.
-export const SITE_VERSION = 'v109';
+export const SITE_VERSION = 'v110';
 export function humanise(text) {
   let t = String(text || '');
   const swap = [

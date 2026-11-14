@@ -123,7 +123,9 @@
     { code: 'vi', short: 'VI', eng: 'Vietnamese', name: 'Tiếng Việt', tts: /^vi/i, bcp: 'vi-VN' },
     { code: 'el', short: 'EL', eng: 'Greek', name: 'Ελληνικά',   tts: /^el/i, bcp: 'el-GR' },
     { code: 'fa', short: 'FA', eng: 'Persian', name: 'فارسی',     tts: /^fa/i, bcp: 'fa-IR' },
-    { code: 'ms', short: 'MS', eng: 'Malay', name: 'Bahasa Melayu', tts: /^ms/i, bcp: 'ms-MY' }
+    { code: 'ms', short: 'MS', eng: 'Malay', name: 'Bahasa Melayu', tts: /^ms/i, bcp: 'ms-MY' },
+    { code: 'my', short: 'MY', eng: 'Myanmar', name: 'မြန်မာ', tts: /^my/i, bcp: 'my-MM' },
+    { code: 'bn', short: 'BN', eng: 'Bengali', name: 'বাংলা', tts: /^bn/i, bcp: 'bn-BD' }
   ];
   var voiceOn = false, lang = LANGS[0];
   try {
@@ -301,6 +303,24 @@
   langWrap.addEventListener('keydown', function (e) { if (e.key === 'Escape' && langWrap.classList.contains('open')) { e.stopPropagation(); menu(false); langBtn.focus(); } });
   document.addEventListener('click', function (e) { if (!langWrap.contains(e.target)) menu(false); });
 
+  // v110 (test site only): a language toggle at the top of the chat. It switches the whole page and the chat text
+  // (fixit-i18n.js translates Mr. Fixit's replies; what the customer types stays as typed). Read-aloud follows it.
+  var TLANGS = [['en', 'EN', 'English'], ['ms', 'MS', 'Bahasa Melayu'], ['zh', '中文', '简体中文'], ['ta', 'TA', 'தமிழ்'], ['my', 'MY', 'မြန်မာ'], ['bn', 'BN', 'বাংলা']];
+  var tlang = null;
+  if (window.FX_UI) {
+    var curT = 'en'; try { curT = localStorage.getItem('fxLang') || 'en'; } catch (e) {}
+    tlang = el('select', { class: 'fx-tlang', 'aria-label': 'Chat language', title: 'Language', 'data-noi18n': '' });
+    TLANGS.forEach(function (x) { var o = el('option', { value: x[0], text: '🌐 ' + x[1] + ' · ' + x[2] }); if (x[0] === curT) o.selected = true; tlang.appendChild(o); });
+    tlang.addEventListener('change', function () { if (window.FxI18n) window.FxI18n.set(tlang.value); });
+    window.addEventListener('fx:lang', function (e) {
+      var code = e.detail; if (tlang.value !== code) tlang.value = code;
+      LANGS.forEach(function (l) { if (l.code === code) { lang = l; try { localStorage.setItem(LANG_KEY, code); } catch (x) {} } });
+      drawSound();
+    });
+    LANGS.forEach(function (l) { if (l.code === curT) lang = l; });
+    langWrap.style.display = 'none';   // for now: the language toggle on top instead of a separate voice-language menu
+  }
+
   var panel = el('div', { class: 'fx-panel', role: 'dialog', 'aria-label': 'Mr. Fixit, the MBS assistant' }, [
     el('div', { class: 'fx-head' }, [
       el('div', { class: 'fx-head-art', html: fixitSVG('fx-art fx-art-lg') }),
@@ -308,10 +328,11 @@
         el('b', { text: 'Mr. Fixit' }),
         el('small', { text: 'MBS helper · answers in seconds' })
       ]),
-      langWrap,
+      tlang || langWrap,
+      tlang ? langWrap : null,
       soundBtn,
       closeBtn
-    ]),
+    ].filter(Boolean)),
     el('div', { class: 'fx-screen' }, [list, chipsBox]),
     confirmBar,
     form,

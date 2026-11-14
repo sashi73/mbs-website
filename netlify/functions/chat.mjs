@@ -13,6 +13,14 @@ export default async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors() });
   if (req.method !== 'POST') return json(405, { error: 'Method not allowed' });
 
+  // v110: page translation (test site only) is answered from the cache first, so it comes before the key check
+  if (req.headers.get('x-mbs-i18n') === '1') {
+    let b; try { b = await req.json(); } catch { return json(400, { error: 'Invalid JSON' }); }
+    const ip = req.headers.get('x-nf-client-connection-ip') || req.headers.get('x-forwarded-for') || 'local';
+    let host = ''; try { host = new URL(req.url).host; } catch {}
+    return (await import('../lib/i18n.mjs')).i18n(b, ip, req.headers.get('host') || host);
+  }
+
   const apiKey = env('LLM_API_KEY');
   if (!apiKey) {
     console.log(`\n[${new Date().toLocaleTimeString()}] AI question NOT answered - LLM_API_KEY is empty in .env`);
