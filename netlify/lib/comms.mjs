@@ -77,8 +77,8 @@ const SYSTEM = 'You are an experienced construction project manager (PMBOK, PRIN
   '2) Impact on each area (scope, time, cost, quality, risk, issues, stakeholders): level None|Low|Medium|High and one or two sentences that name the tasks (#n) and dates. ' +
   'For time, explain whether the change is on the critical path (critical=true tasks move the finish date) and roughly how many working days the finish moves. ' +
   '3) Concrete changes to the plan: task_changes for existing tasks (n, days = the new number of working days when a duration or lead time changed, e.g. a supply lead time now 3 weeks = 15 working days on the ordering/delivery task; ' +
-  'not_before = YYYY-MM-DD if a task cannot start before a date; extra_cost = extra AUD ex GST if the meeting means extra cost for that task; why). ' +
-  'new_tasks only when new work was agreed (name, days, after = task numbers it follows, cost AUD ex GST, why). scope_changes when scope was added, removed or changed. ' +
+  'not_before = YYYY-MM-DD if a task cannot start before a date; extra_cost = extra $ ex tax if the meeting means extra cost for that task; why). ' +
+  'new_tasks only when new work was agreed (name, days, after = task numbers it follows, cost $ ex tax, why). scope_changes when scope was added, removed or changed. ' +
   '4) risks (new or heightened risks, critical=true if they can delay a critical task), issues (problems that are happening now and need action: priority Low|Medium|High|Critical, owner, due YYYY-MM-DD), ' +
   'stakeholders (people or organisations in the meeting who are NOT in the stakeholder list: name, role, raci R|A|C|I), quality (concerns, inspections or tests to add). ' +
   '5) decisions and actions (action, owner, due YYYY-MM-DD or ""). 6) Australian spelling, dates as D Month YYYY, $1,234. ' +

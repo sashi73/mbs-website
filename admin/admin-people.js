@@ -254,7 +254,7 @@
       f('phone', 'Mobile', p.phone, '04xx xxx xxx', 'tel') + (self ? '<label>Email (your login)<input value="' + esc(o.email || p.email || '') + '" disabled></label>' : f('email', 'Email (also their login)', p.email, 'name@company.com', 'email')) +
       f('suburb', 'City / suburb ' + opt, p.suburb, '') + f('linkedin', 'LinkedIn ' + opt, p.linkedin, 'https://linkedin.com/in/…') +
       f('availability', 'Availability ' + opt, p.availability, 'e.g. Mon–Fri, 3 days a week') + f('hours', 'Hours a week ' + opt, p.hours || '', 'e.g. 38', 'number') +
-      '<h3 class="full">💲 Rate</h3><label class="pp-rate">Your rate per hour (AUD)<input data-k="costRate" type="number" min="0" step="any" value="' + esc(p.costRate || '') + '" placeholder="e.g. 95"><small class="muted">What you quote for an hour of your time. The project manager uses it for costing.</small></label>' +
+      '<h3 class="full">💲 Rate</h3><label class="pp-rate">Your rate per hour ($)<input data-k="costRate" type="number" min="0" step="any" value="' + esc(p.costRate || '') + '" placeholder="e.g. 95"><small class="muted">What you quote for an hour of your time. The project manager uses it for costing.</small></label>' +
       (self ? '' : f('chargeRate', 'Charge-out rate ($/hr) ' + opt, p.chargeRate || '', 'what the client is charged', 'number')) +
       '<div class="full form" data-ctr style="padding:0">' + f('business', 'Business / trading name ' + opt, p.business, '') + f('abn', 'ABN ' + opt, p.abn, '11 digits') + '<label>GST<span class="sc-inline">' + cb('gst', 'Registered for GST', p.gst) + '</span></label></div>' +
       '<h3 class="full">🎓 Credentials</h3><p class="full muted pp-sub">Education</p>' + repRows('education', p.education) +

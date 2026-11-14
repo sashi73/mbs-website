@@ -55,7 +55,7 @@ export async function draft({ core, note, only }, by) {
   const work = plan.tasks.filter((t) => t.dur > 0), want = new Set((Array.isArray(only) ? only : []).map(String));
   const tasks = plan.tasks.filter((t) => !/^🧱 Bill of Materials/.test(t.name)).map((t) => ({ n: plan.tasks.indexOf(t) + 1, task: P.scrubTask(t.name, job), days: t.dur, steps: (t.subs || []).slice(0, 8).map((s) => P.scrubTask(s.name, job)) })).filter((t) => !want.size || want.has(String(t.n)));
   const system = 'You are an experienced estimator for a building and maintenance company in Sydney, NSW. Write ONE Bill of Materials (BOM) for the whole job: only the PHYSICAL materials, fixings and consumables that must be bought to build it ' +
-    '(timber, concrete, fixings, sealants, paint, tiles, membranes, hardware and so on), with realistic quantities for the size of the job (from the description and scope), units and a typical Sydney trade price per unit in AUD ex GST. ' +
+    '(timber, concrete, fixings, sealants, paint, tiles, membranes, hardware and so on), with realistic quantities for the size of the job (from the description and scope), units and a typical Sydney trade price per unit in $ ex tax. ' +
     'Do NOT list services, fees, approvals, permits, reports, inspections, surveys, design, labour, plant or equipment hire, subcontract work, or anything for planning, quoting or admin tasks: those are not materials. ' +
     'Add a sensible waste allowance where it applies (e.g. 10% tiles, 5% timber) and say so in the note. Leave item empty. ' +
     'For items that usually take time to arrive (hardwood, stone benchtops, custom joinery, windows, switchboards, special orders), give lead_days (working days). ' +

@@ -273,7 +273,7 @@ export async function narrative({ title, sql, columns, rows, focus }) {
       body: JSON.stringify({ model, temperature: 0.3, stream: false, max_tokens: 600, response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: langLine() + ' You are a senior PMO analyst for GKH Project Champ (project, program and portfolio management, PMBOK). Explain schedule and cost health with earned value (SPI, CPI) where the data has it. ' +
-            'Write a short, plain-English report on the data you are given. Australian spelling, dollars in AUD, GST is 10%. Only state what the data shows; do not invent numbers. ' +
+            'Write a short, plain-English report on the data you are given. Australian spelling, amounts in dollars ($), no country-specific currency. Only state what the data shows; do not invent numbers. ' +
             'Reply as JSON: {"title": string (max 70 chars), "summary": string (2-3 sentences), "insights": [3-5 short bullet strings with specific figures], "recommendations": [1-3 short practical actions]}.' },
           { role: 'user', content: JSON.stringify({ report_title: title, question_or_focus: focus || '', sql, row_count: rows.length, columns: s.columns, rows: s.rows }) }
         ] })
