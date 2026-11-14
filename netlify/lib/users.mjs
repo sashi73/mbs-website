@@ -21,7 +21,6 @@ export const MODS = [
   ['crm', 'Jobs & customers', 'Dashboard, jobs, customers, new jobs and reminders'],
   ['projects', 'Projects', 'Plans, Gantt chart, Board, scope, stakeholders, risks, comms, reports, SWMS, change control, Project Intelligence'],
   ['accounts', 'Accounts', 'Quotes, invoices, expenses, accounting and BAS'],
-  ['stock', 'Stock', 'Inventory and suppliers'],
   ['subbies', 'Sub-contractors', 'Subbies, their licences and insurance'],
   ['people', 'People', 'Employees and contractors, tickets, rates and workload'],
   ['data', 'Data & AI', 'Ask AI, SQL wizard and reports, data explorer, activity log'],

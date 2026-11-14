@@ -57,4 +57,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 46 | 1.0.46| 2026-11-14 10:42| GKH-Project-Champ| `e6d9154` | Sticky notes: edit in place, tick boxes, checklists |
 | 47 | 1.0.47| 2026-11-14 11:08| GKH-Project-Champ| `03de9c4` | Project types: 16 cloud projects |
 | 48 | 1.0.48| 2026-11-14 12:15| GKH-Project-Champ| `2fa9b18` | Whole console in the chosen language; Costing with the signed-off BOM; change control as a module; no Inventory; draggable notes |
-| 49 | 1.0.49 | 2026-11-14 15:17 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 49 | 1.0.49| 2026-11-14 15:17| GKH-Project-Champ| `f9a3767` | BOM: delete, one per project, opens from the costing; signed budget approval |
+| 50 | 1.0.50 | 2026-11-14 16:09 | GKH-Project-Champ | _this commit_ | _see git log_ |

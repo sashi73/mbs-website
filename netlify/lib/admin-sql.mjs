@@ -345,7 +345,7 @@ export function pickTables(question, extraSql = '') {
   return Object.keys(SCHEMA).filter((t) => chosen.has(t) && CHAMP_TABLES.has(t));
 }
 // GKH Project Champ: only the project tables (the MBS business tables, such as quotes and invoices, are always empty here)
-export const CHAMP_TABLES = new Set(['projects', 'programs', 'dependencies', 'change_records', 'jobs', 'plan_tasks', 'plan_subtasks', 'plan_risks', 'plan_issues', 'plan_stakeholders', 'plan_contracts', 'inventory', 'subcontractors', 'sub_trades']);
+export const CHAMP_TABLES = new Set(['projects', 'programs', 'dependencies', 'change_records', 'jobs', 'plan_tasks', 'plan_subtasks', 'plan_risks', 'plan_issues', 'plan_stakeholders', 'plan_contracts', 'subcontractors', 'sub_trades']);
 const champOnly = (o) => Object.fromEntries(Object.entries(o).filter(([t]) => CHAMP_TABLES.has(t)));
 
 function sydneyDates(now = Date.now()) {

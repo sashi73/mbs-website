@@ -759,6 +759,25 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     await p.fill('#bsF [name=by]', 'Sashi Kumar Sivam').catch(() => {}); await p.fill('#bsF [name=sig]', 'Sashi Kumar Sivam').catch(() => {}); await p.click('#bsF [type=submit]').catch(() => {}); await sleep(2500);
     const bt2 = await p.textContent('#planBody').catch(() => '');
     ok('Costing', 'the preparer signs off the BOM: it goes into the costing as Materials ($450), no change control', /#plan\/[^/]+\/budget/.test(p.url()) && /signed off/i.test(bt2) && /from the signed-off BOM/.test(bt2) && /450/.test(bt2), 'sign enabled=' + signOn + ' ' + p.url() + ' ' + bt2.slice(0, 200));
+    // 🛒 things to order on the overview: order-by date, tick when ordered, a note saved with Enter
+    await p.goto(`${BASE}/admin/#plan/${cc}/overview`); await p.waitForSelector('.ord-row', { timeout: 8000 }).catch(() => {});
+    const ordT = await p.textContent('.ord').catch(() => '');
+    ok('Overview', 'Things to order (no Inventory): each BOM line with an order-by date, no re-order buttons', /Things to order/.test(ordT) && /order by|order now/.test(ordT) && !/Re-order|short /.test(ordT), ordT.slice(0, 200));
+    await p.check('.ord-row [data-ord]').catch(() => {}); await sleep(1200);
+    await p.fill('.ord-row [data-onote]', 'Quote from the supplier, delivery Tuesday').catch(() => {}); await p.press('.ord-row [data-onote]', 'Enter').catch(() => {}); await sleep(2000);
+    const ol = (((await (await api('planGet', { core: cc })).json()).plan.bom || {}).lines || [])[0] || {};
+    ok('Overview', 'ticking marks it ordered (who and when); the note saves with Enter', ol.ordered && !!ol.orderedBy && ol.orderNote === 'Quote from the supplier, delivery Tuesday' && !!ol.orderNoteBy, JSON.stringify(ol).slice(0, 300));
+    ok('Overview', 'the upcoming card is this week (7 days), not 14 days', /This week/.test(await p.textContent('#planBody').catch(() => '')) && !/Next 14 days/.test(await p.textContent('#planBody').catch(() => '')));
+    // cost moves with progress when no actual cost is entered
+    const cp = (await (await api('planGet', { core: cc })).json()).plan; const tk1 = cp.tasks.find((t) => t.dur > 0 && t.qty * t.rate > 0);
+    tk1.pct = 50; await api('planSave', { core: cc, plan: cp, rev: cp.rev, note: 'progress' }).catch(() => {});
+    await p.goto(`${BASE}/admin/#plan/${cc}/overview`); await p.reload(); await p.waitForSelector('#planBody', { timeout: 8000 }).catch(() => {}); await sleep(800);
+    const costTxt = await p.evaluate(() => [...document.querySelectorAll('.rag-card')].map((e) => e.textContent).join(' | ')).catch(() => '');
+    ok('Cost', 'spent so far moves with progress (cost × % complete) when no actual is entered', /estimated from progress/.test(costTxt) && !/\$0\.00 of/.test(costTxt), costTxt.slice(0, 300));
+    { const bt = await (async () => { await p.goto(`${BASE}/admin/#plan/${cc}/bom`); await p.waitForSelector('.bom-tbl', { timeout: 8000 }).catch(() => {}); return p.textContent('#planBody').catch(() => ''); })();
+      await p.goto(`${BASE}/admin/#inventory`); await sleep(1200); const u = p.url();
+      const side = await p.textContent('.side-nav').catch(() => '');
+      ok('Inventory', 'no Inventory anywhere: not in the menu, #inventory goes to the portfolio, no stock buttons in the BOM', !/Inventory|Stock\b|Suppliers/.test(side) && !/#inventory/.test(u) && !/Inventory|from stock/i.test(bt), u + ' ' + side.slice(0, 120)); }
     ok('BOM', 'one BOM per project: Draft with AI and Templates are off until the BOM is deleted (no appending)', await p.goto(`${BASE}/admin/#plan/${cc}/bom`).then(() => p.waitForSelector('#bomOpen, #bomAi', { timeout: 8000 })).then(async () => { await p.click('#bomOpen').catch(() => {}); await p.fill('#boF [name=why]', 'Add a line').catch(() => {}); await p.click('#boF [type=submit]').catch(() => {}); await sleep(1200); return (await p.isDisabled('#bomAi').catch(() => false)) && (await p.isDisabled('#bomTpl').catch(() => false)); }).catch(() => false));
     await p.goto(`${BASE}/admin/#plan/${cc}/budget`); await p.waitForSelector('.bd-tiles', { timeout: 8000 }).catch(() => {});
     ok('Costing', 'reopened, the BOM is out of the costing until it is signed off again', /waiting for sign-off/.test(await p.textContent('.bd-bomst').catch(() => '')) && !(await p.$('[data-gobom]')));

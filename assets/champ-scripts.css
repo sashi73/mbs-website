@@ -1,0 +1,31 @@
+/* GKH Project Champ: languages in other scripts (Tamil, Hindi, Khmer, Thai, Arabic, Persian, Chinese, Japanese, Korean ...)
+   Noto Sans fonts (SIL Open Font License) for each script, downloaded only when a page shows that script (unicode-range).
+   The English styling (letter spacing, capitals, condensed tight headings) pulls these scripts apart, so it is switched off for them. */
+@font-face{font-family:'ChampScript';src:url('fonts/noto-sans-tamil.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+0964-0965,U+0B82-0BFA,U+200C-200D,U+20B9,U+25CC}
+@font-face{font-family:'ChampScript';src:url('fonts/noto-sans-devanagari.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+0900-097F,U+1CD0-1CF9,U+200C-200D,U+20A8,U+20B9,U+20F0,U+25CC,U+A830-A839,U+A8E0-A8FF}
+@font-face{font-family:'ChampScript';src:url('fonts/noto-sans-khmer.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+1780-17FF,U+19E0-19FF,U+200C-200D,U+25CC}
+@font-face{font-family:'ChampScript';src:url('fonts/noto-sans-thai.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC}
+@font-face{font-family:'ChampScript';src:url('fonts/noto-sans-arabic.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
+
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa],[lang=zh],[lang=ja],[lang=ko],[lang=vi]) :is(body,h1,h2,h3,h4,h5,h6,p,a,button,input,select,textarea,label,li,td,th,span,b,strong,small,div,em,i){
+  letter-spacing:0!important;text-transform:none!important;font-stretch:normal!important;word-spacing:normal!important}
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa]) body{font-family:'Manrope','ChampScript',system-ui,-apple-system,'Segoe UI',sans-serif!important}
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa]) :is(h1,h2,h3,h4,h5,h6,.btn,button,.brand .mark,[class*=title],[class*=head]){font-family:'Manrope','ChampScript',system-ui,sans-serif!important;font-weight:800}
+html:is([lang=zh],[lang=ja],[lang=ko]) body,html:is([lang=zh],[lang=ja],[lang=ko]) :is(h1,h2,h3,h4,h5,h6,button,.btn){font-family:'Manrope','PingFang SC','Hiragino Sans','Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','Malgun Gothic',sans-serif!important}
+/* room for the tall vowel signs, and headings that wrap evenly instead of breaking a word letter by letter */
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa],[lang=zh],[lang=ja],[lang=ko],[lang=vi]) body{line-height:1.75}
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa],[lang=zh],[lang=ja],[lang=ko],[lang=vi]) :is(h1,h2,h3,h4,h5,h6){line-height:1.38!important;word-break:normal!important;overflow-wrap:break-word;hyphens:none;text-wrap:balance}
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa]) h1{font-size:clamp(30px,4.6vw,58px)!important}
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa]) h2{font-size:clamp(23px,3.2vw,40px)!important}
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa]) h3{font-size:clamp(17px,2vw,24px)!important}
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa],[lang=zh],[lang=ja],[lang=ko]) :is(p,li,td,small){text-align:start!important;word-break:normal;overflow-wrap:break-word}
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa]) :is(.btn,button,.pill,[class*=chip],nav a){line-height:1.45!important;white-space:normal}
+/* Arabic and Persian read right to left */
+html:is([lang=ar],[lang=fa]) :is(p,li,h1,h2,h3,h4,td,th,label,small,blockquote){direction:rtl;text-align:right!important}
+/* headings: no narrow English measure (13ch) that forced words to split mid-word */
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa],[lang=zh],[lang=ja],[lang=ko],[lang=vi]) :is(h1,h2,h3){max-width:min(100%,24em)!important}
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa]) h1{font-size:clamp(28px,4vw,52px)!important}
+/* navigation: one tidy size, evenly wrapped labels, brand name kept to two lines */
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa]) :is(nav a,header a){font-size:13.5px!important;line-height:1.4!important;text-wrap:balance}
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa]) :is(.brand,.brand *,[class*=brand] b,[class*=brand] strong){font-size:14px!important;line-height:1.35!important;text-wrap:balance}
+html:is([lang=ta],[lang=hi],[lang=km],[lang=th],[lang=ar],[lang=fa]) :is(.brand,[class*=brand]) :is(b,strong,span:first-child){display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:200px}

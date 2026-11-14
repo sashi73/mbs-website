@@ -98,15 +98,18 @@ export function rollup(plan, today) {
   const BAC = r2(tasks.reduce((a, t) => a + cost(t), 0));
   const PV = r2(tasks.reduce((a, t) => a + cost(t) * frac(t), 0));
   const EV = r2(tasks.reduce((a, t) => a + cost(t) * (t.pct || 0) / 100, 0));
-  const AC = r2(tasks.reduce((a, t) => a + (Number(t.actual) || 0), 0));
+  // spent so far: entered actuals; a task with progress but no actual entered counts at its cost × % complete. CPI from entered actuals only
+  const has = (t) => Number(t.actual) > 0;
+  const ACin = r2(tasks.reduce((a, t) => a + (has(t) ? Number(t.actual) : 0), 0)), EVin = r2(tasks.reduce((a, t) => a + (has(t) ? cost(t) * (t.pct || 0) / 100 : 0), 0));
+  const ACest = r2(tasks.reduce((a, t) => a + (has(t) ? 0 : cost(t) * (t.pct || 0) / 100), 0)), AC = r2(ACin + ACest);
   const finish = tasks.reduce((m, t) => (t.ef > m ? t.ef : m), '');
   const begin = tasks.reduce((m, t) => (!m || (t.es && t.es < m) ? t.es : m), '');
   const done = tasks.filter((t) => (t.pct || 0) >= 100).length;
   const late = tasks.filter((t) => (t.pct || 0) < 100 && t.ef && t.ef < today).length;
   const durW = tasks.reduce((a, t) => a + Math.max(1, t.dur), 0);
   const pct = tasks.length ? Math.round(tasks.reduce((a, t) => a + Math.max(1, t.dur) * (t.pct || 0), 0) / durW) : 0;
-  const CPI = AC > 0 ? r2(EV / AC) : null, SPI = PV > 0 ? r2(EV / PV) : null;
-  return { BAC, PV, EV, AC, CPI, SPI, EAC: CPI ? r2(BAC / CPI) : null, VAC: CPI ? r2(BAC - BAC / CPI) : null, start: begin, finish, done, total: tasks.length, late, pct,
+  const CPI = ACin > 0 ? r2(EVin / ACin) : null, SPI = PV > 0 ? r2(EV / PV) : null;
+  return { BAC, PV, EV, AC, ACin, ACest, CPI, SPI, EAC: CPI ? r2(BAC / CPI) : null, VAC: CPI ? r2(BAC - BAC / CPI) : null, start: begin, finish, done, total: tasks.length, late, pct,
     openRisks: (plan.risks || []).filter((r) => r.status !== 'Closed').length, highRisks: (plan.risks || []).filter((r) => r.status !== 'Closed' && r.p * r.i >= 12).length,
     openIssues: (plan.issues || []).filter((x) => x.status !== 'Resolved').length };
 }
@@ -897,7 +900,7 @@ export async function planPost(action, body, { who, by, audit }) {
     if (r.conflict) return out(409, { error: 'Someone else changed this plan. Your view has been refreshed with their version.', plan: r.conflict });
     if (body.note && audit) await audit(who, `Plan ${core}: ${str(body.note, 120)}`);
     let low = [];
-    try { low = await INV.syncPlan(core, before, r.plan, by); } catch (e) { console.error('Stock update from plan failed:', e.message); }
+    // GKH Project Champ: no Inventory, so a plan never sets stock aside
     return out(200, { plan: r.plan, low });
   }
   if (action === 'pipelineBoard') {   // the dashboard's big Kanban: every open job (and recently closed ones) in its pipeline column

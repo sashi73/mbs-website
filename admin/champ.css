@@ -256,3 +256,11 @@ html.dark .stkpop,body.dark .stkpop{color:#1F1D18}
 .pkbtn{display:none!important}
 .bd-bomst{margin:0 0 14px;padding:10px 14px;border-radius:10px;background:#FFF8E1;border:1px solid #F0DFA0;font-size:13.5px}.bd-bomst.ok{background:#ECFDF3;border-color:#BBE5CB}
 .bd-tbl tr.bd-bom td{background:#FBF8EC}
+/* 🛒 things to order */
+.ord-list{display:grid;gap:8px}
+.ord-row{display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border:1px solid #EEE9DC;border-radius:10px;background:#FFFDF6}
+.ord-row.done{background:#F3FBF6;border-color:#CDEBD8}.ord-row.done .ord-main>b{text-decoration:line-through;color:#6B665A}
+.ord-ck input{width:18px;height:18px;margin:2px 0 0;accent-color:#16A34A;cursor:pointer}
+.ord-main{flex:1;min-width:0;display:grid;gap:3px}.ord-main small .bad{color:#B42318;font-weight:700}.ord-main small .warn{color:#B45309;font-weight:700}
+.ord-note{display:flex;gap:6px}.ord-note input{flex:1;min-width:0;font-size:12.5px;padding:5px 8px}.ord-note input.ord-ok{box-shadow:0 0 0 2px #16A34A}
+.ord-by{font-size:11px}

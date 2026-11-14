@@ -114,10 +114,13 @@
     schedule(p);
     var T = p.tasks, frac = function (t) { return !t.es ? 0 : day < t.es ? 0 : day >= t.ef ? 1 : workBetween(t.es, day) / Math.max(1, workBetween(t.es, t.ef)); };
     var BAC = r2(T.reduce(function (a, t) { return a + cost(t); }, 0)), PV = r2(T.reduce(function (a, t) { return a + cost(t) * frac(t); }, 0));
-    var EV = r2(T.reduce(function (a, t) { return a + cost(t) * (t.pct || 0) / 100; }, 0)), AC = r2(T.reduce(function (a, t) { return a + (Number(t.actual) || 0); }, 0));
+    var EV = r2(T.reduce(function (a, t) { return a + cost(t) * (t.pct || 0) / 100; }, 0));
+    // spent so far: what was entered in $ Actual; a task with progress but no actual entered counts at its cost × % complete (as planned), so the cost moves with the work
+    var has = function (t) { return Number(t.actual) > 0; }, ACin = r2(T.reduce(function (a, t) { return a + (has(t) ? Number(t.actual) : 0); }, 0)), EVin = r2(T.reduce(function (a, t) { return a + (has(t) ? cost(t) * (t.pct || 0) / 100 : 0); }, 0));
+    var ACest = r2(T.reduce(function (a, t) { return a + (has(t) ? 0 : cost(t) * (t.pct || 0) / 100); }, 0)), AC = r2(ACin + ACest);
     var durW = T.reduce(function (a, t) { return a + Math.max(1, t.dur); }, 0) || 1;
-    var CPI = AC > 0 ? r2(EV / AC) : null, SPI = PV > 0 ? r2(EV / PV) : null;
-    return { BAC: BAC, PV: PV, EV: EV, AC: AC, CPI: CPI, SPI: SPI, EAC: CPI ? r2(BAC / CPI) : null,
+    var CPI = ACin > 0 ? r2(EVin / ACin) : null, SPI = PV > 0 ? r2(EV / PV) : null;   // CPI from real (entered) costs only
+    return { BAC: BAC, PV: PV, EV: EV, AC: AC, ACin: ACin, ACest: ACest, CPI: CPI, SPI: SPI, EAC: CPI ? r2(BAC / CPI) : null,
       start: T.reduce(function (m, t) { return !m || (t.es && t.es < m) ? t.es : m; }, ''), finish: T.reduce(function (m, t) { return t.ef > m ? t.ef : m; }, ''),
       done: T.filter(function (t) { return t.pct >= 100; }).length, total: T.length, late: T.filter(function (t) { return t.pct < 100 && t.ef && t.ef < day; }),
       pct: T.length ? Math.round(T.reduce(function (a, t) { return a + Math.max(1, t.dur) * (t.pct || 0); }, 0) / durW) : 0 };
@@ -1316,7 +1319,7 @@
       '<div class="grid pkpis">' +
         mini('Scope', R.pct + '% complete', R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8)) +
         timeCard(p, R) +
-        mini('Cost', money(R.AC) + ' of ' + money(R.BAC), (R.CPI == null ? 'no actual costs yet' : 'CPI ' + R.CPI + ' · forecast ' + money(R.EAC)), evRag(R.CPI)) +
+        mini('Cost', money(R.AC) + ' of ' + money(R.BAC), (R.ACest > 0 ? money(R.ACest) + ' estimated from progress' + (R.ACin > 0 ? ' + ' + money(R.ACin) + ' actual' : ' (enter $ Actual for real costs)') : R.AC > 0 ? 'actual costs' : 'nothing spent yet') + (R.CPI == null ? '' : ' · CPI ' + R.CPI + ' · forecast ' + money(R.EAC)), evRag(R.CPI)) +
         mini('Risks & issues', pl((p.risks || []).filter(function (r) { return r.status !== 'Closed'; }).length, 'risk') + ' · ' + pl((p.issues || []).filter(function (x) { return x.status !== 'Resolved'; }).length, 'issue'), pl((p.risks || []).filter(function (r) { return r.status !== 'Closed' && r.p * r.i >= 12; }).length, 'high risk'), (p.risks || []).some(function (r) { return r.status !== 'Closed' && r.p * r.i >= 15; }) ? 'red' : (p.issues || []).some(function (x) { return x.status !== 'Resolved' && /High|Critical/.test(x.priority); }) ? 'amber' : 'green') +
       '</div>' +
       '<div class="tabs" id="planTabs">' + tabs.map(function (t) { return '<a class="tab' + (S.tab === t[0] ? ' on' : '') + '" href="#plan/' + esc(S.core) + '/' + t[0] + '" style="text-decoration:none">' + t[1] + '</a>'; }).join('') + '</div><div id="planBody"></div>';
@@ -2090,7 +2093,7 @@
     var kp = [
       ['Scope: % complete', R.pct / 100, R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8), '0%'],
       ['Time: planned finish', D(R.finish), (R.SPI == null ? 'not started' : 'SPI ' + R.SPI) + (R.late.length ? ' · ' + R.late.length + ' late task' + (R.late.length === 1 ? '' : 's') : ''), R.late.length ? 'red' : evRag(R.SPI), dateF],
-      ['Cost: spent so far (actual)', R.AC, 'of ' + money(R.BAC) + ' budget' + (R.CPI == null ? '' : ' · CPI ' + R.CPI + ' · forecast ' + money(R.EAC)), evRag(R.CPI), money$],
+      ['Cost: spent so far', R.AC, 'of ' + money(R.BAC) + ' budget' + (R.ACest > 0 ? ' (' + money(R.ACest) + ' estimated from progress where no actual is entered)' : '') + (R.CPI == null ? '' : ' · CPI ' + R.CPI + ' · forecast ' + money(R.EAC)), evRag(R.CPI), money$],
       ['Risks open (high)', openRisks.length, openRisks.filter(function (r) { return r.p * r.i >= 12; }).length + ' high risk(s)', openRisks.some(function (r) { return r.p * r.i >= 15; }) ? 'red' : 'green', '0'],
       ['Issues open', openIssues.length, openIssues.filter(function (x) { return /High|Critical/.test(x.priority); }).length + ' high or critical', openIssues.some(function (x) { return /High|Critical/.test(x.priority); }) ? 'amber' : 'green', '0']
     ];
@@ -2109,7 +2112,7 @@
 
     /* 2. Schedule (tasks + sub-tasks grouped under them) */
     var sc = wb.addWorksheet('Schedule', { views: [{ state: 'frozen', xSplit: 2, ySplit: 4 }], properties: { outlineProperties: { summaryBelow: false } } });
-    var cols = ['#', 'Task / sub-task', 'People (lead first)', 'Lead', 'Days', 'Start', 'Finish', 'After #', 'Qty', 'Unit', 'Unit $', 'Cost', 'Actual $', 'Status', '% complete', 'Late', 'Stock materials'];
+    var cols = ['#', 'Task / sub-task', 'People (lead first)', 'Lead', 'Days', 'Start', 'Finish', 'After #', 'Qty', 'Unit', 'Unit $', 'Cost', 'Actual $', 'Status', '% complete', 'Late'];
     sc.columns = [6, 40, 28, 14, 7, 13, 13, 9, 8, 8, 11, 13, 12, 15, 11, 7, 26].map(function (w) { return { width: w }; });
     titleBlock(sc, 'Schedule', cols.length);
     header(sc, 4, cols);
@@ -2118,7 +2121,7 @@
       var late = t.pct < 100 && t.ef && t.ef < t0, mts = matsOf(t).map(function (m) { var x = invItem(m.item); return (m.qty || 0) + ' × ' + (x ? x.name : m.item); }).join(', ');
       var r = sc.getRow(row);
       r.values = [i + 1, (t.dur === 0 ? '◆ ' : '') + t.name, resText(t), t.lead || '', t.dur, D(t.es), D(t.ef), (t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', '),
-        Number(t.qty) || 0, t.unit || '', Number(t.rate) || 0, (matsOf(t).length ? { formula: 'I' + row + '*K' + row + '+' + matCost(t), result: cost(t) } : { formula: 'I' + row + '*K' + row, result: cost(t) }), Number(t.actual) || 0, stName[t.status], (t.pct || 0) / 100, late ? 'Yes' : '', mts];
+        Number(t.qty) || 0, t.unit || '', Number(t.rate) || 0, (matsOf(t).length ? { formula: 'I' + row + '*K' + row + '+' + matCost(t), result: cost(t) } : { formula: 'I' + row + '*K' + row, result: cost(t) }), Number(t.actual) || 0, stName[t.status], (t.pct || 0) / 100, late ? 'Yes' : ''];
       r.font = { bold: !!(t.subs && t.subs.length), color: late ? { argb: 'FFB42318' } : undefined };
       [6, 7].forEach(function (c) { r.getCell(c).numFmt = dateF; }); [11, 12, 13].forEach(function (c) { r.getCell(c).numFmt = money$; }); r.getCell(15).numFmt = '0%';
       r.getCell(14).fill = fill(STC[t.status]); r.eachCell({ includeEmpty: true }, function (c) { c.border = box; c.alignment = { vertical: 'top', wrapText: c.col === 2 || c.col === 3 }; });
@@ -2293,7 +2296,7 @@
     /* 8. Materials from stock (only when tasks use stock items) */
     var by = {};
     p.tasks.forEach(function (t) { matsOf(t).forEach(function (m) { var b = by[m.item] = by[m.item] || { need: 0, used: 0, tasks: [] }; if (t.status === 'done') b.used += Number(m.qty) || 0; else b.need += Number(m.qty) || 0; b.tasks.push(t.name + ' (' + (m.qty || 0) + ')'); }); });
-    if (Object.keys(by).length) {
+    if (false && Object.keys(by).length) {   // GKH Project Champ: no Inventory
       var mt = wb.addWorksheet('Materials', { views: [{ state: 'frozen', ySplit: 4 }] });
       mt.columns = [34, 10, 12, 12, 14, 12, 40].map(function (w) { return { width: w }; });
       titleBlock(mt, 'Materials from stock', 7);
@@ -4094,7 +4097,7 @@
     if (!b) {
       var have = 0; S.plan.tasks.forEach(function (t) { have += matsOf(t).length; });
       B.innerHTML = '<div class="card bom-intro"><h2>🧱 Bill of Materials: ' + esc(S.plan.name) + '</h2><p>Every material, fixing and consumable the job needs, with quantities and prices: checked and signed off <b>before the work starts</b>. In the Gantt chart it is one milestone, <b>🧱 Bill of Materials</b>, just before the build starts (e.g. before site set-out and excavation), and all the materials are costed there.</p>' +
-        '<ol class="bom-how"><li><b>✨ Draft with AI</b> from the plan, the scope and our stock, or start from a <b>📋 template</b> (e.g. a standard bathroom), or add lines yourself.</li>' +
+        '<ol class="bom-how"><li><b>✨ Draft with AI</b> from the plan and the scope, or start from a <b>📋 template</b> (e.g. a standard bathroom), or add lines yourself.</li>' +
         '<li><b>One milestone:</b> all of it sits on the 🧱 Bill of Materials milestone in the Gantt chart, just before the work starts.</li>' +
         '<li><b>Check and sign off:</b> the preparer ticks each line as checked, then signs. Signed off, the BOM is locked and its total goes into the 💰 Costing as materials.</li></ol>' +
         (have ? '<p class="muted">The ' + pl(have, 'material') + ' already on the tasks (📦) will become the first lines.</p>' : '') +
@@ -4156,7 +4159,7 @@
       (T.est && !lock ? '<div class="est-warn"><div class="est-ic">⚠</div><div class="est-tx"><b>' + pl(T.est, 'line') + ' marked ≈ est</b> came from the AI or a template: check the quantity and price of each (and the waste allowance) against the drawings and supplier quotes, then tick it as checked.</div></div>' : '') +
       (T.noItem && !lock && !NOINV ? '<p class="muted" style="font-size:12.5px;margin:6px 0">Every line is costed: the 🧱 Bill of Materials milestone and the quote include it. Lines that are not in Inventory are not set aside or tracked in stock: press <b>＋ Add to Inventory</b> (or 📦 to pick an existing stock item)' + (T.noItem > 1 ? ', or <button class="btn btn-sm" id="bomInvAll" type="button">＋ Add all ' + T.noItem + ' to Inventory</button>' : '') + '.</p>' : '') +
       (b.lines.length ? fbar + '<div class="table-wrap bom-scroll"><table class="rt bom-tbl"><thead><tr><th class="bom-no">#</th><th class="c" title="Checked">✓</th><th class="bom-mat">Material</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit $</th><th class="num">Total</th><th class="num" title="Lead time (working days)">Lead</th>' + (NOINV ? '' : '<th>Stock</th>') + '<th></th></tr></thead><tbody>' + rows +
-        (rows ? '' : '<tr><td colspan="10" class="empty" style="padding:14px">No lines match. <button class="btn btn-sm" data-bomf="all" type="button">Show all</button></td></tr>') + (lock ? '' : '<tr class="bom-addrow"><td></td><td></td><td colspan="8"><button class="btn btn-sm" id="bomAdd2" type="button">＋ Add a line</button> <button class="btn btn-sm" id="bomStock2" type="button">📦 Add from Inventory</button> <small class="muted">Anything else the job needs: type it in, or pick it from stock.</small></td></tr>') +
+        (rows ? '' : '<tr><td colspan="10" class="empty" style="padding:14px">No lines match. <button class="btn btn-sm" data-bomf="all" type="button">Show all</button></td></tr>') + (lock ? '' : '<tr class="bom-addrow"><td></td><td></td><td colspan="8"><button class="btn btn-sm" id="bomAdd2" type="button">＋ Add a line</button> <small class="muted">Anything else the project needs: type it in.</small></td></tr>') +
         '</tbody><tfoot><tr><td></td><td></td><td colspan="4"><b>Total materials</b> <small class="muted">(' + pl(b.lines.length, 'line') + ')</small> <small class="muted">ex GST</small></td><td class="num"><b>' + money(T.value) + '</b></td><td colspan="3"></td></tr></tfoot></table></div>'
         : '<div class="empty">No lines yet. ✨ Draft with AI, apply a 📋 template, or ＋ add a line.</div>') + '</div>' + shortHtml +
       ((b.log || []).length ? '<details class="card bom-log"><summary><b>History</b> (' + b.log.length + ')</summary><ul>' + b.log.slice().reverse().map(function (x) { return '<li><small class="muted">' + esc(new Date(x.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + '</small> ' + esc(x.what) + '</li>'; }).join('') + '</ul></details>' : '');
@@ -4206,7 +4209,7 @@
     on('bomAdd', function () { b.lines.push(bomLine({ name: 'New material', source: 'manual' })); bomSave('BOM line added'); setTimeout(function () { var r = B.querySelector('tr[data-bk="' + (b.lines.length - 1) + '"] [data-bf=name]'); if (r) { r.focus(); r.select(); } }, 30); });
     on('bomAi', bomAiDialog); on('bomTpl', bomTplDialog); on('bomSign', bomSignDialog); on('bomOpen', bomReopenDialog); on('bomDel', bomDelete); on('bomOrdT', function () { bomOrderTasks(st); });
     on('bomDoc', function () {
-      M.modal('<h2>📄 Bill of Materials</h2><p class="muted">The BOM by task with quantities, prices, stock and the shortfall, and the sign-off (or a sign-off block while it is a draft).</p><div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn" id="bdDocx" type="button">⬇ Word</button><button class="btn btn-gold" id="bdPdf" type="button">⬇ PDF</button></div>');
+      M.modal('<h2>📄 Bill of Materials</h2><p class="muted">The BOM by task with quantities, prices and lead times, and the sign-off (or a sign-off block while it is a draft).</p><div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn" id="bdDocx" type="button">⬇ Word</button><button class="btn btn-gold" id="bdPdf" type="button">⬇ PDF</button></div>');
       var go = function (fmt) { M.report[fmt](bomSnapshot()).then(function (r) { M.report.save(r.blob, r.name); M.closeModal(); toast((fmt === 'pdf' ? 'PDF' : 'Word') + ' ready'); }).catch(fail); };
       $('#bdPdf').onclick = function () { go('pdf'); }; $('#bdDocx').onclick = function () { go('docx'); };
     });
@@ -5371,7 +5374,7 @@
     }).join('') + '</ol>' + (next === 0 ? '<p class="su-why"><b>Why stakeholders first?</b> Best practice (PMBOK) identifies the stakeholders before the scope: their needs become the requirements, the acceptance criteria and the sign-off. Skip it and the project risks late changes, rework, scope creep and stalled approvals.</p>' : '') + '</div>';
   }
   function overview(R) {
-    var p = S.plan, t0 = today(), soon = toS(new Date(toD(t0).getTime() + 14 * 864e5));
+    var p = S.plan, t0 = today(), soon = toS(new Date(toD(t0).getTime() + 6 * 864e5));
     var coming = ordered().filter(function (r) { return r.t.pct < 100 && r.t.es <= soon && r.t.ef >= t0; });
     var evm = [['Budget at completion (BAC)', money(R.BAC), 'Total planned cost'], ['Planned value (PV)', money(R.PV), 'Work that should be done by today'], ['Earned value (EV)', money(R.EV), 'Work actually done (cost × % complete)'],
       ['Actual cost (AC)', money(R.AC), 'Money spent so far (Actual $ column)'], ['Schedule performance (SPI = EV ÷ PV)', R.SPI == null ? '—' : R.SPI, R.SPI == null ? '' : R.SPI >= 1 ? 'on or ahead of schedule' : 'behind schedule'],
@@ -5380,7 +5383,7 @@
       '<div class="card"><h2>Time & cost (earned value)</h2><div class="table-wrap"><table><tbody>' + evm.map(function (e) { return '<tr><td>' + esc(e[0]) + '<br><small class="muted">' + esc(e[2]) + '</small></td><td class="num" style="font-weight:800;font-size:15px">' + esc(e[1]) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
         (S.expensesEx ? '<p class="muted" style="margin:10px 0 0">Expenses recorded for this job in Accounts: <b>' + money(S.expensesEx) + '</b> ex GST.</p>' : '') +
         (p.baseline ? '<p class="muted" style="margin:6px 0 0">Baseline set ' + esc(M.day(p.baseline.at)) + ': finish ' + esc(prettyY(p.baseline.finish)) + ', budget ' + money(p.baseline.BAC) + '. Now: finish ' + esc(prettyY(R.finish)) + ' (' + esc(varDays(p.baseline.finish, R.finish)) + ').</p>' : '<p class="muted" style="margin:6px 0 0">Tip: press “Set baseline” once the plan is agreed, so you can track slippage.</p>') + '</div>' +
-      '<div class="card"><h2>Next 14 days</h2>' + (coming.length ? '<div class="list">' + coming.map(function (r) { return '<div class="item"><div><b>#' + r.n + ' ' + esc(r.t.name) + '</b><br><small>' + esc(pretty(r.t.es)) + ' – ' + esc(pretty(r.t.ef)) + (r.t.res && r.t.res.length ? ' · ' + esc(resText(r.t)) : '') + '</small></div><b>' + r.t.pct + '%</b></div>'; }).join('') + '</div>' : '<div class="empty">Nothing scheduled in the next two weeks.</div>') + '</div></div>' +
+      '<div class="card"><h2>This week <small class="muted" style="font-weight:500">(' + esc(pretty(t0)) + ' to ' + esc(pretty(soon)) + ')</small></h2>' + (coming.length ? '<div class="list">' + coming.map(function (r) { return '<div class="item"><div><b>#' + r.n + ' ' + esc(r.t.name) + '</b><br><small>' + esc(pretty(r.t.es)) + ' – ' + esc(pretty(r.t.ef)) + (r.t.res && r.t.res.length ? ' · ' + esc(resText(r.t)) : '') + '</small></div><b>' + r.t.pct + '%</b></div>'; }).join('') + '</div>' : '<div class="empty">Nothing scheduled this week.</div>') + '</div></div>' +
       '<div class="grid" style="align-content:start">' +
       materialsCard() +
       '<div class="card"><h2>Late tasks</h2>' + (R.late.length ? '<div class="list">' + R.late.map(function (t) { return '<div class="item"><div><b>' + esc(t.name) + '</b><br><small style="color:#C2410C">was due ' + esc(pretty(t.ef)) + '</small></div><b>' + t.pct + '%</b></div>'; }).join('') + '</div>' : '<div class="empty">Nothing late. 👍</div>') + '</div>' +
@@ -5388,20 +5391,32 @@
       '<div class="card"><h2>Open issues</h2>' + ((p.issues || []).filter(function (x) { return x.status !== 'Resolved'; }).map(function (x) { return '<div class="item"><div><b>' + esc(x.title || '(untitled)') + '</b><br><small>' + esc(x.priority) + (x.owner ? ' · ' + esc(x.owner) : '') + (x.due ? ' · due ' + esc(pretty(x.due)) : '') + '</small></div><small>' + esc(x.status) + '</small></div>'; }).join('') || '<div class="empty">No open issues.</div>') + '</div>' +
       (S.reminders.length ? '<div class="card"><h2>Reminders for this job</h2><div class="list">' + S.reminders.map(function (r) { return '<div class="item"><div><b>' + esc(r.when) + '</b><br><small>' + esc(r.text) + '</small></div></div>'; }).join('') + '</div></div>' : '') +
       '</div></div>';
-    $('#planBody').querySelectorAll('[data-invro]').forEach(function (b) { b.onclick = function () { M.inv.reorder(b.getAttribute('data-invro')); }; });
+    ordWire($('#planBody'));
     estWire($('#planBody'));
   }
 
+  // 🛒 things to order (from the BOM, no Inventory): what, how many, order by when; tick when ordered; a note on what is happening (Enter or 💾 saves)
   function materialsCard() {
-    var p = S.plan, by = {};
-    p.tasks.forEach(function (t) { matsOf(t).forEach(function (m) { var b = by[m.item] = by[m.item] || { need: 0, used: 0, tasks: 0 }; b.tasks++; if (t.status === 'done') b.used += Number(m.qty) || 0; else b.need += Number(m.qty) || 0; }); });
-    var ids = Object.keys(by);
-    if (!ids.length) return '<div class="card"><h2>Materials from stock</h2><p class="muted" style="margin:0">Press 📦 next to a task name to use an item from Inventory. Its quantity is set aside for this job and taken out of stock when the task is Done.</p></div>';
-    return '<div class="card"><h2>Materials from stock</h2><div class="list">' + ids.map(function (id) {
-      var i = invItem(id) || { name: id, unit: '', available: 0 }, b = by[id], short = i.available < 0;
-      return '<div class="item"><div><b>' + esc(i.name) + '</b><br><small>' + (b.need ? 'needed ' + b.need + ' ' + esc(i.unit) : '') + (b.need && b.used ? ' · ' : '') + (b.used ? 'used ' + b.used + ' ' + esc(i.unit) : '') + ' · ' + (short ? '<b style="color:#B42318">short ' + (-i.available) + ' ' + esc(i.unit) + '</b>' : i.available + ' ' + esc(i.unit) + ' left in stock') + '</small></div>' +
-        (short || i.low ? '<button class="btn btn-sm btn-gold" data-invro="' + esc(id) + '">Re-order</button>' : '<a class="btn btn-sm" href="#inventory/' + esc(id) + '">Stock</a>') + '</div>';
-    }).join('') + '</div></div>';
+    var b = S.plan.bom, L = b && (b.lines || []); if (!L || !L.length || (S.mods && S.mods.bom === false)) return '';
+    var ms = bomMs(), need = ms && ms.es ? ms.es : '', t0 = today(), done = L.filter(function (l) { return l.ordered; }).length;
+    var by = function (l) { if (!need) return ''; var d = addDays(need, -(Number(l.lead) || 0)); return d; };
+    var rows = L.slice().sort(function (a, c) { return (a.ordered - c.ordered) || String(by(a)).localeCompare(String(by(c))); });
+    return '<div class="card ord"><div class="card-h"><h2>🛒 Things to order</h2><span class="sp"></span><small class="muted">' + done + ' of ' + L.length + ' ordered</small></div>' +
+      '<p class="muted" style="margin:-4px 0 8px;font-size:12.5px">From the Bill of Materials' + (need ? ': needed by ' + esc(prettyY(need)) + ' (the 🧱 milestone)' : '') + '. Tick each one when it is ordered, and note what is happening.</p><div class="ord-list">' +
+      rows.map(function (l) { var d = by(l), late = !l.ordered && d && d < t0, soon = !l.ordered && d && !late && d <= addDays(t0, 7);
+        return '<div class="ord-row' + (l.ordered ? ' done' : '') + '" data-ol="' + esc(l.id) + '"><label class="ord-ck" title="' + (l.ordered ? 'Ordered' + (l.orderedBy ? ' by ' + esc(l.orderedBy) : '') : 'Tick when it is ordered') + '"><input type="checkbox" data-ord' + (l.ordered ? ' checked' : '') + '></label>' +
+          '<div class="ord-main"><b>' + esc(l.name) + '</b><small>' + esc(q3c(l.qty) + ' ' + (l.unit || '')) + (d ? ' · <span class="' + (late ? 'bad' : soon ? 'warn' : '') + '">' + (l.ordered ? 'ordered' + (l.orderedAt ? ' ' + esc(pretty(new Date(l.orderedAt).toISOString().slice(0, 10))) : '') : (late ? 'order now (was due ' : 'order by ') + esc(pretty(d)) + (late ? ')' : '')) + '</span>' : '') + (l.lead ? ' · ' + l.lead + '-day lead time' : '') + '</small>' +
+          '<div class="ord-note"><input data-onote maxlength="300" placeholder="Note: what is happening (supplier, quote, delivery date…)" value="' + esc(l.orderNote || '') + '"><button type="button" class="btn btn-sm" data-osave title="Save the note (or press Enter)">💾 Save</button></div>' +
+          (l.orderNote && l.orderNoteBy ? '<small class="muted ord-by">Note by ' + esc(l.orderNoteBy) + (l.orderNoteAt ? ', ' + esc(new Date(l.orderNoteAt).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })) : '') + '</small>' : '') + '</div></div>'; }).join('') + '</div></div>';
+  }
+  function ordWire(box) {
+    if (!box) return; var line = function (el) { var id = el.closest('[data-ol]').getAttribute('data-ol'); return ((S.plan.bom || {}).lines || []).filter(function (l) { return l.id === id; })[0]; };
+    box.querySelectorAll('[data-ord]').forEach(function (c) { c.onchange = function () { var l = line(c); if (!l) return; l.ordered = c.checked; l.orderedBy = c.checked ? bomMe() : ''; l.orderedAt = c.checked ? Date.now() : 0; dirty((c.checked ? 'ordered: ' : 'not ordered: ') + l.name); setTimeout(render, 0); }; });
+    var save = function (el) { var l = line(el), inp = el.closest('[data-ol]').querySelector('[data-onote]'), v = inp.value.trim(); if (!l || v === (l.orderNote || '')) { flash(inp); return; }
+      l.orderNote = v; l.orderNoteBy = bomMe(); l.orderNoteAt = Date.now(); dirty('order note: ' + l.name); toast('Note saved'); setTimeout(render, 0); };
+    var flash = function (inp) { inp.classList.add('ord-ok'); setTimeout(function () { inp.classList.remove('ord-ok'); }, 700); };
+    box.querySelectorAll('[data-osave]').forEach(function (bt) { bt.onclick = function () { save(bt); }; });
+    box.querySelectorAll('[data-onote]').forEach(function (inp) { inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); save(inp); } }; });
   }
 
   /* ---------- job page card ---------- */

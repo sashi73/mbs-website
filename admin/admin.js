@@ -70,7 +70,7 @@
     document.body.classList.toggle('is-subbie', !!me.scope);   // v91: a sub-contractor signed in to their project
   }
   function firstPage() { var me0 = window.MBS && window.MBS.me; if (me0 && me0.scope) return 'plan/' + me0.scope[0] + '/overview';
-    var order = [['programs', 'projects'], ['dashboard', 'crm'], ['quotes', 'accounts'], ['inventory', 'stock'], ['subs', 'subbies'], ['people', 'people'], ['sql/ask', 'data'], ['users', 'users']];
+    var order = [['programs', 'projects'], ['dashboard', 'crm'], ['quotes', 'accounts'], ['subs', 'subbies'], ['people', 'people'], ['sql/ask', 'data'], ['users', 'users']];
     for (var i = 0; i < order.length; i++) if (allowed(order[i][1], 'view')) return order[i][0]; return 'portfolio'; }
   function showApp(user) {
     $('#login').hidden = true;
@@ -173,6 +173,7 @@
   function route() {
     if ($('#app').hidden) return;
     var parts = (location.hash.slice(1) || 'programs').split('/').map(decodeURIComponent);
+    if (parts[0] === 'inventory') { location.replace('#portfolio'); return; }   // GKH Project Champ: no Inventory
     var name = VIEWS[parts[0]] ? parts[0] : (VIEWS.programs ? 'programs' : 'portfolio');
     if (VIEWMOD[name] && !allowed(VIEWMOD[name], 'view', name === 'job' ? ['projects'] : null)) {   // v86: no access to this module
       $('#title').textContent = TITLES[name]; view.innerHTML = '<div class="card noaccess"><h2>🔒 No access</h2><p class="muted">Your login (' + esc((window.MBS.me || {}).role || '') + ') doesn\'t include this part of the console. Ask an administrator if you need it.</p><p><a class="btn" href="#' + firstPage() + '">Go to my start page</a></p></div>'; return;
