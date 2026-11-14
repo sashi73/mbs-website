@@ -28,11 +28,13 @@ import * as U from '../lib/users.mjs';
 import * as PPL from '../lib/people.mjs';
 import * as SUB from '../lib/subbies.mjs';
 // v91: who may sign in: a person in People, or a sub-contractor in Subbies
-const canIn = (pid, u) => (u && u.kind === 'google' ? !!env('GOOGLE_CLIENT_ID').trim() : u && u.kind === 'subbie' ? SUB.canLogin(u.subId) : PPL.canLogin(pid));   // v97: Google sign-ins only while the test site has it on
+// a real Google OAuth client ID ends in .apps.googleusercontent.com; anything else (e.g. the site URL pasted by mistake) switches the button off
+const gcid = () => { const v = env('GOOGLE_CLIENT_ID').trim().replace(/^["']|["']$/g, ''); if (v && !/\.apps\.googleusercontent\.com$/.test(v)) console.error('GOOGLE_CLIENT_ID is not an OAuth client ID (it should end in .apps.googleusercontent.com): Sign in with Google is off'); return /\.apps\.googleusercontent\.com$/.test(v) ? v : ''; };
+const canIn = (pid, u) => (u && u.kind === 'google' ? !!gcid() : u && u.kind === 'subbie' ? SUB.canLogin(u.subId) : PPL.canLogin(pid));   // v97: Google sign-ins only while the test site has it on
 // v97: "Sign in with Google" on the test site. The Google ID token is checked with Google (tokeninfo): our client ID, a verified
 // email, not expired. GOOGLE_ALLOWED (optional) limits it to some emails or @domains.
 async function googleVerify(cred) {
-  const id = env('GOOGLE_CLIENT_ID').trim(); if (!id) return { error: 'Sign in with Google is not available here.', code: 403 };
+  const id = gcid(); if (!id) return { error: 'Sign in with Google is not available here.', code: 403 };
   if (!/^[\w-]+\.[\w-]+\.[\w-]+$/.test(String(cred || ''))) return { error: 'Google sign-in failed. Try again.' };
   let t;
   try { const r = await fetch((env('GOOGLE_TOKENINFO_URL').trim() || 'https://oauth2.googleapis.com/tokeninfo') + '?id_token=' + encodeURIComponent(cred), { signal: AbortSignal.timeout(8000) }); if (!r.ok) return { error: 'Google did not accept that sign-in. Try again.' }; t = await r.json(); }
@@ -174,7 +176,7 @@ async function handle(req, context) {
       return out(200, { ok: true, user }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(user)) });
     }
     if (action === 'logout') return out(200, { ok: true }, { 'Set-Cookie': A.clearCookie(req) });
-    if (action === 'loginOptions') return out(200, { google: env('GOOGLE_CLIENT_ID').trim() });   // v97: the sign-in page asks
+    if (action === 'loginOptions') return out(200, { google: gcid() });   // v97: the sign-in page asks
     if (action === 'loginGoogle') {   // v97
       if (!A.adminReady()) return bad('The admin console is not set up yet.', 503);
       const ip = A.clientIp(req), { wait } = await A.loginCheck(ip);
