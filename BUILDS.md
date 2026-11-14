@@ -54,4 +54,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 43 | 1.0.43| 2026-11-14 02:25| GKH-Project-Champ| `a2f8e8b` | Budget window, designed project charter and 20-page project plan (PDF and Word), in the chosen language |
 | 44 | 1.0.44| 2026-11-14 03:10| GKH-Project-Champ| `4f4b6d3` | Sticky notes on tasks (Kanban and Gantt); Khmer (Cambodian) language |
 | 45 | 1.0.45| 2026-11-14 10:15| GKH-Project-Champ| `c736a59` | Charter and plan: fully in the chosen language; colour schemes |
-| 46 | 1.0.46 | 2026-11-14 10:42 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 46 | 1.0.46| 2026-11-14 10:42| GKH-Project-Champ| `e6d9154` | Sticky notes: edit in place, tick boxes, checklists |
+| 47 | 1.0.47 | 2026-11-14 11:08 | GKH-Project-Champ | _this commit_ | _see git log_ |
