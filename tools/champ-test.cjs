@@ -34,6 +34,11 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       s2.setHeader('Content-Type', 'application/json');
       return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }], usage: { total_tokens: 4200 } }));
     }
+    if (j.response_format && /You are Champ, the guide/.test(sys)) {   // 🎙 Ask Champ in the dashboard
+      let u = {}; try { u = JSON.parse((j.messages.filter((m) => m.role === 'user').pop() || {}).content || '{}'); } catch (e) {} global.GUIDE_CTX = u;
+      const o = /late/i.test(u.question) ? { tour: 'critical', how: false, answer: 'To recover: crash the critical tasks (more crew or overtime, at extra cost) or fast-track them in parallel (more risk).' + (u.project ? ' Your plan finishes ' + u.project.finish + '.' : '') } : { tour: '', how: false, answer: 'A charter authorises the project.' };
+      s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }] }));
+    }
     if (j.response_format && /Project Intelligence/.test(sys)) {
       global.INTEL_Q = JSON.parse(j.messages[1].content).question; global.INTEL_CTX = JSON.parse(j.messages[1].content);
       s2.setHeader('Content-Type', 'application/json');
@@ -863,23 +868,38 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     // 🎙 Ask Champ in the dashboard: ask how, and Champ points at each place to click
     { await p.goto(`${BASE}/admin/#projects`); await p.waitForSelector('#cgBtn', { timeout: 8000 }).catch(() => {});
       await p.click('#cgBtn').catch(() => {}); await p.waitForSelector('#cgMic', { timeout: 5000 }).catch(() => {});
-      const panel = await p.evaluate(() => ({ mic: !!document.querySelector('#cgMic'), lang: !!document.querySelector('#cgPanel select, #cgPanel [data-l]') }));
+      let ttsN = 0; const onReq = (rq) => { if (/functions\/tts/.test(rq.url())) ttsN++; }; p.on('request', onReq); await sleep(1500);
+      const panel = await p.evaluate(() => ({ mic: !!document.querySelector('#cgMic'), lang: !!document.querySelector('#cgLang'), voice: !!document.querySelector('#cgVoice'), hello: (document.querySelector('#cgLog') || {}).textContent || '' }));
       await p.fill('#cgQ', 'show me how to generate the project charter'); await p.press('#cgQ', 'Enter'); await sleep(1500);
       const s1 = await p.evaluate(() => ({ tip: (document.querySelector('.cg-tip') || {}).textContent || '', spot: !!document.querySelector('.cg-spot:not([hidden])'), on: !!document.querySelector('#cgLayer.on') }));
       await p.click('tr[data-plan]').catch(() => {}); await p.waitForURL(/#plan\//, { timeout: 8000 }).catch(() => {}); await sleep(2500);
       const s2 = await p.evaluate(() => { const sp = document.querySelector('.cg-spot'), b = document.querySelector('[data-dact=charter]'); if (!sp || !b) return null; const a = sp.getBoundingClientRect(), c = b.getBoundingClientRect(); return { tip: document.querySelector('.cg-tip').textContent, over: a.left <= c.left && a.right >= c.right && a.top <= c.top && a.bottom >= c.bottom }; });
       await p.click('[data-dact=charter]').catch(() => {}); await sleep(2500);
       const s3 = await p.evaluate(() => ({ tip: (document.querySelector('.cg-tip') || {}).textContent || '', dlg: !!document.querySelector('#chPdf') }));
-      ok('Guide', 'Ask Champ in the dashboard: a big microphone, no language questions', panel.mic && !panel.lang, JSON.stringify(panel));
+      ok('Guide', 'Ask Champ: says hello (“I’m Champ … guide you … project questions”) out loud, a big microphone, a language picker and a voice switch', panel.mic && panel.lang && panel.voice && /I’m Champ/.test(panel.hello) && /project management questions/.test(panel.hello) && ttsN >= 1, JSON.stringify(panel).slice(0, 200) + ' tts=' + ttsN);
+      ok('Guide', 'Champ reads each step aloud as it shows it', ttsN >= 3, 'tts calls ' + ttsN); p.off('request', onReq);
       ok('Guide', '“show me how to generate the project charter”: Champ asks you to open a project and lights up the list', s1.on && s1.spot && /open a project/i.test(s1.tip), JSON.stringify(s1).slice(0, 200));
       ok('Guide', 'then it points at “Generate the charter” (spotlight on the button), and after the click walks through the charter dialog', s2 && s2.over && /Generate the charter/.test(s2.tip) && s3.dlg && /theme|Preview|PDF/i.test(s3.tip), JSON.stringify([s2, s3]).slice(0, 300));
       await p.click('#cgEnd').catch(() => {}); await p.keyboard.press('Escape'); await sleep(300);
       await p.evaluate(() => window.MBS.guide.ask('how do I create a new user')); await sleep(2500);
       const s4 = await p.evaluate(() => ({ hash: location.hash, tip: (document.querySelector('.cg-tip') || {}).textContent || '', lit: (() => { const sp = document.querySelector('.cg-spot'), b = document.querySelector('#usNew'); if (!sp || !b) return false; const a = sp.getBoundingClientRect(), c = b.getBoundingClientRect(); return a.left <= c.left && a.right >= c.right; })() }));
       ok('Guide', '“how do I create a new user”: Champ opens Users & access and points at ＋ New user', s4.hash === '#users' && s4.lit && /New user/.test(s4.tip), JSON.stringify(s4).slice(0, 200));
-      await p.click('#cgShow').catch(() => {}); await sleep(3500);
+      await p.click('#cgShow').catch(() => {}); await p.waitForSelector('#nuF', { timeout: 20000 }).catch(() => {});
       ok('Guide', '“Show me” clicks the safe steps for you (opens the New user form)', !!(await p.$('#nuF')));
       await p.click('#cgEnd').catch(() => {}); await p.keyboard.press('Escape'); await sleep(300); await p.evaluate(() => { const m = document.getElementById('modal'); if (m && !m.hidden) { const x = m.querySelector('[data-close]'); if (x) x.click(); } }); }
+    // ☰ the menu (tap it, or say/type "menu"); a project question gets a PM answer about this project, with a Show me button
+    { await p.goto(`${BASE}/admin/#projects`); await sleep(800); await p.evaluate(() => { const pn = document.getElementById('cgPanel'); if (!pn || pn.hidden) document.getElementById('cgBtn').click(); }); await sleep(800);
+      const small = await p.evaluate(() => { const m = document.getElementById('cgMic').getBoundingClientRect(); return m.width <= 44 && !!document.querySelector('#cgF #cgMic'); });
+      await p.click('#cgMenuBtn').catch(() => {}); await sleep(1200);
+      const mt = await p.evaluate(() => { const m = document.getElementById('cgMenu'); return m && !m.hidden ? m.textContent : ''; });
+      await p.click('#cgMenuX').catch(() => {}); await p.fill('#cgQ', 'menu'); await p.press('#cgQ', 'Enter'); await sleep(1500);
+      const said = await p.evaluate(() => !document.getElementById('cgMenu').hidden);
+      ok('Guide', 'a small microphone next to the box, and a ☰ menu (tap it or say “menu”) with everything Champ can show', small && /In a project/.test(mt) && /Generate the project charter/.test(mt) && /Create a new user/.test(mt) && said, mt.slice(0, 160));
+      await p.click('#cgMenuX').catch(() => {}); const core = (await (await api('planList')).json()).plans[0].core;
+      await p.goto(`${BASE}/admin/#plan/${core}/overview`); await sleep(1500); await p.evaluate(() => { const pn = document.getElementById('cgPanel'); if (!pn || pn.hidden) document.getElementById('cgBtn').click(); }); await sleep(600);
+      await p.fill('#cgQ', 'My project is running late, what can I do about it?'); await p.press('#cgQ', 'Enter'); await sleep(2500);
+      const an = await p.evaluate(() => (document.getElementById('cgLog') || {}).textContent || ''), tourOn = await p.evaluate(() => !!document.querySelector('#cgLayer.on'));
+      ok('Guide', '“my project is running late”: a PM answer (crashing, fast-tracking) using this project\'s facts, with a Show me button (no tour forced)', /crash/i.test(an) && /fast-track/i.test(an) && global.GUIDE_CTX && global.GUIDE_CTX.project && global.GUIDE_CTX.project.finish && /Show me/.test(an) && !tourOn, an.slice(-260)); await p.evaluate(() => { const pn = document.getElementById('cgPanel'); if (pn) pn.hidden = true; }); }
     ok('BOM', 'one BOM per project: Draft with AI and Templates are off until the BOM is deleted (no appending)', await p.goto(`${BASE}/admin/#plan/${cc}/bom`).then(() => p.waitForSelector('#bomOpen, #bomAi', { timeout: 8000 })).then(async () => { await p.click('#bomOpen').catch(() => {}); await p.fill('#boF [name=why]', 'Add a line').catch(() => {}); await p.click('#boF [type=submit]').catch(() => {}); await sleep(1200); return (await p.isDisabled('#bomAi').catch(() => false)) && (await p.isDisabled('#bomTpl').catch(() => false)); }).catch(() => false));
     await p.goto(`${BASE}/admin/#plan/${cc}/budget`); await p.waitForSelector('.bd-tiles', { timeout: 8000 }).catch(() => {});
     ok('Costing', 'reopened, the BOM is out of the costing until it is signed off again', /waiting for sign-off/.test(await p.textContent('.bd-bomst').catch(() => '')) && !(await p.$('[data-gobom]')));

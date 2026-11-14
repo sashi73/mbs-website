@@ -339,11 +339,18 @@ body.is-subbie [data-nav=programs],body.is-subbie [data-nav=deps],body.is-subbie
 .cgp-h{display:flex;align-items:baseline;gap:8px}.cgp-h small{color:#6B665A;font-size:12px}.cgp-x{margin-left:auto;border:0;background:none;font-size:16px;cursor:pointer;color:#6B665A}
 .cgp-log{overflow:auto;display:flex;flex-direction:column;gap:6px;max-height:180px}.cgp-log:empty{display:none}
 .cgp-m{padding:7px 11px;border-radius:12px;font-size:13px;max-width:90%}.cgp-me{align-self:flex-end;background:#1F1D18;color:#F5D77A}.cgp-bot{background:#FFF8E1;border:1px solid #F0D98A}
-.cgp-mic{align-self:center;width:92px;height:92px;border-radius:50%;border:0;cursor:pointer;background:radial-gradient(circle at 35% 30%,#F5D77A,#C9A227);box-shadow:0 10px 24px rgba(201,162,39,.45);font-size:40px;display:grid;place-items:center;transition:transform .15s}
+.cgp-mic{flex:none;width:40px;height:40px;border-radius:50%;border:0;cursor:pointer;background:radial-gradient(circle at 35% 30%,#F5D77A,#C9A227);box-shadow:0 4px 10px rgba(201,162,39,.4);font-size:18px;display:grid;place-items:center;transition:transform .15s}
 .cgp-mic:hover{transform:scale(1.04)}.cgp-mic.rec{background:radial-gradient(circle at 35% 30%,#FCA5A5,#DC2626);animation:cgPulse 1.1s infinite}.cgp-mic.busy{opacity:.6;animation:cgSpin 1s linear infinite}
 @keyframes cgPulse{0%{box-shadow:0 0 0 0 rgba(220,38,38,.55)}100%{box-shadow:0 0 0 22px rgba(220,38,38,0)}}@keyframes cgSpin{to{transform:rotate(360deg)}}
 .cgp-hint{margin:0;text-align:center;font-size:12.5px;color:#6B665A}
-.cgp-f{display:flex;gap:6px}.cgp-f input{flex:1}
+.cgp-f{display:flex;gap:6px;align-items:center}.cgp-f input{flex:1;min-width:0;border-radius:99px;padding:8px 12px}
+.cgp-send,.cgp-mbtn{flex:none;width:38px;height:38px;border-radius:50%;border:1px solid #E7E1D2;background:#FFFCF2;cursor:pointer;font-size:16px;color:#1F1D18}.cgp-send{background:#1F1D18;color:#F5D77A;border-color:#1F1D18}.cgp-mbtn:hover,.cgp-send:hover{border-color:#C9A227}
+.cgp-menu{overflow:auto;max-height:300px;border:1px solid #F0D98A;background:#FFFCF2;border-radius:14px;padding:8px 10px}
+.cgp-mh{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:13px;margin-bottom:2px}.cgp-mh button{border:0;background:none;cursor:pointer;color:#6B665A}
+.cgp-menu p{margin:8px 0 4px;font-size:11.5px;font-weight:800;color:#8A6D1E;text-transform:uppercase;letter-spacing:.04em}
+.cgp-mg{display:grid;grid-template-columns:1fr 1fr;gap:5px}.cgp-mg button{display:flex;gap:6px;align-items:center;text-align:left;border:1px solid #E7E1D2;background:#fff;border-radius:10px;padding:6px 8px;font:600 12px/1.25 'Manrope',system-ui,sans-serif;cursor:pointer;color:#3F3A2E}.cgp-mg button:hover{border-color:#C9A227;background:#FFF4CC}.cgp-mg i{font-style:normal}
+.cgp-show{display:block;margin-top:6px;border:0;border-radius:99px;background:#C9A227;color:#1F1D18;font:700 12px/1 'Manrope',system-ui,sans-serif;padding:6px 10px;cursor:pointer}
+.cgp-log{max-height:260px}
 .cgp-chips{display:flex;flex-wrap:wrap;gap:6px}.cgp-chips button{border:1px solid #E7E1D2;background:#FFFCF2;border-radius:99px;padding:5px 10px;font:600 12px/1.2 'Manrope',system-ui,sans-serif;cursor:pointer;color:#3F3A2E}.cgp-chips button:hover{border-color:#C9A227;background:#FFF4CC}
 #cgLayer{position:fixed;inset:0;z-index:95;pointer-events:none;display:none}#cgLayer.on{display:block}
 .cg-spot{position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(20,18,12,.45),0 0 0 3px #F5D77A,0 0 22px 6px rgba(245,215,122,.75);transition:all .55s cubic-bezier(.3,.8,.3,1);pointer-events:none}
@@ -355,3 +362,7 @@ body.is-subbie [data-nav=programs],body.is-subbie [data-nav=deps],body.is-subbie
 .cg-tip-b{display:flex;gap:6px;flex-wrap:wrap}.cg-tip-b .btn{background:#2C2920;color:#FFF8E1;border-color:#4A4538}.cg-tip-b .btn-gold{background:#C9A227;color:#1F1D18;border-color:#C9A227}
 @media print{#cgBtn,#cgPanel,#cgLayer{display:none!important}}
 #modal:not([hidden]) ~ #cgBtn,#modal:not([hidden]) ~ #cgPanel{display:none}
+.cgp-h{align-items:center}.cgp-h img{width:28px;height:28px;border-radius:50%}.cgp-h select{margin-left:auto;width:auto;max-width:130px;padding:3px 6px;font-size:12px}
+.cgp-v{border:1px solid #E7E1D2;background:#FFFCF2;border-radius:99px;width:32px;height:30px;cursor:pointer;font-size:15px}.cgp-v.talk{border-color:#C9A227;box-shadow:0 0 0 3px rgba(201,162,39,.3);animation:cgTalk .8s ease-in-out infinite alternate}
+@keyframes cgTalk{to{box-shadow:0 0 0 6px rgba(201,162,39,.12)}}
+.cgp-x{margin-left:0}

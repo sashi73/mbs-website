@@ -72,6 +72,18 @@
     { id: 'language', t: 'Change the language of the console', k: 'language|bahasa|மொழி|translate', steps: [
       { sel: '#champLangBtn', say: 'Press the language button and pick a language: the whole console changes.' }] }];
 
+  // ---------- 🔊 Champ's voice (Azure, the same voice as the website): reads replies and every step aloud ----------
+  var V = { audio: null, n: 0, on: (function () { try { return localStorage.getItem('cgVoice') !== 'off'; } catch (e) { return true; } })() };
+  function hush() { V.n++; if (V.audio) { try { V.audio.pause(); } catch (e) {} V.audio = null; } }
+  function speak(text) {
+    hush(); if (!V.on || !text) return; var n = V.n, el = $('#cgVoice');
+    fetch('/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: String(text).slice(0, 1500), lang: lang() }) })
+      .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(j.error || 'Champ’s voice is not available right now.'); }); return r.blob(); })
+      .then(function (bl) { if (n !== V.n) return; V.audio = new Audio(URL.createObjectURL(bl)); if (el) el.classList.add('talk'); V.audio.onended = function () { if (el) el.classList.remove('talk'); }; return V.audio.play(); })
+      .catch(function (e) { if (el) el.classList.remove('talk'); if (n === V.n && !V.warned) { V.warned = true; say('bot', '🔇 ' + (/play|interact|NotAllowed/i.test(e.message) ? 'Tap 🔊 to let me speak.' : e.message)); } });
+  }
+  function voiceBtn() { var b = $('#cgVoice'); if (b) { b.textContent = V.on ? '🔊' : '🔇'; b.title = V.on ? 'Champ speaks: tap to mute' : 'Muted: tap so Champ speaks'; } }
+
   // ---------- the pointer, the spotlight and the bubble ----------
   var G = { tour: null, i: 0, auto: false, el: null, off: null, x: innerWidth - 80, y: innerHeight - 80 };
   function ui() {
@@ -108,7 +120,7 @@
     G.i = i; var s = tour.steps[i], sp = $('.cg-spot'), tip = $('.cg-tip'), cur = $('.cg-cursor');
     $('#cgTitle').textContent = tour.title; $('#cgN').textContent = (i + 1) + ' / ' + tour.steps.length; $('#cgBack').disabled = i === 0;
     $('#cgNext').textContent = i === tour.steps.length - 1 ? 'Done ✓' : 'Next ▶';
-    tr([s.say]).then(function (x) { $('#cgSay').textContent = x[0]; place(); });
+    tr([s.say]).then(function (x) { $('#cgSay').textContent = x[0]; place(); speak(x[0]); });
     var go = function () {
       if (s.plan && planHash()) return step(i + 1);   // a project is open already
       if (s.plan) { if (!/^#projects$/.test(location.hash)) location.hash = '#projects'; waitHash(/^#plan\//).then(function (ok) { if (ok && G.tour === tour && G.i === i) setTimeout(function () { step(i + 1); }, 500); }); }
@@ -134,8 +146,10 @@
   }
   function autoGo() {
     var tour = G.tour, i = G.i, s = tour && tour.steps[i]; if (!s) return;
-    setTimeout(function () { if (!G.auto || G.tour !== tour || G.i !== i) return;
-      if (s.click && G.el) G.el.click(); else step(i + 1); }, 2200);
+    var t0 = Date.now(), go = function () { if (!G.auto || G.tour !== tour || G.i !== i) return;
+      if (V.audio && !V.audio.ended && !V.audio.paused && Date.now() - t0 < 15000) return setTimeout(go, 400);   // let Champ finish the sentence
+      if (s.click && G.el) G.el.click(); else step(i + 1); };
+    setTimeout(go, 2200);
   }
   function start(tour) {
     if (tour.owner && !(M.me || {}).owner) { reply('Only the project manager (super user) can do “' + tour.t + '”. Ask them, or I can show you something else.'); return; }
@@ -143,7 +157,7 @@
     tr([tour.t]).then(function (x) { if (G.tour) G.tour.title = x[0]; $('#cgTitle').textContent = x[0]; });
     $('#cgLayer').classList.add('on'); step(0);
   }
-  function end() { if (G.off) { G.off(); G.off = null; } G.tour = null; G.el = null; var l = $('#cgLayer'); if (l) { l.classList.remove('on'); l.querySelectorAll('.cg-spot,.cg-cursor,.cg-tip').forEach(function (x) { x.hidden = true; }); } }
+  function end() { hush(); if (G.off) { G.off(); G.off = null; } G.tour = null; G.el = null; var l = $('#cgLayer'); if (l) { l.classList.remove('on'); l.querySelectorAll('.cg-spot,.cg-cursor,.cg-tip').forEach(function (x) { x.hidden = true; }); } }
   function finish() { var t = G.tour && G.tour.title; end(); openPanel(); reply('✓ That is how: ' + t + '. Ask me anything else.'); }
 
   // ---------- the panel: a big microphone (and a box to type in) ----------
@@ -157,25 +171,48 @@
     var p = $('#cgPanel');
     if (!p) {
       p = document.createElement('div'); p.id = 'cgPanel';
-      p.innerHTML = '<div class="cgp-h"><b>🎙 Ask Champ</b><small>I show you where to click</small><button type="button" class="cgp-x" title="Close">✕</button></div><div class="cgp-log" id="cgLog"></div>' +
-        '<button type="button" class="cgp-mic" id="cgMic" title="Tap and ask"><span>🎙</span></button><p class="cgp-hint" id="cgHint">Tap the microphone and ask, e.g. “How do I generate the project charter?”</p>' +
-        '<form class="cgp-f" id="cgF"><input id="cgQ" maxlength="200" placeholder="…or type: how do I add a user?"><button class="btn btn-sm btn-gold" type="submit">Ask</button></form>' +
-        '<div class="cgp-chips" id="cgChips"></div>';
+      var LL = (window.ChampI18n && window.ChampI18n.langs) || [['en', 'English']];
+      p.innerHTML = '<div class="cgp-h"><img src="../assets/gkh-globe.webp" alt=""><b>Champ</b><select id="cgLang" title="Champ\'s language (the whole console changes too)">' + LL.map(function (l) { return '<option value="' + l[0] + '"' + (l[0] === lang() ? ' selected' : '') + '>' + esc(l[1]) + '</option>'; }).join('') + '</select>' +
+        '<button type="button" class="cgp-v" id="cgVoice"></button><button type="button" class="cgp-x" title="Close">✕</button></div><div class="cgp-log" id="cgLog"></div>' +
+        '<div class="cgp-menu" id="cgMenu" hidden></div>' +
+        '<p class="cgp-hint" id="cgHint">Tap 🎙 and ask, or say “menu”.</p>' +
+        '<form class="cgp-f" id="cgF"><button type="button" class="cgp-mic" id="cgMic" title="Tap and ask (say “menu” for the list)">🎙</button><input id="cgQ" maxlength="300" placeholder="Ask me anything…"><button class="cgp-send" type="submit" title="Ask">➤</button><button type="button" class="cgp-mbtn" id="cgMenuBtn" title="Menu: everything I can show you">☰</button></form>';
       document.body.appendChild(p);
-      p.querySelector('.cgp-x').onclick = closePanel;
+      p.querySelector('.cgp-x').onclick = closePanel; voiceBtn();
+      $('#cgVoice').onclick = function () { V.on = !V.on; try { localStorage.setItem('cgVoice', V.on ? 'on' : 'off'); } catch (e) {} voiceBtn(); if (!V.on) hush(); else { V.warned = false; speak(lastBot || 'Hello!'); } };
+      $('#cgLang').onchange = function () { var l = this.value; if (window.ChampI18n) window.ChampI18n.set(l); setTimeout(function () { greet(true); chipsFill(p); }, 600); };
       $('#cgF').onsubmit = function (e) { e.preventDefault(); var q = $('#cgQ').value.trim(); if (q) { $('#cgQ').value = ''; ask(q); } };
-      $('#cgMic').onclick = mic;
-      var chips = ['charter', 'bom', 'user', 'project', 'task', 'board', 'profile'].map(function (id) { return T.filter(function (x) { return x.id === id; })[0]; });
-      tr(chips.map(function (c) { return c.t; }).concat(['Tap the microphone and ask, e.g. “How do I generate the project charter?”'])).then(function (L) {
-        $('#cgChips').innerHTML = chips.map(function (c, i) { return '<button type="button" data-cgt="' + c.id + '">' + esc(L[i]) + '</button>'; }).join(''); $('#cgHint').textContent = L[L.length - 1];
-        p.querySelectorAll('[data-cgt]').forEach(function (b) { b.onclick = function () { start(T.filter(function (x) { return x.id === b.getAttribute('data-cgt'); })[0]); }; });
-      });
+      $('#cgMic').onclick = mic; $('#cgMenuBtn').onclick = function () { menu(); };
+      chipsFill(p);
     }
-    p.hidden = false;
+    p.hidden = false; greet(false);
+  }
+  // ☰ the menu: everything Champ can show you, in groups (tap ☰, or say / type "menu")
+  var MENU = [['📁 In a project', ['charter', 'plandoc', 'bom', 'task', 'note', 'board', 'budget', 'risk', 'critical', 'change', 'intel']], ['🚀 Getting started', ['project', 'profile', 'language']], ['👥 Team and access', ['user', 'people', 'calendar']]];
+  var IC = { charter: '📜', plandoc: '📘', bom: '🧱', task: '＋', note: '🗒', board: '🖼', budget: '💰', risk: '⚠', critical: '⚡', change: '🔁', intel: '🧠', project: '📅', profile: '🙋', language: '🌐', user: '🔐', people: '👥', calendar: '📆' };
+  function chipsFill(p) {
+    var ids = [].concat.apply([], MENU.map(function (g) { return g[1]; })), tt = ids.map(function (id) { return T.filter(function (x) { return x.id === id; })[0].t; });
+    tr(tt.concat(MENU.map(function (g) { return g[0]; }), ['Tap 🎙 and ask, or say “menu”.', 'Ask me anything…', 'Everything I can show you'])).then(function (L) {
+      var at = 0, g0 = tt.length;
+      $('#cgMenu').innerHTML = '<div class="cgp-mh">' + esc(L[L.length - 1]) + '<button type="button" id="cgMenuX">✕</button></div>' + MENU.map(function (g, gi) {
+        return '<p>' + esc(L[g0 + gi]) + '</p><div class="cgp-mg">' + g[1].map(function (id) { var t = L[at++]; return '<button type="button" data-cgt="' + id + '"><i>' + IC[id] + '</i>' + esc(t) + '</button>'; }).join('') + '</div>'; }).join('');
+      $('#cgHint').textContent = L[L.length - 3]; $('#cgQ').placeholder = L[L.length - 2];
+      p.querySelectorAll('[data-cgt]').forEach(function (b) { b.onclick = function () { $('#cgMenu').hidden = true; start(T.filter(function (x) { return x.id === b.getAttribute('data-cgt'); })[0]); }; });
+      $('#cgMenuX').onclick = function () { $('#cgMenu').hidden = true; };
+    });
+  }
+  function menu(spoken) { openPanel(); var m = $('#cgMenu'); m.hidden = spoken ? false : !m.hidden; if (!m.hidden) { m.scrollTop = 0; if (spoken) reply('Here is everything I can show you. Pick one, or just ask.'); } }
+  var MENU_WORDS = /^(the )?(menu|main menu|show (me )?(the )?menu|open (the )?menu|options|help|what can you do\??|what can you show me\??|menu utama|tunjuk menu|மெனு|菜单|メニュー|메뉴|منو|القائمة|मेनू|เมนู)[.!? ]*$/i;
+  // the hello: once a session (and again in a new language)
+  var GREET = 'Hello, I’m Champ! 👋 Think of me as your co-pilot in Project Champ. Ask me how to do anything, like making a charter, a BOM or a new user, and I’ll show you exactly where to click, step by step. I can also answer your project management questions, like what to do when a project runs late. Tap 🎙 and just ask, or say “menu” to see everything I can show you.';
+  function greet(again) {
+    var k = 'cgHello'; try { if (!again && sessionStorage.getItem(k) === lang()) return; sessionStorage.setItem(k, lang()); } catch (e) {}
+    var L = $('#cgLog'); if (L && again) L.innerHTML = ''; reply(GREET);
   }
   function closePanel() { var p = $('#cgPanel'); if (p) p.hidden = true; }
   function say(who, text) { var L = $('#cgLog'); if (!L) return; var d = document.createElement('div'); d.className = 'cgp-m cgp-' + who; d.textContent = text; L.appendChild(d); L.scrollTop = L.scrollHeight; return d; }
-  function reply(text) { openPanel(); tr([text]).then(function (x) { say('bot', x[0]); }); }
+  var lastBot = '';
+  function reply(text, quiet) { var p = $('#cgPanel'); if (!p || p.hidden) { if (p) p.hidden = false; else openPanel(); } tr([text]).then(function (x) { say('bot', x[0]); lastBot = x[0]; if (!quiet) speak(x[0]); }); }
 
   // what did they ask for? words first (fast, works offline), then the AI (any language, any wording)
   function local(q) {
@@ -183,23 +220,37 @@
     T.forEach(function (t) { var n = 0; t.k.split('|').forEach(function (w) { if (w && s.indexOf(w) >= 0) n += w.length; }); if (n > top) { top = n; best = t; } });
     return top >= 3 ? best : null;
   }
+  var HOW = /\b(how|where|show me|guide me|walk me|can i|cara|bagaimana|di mana|tunjuk)\b|எப்படி|எங்கே|如何|怎么|どうやって|어떻게|چگونه|كيف|कैसे|ทำอย่างไร/i;
   function ask(q) {
     openPanel(); say('me', q);
-    var hit = local(q); if (hit) return start(hit);
+    if (MENU_WORDS.test(q.trim())) return menu(true);
+    var hit = (HOW.test(q) || q.split(/\s+/).length <= 4) ? local(q) : null; if (hit) return start(hit);   // "how do I make a charter?": straight to the guide
     var wait = say('bot', '…');
-    api('guideAsk', { q: q, tours: T.map(function (t) { return { id: t.id, t: t.t }; }) }).then(function (r) {
+    api('guideAsk', { q: q, page: location.hash.slice(1, 60), core: planHash(), tours: T.map(function (t) { return { id: t.id, t: t.t }; }) }).then(function (r) {
       if (wait) wait.remove();
       var t = T.filter(function (x) { return x.id === r.tour; })[0];
-      if (r.answer) say('bot', r.answer);
-      if (t) setTimeout(function () { start(t); }, r.answer ? 900 : 0);
+      if (r.answer) { var d = say('bot', r.answer); lastBot = r.answer; if (!(t && r.how)) speak(r.answer);
+        if (t && !r.how) tr(['▶ Show me: ' + t.t]).then(function (x) { var b = document.createElement('button'); b.type = 'button'; b.className = 'cgp-show'; b.textContent = x[0]; b.onclick = function () { start(t); }; d.appendChild(b); }); }
+      if (t && (r.how || !r.answer)) setTimeout(function () { start(t); }, r.answer ? 900 : 0);
       else if (!r.answer) reply('I can show you how to: ' + T.slice(0, 8).map(function (x) { return x.t.toLowerCase(); }).join(', ') + '. Which one?');
     }).catch(function () { if (wait) wait.remove(); reply('I can show you how to: ' + T.slice(0, 8).map(function (x) { return x.t.toLowerCase(); }).join(', ') + '. Which one?'); });
   }
 
   // 🎙 tap to talk: records until you stop talking, then Champ's ears (Azure) write it down in the console's language
   var rec = null;
+  // the browser's own speech recognition first (Chrome, Edge, Safari: instant, many languages); Azure when the browser has none
+  var SRL = { en: 'en-AU', ms: 'ms-MY', id: 'id-ID', ta: 'ta-IN', zh: 'zh-CN', hi: 'hi-IN', ar: 'ar-AE', fa: 'fa-IR', vi: 'vi-VN', th: 'th-TH', tl: 'fil-PH', ja: 'ja-JP', ko: 'ko-KR', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', pt: 'pt-BR', sw: 'sw-KE', km: 'km-KH' };
+  var sr = null;
   function mic() {
-    var m = $('#cgMic');
+    var m = $('#cgMic'), SR = window.SpeechRecognition || window.webkitSpeechRecognition; hush();
+    if (sr) { try { sr.stop(); } catch (e) {} return; }
+    if (SR && !mic.azure) {
+      var got = '', failed = false; sr = new SR(); sr.lang = SRL[lang()] || 'en-AU'; sr.interimResults = true; sr.maxAlternatives = 1; sr.continuous = false;
+      sr.onresult = function (e) { got = Array.prototype.map.call(e.results, function (r) { return r[0].transcript; }).join(' '); $('#cgQ').value = got; };
+      sr.onerror = function (e) { failed = true; if (e.error === 'not-allowed' || e.error === 'service-not-allowed') reply('The microphone is blocked. Allow it in the browser (the 🔒 next to the address), or type your question.'); else if (e.error === 'network' || e.error === 'language-not-supported') { mic.azure = true; } };
+      sr.onend = function () { sr = null; m.classList.remove('rec'); var q = got.trim(); $('#cgQ').value = ''; if (q) ask(q); else if (mic.azure && failed) mic(); else if (!failed) reply('I did not catch that. Tap the microphone and ask again, or type it.', true); };
+      try { sr.start(); m.classList.add('rec'); return; } catch (e) { sr = null; mic.azure = true; }
+    }
     if (rec && rec.state === 'recording') { rec.stop(); return; }
     if (!navigator.mediaDevices || !window.MediaRecorder) return reply('This browser cannot use the microphone here. Type your question instead.');
     navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function (stream) {

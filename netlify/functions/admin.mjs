@@ -363,11 +363,22 @@ async function handle(req, context) {
         const q = clean(body.q, 300), tours = (Array.isArray(body.tours) ? body.tours : []).slice(0, 40).map((t) => ({ id: clean(t.id, 20), t: clean(t.t, 80) })).filter((t) => t.id);
         if (!q) return bad('Ask a question');
         const { llmJson } = await import('../lib/ai.mjs');
-        const r = await llmJson([{ role: 'system', content: 'You are Champ, the guide inside the GKH Project Champ project-management console. People ask how to do things in the console. ' +
-          'Pick the ONE guide from the list that shows them how (its id), or "" if none fits. Then write a short, friendly answer (1-2 sentences, plain words) that says what you will show them, or answers briefly if no guide fits. ' +
-          'Do not invent screens or buttons. JSON only: {"tour":"id or empty","answer":"..."}' }, { role: 'user', content: JSON.stringify({ question: q, guides: tours }) }], { maxTokens: 300 }).catch(() => null);
+        let project = null;   // asked from inside a project: its facts, so "my project is running late" gets an answer about this project
+        const core = clean(body.core, 40);
+        if (core && (!ctx.scope || ctx.scope.includes(core))) { try { const PL = await import('../lib/plan.mjs'); const pl = await getPlan(core);
+          if (pl && Array.isArray(pl.tasks)) { const today = new Date(Date.now() + 11 * 3600000).toISOString().slice(0, 10), R = PL.rollup(pl, today);
+            project = { name: pl.name, start: R.start, finish: R.finish, finish_by: pl.finishBy || '', today, pct_complete: R.pct, tasks: R.total, late_tasks: R.late, SPI: R.SPI, CPI: R.CPI, budget_BAC: R.BAC, spent_AC: R.AC,
+              open_risks: (pl.risks || []).filter((x) => x.status !== 'Closed').length, open_issues: (pl.issues || []).filter((x) => x.status !== 'Closed').length }; } } catch (e) { project = null; } }
+        const r0 = await llmJson([{ role: 'system', content: 'You are Champ, the guide inside the GKH Project Champ project-management console. People ask how to do things in the console. ' +
+          'If they ask HOW TO DO something in the console, pick the ONE guide from the list that shows them (its id), set how true, and say in 1-2 friendly sentences what you will show them. ' +
+          'If they ask a project question (e.g. "my project is running late, what can I do?", over budget, too many risks, a stakeholder problem), set how false and answer it like a seasoned PMP: ' +
+          'name the right techniques (late: crashing with more crew or overtime at extra cost, fast-tracking critical tasks in parallel with more risk, re-sequencing, cutting or deferring scope with the sponsor, a change request, re-baselining; ' +
+          'over budget: EVM, CPI and EAC, value engineering, scope trade-offs, contingency), use the project facts given (finish vs finish_by, SPI, CPI, late tasks) when there are any, and you may add the guide id that helps act on it (e.g. critical). ' +
+          'If no guide fits, tour is "" and you answer the question yourself: project management questions (PMBOK, PRINCE2, Agile, Scrum, risks, critical path, EVM, stakeholders, change control, budgets, charters, lessons learned ...) ' +
+          'get a clear, practical answer in up to 5 short sentences, like an experienced project manager would give. Warm, plain words, no markdown. Do not invent screens or buttons of the console. ' +
+          'JSON only: {"tour":"id or empty","how":true|false,"answer":"..."}' }, { role: 'user', content: JSON.stringify({ question: q, on_page: clean(body.page, 60), project, guides: tours }) }], { maxTokens: 900 }).catch(() => null), r = r0 && r0.data;
         const tour = r && tours.some((t) => t.id === r.tour) ? r.tour : '';
-        return out(200, { tour, answer: clean(r && r.answer, 400) });
+        return out(200, { tour, how: !!(r && r.how), answer: clean(r && r.answer, 1500) });
       }
       case 'planNewProject': {
         const pname = clean(body.name, 120), client = clean(body.client, 120);

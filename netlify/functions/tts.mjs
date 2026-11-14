@@ -19,7 +19,7 @@ const hits = new Map();
 function limited(ip) {
   const now = Date.now(), list = (hits.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
   list.push(now); hits.set(ip, list); if (hits.size > 5000) hits.clear();
-  return list.length > 40;
+  return list.length > 150;   // the dashboard guide reads every step aloud
 }
 
 export default async (req, context) => {
