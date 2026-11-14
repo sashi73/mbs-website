@@ -1647,7 +1647,7 @@
       var subs = t.subs || [], open = subs.length && !S.closed[t.id];
       html += '<tr data-tid="' + esc(t.id) + '" class="' + (t.pct >= 100 ? 'tdone' : '') + (late ? ' tlate' : '') + (t.dur === 0 ? ' tmile' : '') + (subs.length ? ' tparent' : '') + '"><td class="muted nowrap">' + '<span class="grip" data-grip title="Drag up or down to move this task">⠿</span>' + (subs.length ? '<button class="subtog" type="button" data-tog title="' + (open ? 'Hide' : 'Show') + ' sub-tasks">' + (open ? '▾' : '▸') + '</button>' : '') + '<input class="posin" data-pos inputmode="numeric" value="' + r.n + '" title="Type a number to move this task there (1 = first)">' + stkBtn(t, 'row') + '</td>' +
         '<td><input type="checkbox" data-k="done"' + (t.pct >= 100 ? ' checked' : '') + ' title="Done" style="width:auto"></td>' +
-        '<td><div class="tname"><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"><button class="tdel" type="button" data-del title="Delete this task' + (subs.length ? ' and its ' + pl(subs.length, 'sub-task') : '') + '" aria-label="Delete task">🗑</button><button class="pkbtn" type="button" data-pick title="' + (matsOf(t).length ? 'Materials from stock (' + matsOf(t).length + '): change them' : 'Add materials from stock (any number, each with a quantity)') + '">📦</button></div>' + stockChip(t) +
+        '<td><div class="tname"><input data-k="name" value="' + esc(t.name) + '" title="' + esc(t.name) + (t.dur === 0 ? ' (milestone)' : '') + (late ? ' · LATE: was due ' + pretty(t.ef) : '') + '"><button class="tdel" type="button" data-del title="Delete this task' + (subs.length ? ' and its ' + pl(subs.length, 'sub-task') : '') + '" aria-label="Delete task">🗑</button><button class="tins" type="button" data-ins title="Add a level-1 task below this one" aria-label="Add a task below">＋</button><button class="pkbtn" type="button" data-pick title="' + (matsOf(t).length ? 'Materials from stock (' + matsOf(t).length + '): change them' : 'Add materials from stock (any number, each with a quantity)') + '">📦</button></div>' + stockChip(t) +
           (t.dur === 0 ? '' : '<button class="subadd" type="button" data-addsub title="Break this task into smaller steps (they stay inside its dates)">＋ sub-task' + (subs.length ? ' · ' + subs.filter(function (x) { return x.status === 'done'; }).length + '/' + subs.length + ' done' : '') + '</button>') + '</td>' +
         '<td>' + resCell(t) + '</td>' +
         '<td><input data-k="dur" type="number" min="0" max="365" value="' + t.dur + '" style="width:50px" title="0 days = milestone"></td>' +
@@ -1696,6 +1696,7 @@
       });
     });
     if (!rows.length) { html += '<tr><td colspan="16"><div class="empty">No tasks yet. Press “＋ Task”.</div></td></tr>'; G += '<tr><td class="gcol"></td></tr>'; }
+    if (rows.length) { html += '<tr class="taddrow"><td></td><td></td><td colspan="14"><button class="btn btn-sm" type="button" data-addend>＋ Task (level 1)</button> <button class="btn btn-sm" type="button" data-addendm>◆ Milestone</button> <small class="muted">A level-1 task carries the costing: Qty × Unit $ = Cost, and Actual $.</small></td></tr>'; G += '<tr class="taddrow"><td class="gcol"></td></tr>'; }
     html += '</tbody><tfoot><tr><td></td><td></td><td><b>Total (budget at completion)</b></td><td></td><td></td><td>' + esc(pretty(R.start)) + '</td><td>' + esc(pretty(R.finish)) + '</td><td></td><td></td><td></td><td></td><td class="num"><b>' + money(R.BAC) + '</b></td><td class="num"><b>' + money(R.AC) + '</b></td><td></td><td><b>' + R.pct + '%</b></td><td></td></tr></tfoot></table></div>' +
       '<div class="gsplitter" id="gSplitter" title="Drag to make the task list or the Gantt chart wider (double-click to reset)"><span></span></div>' +
       '<div class="gpane gright" id="gRight"><table class="gt gtr"><thead><tr><th class="gcol">' + scale + '</th></tr></thead><tbody>' + G + '</tbody><tfoot><tr><td class="gcol"><div class="gleg" title="Bar colours: how far each task and sub-task has got">' + [0, 25, 50, 75, 100].map(function (n) { return '<span><i class="pb-' + n + '"></i>' + (n === 100 ? '100% done' : n + '%') + '</span>'; }).join('') + '<span><i class="pb-late"></i>Late</span><span><i class="pb-mile"></i>Milestone</span></div></td></tr></tfoot></table></div></div>' +
@@ -1866,13 +1867,18 @@
         matsEditor(t);
       };
     });
-    var add = function (mile) {
-      var last = p.tasks[p.tasks.length - 1];
-      var t = { id: 't' + Date.now().toString(36), phase: 'ph1', name: mile ? 'New milestone' : 'New task', dur: mile ? 0 : 1, res: [], lead: '', resource: '', qty: 0, unit: '', rate: 0, actual: 0, pct: 0, status: 'todo', pred: last ? [last.id] : [], snet: '', notes: '' };
-      p.tasks.push(t); dirty(); render();
+    var add = function (mile, after) {   // a level-1 task (with its costing), at the end or straight after another level-1 task
+      var last = after || p.tasks[p.tasks.length - 1];
+      var t = { id: 't' + Date.now().toString(36), phase: (last && last.phase) || 'ph1', name: mile ? 'New milestone' : 'New task', dur: mile ? 0 : 1, res: [], lead: '', resource: '', qty: 0, unit: '', rate: 0, actual: 0, pct: 0, status: 'todo', pred: last ? [last.id] : [], snet: '', notes: '' };
+      if (after) { var at = p.tasks.indexOf(after), nx = p.tasks[at + 1]; if (nx && (nx.pred || []).indexOf(after.id) >= 0) nx.pred = nx.pred.map(function (id) { return id === after.id ? t.id : id; }); p.tasks.splice(at + 1, 0, t); }
+      else p.tasks.push(t);
+      dirty(); render();
       setTimeout(function () { var i = $('#planBody tr[data-tid="' + t.id + '"] [data-k=name]'); if (i) { i.focus(); i.select(); } }, 30);
     };
     $('#addTask').onclick = function () { add(false); };
+    B.querySelectorAll('[data-addend]').forEach(function (b) { b.onclick = function () { add(false); }; });
+    B.querySelectorAll('[data-addendm]').forEach(function (b) { b.onclick = function () { add(true); }; });
+    B.querySelectorAll('[data-ins]').forEach(function (b) { b.onclick = function () { add(false, task(b)); }; });
     $('#addMile').onclick = function () { add(true); };
   }
 
@@ -2647,7 +2653,7 @@
       '<span class="kpts" title="Story points done of the points on the board">' + doneP + ' of ' + totP + ' points done' + (totP ? ' (' + Math.round(doneP / totP * 100) + '%)' : '') + '</span></div>';
     $('#planBody').innerHTML = bar + '<div class="kanban">' + STATUS.map(function (c) {
       var list = rows.filter(function (r) { return r.t.status === c[0]; }).sort(sorter), pts = list.reduce(function (a, r) { return a + themePts(r.t); }, 0);
-      return '<div class="kcol kcol-' + c[0] + '" data-col="' + c[0] + '"><h3><span>' + c[1] + '</span><span class="kcount">' + pl(list.length, 'theme') + (pts ? ' · ' + pts + ' pts' : '') + '</span></h3><div class="kcards">' + list.map(function (r) {
+      return '<div class="kcol kcol-' + c[0] + '" data-col="' + c[0] + '"><h3><span>' + c[1] + '</span><span class="kcount">' + pl(list.length, 'theme') + (pts ? ' · ' + pts + ' pts' : '') + '</span><button type="button" class="kaddt" data-kaddt="' + c[0] + '" title="Add a level-1 task (theme) here, with its costing">＋ Task</button></h3><div class="kcards">' + list.map(function (r) {
         var t = r.t, rg = kRag(t.es, t.ef, t.pct >= 100, t0), subs = t.subs || [], tp = themePts(t), sdone = subs.filter(function (x) { return x.status === 'done'; }).length;
         var shown = filt ? subs.filter(storyOk) : subs;
         return '<div class="kcard kr-' + rg.c + '" draggable="true" data-tid="' + esc(t.id) + '">' +
@@ -2697,6 +2703,20 @@
         });
       };
     });
+    B.querySelectorAll('[data-kaddt]').forEach(function (b) { b.onclick = function () { kAddTask(b.getAttribute('data-kaddt')); }; });
+    function kAddTask(col) {   // a level-1 task from the board: name, days and its costing (Qty × Unit $), in this column
+      M.modal('<h2>＋ Level-1 task</h2><p class="muted" style="margin:-4px 0 10px">It goes at the end of the schedule, after the last task, in <b>' + esc(stName[col]) + '</b>. Stories (1.1) and steps (1.1.1) are added on the card.</p>' +
+        '<form class="form" id="ktF"><label>Task<input name="name" required maxlength="160" placeholder="e.g. Venue booking"></label>' +
+        '<div class="row" style="gap:10px;flex-wrap:wrap"><label style="flex:1">Days<input name="dur" type="number" min="1" max="999" value="1"></label><label style="flex:1">Qty<input name="qty" type="number" min="0" step="any" value="0"></label>' +
+        '<label style="flex:1">Unit<input name="unit" maxlength="12" placeholder="h, m², lot"></label><label style="flex:1">Unit $<input name="rate" type="number" min="0" step="any" value="0"></label></div>' +
+        '<p class="muted" style="font-size:12.5px;margin:6px 0">Cost = Qty × Unit $: <b id="ktC">' + money(0) + '</b>. It counts in the Costing and the budget at completion.</p>' +
+        '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" type="submit">Add the task</button></div></form>');
+      var f = $('#ktF'), calc = function () { $('#ktC').textContent = money((Number(f.qty.value) || 0) * (Number(f.rate.value) || 0)); };
+      f.qty.oninput = calc; f.rate.oninput = calc; setTimeout(function () { f.name.focus(); }, 30);
+      f.onsubmit = function (e) { e.preventDefault(); var last = p.tasks[p.tasks.length - 1];
+        var t = { id: 't' + Date.now().toString(36), phase: (last && last.phase) || 'ph1', name: f.name.value.trim() || 'New task', dur: Math.max(1, Math.round(Number(f.dur.value) || 1)), res: [], lead: '', resource: '', qty: Number(f.qty.value) || 0, unit: f.unit.value.trim(), rate: Number(f.rate.value) || 0, actual: 0, pct: 0, status: 'todo', pred: last ? [last.id] : [], snet: '', notes: '' };
+        p.tasks.push(t); if (col !== 'todo') setStatus(t, col); M.closeModal(); dirty('Task added: ' + t.name); render(); };
+    }
     B.querySelectorAll('[data-kadd]').forEach(function (b) { b.onclick = function () {
       var card = b.closest('.kcard'), t = find(card.getAttribute('data-tid')), row = card.querySelector('[data-addrow]');
       row.innerHTML = '<input class="kadd-in" placeholder="New user story, then Enter" maxlength="160">'; b.style.display = 'none';

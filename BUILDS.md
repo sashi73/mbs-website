@@ -59,4 +59,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 48 | 1.0.48| 2026-11-14 12:15| GKH-Project-Champ| `2fa9b18` | Whole console in the chosen language; Costing with the signed-off BOM; change control as a module; no Inventory; draggable notes |
 | 49 | 1.0.49| 2026-11-14 15:17| GKH-Project-Champ| `f9a3767` | BOM: delete, one per project, opens from the costing; signed budget approval |
 | 50 | 1.0.50| 2026-11-14 16:09| GKH-Project-Champ| `deb4d59` | Champ: this-week card, cost follows progress, Things to order, Inventory removed, script typography |
-| 51 | 1.0.51 | 2026-11-14 16:56 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 51 | 1.0.51| 2026-11-14 16:56| GKH-Project-Champ| `6ff0fa4` | Champ: Sign in with Google only shows with a real OAuth client ID |
+| 52 | 1.0.52 | 2026-11-14 17:22 | GKH-Project-Champ | _this commit_ | _see git log_ |

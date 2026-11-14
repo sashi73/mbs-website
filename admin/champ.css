@@ -264,3 +264,10 @@ html.dark .stkpop,body.dark .stkpop{color:#1F1D18}
 .ord-main{flex:1;min-width:0;display:grid;gap:3px}.ord-main small .bad{color:#B42318;font-weight:700}.ord-main small .warn{color:#B45309;font-weight:700}
 .ord-note{display:flex;gap:6px}.ord-note input{flex:1;min-width:0;font-size:12.5px;padding:5px 8px}.ord-note input.ord-ok{box-shadow:0 0 0 2px #16A34A}
 .ord-by{font-size:11px}
+/* level-1 tasks: ＋ below a task, an add row under the schedule, ＋ Task in each Kanban column */
+.tins{flex:none;background:none;border:1px solid transparent;border-radius:6px;cursor:pointer;font-size:13px;font-weight:800;line-height:1;padding:3px 5px;color:#8A6D1E;opacity:.45}
+tr:hover .tins,.tins:focus-visible{opacity:.9}.tins:hover{opacity:1;background:#FFF7DD;border-color:#E9C46A}
+@media (hover:none){.tins{opacity:.75}}
+table.gt tr.taddrow td{background:#FFFCF2;padding:8px 6px}table.gt tr.taddrow small{margin-left:6px}
+.kaddt{margin-left:auto;margin-right:6px;font:700 11.5px/1 'Manrope',system-ui,sans-serif;padding:5px 8px;border-radius:8px;border:1px dashed #C9A54A;background:#FFF9E8;color:#6B5313;cursor:pointer}
+.kaddt:hover{background:#F8E7B0}

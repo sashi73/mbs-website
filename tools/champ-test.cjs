@@ -778,6 +778,23 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       await p.goto(`${BASE}/admin/#inventory`); await sleep(1200); const u = p.url();
       const side = await p.textContent('.side-nav').catch(() => '');
       ok('Inventory', 'no Inventory anywhere: not in the menu, #inventory goes to the portfolio, no stock buttons in the BOM', !/Inventory|Stock\b|Suppliers/.test(side) && !/#inventory/.test(u) && !/Inventory|from stock/i.test(bt), u + ' ' + side.slice(0, 120)); }
+    // level-1 tasks: ＋ under the schedule, ＋ below a task, ＋ Task in a Kanban column (with its costing)
+    { const nT = async () => ((await (await api('planGet', { core: cc })).json()).plan.tasks || []);
+      const n0 = (await nT()).length;
+      await p.goto(`${BASE}/admin/#plan/${cc}/schedule`); await p.waitForSelector('[data-addend]', { timeout: 8000 }).catch(() => {});
+      const vis = await p.isVisible('[data-addend]').catch(() => false);
+      await p.click('[data-addend]').catch(() => {}); await sleep(2500);
+      const t1 = await nT();
+      const firstId = t1[0] && t1[0].id; await p.hover(`tr[data-tid="${firstId}"]`).catch(() => {}); await p.click(`tr[data-tid="${firstId}"] [data-ins]`).catch(() => {}); await sleep(2500);
+      const t2 = await nT();
+      ok('Level 1', '＋ Task under the schedule adds a level-1 task at the end; ＋ on a task adds one straight below it', vis && t1.length === n0 + 1 && t2.length === n0 + 2 && t2[1].name === 'New task' && (t2[1].pred || [])[0] === firstId, `vis=${vis} ${n0}->${t1.length}->${t2.length} ${t2[1] && t2[1].name}`);
+      await p.goto(`${BASE}/admin/#plan/${cc}/board`); await p.waitForSelector('[data-kaddt="doing"]', { timeout: 8000 }).catch(() => {});
+      await p.click('[data-kaddt="doing"]').catch(() => {}); await p.waitForSelector('#ktF', { timeout: 5000 }).catch(() => {});
+      await p.fill('#ktF [name=name]', 'Venue booking').catch(() => {}); await p.fill('#ktF [name=dur]', '3').catch(() => {}); await p.fill('#ktF [name=qty]', '2').catch(() => {}); await p.fill('#ktF [name=unit]', 'lot').catch(() => {}); await p.fill('#ktF [name=rate]', '250').catch(() => {});
+      const cTxt = await p.textContent('#ktC').catch(() => '');
+      await p.click('#ktF [type=submit]').catch(() => {}); await sleep(2500);
+      const vb = (await nT()).find((t) => t.name === 'Venue booking') || {};
+      ok('Level 1', 'Kanban: ＋ Task in a column adds a level-1 task in that column with its costing (2 × $250 = $500)', /500/.test(cTxt) && vb.status === 'doing' && vb.qty === 2 && vb.rate === 250 && vb.unit === 'lot' && vb.dur === 3, cTxt + ' ' + JSON.stringify(vb).slice(0, 200)); }
     ok('BOM', 'one BOM per project: Draft with AI and Templates are off until the BOM is deleted (no appending)', await p.goto(`${BASE}/admin/#plan/${cc}/bom`).then(() => p.waitForSelector('#bomOpen, #bomAi', { timeout: 8000 })).then(async () => { await p.click('#bomOpen').catch(() => {}); await p.fill('#boF [name=why]', 'Add a line').catch(() => {}); await p.click('#boF [type=submit]').catch(() => {}); await sleep(1200); return (await p.isDisabled('#bomAi').catch(() => false)) && (await p.isDisabled('#bomTpl').catch(() => false)); }).catch(() => false));
     await p.goto(`${BASE}/admin/#plan/${cc}/budget`); await p.waitForSelector('.bd-tiles', { timeout: 8000 }).catch(() => {});
     ok('Costing', 'reopened, the BOM is out of the costing until it is signed off again', /waiting for sign-off/.test(await p.textContent('.bd-bomst').catch(() => '')) && !(await p.$('[data-gobom]')));
