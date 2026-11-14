@@ -3017,7 +3017,9 @@
     phaseGroups().forEach(function (g) { var sum = 0; g.rows.forEach(function (x) { var lab = Math.round((Number(x.t.qty) || 0) * (Number(x.t.rate) || 0) * 100) / 100, mat = Math.round((cost(x.t) - lab) * 100) / 100;
         if (lab) { add(x, lab, catOf(p, x.t), g.name); sum += lab; } if (mat > 0.004) { add(x, mat, 'Materials', 'Bill of Materials', true); bomSum += mat; } });
       if (sum) byPh.push({ name: g.name, v: sum }); });
-    ordered().forEach(function (x) { if (x.t.dur !== 0) return; var c = cost(x.t); if (c > 0.004) { add(x, c, 'Materials', 'Bill of Materials', true); bomSum += c; } });   // the 🧱 BOM milestone carries the materials
+    var msLab = 0; ordered().forEach(function (x) { if (x.t.dur !== 0) return; var lab = Math.round((Number(x.t.qty) || 0) * (Number(x.t.rate) || 0) * 100) / 100, mat = Math.round((cost(x.t) - lab) * 100) / 100;   // the 🧱 BOM milestone carries the materials
+      if (lab > 0.004) { add(x, lab, catOf(p, x.t), 'Milestones'); msLab += lab; } if (mat > 0.004) { add(x, mat, 'Materials', 'Bill of Materials', true); bomSum += mat; } });
+    if (msLab) byPh.push({ name: 'Milestones', v: Math.round(msLab * 100) / 100 });
     if (p.bomLoose > 0) { add({ n: '', t: { name: 'BOM lines not linked to a task', id: '' } }, Number(p.bomLoose), 'Materials', 'Bill of Materials', true); bomSum += Number(p.bomLoose); }
     if (bomSum) byPh.push({ name: 'Bill of Materials', v: Math.round(bomSum * 100) / 100 });
     var r2_ = function (v) { return Math.round(v * 100) / 100; }, cont = r2_(base * b.cont / 100), res = r2_(base * b.res / 100), total = r2_(base + cont + res), price = r2_(total * (1 + b.margin / 100)), gst = r2_(price * b.gst / 100);
@@ -3037,13 +3039,13 @@
     var tile = function (v, l, cls) { return '<div class="bd-t ' + (cls || '') + '"><b>' + v + '</b><small>' + l + '</small></div>'; };
     var diff = K.approved ? Math.round((K.approved - K.total) * 100) / 100 : 0;
     B.innerHTML = '<div class="card bd"><div class="card-h"><h2>💰 Costing</h2><span class="sp"></span>' +
-      '<button class="btn btn-sm" id="bdCsv" type="button">⬇ Costing (CSV)</button><button class="btn btn-sm btn-gold" id="bdSet" type="button"' + (ro ? ' disabled' : '') + '>✔ Set as the approved budget</button></div>' +
+      '<button class="btn btn-sm" id="bdCsv" type="button">⬇ Costing (CSV)</button><button class="btn btn-sm btn-gold" id="bdSet" type="button"' + (ro ? ' disabled' : '') + '>✍ Approve the budget</button></div>' +
       '<p class="muted" style="margin:-4px 0 12px">Work out the costing from the plan: every task\'s cost (quantity × rate) and the signed-off Bill of Materials, by phase and by category, plus contingency for known risks and a management reserve for the unknown. Change a quantity, rate or category below and the totals follow.</p>' +
       '<div class="bd-tiles">' + tile(money(K.base), 'Base cost (BAC)', 'dark') + tile(money(K.cont), 'Contingency ' + b.cont + '%') + tile(money(K.res), 'Management reserve ' + b.res + '%') + tile(money(K.total), 'Total budget', 'gold') +
         tile(money(K.price), b.margin ? 'Client price (+' + b.margin + '% margin)' : 'Client price') + tile(money(K.inc), 'Including GST ' + b.gst + '%') + '</div>' +
       '<div class="bd-cfg">' + pct('cont', 'Contingency', 'For identified risks (known unknowns). PMBOK: part of the cost baseline.') + pct('res', 'Management reserve', 'For unforeseen work (unknown unknowns). Held by the sponsor, outside the cost baseline.') +
         pct('margin', 'Margin', 'Mark-up on the total budget, for the price to the client (0 for an internal project).') + pct('gst', 'GST / tax', 'Tax on the client price (10% GST in Australia, 8% SST in Malaysia).') +
-        '<div class="bd-ap">' + (K.approved ? 'Approved budget <b>' + money(K.approved) + '</b>' + (Math.abs(diff) >= 1 ? ' · <span class="' + (diff < 0 ? 'bad' : 'good') + '">' + (diff < 0 ? money(-diff) + ' short of this budget' : money(diff) + ' to spare') + '</span>' : ' · <span class="good">matches</span>') : '<span class="muted">No approved budget yet</span>') + '</div></div>' +
+        '<div class="bd-ap">' + (K.approved ? 'Approved budget <b>' + money(K.approved) + '</b>' + (b.setBy && b.setSig ? ' <small class="muted">✍ signed by ' + esc(b.setBy) + (b.setRole ? ', ' + esc(b.setRole) : '') + (b.setAt ? ' on ' + esc(dmy(new Date(b.setAt).toISOString().slice(0, 10))) : '') + '</small>' : '') + (Math.abs(diff) >= 1 ? ' · <span class="' + (diff < 0 ? 'bad' : 'good') + '">' + (diff < 0 ? money(-diff) + ' short of this budget' : money(diff) + ' to spare') + '</span>' : ' · <span class="good">matches</span>') : '<span class="muted">No approved budget yet</span>') + '</div></div>' +
       (function () { var bm = S.plan.bom; if (!bm || !(bm.lines || []).length || (S.mods && S.mods.bom === false)) return ''; var v = bm.lines.reduce(function (a, l) { return a + (Number(l.qty) || 0) * (Number(l.price) || 0); }, 0);
         return bm.status === 'Signed off' ? '<div class="bd-bomst ok">🧱 <b>Bill of Materials signed off</b> by ' + esc(bm.signedBy || '') + ': <b>' + money(v) + '</b> is in this costing as Materials.</div>'
           : '<div class="bd-bomst">🧱 <b>Bill of Materials: ' + money(v) + ' waiting for sign-off.</b> It is added to this costing once the preparer signs it off. <a href="#plan/' + esc(S.core) + '/bom">Open the BOM</a></div>'; })() +
@@ -3051,19 +3053,25 @@
         '<div><h3>Cost by category</h3>' + (K.base ? img('donut', { items: BCATS.map(function (k) { return { l: k, v: K.byCat[k], t: money(K.byCat[k]) }; }), center: money(K.base), centerLabel: 'Base cost' }, 'Cost by category') : '<p class="muted">No costs yet.</p>') + '</div></div>' +
       (K.months.length ? '<h3>Cash flow by month</h3>' + img('scurve', { points: K.months.map(function (x) { return { l: mon(x.m), v: x.v }; }) }, 'Cash flow') : '') +
       '<h3>Cost breakdown</h3><div class="table-wrap"><table class="rt bd-tbl"><thead><tr><th>#</th><th>Task</th><th>Phase</th><th>Category</th><th class="num">Qty</th><th>Unit</th><th class="num">Rate</th><th class="num">Cost</th></tr></thead><tbody>' +
-      K.tasks.map(function (x) { if (x.bom) return '<tr class="bd-bom"><td>' + x.n + '</td><td>🧱 ' + esc(String(x.t.name).replace(/^[🧱\s]+/, '')) + '</td><td><small>Bill of Materials</small></td><td>Materials</td><td class="num" colspan="3"><small class="muted">from the signed-off BOM</small></td><td class="num"><b>' + money(x.c) + '</b></td></tr>';
+      K.tasks.map(function (x) { if (x.bom) return '<tr class="bd-bom" data-gobom title="Open the BOM to change it, then sign it off again to put it back in the costing"><td>' + x.n + '</td><td>🧱 ' + esc(String(x.t.name).replace(/^[🧱\s]+/, '')) + '</td><td><small>Bill of Materials</small></td><td>Materials</td><td class="num" colspan="3"><small class="muted">from the signed-off BOM · <u>edit in the BOM</u></small></td><td class="num"><b>' + money(x.c) + '</b></td></tr>';
         return '<tr><td>' + x.n + '</td><td>' + esc(x.t.name) + '</td><td><small>' + esc(x.ph) + '</small></td><td><select data-bcat="' + esc(x.t.id) + '"' + (ro ? ' disabled' : '') + '>' + BCATS.map(function (k) { return '<option' + (k === x.cat ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></td>' +
         '<td class="num"><input type="number" step="any" min="0" data-bq="' + esc(x.t.id) + '" value="' + (x.t.qty || 0) + '"' + (ro ? ' disabled' : '') + '></td><td>' + esc(x.t.unit || '') + '</td><td class="num"><input type="number" step="any" min="0" data-br="' + esc(x.t.id) + '" value="' + (x.t.rate || 0) + '"' + (ro ? ' disabled' : '') + '></td><td class="num"><b>' + money(x.c) + '</b></td></tr>'; }).join('') +
       '</tbody><tfoot><tr><td colspan="7">Base cost (BAC)</td><td class="num"><b>' + money(K.base) + '</b></td></tr><tr><td colspan="7">Contingency (' + b.cont + '%)</td><td class="num">' + money(K.cont) + '</td></tr><tr><td colspan="7">Management reserve (' + b.res + '%)</td><td class="num">' + money(K.res) + '</td></tr><tr class="bd-tot"><td colspan="7">Total budget</td><td class="num"><b>' + money(K.total) + '</b></td></tr></tfoot></table></div>' +
       (K.tasks.length ? '' : '<div class="empty">No task has a cost yet. Give tasks a quantity and a rate on the Schedule tab (Costs view), or here once they have one.</div>') + '</div>';
+    B.querySelectorAll('[data-gobom]').forEach(function (r) { r.onclick = function () { location.hash = '#plan/' + S.core + '/bom'; if (bomLocked()) setTimeout(function () { toast('The BOM is signed off: 🔓 Reopen it to edit, then ✍ sign it off again to put it back in the costing'); }, 300); }; });
     if (miss.length && !S.bdTr) { S.bdTr = true; window.ChampI18n.strings(miss, cl).then(function () { S.bdTr = false; if (S.tab === 'budget' && $('.bd-tiles')) budgetTab(); }, function () { S.bdTr = false; }); }
     var byId = {}; p.tasks.forEach(function (t) { byId[t.id] = t; });
     B.querySelectorAll('[data-bcfg]').forEach(function (i) { i.onchange = function () { var v = Math.max(0, Math.min(100, +this.value || 0)); bCfg(p)[this.getAttribute('data-bcfg')] = v; dirty('budget ' + this.getAttribute('data-bcfg') + ' ' + v + '%'); setTimeout(budgetTab, 0); }; });
     B.querySelectorAll('[data-bcat]').forEach(function (s0) { s0.onchange = function () { bCfg(p).cat[this.getAttribute('data-bcat')] = this.value; dirty('budget category'); setTimeout(budgetTab, 0); }; });
     B.querySelectorAll('[data-bq],[data-br]').forEach(function (i) { i.onchange = function () { var t = byId[this.getAttribute('data-bq') || this.getAttribute('data-br')]; if (!t) return; if (this.hasAttribute('data-bq')) t.qty = Math.max(0, +this.value || 0); else t.rate = Math.max(0, +this.value || 0); derive && derive(t); dirty('budget: ' + t.name); setTimeout(render, 0); }; });
     $('#bdSet').onclick = function () { var c = p.charter = p.charter || {}, old = c.budget || 0;
-      M.confirmBox('Set the approved budget?', 'The approved budget becomes <b>' + money(K.total) + '</b> (base ' + money(K.base) + ' + contingency ' + money(K.cont) + ' + reserve ' + money(K.res) + ')' + (old ? ', replacing ' + money(old) : '') + '. It is the budget in the charter and the project plan.', 'Set the budget').then(function (ok) {
-        if (!ok) return; c.budget = K.total; bCfg(p).setAt = Date.now(); bCfg(p).setBy = (M.me && (M.me.name || M.me.user)) || ''; dirty('approved budget ' + K.total); budgetTab(); toast('Approved budget: ' + money(K.total)); }); };
+      M.modal('<h2>✍ Approve the budget</h2><p class="muted" style="margin:-4px 0 10px">The approved budget becomes <b>' + money(K.total) + '</b> (base ' + money(K.base) + ' + contingency ' + money(K.cont) + ' + reserve ' + money(K.res) + ')' + (old ? ', replacing ' + money(old) : '') + '. It is the budget in the charter and the project plan, and the cost baseline progress is measured against.</p>' +
+        '<form class="form" id="bdF"><label>Name<input name="by" required maxlength="80" value="' + esc((p.charter || {}).manager || bomMe()) + '"></label><label>Role<select name="role">' + CR_ROLES.map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></label>' +
+        '<label class="full">Signature <small class="muted">(type your full name)</small><input name="sig" required maxlength="80" class="cr-sigin" autocomplete="off"></label>' +
+        '<div class="actions full"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" type="submit">✍ Approve and sign</button></div></form>');
+      $('#bdF').onsubmit = function (e) { e.preventDefault(); var f = this, by = f.by.value.trim(), sig = f.sig.value.trim(); if (!by || !sig) return;
+        var g = bCfg(p); c.budget = K.total; g.setAt = Date.now(); g.setBy = by; g.setRole = f.role.value; g.setSig = sig; g.setAmt = K.total;
+        M.closeModal(); dirty('budget ' + money(K.total) + ' approved and signed by ' + by + ' (' + f.role.value + ')'); budgetTab(); toast('✍ Approved budget: ' + money(K.total) + ', signed by ' + by); }; };
     $('#bdCsv').onclick = function () {
       var q = function (v) { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
       var L = [['#', 'Task', 'Phase', 'Category', 'Qty', 'Unit', 'Rate', 'Cost']].concat(K.tasks.map(function (x) { return [x.n, x.t.name, x.ph, x.cat, x.t.qty || 0, x.t.unit || '', x.t.rate || 0, x.c]; }))
@@ -3981,6 +3989,7 @@
   var q3c = function (n) { return Math.round((Number(n) || 0) * 1000) / 1000; };
   function bomMe() { var m = M.me || {}; return m.name || m.user || 'Admin'; }
   function bomOf() { return S.plan.bom || null; }
+  function bomHas() { var b = bomOf(); return !!(b && (b.lines || []).length); }
   function bomLocked() { var b = bomOf(); return !!(b && b.status === 'Signed off'); }
   function bomLog(what) { var b = bomOf(); b.log = (b.log || []).concat([{ at: Date.now(), what: what }]).slice(-60); }
   function bomLine(o) { var ms = bomMs(); return { id: 'b' + rid().slice(0, 12), task: o.task || (ms ? ms.id : ''), name: o.name || 'Material', item: o.item || '', qty: q3c(o.qty), unit: o.unit || 'each', price: r2(o.price), lead: Math.max(0, Math.round(Number(o.lead) || 0)), note: o.note || '', source: o.source || 'manual', est: !!o.est, checked: false, checkedBy: '' }; }
@@ -4090,7 +4099,7 @@
         '<li><b>Check and sign off:</b> the preparer ticks each line as checked, then signs. Signed off, the BOM is locked and its total goes into the 💰 Costing as materials.</li></ol>' +
         (have ? '<p class="muted">The ' + pl(have, 'material') + ' already on the tasks (📦) will become the first lines.</p>' : '') +
         '<div class="actions" style="justify-content:flex-start"><button class="btn btn-gold" id="bomGo" type="button">🧱 Start the BOM</button></div></div>';
-      $('#bomGo').onclick = function () { bomStart(); bomSave('BOM started'); bomLoadStock().then(bomTab); };
+      $('#bomGo').onclick = function () { bomStart(); bomSave('BOM started'); };
       return;
     }
     if (!bomLocked() && bomEnsure()) b = bomOf();   // v99: one milestone for all the materials
@@ -4137,8 +4146,8 @@
       (lock ? '<b>' + esc(bs ? bs.name : 'the end') + '</b>' : '<select id="bomBefore" title="Where the build (physical work) starts: the materials are needed before it"><option value="">– the end of the plan –</option>' + S.plan.tasks.filter(function (t) { return t.id !== ms.id; }).map(function (t) { return '<option value="' + esc(t.id) + '"' + (bs && bs.id === t.id ? ' selected' : '') + '>#' + (S.plan.tasks.indexOf(t) + 1) + ' ' + esc(t.name.slice(0, 70)) + '</option>'; }).join('') + '</select>') +
       '<small class="muted">where the build starts. All the materials are costed and set aside there.</small></div>' : '';
     B.innerHTML = bomPhases() + '<div class="card"><div class="card-h"><h2>🧱 Bill of Materials: ' + esc(S.plan.name) + '</h2><span class="bom-pill ' + (lock ? 'ok' : '') + '">' + (lock ? '✓ Signed off' : 'Draft') + '</span><span class="sp"></span>' +
-        (lock ? '' : '<button class="btn btn-sm" id="bomAi" type="button">✨ Draft with AI</button><button class="btn btn-sm" id="bomAdd" type="button">＋ Line</button>' + (NOINV ? '' : '<button class="btn btn-sm" id="bomStock" type="button" title="Pick materials from Inventory">📦 From stock</button>') + '') +
-        '<button class="btn btn-sm" id="bomTpl" type="button">📋 Templates</button><button class="btn btn-sm" id="bomDoc" type="button">📄 Document</button><button class="btn btn-sm" id="bomXls" type="button">⬇ Excel</button>' +
+        (lock ? '' : '<button class="btn btn-sm" id="bomAi" type="button"' + (bomHas() ? ' disabled title="One BOM per project: delete this BOM first to generate a new one"' : '') + '>✨ Draft with AI</button><button class="btn btn-sm" id="bomAdd" type="button">＋ Line</button>' + (NOINV ? '' : '<button class="btn btn-sm" id="bomStock" type="button" title="Pick materials from Inventory">📦 From stock</button>') + '') +
+        '<button class="btn btn-sm" id="bomTpl" type="button"' + (bomHas() ? ' disabled title="One BOM per project: delete this BOM first to generate a new one"' : '') + '>📋 Templates</button><button class="btn btn-sm" id="bomDoc" type="button">📄 Document</button><button class="btn btn-sm" id="bomXls" type="button">⬇ Excel</button><button class="btn btn-sm btn-danger-soft" id="bomDel" type="button" title="Delete the whole BOM: its lines, its milestone and its materials in the costing">🗑 Delete BOM</button>' +
         (lock ? '<button class="btn btn-sm" id="bomOpen" type="button">🔓 Reopen</button>' : '<button class="btn btn-sm btn-gold" id="bomSign" type="button"' + (b.lines.length && T.checked === b.lines.length && !T.noTask && !T.zero ? '' : ' disabled title="' + (T.zero ? 'Every line needs a price first (no $0 lines)' : T.noTask ? 'Link every line to a task first (so its cost is in the plan)' : 'Tick every line as checked first') + '"') + '>✍ Sign off</button>') + '</div>' +
       '<div class="bom-kpi"><span><b>' + pl(b.lines.length, 'line') + '</b></span><span>Value <b>' + money(T.value) + '</b> ex GST</span><span>' + (lock ? 'In the costing' : 'In the costing once signed off') + ' <b>' + money(lock ? T.inPlan : T.value) + '</b></span>' + (T.value - T.inPlan > 0.005 ? '<span class="bad" title="Lines not linked to a task: the quote adds them as a separate line, but the plan budget does not have them">Not in the budget <b>' + money(r2(T.value - T.inPlan)) + '</b></span>' : '') + '<span>Checked <b>' + T.checked + ' / ' + b.lines.length + '</b></span>' +
         '' + (shorts.length ? (toOrder.length ? '<span class="bad">To order: <b>' + toOrder.length + '</b></span>' : '<span class="ok">✓ Shortfall ordered</span>') : '') + (T.noItem && !NOINV ? '<span>Not in stock: <b>' + T.noItem + '</b></span>' : '') + '</div>' +
@@ -4195,7 +4204,7 @@
     B.querySelectorAll('[data-gstock]').forEach(function (x) { x.onclick = function () { bomStockDialog(x.getAttribute('data-gstock')); }; });
     on('bomStock', function () { bomStockDialog(''); }); on('bomStock2', function () { bomStockDialog(''); }); on('bomAdd2', function () { addLine(''); });
     on('bomAdd', function () { b.lines.push(bomLine({ name: 'New material', source: 'manual' })); bomSave('BOM line added'); setTimeout(function () { var r = B.querySelector('tr[data-bk="' + (b.lines.length - 1) + '"] [data-bf=name]'); if (r) { r.focus(); r.select(); } }, 30); });
-    on('bomAi', bomAiDialog); on('bomTpl', bomTplDialog); on('bomSign', bomSignDialog); on('bomOpen', bomReopenDialog); on('bomOrdT', function () { bomOrderTasks(st); });
+    on('bomAi', bomAiDialog); on('bomTpl', bomTplDialog); on('bomSign', bomSignDialog); on('bomOpen', bomReopenDialog); on('bomDel', bomDelete); on('bomOrdT', function () { bomOrderTasks(st); });
     on('bomDoc', function () {
       M.modal('<h2>📄 Bill of Materials</h2><p class="muted">The BOM by task with quantities, prices, stock and the shortfall, and the sign-off (or a sign-off block while it is a draft).</p><div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn" id="bdDocx" type="button">⬇ Word</button><button class="btn btn-gold" id="bdPdf" type="button">⬇ PDF</button></div>');
       var go = function (fmt) { M.report[fmt](bomSnapshot()).then(function (r) { M.report.save(r.blob, r.name); M.closeModal(); toast((fmt === 'pdf' ? 'PDF' : 'Word') + ' ready'); }).catch(fail); };
@@ -4308,6 +4317,19 @@
       toast('✍ BOM signed off: ' + money(T.value) + ' added to the 💰 Costing as materials'); location.hash = '#plan/' + S.core + '/budget';
     };
   }
+  // 🗑 delete the whole BOM: lines, the 🧱 milestone (the plan keeps its order) and its materials come out of the costing
+  function bomDelete() {
+    var p = S.plan, b = bomOf(); if (!b) return; var T = bomTotals(b), signed = b.status === 'Signed off';
+    M.confirmBox('Delete the Bill of Materials?', pl(b.lines.length, 'line') + ' (' + money(T.value) + ' ex GST)' + (signed ? ', signed off by ' + esc(b.signedBy || '') : '') + ' and the 🧱 Bill of Materials milestone are removed' + (signed ? ', and ' + money(T.value) + ' comes out of the 💰 Costing' : '') + '.', 'Delete the BOM').then(function (ok) {
+      if (!ok) return;
+      var ms = bomMs();
+      if (ms) { var before = ms.pred || []; p.tasks.splice(p.tasks.indexOf(ms), 1);
+        p.tasks.forEach(function (t) { if ((t.pred || []).indexOf(ms.id) >= 0) t.pred = t.pred.filter(function (x) { return x !== ms.id; }).concat(before.filter(function (x) { return (t.pred || []).indexOf(x) < 0; })); }); }   // whatever followed the milestone now follows what came before it
+      p.tasks.forEach(function (t) { t.mats = []; delete t.bomx; }); p.bomLoose = 0; delete p.bom;
+      dirty('BOM deleted (' + money(T.value) + (signed ? ', out of the costing' : '') + ')'); render();
+      toast('🗑 BOM deleted' + (signed ? ': ' + money(T.value) + ' taken out of the costing' : ''));
+    });
+  }
   function bomReopenDialog() {
     var b = bomOf();
     M.modal('<h2>🔓 Reopen the BOM</h2><p class="muted" style="margin:-4px 0 10px">It was signed off by ' + esc(b.signedBy) + '. Say why it needs to change: the reason is kept in its history. While it is reopened its materials come out of the costing; sign it off again to put them back.</p>' +
@@ -4319,6 +4341,7 @@
     };
   }
   function bomAiDialog() {   // v99: the whole job, physical materials only
+    if (bomHas()) return toast('This project already has a BOM. Delete it first (🗑 Delete BOM) to generate a new one.', true);
     var b = bomOf(), aiN = b.lines.filter(function (l) { return l.source === 'ai' && !l.checked; }).length;
     M.modal('<h2>✨ Draft the BOM with AI</h2><p class="muted" style="margin:-4px 0 10px">The AI reads the plan, the scope and our stock catalogue and lists the <b>physical materials</b> the build needs (no services, fees, approvals, reports or labour), with quantities, waste allowance and Sydney trade prices, using our stock items where they match. It also says where the build starts, for the 🧱 Bill of Materials milestone. Every line comes in marked <span class="est-tag">≈ est</span> for you to check.</p>' +
       '<label>Anything the AI should know? <small class="muted">(optional)</small><input id="bomNote" maxlength="300" placeholder="e.g. 18 m² deck, hardwood boards, galvanised fixings, 600 mm footings"></label>' +
@@ -4367,6 +4390,7 @@
   }
   // 📋 reusable templates: save this BOM, or apply one (scaled) to this job, matched to its tasks by name
   function bomTplDialog() {
+    if (bomHas()) return toast('This project already has a BOM. Delete it first (🗑 Delete BOM) to generate a new one from a template.', true);
     var b = bomOf(), lock = bomLocked();
     M.modal('<h2>📋 BOM templates</h2><p class="muted" style="margin:-4px 0 10px">Save a BOM you trust (e.g. a standard bathroom) and use it on the next similar job. Lines are matched to this job\'s tasks by name and marked ≈ est to check.</p><div id="btList"><p class="ask-think">Loading…</p></div>' +
       (b.lines.length ? '<h3 style="font-size:14px;margin:16px 0 6px">Save this BOM as a template</h3><form class="form" id="btF"><label>Name<input name="name" required maxlength="100" placeholder="e.g. Standard bathroom 2.4 × 1.8 m"></label><label>Kind of job<input name="kind" maxlength="80" placeholder="e.g. Bathroom renovation" value="' + esc(S.job.service || '') + '"></label>' +

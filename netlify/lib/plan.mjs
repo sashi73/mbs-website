@@ -203,7 +203,7 @@ function clean(p, core) {
     budgetCfg: (() => { const b = p.budgetCfg && typeof p.budgetCfg === 'object' ? p.budgetCfg : null; if (!b) return undefined; const pc = (v, d) => (isNaN(Number(v)) ? d : Math.max(0, Math.min(100, Number(v))));   // 💰 Budget settings
       const cats = ['Labour', 'Materials', 'Subcontractors', 'Equipment', 'Travel and expenses', 'Other'], cat = {};
       for (const [k, v] of Object.entries(b.cat && typeof b.cat === 'object' ? b.cat : {}).slice(0, 600)) if (/^[\w-]{1,30}$/.test(k) && cats.includes(v)) cat[k] = v;
-      return { cont: pc(b.cont, 10), res: pc(b.res, 5), margin: pc(b.margin, 0), gst: pc(b.gst, 10), cat, setAt: Number(b.setAt) || 0, setBy: str(b.setBy, 80) }; })(),
+      return { cont: pc(b.cont, 10), res: pc(b.res, 5), margin: pc(b.margin, 0), gst: pc(b.gst, 10), cat, setAt: Number(b.setAt) || 0, setBy: str(b.setBy, 80), setRole: str(b.setRole, 60), setSig: str(b.setSig, 80), setAmt: Math.round((Number(b.setAmt) || 0) * 100) / 100 }; })(),
     baseline: p.baseline && typeof p.baseline === 'object' ? { at: Number(p.baseline.at) || Date.now(), finish: ymdOk(p.baseline.finish), BAC: r2(p.baseline.BAC),
       tasks: Object.fromEntries(Object.entries(p.baseline.tasks || {}).slice(0, 300).map(([k, v]) => [str(k, 20), { es: ymdOk(v.es), ef: ymdOk(v.ef), cost: r2(v.cost) }])) } : null
   };
@@ -214,7 +214,9 @@ function clean(p, core) {
   // special orders) go into the task's cost as bomx, so the plan, the budget and the quote include them. Lines not linked to a
   // task are bomLoose: the quote adds them as their own line, so nothing is left out of the price.
   const bx = {}; let loose = 0;
-  for (const l of (res.bom && res.bom.lines) || []) { const v = (Number(l.qty) || 0) * (Number(l.price) || 0); if (!l.task) loose += v; else if (!l.item) bx[l.task] = (bx[l.task] || 0) + v; }
+  const bomIn = !!(res.bom && res.bom.status === 'Signed off');   // GKH Project Champ: the BOM is in the costing once it is signed off (deleted: nothing)
+  if (!bomIn) for (const t of res.tasks) t.mats = [];
+  for (const l of (bomIn && res.bom.lines) || []) { const v = (Number(l.qty) || 0) * (Number(l.price) || 0); if (!l.task) loose += v; else if (!l.item) bx[l.task] = (bx[l.task] || 0) + v; }
   for (const t of res.tasks) { if (bx[t.id]) t.bomx = r2(bx[t.id]); else delete t.bomx; }
   res.bomLoose = r2(loose);
   res.raciMap = {};
