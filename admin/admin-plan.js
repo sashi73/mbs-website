@@ -242,7 +242,20 @@
         ['Test', [['System and integration testing', 10, 2], ['User acceptance testing', 10, 2]]], ['Deploy', [['End-user training', 5, 2], ['Go-live and cutover', 3, 3], ['Hypercare', 15, 1]]]], r: ['c_vendor', 'c_quality', 'c_adopt', 'c_scope', 'c_keyperson'] },
       { id: 'tech-cyber', n: 'Cybersecurity and data protection review', dr: 1700, o: 'Find and fix security and privacy gaps before they become incidents.', d: 'Controls assessment (ISO 27001 / Essential Eight); vulnerability and penetration test results; privacy (PDPA / Privacy Act) review; remediation plan', ph: [
         ['Assessment', [['Policy and controls review (ISO 27001 / Essential Eight)', 6, 1], ['Vulnerability scan and penetration test', 8, 1], ['Privacy review (PDPA / Privacy Act)', 5, 1]]],
-        ['Report', [['Findings and risk ratings', 4, 1], ['Remediation plan', 4, 1], ['Board briefing', 1, 1]]]], r: ['c_data', 'c_reg', 'c_people'] }] },
+        ['Report', [['Findings and risk ratings', 4, 1], ['Remediation plan', 4, 1], ['Board briefing', 1, 1]]]], r: ['c_data', 'c_reg', 'c_people'] },
+      { id: 'tech-k8s', n: 'Kubernetes platform and deployment', dr: 1700, o: 'Stand up a production-ready Kubernetes platform (managed or on-premises) and deploy the applications onto it safely and repeatably.', d: 'Cluster architecture; production cluster (EKS, AKS, GKE or on-premises); namespaces, RBAC and network policies; ingress, TLS and secrets; Helm charts or GitOps (Argo CD / Flux); autoscaling; monitoring and alerts; backup and upgrade runbooks', ph: [
+        ['Design', [['Workload and requirements review', 3, 1], ['Cluster architecture (managed or on-premises, sizing, networking)', 4, 1], ['Security model: RBAC, namespaces, network policies', 2, 1]]],
+        ['Build', [['Provision the cluster and node pools (infrastructure as code)', 4, 1], ['Ingress controller, TLS certificates and DNS', 2, 1], ['Secrets management and container registry access', 2, 1], ['Helm charts or GitOps pipeline (Argo CD / Flux)', 4, 1], ['Autoscaling, resource requests and limits', 2, 1]]],
+        ['Deploy and operate', [['Deploy the applications to staging', 3, 1], ['Monitoring, logging and alerts (Prometheus, Grafana)', 3, 1], ['Load, failover and upgrade tests', 3, 1], ['Production go-live and hypercare', 5, 0.5], ['Backup, upgrade runbooks and handover training', 2, 1]]]], r: ['k_skill', 'k_sec', 'k_cost', 'k_down'] },
+      { id: 'tech-docker', n: 'Docker deployment (containerise and run the applications)', dr: 1700, o: 'Package the applications as Docker containers and run them the same way on every machine, from a laptop to production.', d: 'Dockerfiles for each service; slim, scanned images in a private registry; Docker Compose for local and test; CI pipeline that builds, tests and pushes images; production deployment on Docker hosts; logs, health checks and restart policies; runbook', ph: [
+        ['Assess', [['Application and dependency review', 2, 1], ['Container approach and image standards', 1, 1]]],
+        ['Containerise', [['Write the Dockerfiles (multi-stage, slim base images)', 4, 1], ['Configuration, secrets and environment variables', 2, 1], ['Docker Compose for local development and testing', 2, 1], ['Image scanning and private registry', 2, 1]]],
+        ['Deploy', [['CI pipeline: build, test and push images', 3, 1], ['Production Docker hosts, volumes and networking', 3, 1], ['Health checks, restart policies and logging', 2, 1], ['Go-live and hypercare', 3, 0.5], ['Runbook and team training', 1, 1]]]], r: ['k_skill', 'k_sec', 'k_legacy'] },
+      { id: 'tech-k8s-docker', n: 'Docker and Kubernetes: containerise and deploy end to end', dr: 1700, o: 'Take the applications from source code to Docker images to a production Kubernetes cluster, with automated builds, safe releases and monitoring.', d: 'Dockerfiles and a private image registry; CI pipeline that builds and scans images; production Kubernetes cluster; Helm charts or GitOps; ingress, TLS and secrets; autoscaling; monitoring and alerts; release, rollback and upgrade runbooks; trained team', ph: [
+        ['Assess and design', [['Application assessment for containers', 3, 1], ['Image standards and registry design', 1, 1], ['Kubernetes cluster and network design', 3, 1]]],
+        ['Containerise (Docker)', [['Write the Dockerfiles (multi-stage, slim base images)', 5, 1], ['Docker Compose for local development', 2, 1], ['Image scanning and private registry', 2, 1], ['CI pipeline: build, test, scan and push images', 3, 1]]],
+        ['Platform (Kubernetes)', [['Provision the cluster and node pools (infrastructure as code)', 4, 1], ['Namespaces, RBAC and network policies', 2, 1], ['Ingress, TLS certificates and secrets', 2, 1], ['Helm charts or GitOps deployments (Argo CD / Flux)', 4, 1], ['Autoscaling, requests and limits', 2, 1]]],
+        ['Release and operate', [['Deploy to staging and test', 3, 1], ['Monitoring, logging and alerts', 3, 1], ['Load, failover and rollback tests', 3, 1], ['Production go-live and hypercare', 5, 0.5], ['Runbooks and handover training', 2, 1]]]], r: ['k_skill', 'k_sec', 'k_cost', 'k_down', 'k_legacy'] }] },
     { c: 'Project and program management', g: 1, items: [
       { id: 'ppm-pmo', n: 'PMO set-up', dr: 1600, o: 'Stand up a PMO that gives leaders one view of every project and consistent delivery.', d: 'PMO charter and operating model; PMBOK-based methodology and templates; governance and stage gates; Project Champ set up; trained project managers', ph: [
         ['Design', [['PMO charter and operating model', 6, 1], ['Methodology and templates (PMBOK)', 8, 1], ['Governance and stage gates', 4, 1]]], ['Tools', [['Project Champ set-up and reporting', 5, 1], ['Portfolio intake and prioritisation', 4, 1]]],
@@ -970,6 +983,7 @@
     $('#tplEmerg').onchange = function () { S.emergTouched = true; if (S.mode === 'ai' && S.aiDraft) showDraft(); };
     $('#tplWeek').onchange = function () { S.tplWeek = this.checked; if (S.mode === 'ai' && S.aiDraft) showDraft(); else if (S.mode === 'type' && $('#tplType') && $('#tplType').value) $('#tplType').onchange(); };
     var keepOrder = function (changed) {
+      if (!$('#tplStart') || !$('#aiFinish')) return true;   // the page has moved on
       var s = $('#tplStart').value, f = $('#aiFinish').value;
       $('#aiFinish').min = s || ''; if (f) $('#tplStart').max = f; else $('#tplStart').removeAttribute('max');
       if (s && f && f < s) { if (changed === 'finish') { setDate('aiFinish', ''); S.aiFinish = ''; toast('Finish by can\'t be before the Start date (' + dmy(s) + ').', true); } else { setDate('tplStart', f); toast('The Start date can\'t be after Finish by (' + dmy(f) + '), so it was set to ' + dmy(f) + '.', true); } return false; }
@@ -2773,6 +2787,50 @@
         sb.pct = v; sb.status = subStatus(v); derive(t); dirty(sb.name + ' ' + v + '% (' + t.name + ')'); render();
       };
     });
+    kFull(B, rows, t0);
+  }
+  // 🖼 Kanban full view: the whole board as one picture on one screen (like the critical path), to see at a glance where things are
+  function kFull(B, rows, t0) {
+    var tb = B.querySelector('.kbar'); if (!tb) return;
+    if (!tb.querySelector('#kbFull')) { var b = document.createElement('button'); b.type = 'button'; b.id = 'kbFull'; b.className = 'btn btn-sm' + (S.kFull ? ' btn-gold' : ''); b.textContent = S.kFull ? '▦ Back to the board' : '🖼 Full view'; b.title = 'The whole board as one picture on one screen'; tb.insertBefore(b, tb.querySelector('.sp')); b.onclick = function () { S.kFull = !S.kFull; render(); }; }
+    if (!S.kFull) return;
+    var kb = B.querySelector('.kanban'); if (kb) kb.hidden = true;
+    var RC = { g: '#16A34A', a: '#D97706', r: '#DC2626' }, W = 1200, cw = 288, gap = 16, ch = 30, cg = 6, top = 58;
+    var cols = STATUS.map(function (c) { return { c: c, L: rows.filter(function (r) { return r.t.status === c[0]; }) }; });
+    var maxN = Math.max(1, cols.reduce(function (m, x) { return Math.max(m, x.L.length); }, 0)), H = top + maxN * (ch + cg) + 34;
+    var cut = function (s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+    var svg = '<svg class="kfull-svg" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" font-family="Manrope, Arial, sans-serif"><rect width="' + W + '" height="' + H + '" fill="#FFFDF7"/>' +
+      cols.map(function (x, i) {
+        var X = 8 + i * (cw + gap), pts = x.L.length, done = x.c[0] === 'done';
+        return '<rect x="' + X + '" y="8" width="' + cw + '" height="' + (H - 16) + '" rx="12" fill="' + (done ? '#F0FDF4' : '#F6F3EA') + '" stroke="#E7E1D2"/>' +
+          '<text x="' + (X + 14) + '" y="34" font-size="15" font-weight="800" fill="#1F1D18">' + esc(x.c[1]) + '</text><text x="' + (X + cw - 14) + '" y="34" font-size="13" font-weight="700" fill="#6B665A" text-anchor="end">' + pts + '</text>' +
+          '<rect x="' + (X + 14) + '" y="42" width="' + (cw - 28) + '" height="3" rx="1.5" fill="' + (done ? '#16A34A' : '#C9A227') + '" opacity=".6"/>' +
+          x.L.map(function (r, k) {
+            var t = r.t, y = top + k * (ch + cg), rg = kRag(t.es, t.ef, t.pct >= 100, t0), subs = t.subs || [], sd = subs.filter(function (s) { return s.status === 'done'; }).length, nOpen = (t.stickies || []).filter(function (n) { return !n.done; }).length;
+            var right = (subs.length ? sd + '/' + subs.length + '  ' : '') + (t.dur === 0 ? '◆' : t.pct + '%');
+            return '<g class="kf-card" data-tid="' + esc(t.id) + '"><title>' + esc('#' + r.n + ' ' + t.name + (t.es ? ' · ' + dmy(t.es) + (t.ef && t.ef !== t.es ? ' – ' + dmy(t.ef) : '') : '') + (rg.txt ? ' · ' + rg.txt : '') + (subs.length ? ' · ' + sd + ' of ' + subs.length + ' stories done' : '') + (nOpen ? ' · ' + nOpen + ' open note(s)' : '')) + '</title>' +
+              '<rect x="' + (X + 10) + '" y="' + y + '" width="' + (cw - 20) + '" height="' + ch + '" rx="7" fill="#fff" stroke="#E7E1D2"/>' +
+              '<rect x="' + (X + 10) + '" y="' + y + '" width="5" height="' + ch + '" rx="2" fill="' + RC[rg.c] + '"/>' +
+              '<rect x="' + (X + 15) + '" y="' + (y + ch - 3) + '" width="' + ((cw - 25) * Math.min(100, t.pct || 0) / 100).toFixed(1) + '" height="3" fill="' + RC[rg.c] + '" opacity=".45"/>' +
+              '<text x="' + (X + 22) + '" y="' + (y + 19.5) + '" font-size="12" fill="#1F1D18"><tspan font-weight="800" fill="#8A6D1E">#' + r.n + '</tspan> ' + esc(cut(t.name, subs.length ? 25 : 30)) + '</text>' +
+              (nOpen ? '<text x="' + (X + cw - 58 - (subs.length ? 22 : 0)) + '" y="' + (y + 19.5) + '" font-size="11">🗒</text>' : '') +
+              '<text x="' + (X + cw - 16) + '" y="' + (y + 19.5) + '" font-size="11" font-weight="700" fill="#4A4538" text-anchor="end">' + esc(right) + '</text></g>';
+          }).join('') + (x.L.length ? '' : '<text x="' + (X + cw / 2) + '" y="' + (top + 20) + '" font-size="12" fill="#A39E92" text-anchor="middle">Nothing here</text>');
+      }).join('') +
+      '<g font-size="11" fill="#6B665A"><circle cx="18" cy="' + (H - 14) + '" r="4" fill="#16A34A"/><text x="26" y="' + (H - 10) + '">On track</text><circle cx="96" cy="' + (H - 14) + '" r="4" fill="#D97706"/><text x="104" y="' + (H - 10) + '">Due within 3 days</text><circle cx="214" cy="' + (H - 14) + '" r="4" fill="#DC2626"/><text x="222" y="' + (H - 10) + '">Late</text><text x="300" y="' + (H - 10) + '">x/y = stories done · % = progress · 🗒 = open notes</text>' +
+      '<text x="' + (W - 12) + '" y="' + (H - 10) + '" text-anchor="end">' + esc((S.plan.name || '') + ' · ' + dmy(t0)) + '</text></g></svg>';
+    var box = document.createElement('div'); box.className = 'card kfull';
+    box.innerHTML = '<div class="row" style="margin-bottom:8px"><h2 style="margin:0">🖼 The whole board</h2><span class="muted" style="font-size:12.5px">' + rows.length + ' themes · hover a card for its dates · click one to open it on the board</span><span class="sp"></span><button class="btn btn-sm" type="button" id="kfPng">⬇ Save as picture (PNG)</button><button class="btn btn-sm btn-gold" type="button" id="kfBack">▦ Back to the board</button></div><div class="kfull-pic">' + svg + '</div>';
+    B.appendChild(box);
+    var esc2 = function (e) { if (e.key === 'Escape' && S.kFull) { document.removeEventListener('keydown', esc2); S.kFull = false; render(); } }; document.addEventListener('keydown', esc2);   // one screen: the picture fits the window
+    $('#kfBack').onclick = function () { S.kFull = false; render(); };
+    box.querySelectorAll('.kf-card').forEach(function (g) { g.onclick = function () { var id = g.getAttribute('data-tid'); S.kFull = false; render(); setTimeout(function () { var c = document.querySelector('.kcard[data-tid="' + id + '"]'); if (c) { c.scrollIntoView({ block: 'center' }); c.classList.add('kflash'); setTimeout(function () { c.classList.remove('kflash'); }, 1600); } }, 60); }; });
+    $('#kfPng').onclick = function () {
+      var s = box.querySelector('svg'), xml = new XMLSerializer().serializeToString(s), img = new Image(), sc = 2;
+      img.onload = function () { var cv = document.createElement('canvas'); cv.width = W * sc; cv.height = H * sc; var cx = cv.getContext('2d'); cx.drawImage(img, 0, 0, cv.width, cv.height);
+        cv.toBlob(function (bl) { var a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = (S.plan.name || 'board').replace(/[^\w\- ]+/g, '') + ' - Kanban.png'; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }, 'image/png'); };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+    };
   }
 
   /* ---------- scope (project charter) ---------- */
