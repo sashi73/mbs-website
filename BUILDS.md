@@ -70,4 +70,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 59 | 1.0.59| 2026-11-14 21:37| GKH-Project-Champ| `334d792` | Champ: Ask Champ in the dashboard: tap the mic, ask how, and Champ shows you where to click |
 | 60 | 1.0.60| 2026-11-14 22:51| GKH-Project-Champ| `53aec51` | Champ: Ask Champ speaks, says hello, picks a language, has a menu and answers project questions |
 | 61 | 1.0.61| 2026-11-15 00:05| GKH-Project-Champ| `08b0bd5` | Champ: Ask Champ works in every language; translate the whole project into the console language |
-| 62 | 1.0.62 | 2026-11-15 01:27 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 62 | 1.0.62| 2026-11-15 01:27| GKH-Project-Champ| `184a7bd` | Champ on a phone: a simpler console; chatbots listen with the browser and speak on phones |
+| 63 | 1.0.63 | 2026-11-15 02:09 | GKH-Project-Champ | _this commit_ | _see git log_ |

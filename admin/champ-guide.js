@@ -190,7 +190,7 @@
       document.body.appendChild(p);
       p.querySelector('.cgp-x').onclick = closePanel; voiceBtn();
       $('#cgVoice').onclick = function () { V.on = !V.on; try { localStorage.setItem('cgVoice', V.on ? 'on' : 'off'); } catch (e) {} voiceBtn(); if (!V.on) hush(); else { V.warned = false; speak(lastBot || 'Hello!'); } };
-      $('#cgLang').onchange = function () { var l = this.value; if (window.ChampI18n) window.ChampI18n.set(l); setTimeout(function () { greet(true); chipsFill(p); }, 600); };
+      $('#cgLang').onchange = function () { var l = this.value; if (window.ChampI18n) window.ChampI18n.set(l); };   // the champ:lang listener redraws the panel
       $('#cgF').onsubmit = function (e) { e.preventDefault(); var q = $('#cgQ').value.trim(); if (q) { $('#cgQ').value = ''; ask(q); } };
       $('#cgMic').onclick = mic; $('#cgMenuBtn').onclick = function () { menu(); };
       chipsFill(p);
@@ -295,6 +295,8 @@
     }).catch(function () { reply('The microphone is blocked. Allow it in the browser (the 🔒 next to the address), or type your question.'); });
   }
 
+  // the console changed language (from anywhere): Champ follows, nothing of the old language is left in the panel
+  window.addEventListener('champ:lang', function () { var p = $('#cgPanel'); if (!p) return; var sl = $('#cgLang'); if (sl) sl.value = lang(); hush(); chipsFill(p); var L = $('#cgLog'); if (L) L.innerHTML = ''; if (!p.hidden) greet(true); });
   M.guide = { start: function (id) { var t = T.filter(function (x) { return x.id === id; })[0]; if (t) start(t); }, ask: ask, tours: T };
   new MutationObserver(function () { if (!document.getElementById('app').hidden) btn(); }).observe(document.getElementById('app'), { attributes: true, attributeFilter: ['hidden'] });
   setTimeout(function () { if (!document.getElementById('app').hidden) btn(); }, 800);

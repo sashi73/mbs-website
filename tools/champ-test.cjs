@@ -884,6 +884,16 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       await p.fill('#champNew [name=name]', 'Scope 3 baseline'); await p.click('#champNew [type=submit]'); await p.waitForURL(/#plan\//, { timeout: 10000 }).catch(() => {});
       const core = (p.url().match(/#plan\/([^/]+)/) || [])[1]; const job = core ? ((await (await api('planGet', { core })).json()).job || {}) : {};
       ok('Programs', 'the new project keeps the sponsor and project manager from the program', job.sponsor === 'Board of Directors' && job.manager === 'Sashi Kumar Sivam' && job.name === 'National Airlines', JSON.stringify(job).slice(0, 200)); }
+    // English console, a project written in Malay: its name shows in English on the lists, and one click puts its data in English
+    { const mc = (await (await api('planNewProject', { name: 'Majlis perkahwinan di Bali', client: 'Family', program: 'Digital health' })).json()).core;
+      await api('planSave', { core: mc, plan: { name: 'Majlis perkahwinan di Bali', start: '2026-12-01', phases: [{ id: 'ph1', name: 'Kerja' }], tasks: [['Tempah dewan untuk majlis', 2], ['Pilih katering dan menu', 3], ['Hantar kad jemputan', 1]].map((t, i) => ({ id: 't' + i, phase: 'ph1', name: t[0], dur: t[1], pred: i ? ['t' + (i - 1)] : [], qty: 0, rate: 0, pct: 0 })) } });
+      await p.goto(`${BASE}/admin/#projects`); await sleep(2500);
+      const lst = await p.textContent('#view').catch(() => '');
+      await p.goto(`${BASE}/admin/#plan/${mc}/schedule`); await p.waitForSelector('#trBan', { timeout: 10000 }).catch(() => {});
+      const bn = await p.textContent('#trBan').catch(() => ''); await p.click('#trGo').catch(() => {}); await p.waitForSelector('#okBtn', { timeout: 5000 }).catch(() => {}); await p.click('#okBtn').catch(() => {}); await sleep(3500);
+      const mp2 = (await (await api('planGet', { core: mc })).json()).plan || { tasks: [] };
+      ok('Language', 'English console: a Malay project\'s name shows in English on the list, and the banner puts its tasks into English (stored names change only when you say so)', /\[Engli\] Majlis perkahwinan di Bali/.test(lst) && /English/.test(bn) && mp2.tasks.every((t) => /^\[Engli\] /.test(t.name)), JSON.stringify({ l: /\[Engli\] Majlis/.test(lst), bn: bn.slice(0, 60), t: mp2.tasks.map((t) => t.name).slice(0, 2) }));
+      await api('planProjectDelete', { core: mc }); }
     // 📱 on a phone: bottom bar, no brand bar, the project's tools under ⋯ More, the schedule as cards, the Board swipes
     { const mp = await ctx.newPage(); await mp.setViewportSize({ width: 390, height: 844 }); const plc = (await (await api('planList')).json()).plans.find((x) => x.name !== 'x') || {};
       await mp.goto(`${BASE}/admin/#plan/${plc.core}/schedule`); await mp.waitForSelector('#mNav', { timeout: 10000 }).catch(() => {}); await sleep(1500);
@@ -1170,7 +1180,18 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     await p.click('#trGo').catch(() => {}); await p.waitForSelector('#okBtn', { timeout: 5000 }).catch(() => {}); await p.click('#okBtn').catch(() => {}); await sleep(4000);
     const tp = (await (await api('planGet', { core: tc })).json()).plan || { tasks: [] };
     const gName = await p.$$eval('table.gt [data-k=name]', (L) => L.slice(0, 3).map((x) => x.value)).catch(() => []);
-    ok('Language', 'the console in another language offers to translate the whole project; one click and the Gantt task names are in that language (saved, banner gone)', !!ban && tp.dataLang === 'ms' && tp.tasks.every((t) => /^\[Bahas\]/.test(t.name) || !/\p{L}/u.test(t.name)) && gName.length && gName.every((n) => /^\[Bahas\]/.test(n)) && !(await p.$('#trBan')), JSON.stringify({ tc, n: pls.length, url: p.url(), ban: ban.slice(0, 60), lang: tp.dataLang, g: gName })); }
+    ok('Language', 'the console in another language offers to translate the whole project; one click and the Gantt task names are in that language (saved, banner gone)', !!ban && tp.dataLang === 'ms' && tp.tasks.every((t) => /^\[Bahas\]/.test(t.name) || !/\p{L}/u.test(t.name)) && gName.length && gName.every((n) => /^\[Bahas\]/.test(n)) && !(await p.$('#trBan')), JSON.stringify({ tc, n: pls.length, url: p.url(), ban: ban.slice(0, 60), lang: tp.dataLang, g: gName }));
+    // on to Tamil: translated from the original English (not from the Malay), then back to English: the original words exactly
+    await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=ta]'); await p.waitForSelector('#trBan', { timeout: 10000 }).catch(() => {});
+    await p.click('#trGo').catch(() => {}); await p.waitForSelector('#okBtn', { timeout: 5000 }).catch(() => {}); await p.click('#okBtn').catch(() => {}); await sleep(4000);
+    const tt = (await (await api('planGet', { core: tc })).json()).plan || { tasks: [] };
+    await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=en]'); await p.waitForSelector('#trBan', { timeout: 10000 }).catch(() => {});
+    const back = await p.textContent('#trBan').catch(() => '');
+    await p.click('#trGo').catch(() => {}); await sleep(3500);
+    const te = (await (await api('planGet', { core: tc })).json()).plan || { tasks: [] };
+    const ui = await p.evaluate(() => /\[Bahas\]/.test(document.querySelector('.side-nav').textContent + document.querySelector('#planTabs').textContent));
+    ok('Language', 'Malay → Tamil → English: each language comes from the original words, and back in English the Gantt task names are exactly as written (screens fully English too)', tt.dataLang === 'ta' && tt.tasks.every((t) => /^\[[A-Za-z]+\] [^\[]/.test(t.name)) && /again/.test(back) && !te.dataLang && te.tasks.map((t) => t.name).join('|') === 'Pack the boxes|Book the truck|Move the desks|Set up the network' && !ui, JSON.stringify({ ta: tt.tasks.map((t) => t.name).slice(0, 2), back: back.slice(0, 50), en: te.tasks.map((t) => t.name), ui }));
+    await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=ms]'); await sleep(800); }
   { await p.evaluate(() => { try { sessionStorage.removeItem('cgHello'); } catch (e) {} const pn = document.getElementById('cgPanel'); if (pn) pn.remove(); }); await p.goto(`${BASE}/admin/#projects`); await sleep(800);
     await p.click('#cgBtn').catch(() => {}); await sleep(2500); await p.click('#cgMenuBtn').catch(() => {}); await sleep(800);
     const g = await p.evaluate(() => ({ hello: (document.getElementById('cgLog') || {}).textContent || '', menu: Array.from(document.querySelectorAll('#cgMenu [data-cgt]')).map((b) => b.textContent), hint: (document.getElementById('cgHint') || {}).textContent || '' }));

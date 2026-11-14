@@ -22,13 +22,26 @@
   var chip = function (s) { return '<span class="chip st-' + esc(s) + '">' + esc(LABEL[s] || s) + '</span>'; };
   var tel = function (p) { return String(p || '').replace(/[^\d+]/g, ''); };
 
+  // the console in English: project names written in another language (a Tamil, Malay or French project) are shown in
+  // English too. Only names that are clearly not English are sent (another script, or common Malay / French / Spanish ...
+  // words); the stored names are not changed. In any other language the page translation already does this.
+  var FOREIGN = /[^\u0000-\u024F\u2000-\u2BFF\uFE00-\uFE0F\uD800-\uDFFF]|\b(dan|untuk|yang|dengan|di|ke|dari|laporan|perundingan|projek|majlis|jamuan|pengurusan|pelan|kajian|pembangunan|harijadi|perkahwinan|sistem|baharu|et|pour|des|du|le|la|les|une|projet|gestion|mise|el|los|las|para|y|del|proyecto|und|der|die|für|projekt|com|uma|não|untuk)\b/i;
+  var NAMED = { planPipelineList: ['cards'], planList: ['plans'], planProgramList: ['cards', 'plans'] };
+  function namesInEnglish(action, j) {
+    var lang = (window.ChampI18n && window.ChampI18n.get()) || 'en', keys = NAMED[action];
+    if (lang !== 'en' || !keys || !window.ChampI18n || !window.ChampI18n.strings) return j;
+    var rows = [], list = [];
+    keys.forEach(function (k) { (Array.isArray(j[k]) ? j[k] : []).forEach(function (x) { ['name', 'title'].forEach(function (f) { var v = x && x[f]; if (typeof v === 'string' && FOREIGN.test(v)) { rows.push([x, f, v]); if (list.indexOf(v) < 0) list.push(v); } }); }); });
+    if (!list.length) return j;
+    return window.ChampI18n.strings(list, 'en', true).then(function (m) { rows.forEach(function (r) { var t = m[r[2]]; if (t) { r[0][r[1] + 'Orig'] = r[2]; r[0][r[1]] = t; } }); return j; }).catch(function () { return j; });
+  }
   function api(action, data) {
     return fetch(API, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' }, body: JSON.stringify(Object.assign({ action: action }, data || {})) })
       .then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) {
           if (r.status === 401 && action !== 'login') { showLogin(); throw new Error('Please log in again'); }
           if (!r.ok) throw new Error(j.error || ('Error ' + r.status));
-          return j;
+          return namesInEnglish(action, j);
         });
       });
   }
@@ -189,6 +202,8 @@
     window.scrollTo(0, 0);
   }
   window.addEventListener('hashchange', route);
+  // a new language: draw the page again from scratch, so nothing from the language before is left on the screen
+  window.addEventListener('champ:lang', function () { if (!$('#app').hidden) setTimeout(route, 60); });
 
   /* ---------------- dashboard ---------------- */
   // Dashboard: summary (figures) or the pipeline board (every job in its column). The choice is remembered.
@@ -484,6 +499,7 @@
   window.MBS = {
     api: api, esc: esc, money: money, gst: gst, date: date, day: day, chip: chip, toast: toast, fail: fail, modal: modal, closeModal: closeModal,
     confirmBox: confirmBox, route: route, $: $, view: function () { return view; }, API: API,
+    foreign: function (t) { return FOREIGN.test(String(t || '')); },
     addView: function (name, title, fn, navKey) { VIEWS[name] = fn; TITLES[name] = title; if (navKey) NAVKEY[name] = navKey; },
     allowed: allowed, me: null,
     onJob: function (fn) { jobExtras.push(fn); }

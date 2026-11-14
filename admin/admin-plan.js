@@ -1043,7 +1043,7 @@
       var btn = this; btn.disabled = true;
       plan.emergency = false; plan.weekends = !!($('#tplWeek') && $('#tplWeek').checked); plan.coolOff = 0;
       if (S.mode === 'type') { var squeezed = fitTemplate(plan); if (squeezed) { plan.charter.assumptions = (squeezed + '\n' + (plan.charter.assumptions || '')).trim(); note += '; ' + squeezed; } }
-      S.plan = plan; S.rev = 0; S.tab = 'schedule';
+      S.plan = plan; S.rev = 0; S.tab = 'schedule'; if (!plan.dataSrcLang) plan.dataSrcLang = docLang();   // the language it is written in
       var link = S.mode === 'type' && $('#tplLink') && typeProgram(S.tplType || $('#tplType').value) ? { prog: $('#tplProgOn') && $('#tplProgOn').checked ? typeProgram($('#tplType').value) : '', after: $('#tplAfter') ? $('#tplAfter').value : '', type: $('#tplDepType') ? $('#tplDepType').value : 'FS' } : null;
       api('planSave', { core: S.core, plan: S.plan, rev: 0, note: note }).then(function (r) { return linkUp(link).then(function () { return r; }); }).then(function (r) { S.plan = normalise(r.plan); S.rev = r.plan.rev; S.aiDraft = null; S.chain = null; loadChain(); S.aiText = ''; S.tplType = ''; toast('Plan created'); history.replaceState(null, '', '#plan/' + S.core + '/schedule'); render(); }).catch(function (e) { btn.disabled = false; S.plan = null; fail(e); });
     };
@@ -1357,9 +1357,9 @@
       '<div class="tabs" id="planTabs">' + tabs.map(function (t) { return '<a class="tab' + (S.tab === t[0] ? ' on' : '') + '" href="#plan/' + esc(S.core) + '/' + t[0] + '" style="text-decoration:none">' + t[1] + '</a>'; }).join('') + '</div><div id="planBody"></div>';
     $('#planWide').onclick = function () { document.body.classList.toggle('plan-wide'); render(); };
     $('#planQuote').onclick = function () { location.hash = '#plan/' + S.core + '/budget'; };
-    (function () { var l = (window.ChampI18n && window.ChampI18n.get()) || 'en', at = $('#planQuote'); if (l === 'en' || !at || $('#planTrData')) return;
+    (function () { var l = (window.ChampI18n && window.ChampI18n.get()) || 'en', at = $('#planQuote'); if ((l === 'en' && !p.dataLang && !(S.trUndo && S.trUndo.core === S.core)) || !at || $('#planTrData')) return;
       var b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-sm'; b.id = 'planTrData'; b.title = 'Write this project\'s data (task names, risks, BOM lines ...) in the console language'; b.textContent = '🌐 Translate project data';
-      b.onclick = translateData;
+      b.onclick = function () { translateData(); };
       if (S.trUndo && S.trUndo.core === S.core) { b.textContent = '↶ Undo translation'; b.title = 'Put the project data back as it was before the translation'; b.onclick = function () { if (!S.trUndo || S.trUndo.core !== S.core) return; S.plan = S.trUndo.plan; S.trUndo = null; dirty('translation undone'); render(); toast('Translation undone'); }; }
       at.parentNode.insertBefore(b, at); })();   // GKH Project Champ: budgeting instead of quotes
     trBanner();
@@ -3244,16 +3244,19 @@
   window.addEventListener('champ:lang', function () { setTimeout(function () { if (S.plan && /^#plan\//.test(location.hash)) trBanner(); }, 300); });
   function trBanner() {
     var l = (window.ChampI18n && window.ChampI18n.get()) || 'en', p = S.plan, old = $('#trBan'); if (old) old.remove();
-    if (!p || l === 'en' && !p.dataLang || p.dataLang === l || (M.me && M.me.scope && (M.me.mods || {}).projects !== 'edit')) return;
-    if (l === 'en' && p.dataLang) return;   // back in English: the Undo button is there
+    var src = (p && p.dataSrcLang) || 'en', cur = (p && p.dataLang) || src, unk = false;
+    if (p && cur === l && !p.dataLang && M.foreign) { var nf = 0, nt = 0; dataStrings(p, function (t) { nt++; if (M.foreign(t)) nf++; }); if (nt && nf >= Math.max(2, nt * 0.3)) { unk = true; cur = 'xx'; } }
+    if (!p || cur === l || (M.me && M.me.scope && (M.me.mods || {}).projects !== 'edit')) return;
+    var back = l === src && !unk;   // back to the language the project was written in: the original words come back exactly
     var key = 'trKeep:' + S.core + ':' + l; try { if (localStorage.getItem(key)) return; } catch (e) {}
     var n = 0; dataStrings(p, function () { n++; }); if (n < 2) return;
     var name = window.ChampI18n.name ? window.ChampI18n.name(l) : l, host = $('#planBody'); if (!host) return;
     var d = document.createElement('div'); d.id = 'trBan'; d.className = 'tr-ban';
-    d.innerHTML = '<span>🌐</span><div><b>Show this project in ' + esc(name) + '?</b><small>The screens are in ' + esc(name) + ', but the task names, phases, risks, the charter and the BOM are still in their own words. Translate them all once: the Gantt chart, the Board and the documents then read in ' + esc(name) + '. You can undo it.</small></div>' +
-      '<button type="button" class="btn btn-sm btn-gold" id="trGo">🌐 Translate the project</button><button type="button" class="btn btn-sm" id="trKeep">Keep as it is</button>';
+    var curName = unk ? 'another language' : window.ChampI18n.name ? window.ChampI18n.name(cur) : cur;
+    d.innerHTML = '<span>🌐</span><div><b>' + (back ? 'Show this project in ' + esc(name) + ' again?' : 'Show this project in ' + esc(name) + '?') + '</b><small>The screens are in ' + esc(name) + ', but the task names, phases, risks, the charter and the BOM are in ' + esc(curName) + '. ' + (back ? 'One click brings back the original ' + esc(name) + ' words, exactly as they were written.' : 'Translate them once: the Gantt chart, the Board and the documents then read in ' + esc(name) + '. You can undo it.') + '</small></div>' +
+      '<button type="button" class="btn btn-sm btn-gold" id="trGo">🌐 ' + (back ? 'Back to ' + esc(name) : 'Translate the project') + '</button><button type="button" class="btn btn-sm" id="trKeep">Keep as it is</button>';
     host.parentNode.insertBefore(d, host);
-    $('#trGo').onclick = translateData;
+    $('#trGo').onclick = function () { translateData(unk ? { force: true } : {}); };
     $('#trKeep').onclick = function () { try { localStorage.setItem(key, '1'); } catch (e) {} d.remove(); };
   }
   function dataStrings(p, fn) {   // fn(text, set) for each piece of project data people read
@@ -3266,21 +3269,38 @@
     var c = p.charter || {}; ['objective', 'background', 'inScope', 'outScope', 'deliverables', 'acceptance', 'assumptions'].forEach(function (k) { f(c, k); });
     ((p.bom || {}).lines || []).forEach(function (l) { f(l, 'name'); f(l, 'note'); f(l, 'basis'); });
   }
-  function translateData() {
-    var l = (window.ChampI18n && window.ChampI18n.get()) || 'en'; if (l === 'en') return;
-    var p = S.plan, list = [], jobs = [];
+  // 🌐 the project's own words (task names, phases, risks, charter, BOM) in the console language, in any direction:
+  // English → Tamil → French → back to English. Each translated piece remembers its original (dataMap), so going back to
+  // the language it was written in is exact, and the next language is translated from the original, not from a translation.
+  function translateData(opts) {
+    opts = opts || {}; var l = (window.ChampI18n && window.ChampI18n.get()) || 'en', p = S.plan;
+    var src = p.dataSrcLang || 'en', cur = p.dataLang || src, map = p.dataMap || {};
+    if (cur === l && opts.force && !p.dataLang) { cur = 'xx'; src = l; map = {}; }   // written in another language from the start: translate it all into this one
+    if (cur === l) { if (!opts.quiet) toast('This project is already in ' + window.ChampI18n.name(l)); return; }
     var split = function (t) { return String(t).split('\n').map(function (ln) { var m = ln.match(/^(\s*(?:[-•*]|\d+[.)])\s+)?(.*)$/); return { pre: m[1] || '', body: m[2] || '' }; }); };
-    dataStrings(p, function (t, set) { var L = split(t); L.forEach(function (x) { if (/\p{L}/u.test(x.body) && x.body.length < 700) list.push(x.body.trim()); }); jobs.push([L, set]); });
-    if (!list.length) { toast('Nothing to translate'); return; }
-    M.confirmBox('Translate this project\'s data?', 'Task names, phases, risks, issues, stakeholder roles, the charter and the BOM lines (' + pl(list.length, 'piece') + ' of text) are written in <b>' + esc(window.ChampI18n.name(l)) + '</b>, so everyone reads the same language. Names, emails, numbers and codes stay as they are. You can undo it straight after.', 'Translate').then(function (ok) {
-      if (!ok) return; toast('Translating the project data…');
-      var snap = JSON.parse(JSON.stringify(p));
-      window.ChampI18n.strings(list, l).then(function (map) {
-        var n = 0; jobs.forEach(function (j) { var changed = false, v = j[0].map(function (x) { var k = x.body.trim(), tr = map[k]; if (tr && tr !== k) { changed = true; n++; return x.pre + tr; } return x.pre + x.body; }).join('\n'); if (changed) j[1](v); });
-        S.trUndo = { core: S.core, plan: snap }; p.dataLang = l; dirty('project data translated (' + l + ')'); render();
-        toast(pl(n, 'piece') + ' translated. “Undo translation” puts it back.');
+    var jobs = [], unknown = [];
+    dataStrings(p, function (t, set) { var L = split(t); L.forEach(function (x) { var k = x.body.trim(); x.k = k; x.orig = map[k] != null ? map[k] : cur === src ? k : null; if (x.orig == null && /\p{L}/u.test(k) && k.length < 700 && unknown.indexOf(k) < 0) unknown.push(k); }); jobs.push([L, set]); });
+    if (!jobs.length) { if (!opts.quiet) toast('Nothing to translate'); return; }
+    var lossless = l === src && !unknown.length, name = window.ChampI18n.name(l);
+    var go = function () {
+      var snap = JSON.parse(JSON.stringify(p)), I = window.ChampI18n;
+      // 1. pieces typed or changed after the last translation: work out their original first
+      (unknown.length ? I.strings(unknown, src, true) : Promise.resolve({})).then(function (m0) {
+        jobs.forEach(function (j) { j[0].forEach(function (x) { if (x.orig == null) x.orig = m0[x.k] || x.k; }); });
+        // 2. the originals into the new language (nothing to do when it is the original language)
+        var need = []; if (l !== src) jobs.forEach(function (j) { j[0].forEach(function (x) { if (/\p{L}/u.test(x.orig) && x.orig.length < 700 && need.indexOf(x.orig) < 0) need.push(x.orig); }); });
+        return (need.length ? I.strings(need, l, true) : Promise.resolve({})).then(function (m1) {
+          var nm = {}, n = 0;
+          jobs.forEach(function (j) { var changed = false, v = j[0].map(function (x) { var to = l === src ? x.orig : (m1[x.orig] || x.orig); if (to !== x.body) { changed = true; n++; } if (l !== src && to !== x.orig) nm[to.trim()] = x.orig; return x.pre + to; }).join('\n'); if (changed) j[1](v); });
+          if (l === src) { delete p.dataLang; delete p.dataMap; if (cur === 'xx') p.dataSrcLang = l; } else { p.dataLang = l; p.dataSrcLang = src; p.dataMap = nm; }
+          S.trUndo = { core: S.core, plan: snap }; dirty('project data in ' + l); render();
+          toast(l === src ? 'The project is back in ' + name + ', as it was written.' : pl(n, 'piece') + ' translated into ' + name + '. “Undo translation” puts it back.');
+        });
       }).catch(fail);
-    });
+    };
+    if (lossless || opts.quiet) return go();
+    var count = 0; jobs.forEach(function (j) { count += j[0].filter(function (x) { return /\p{L}/u.test(x.body); }).length; });
+    M.confirmBox('Show this project in ' + esc(name) + '?', 'Task names, phases, risks, issues, stakeholder roles, the charter and the BOM lines (' + pl(count, 'piece') + ' of text) are written in <b>' + esc(name) + '</b>, so everyone reads the same words. Going back to the language it was first written in brings the original words back exactly. You can also undo it.', 'Translate').then(function (ok) { if (ok) go(); });
   }
   function docLang() { var l = (window.ChampI18n && window.ChampI18n.get && window.ChampI18n.get()) || 'en'; return l; }
   function langSelect(id, l) { var L = (window.ChampI18n && window.ChampI18n.langs) || [['en', 'English']]; return '<label>Language<select id="' + id + '" data-noi18n>' + L.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === l ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label>'; }

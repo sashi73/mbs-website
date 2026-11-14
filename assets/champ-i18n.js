@@ -137,8 +137,8 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
   // translate a list of strings (documents: the project charter and plan), using the same cache; returns { english: translation }
-  function strings(list, l) {
-    l = l || lang; if (l === 'en' || !BY[l]) return Promise.resolve({});
+  function strings(list, l, toEnglish) {   // toEnglish: project data written in another language, put back into English
+    l = l || lang; if ((l === 'en' && !toEnglish) || !BY[l]) return Promise.resolve({});
     var cache = cacheOf(l), need = [], out = {};
     list.forEach(function (t) { t = String(t || '').trim(); if (!t || SKIP_TEXT.test(t) || !/\p{L}/u.test(t)) return; if (cache[t] != null) out[t] = cache[t]; else if (need.indexOf(t) < 0) need.push(t); });
     var batches = []; for (var i = 0; i < need.length; i += 25) batches.push(need.slice(i, i + 25));
