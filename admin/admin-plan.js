@@ -689,7 +689,7 @@
     var pending = S.timer ? saveNow() : (S.q || Promise.resolve());
     return pending.then(function () { return api('planGet', { core: core }); }).then(function (d) {
       S.plan = null;
-      S.core = d.job.core; S.job = d.job; S.reminders = d.reminders; S.expensesEx = d.expensesEx; S.tab = tab; S.mods = { bom: !d.champ || d.champ.bom !== false, swms: !d.champ || d.champ.swms !== false }; if (S.mods[S.tab] === false) S.tab = 'overview';
+      S.core = d.job.core; S.job = d.job; S.reminders = d.reminders; S.expensesEx = d.expensesEx; S.tab = tab; S.mods = { bom: !d.champ || d.champ.bom !== false, swms: !d.champ || d.champ.swms !== false, change: !d.champ || d.champ.change !== false }; if (S.mods[S.tab] === false) S.tab = 'overview';
       if (!d.plan) return chooser();
       S.plan = normalise(d.plan); S.rev = d.plan.rev; S.chain = null; S.away = false; S.bench = d.bench || null; S.isTest = !!d.test;
       loadChain();
@@ -935,7 +935,7 @@
           return poll();
         });
       };
-      fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
+      fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' },
         body: JSON.stringify({ id: id, core: j.core, lang: tplLang(), describe: desc, scope: scope, type: cat ? cat.cat + ': ' + cat.item.n : '', start: $('#tplStart').value || today(), finish: $('#aiFinish').value || '', emergency: !!($('#tplEmerg') && $('#tplEmerg').checked), weekends: !!($('#tplWeek') && $('#tplWeek').checked) }) })
         .then(function (r) {
           if (r.status === 401 || r.status === 403) throw new Error('Your session has ended. Sign in again.');
@@ -1211,7 +1211,7 @@
       });
     };
     (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () {
-      return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
+      return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' },
         body: JSON.stringify({ id: id, mode: 'fit', core: core, finishBy: p.finishBy }) });
     }).then(function (r) {
       if (r.status === 401 || r.status === 403) throw new Error('Your session has ended. Sign in again.');
@@ -1304,14 +1304,14 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['budget', '💰 Budget'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Project Intelligence']]);
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['budget', '💰 Costing'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Project Intelligence']]);
     var MODS = S.mods || {}; tabs = tabs.filter(function (t) { return MODS[t[0]] !== false; });   // GKH Project Champ: optional modules switched off
     if (MODS[S.tab] === false) S.tab = 'overview';
     var sub = !!(M.me && M.me.scope), hide = sub ? ' style="display:none"' : '';   // v91: a sub-contractor signed in to this project
     V().innerHTML = (sub ? '<div class="plan-subbie">👷 Signed in as a sub-contractor (' + esc(M.me.name || M.me.user) + ') for project <b>' + esc(S.job.ref) + '</b>. ' + ((M.me.mods || {}).projects === 'edit' ? 'You can update this project.' : 'View only.') + '</div>' : '') +
       '<div class="row" style="margin-bottom:12px">' + (sub ? '' : '<a class="btn btn-sm" href="#job/' + esc(S.core) + '">← ' + esc(S.job.ref) + '</a>') +
       '<h2 style="font-size:21px">' + esc(p.name) + '</h2><span class="muted">' + esc(S.job.name + (S.job.title ? ': ' + S.job.title : '')) + '</span><span class="sp"></span>' +
-      (sub ? '' : '<span class="mod-wrap"><button type="button" class="btn btn-sm mod-btn" id="modBtn" aria-haspopup="true" aria-expanded="false" title="Switch optional modules on or off for this project">⚙ Modules <small>' + ['bom', 'swms'].filter(function (m) { return (S.mods || {})[m] !== false; }).map(function (m) { return m.toUpperCase(); }).join(' · ') + '</small></button></span>') + '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote"' + hide + ' title="Work out the budget for this project: cost by phase and category, contingency, reserve and cash flow">💰 Budget</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel"' + hide + ' title="Delete this project and everything in it">🗑 Delete project</button></div>' +
+      (sub ? '' : '<span class="mod-wrap"><button type="button" class="btn btn-sm mod-btn" id="modBtn" aria-haspopup="true" aria-expanded="false" title="Switch optional modules on or off for this project">⚙ Modules <small>' + ['bom', 'swms'].filter(function (m) { return (S.mods || {})[m] !== false; }).map(function (m) { return m.toUpperCase(); }).join(' · ') + '</small></button></span>') + '<span class="muted" id="planSave" style="font-size:13px">' + (S.timer || S.busy ? 'Saving…' : 'Saved ✓') + '</span><button class="btn btn-sm btn-gold" id="planQuote"' + hide + ' title="Work out the costing for this project: cost by phase and category (with the signed-off BOM), contingency, reserve and cash flow">💰 Costing</button><button class="btn btn-sm" id="planBase" title="Freeze today\'s dates and costs to compare against">📌 ' + (p.baseline ? 'Re-set baseline' : 'Set baseline') + '</button><button class="btn btn-sm" id="planWide" title="Hide the menu and use the whole screen">⛶ ' + (document.body.classList.contains('plan-wide') ? 'Normal view' : 'Wide view') + '</button><button class="btn btn-sm" id="planXls" title="Download the whole plan as an Excel workbook">⬇ Excel</button><button class="btn btn-sm" id="planCsv" title="Export the Gantt chart (tasks, dates, links) as CSV, Microsoft Project XML, Excel or calendar, for Microsoft Project, Primavera, Smartsheet, Asana, Monday.com and others">⬇ Gantt export</button><button class="btn btn-sm" onclick="window.print()">🖨 Print</button><button class="btn btn-sm btn-danger" id="planDel"' + hide + ' title="Delete this project and everything in it">🗑 Delete project</button></div>' +
       '<div id="planChain"></div>' +
       '<div class="grid pkpis">' +
         mini('Scope', R.pct + '% complete', R.done + ' of ' + R.total + ' tasks done', rag(R.total ? R.pct / Math.max(1, timePct(R)) : null, 0.95, 0.8)) +
@@ -1321,7 +1321,12 @@
       '</div>' +
       '<div class="tabs" id="planTabs">' + tabs.map(function (t) { return '<a class="tab' + (S.tab === t[0] ? ' on' : '') + '" href="#plan/' + esc(S.core) + '/' + t[0] + '" style="text-decoration:none">' + t[1] + '</a>'; }).join('') + '</div><div id="planBody"></div>';
     $('#planWide').onclick = function () { document.body.classList.toggle('plan-wide'); render(); };
-    $('#planQuote').onclick = function () { location.hash = '#plan/' + S.core + '/budget'; };   // GKH Project Champ: budgeting instead of quotes
+    $('#planQuote').onclick = function () { location.hash = '#plan/' + S.core + '/budget'; };
+    (function () { var l = (window.ChampI18n && window.ChampI18n.get()) || 'en', at = $('#planQuote'); if (l === 'en' || !at || $('#planTrData')) return;
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-sm'; b.id = 'planTrData'; b.title = 'Write this project\'s data (task names, risks, BOM lines ...) in the console language'; b.textContent = '🌐 Translate project data';
+      b.onclick = translateData;
+      if (S.trUndo && S.trUndo.core === S.core) { b.textContent = '↶ Undo translation'; b.title = 'Put the project data back as it was before the translation'; b.onclick = function () { if (!S.trUndo || S.trUndo.core !== S.core) return; S.plan = S.trUndo.plan; S.trUndo = null; dirty('translation undone'); render(); toast('Translation undone'); }; }
+      at.parentNode.insertBefore(b, at); })();   // GKH Project Champ: budgeting instead of quotes
     drawDocs();
     $('#planXls').onclick = function () { exportExcel(); };
     $('#planCsv').onclick = function () { ganttCsvDialog(); };
@@ -1335,7 +1340,7 @@
     if ($('#modBtn')) $('#modBtn').onclick = function (e) {   // GKH Project Champ: optional modules (BOM, SWMS) on or off
       e.stopPropagation();
       var btn = this, old = document.getElementById('modPop'); if (old) { old.remove(); btn.setAttribute('aria-expanded', 'false'); return; }
-      var L = [['bom', '🧱 Bill of Materials (BOM)', 'Materials costed before work starts, linked to stock'], ['swms', '🦺 SWMS', 'Safe Work Method Statements for high-risk construction work']];
+      var L = [['change', '🔁 Change control', 'Changes are reviewed, approved and signed before they go into the plan. Off (small projects): changes are committed straight away'], ['bom', '🧱 Bill of Materials (BOM)', 'Materials costed and signed off, then added to the costing'], ['swms', '🦺 SWMS', 'Safe Work Method Statements for high-risk construction work']];
       var pop = document.createElement('div'); pop.id = 'modPop'; pop.className = 'mod-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Modules');
       pop.innerHTML = '<b>Modules for this project</b>' + L.map(function (m) {
         return '<label class="mod-row"><span><b>' + m[1] + '</b><small>' + m[2] + '</small></span><span class="bom-switch"><input type="checkbox" data-mod="' + m[0] + '"' + ((S.mods || {})[m[0]] === false ? '' : ' checked') + '><span class="bom-slider"></span></span></label>';
@@ -1348,7 +1353,7 @@
           var mod = box.getAttribute('data-mod'), on = box.checked; box.disabled = true;
           api('planModuleSet', { core: S.core, mod: mod, on: on }).then(function () {
             S.mods = S.mods || {}; S.mods[mod] = on; if (!on && S.tab === mod) S.tab = 'overview';
-            toast((mod === 'bom' ? '🧱 Bill of Materials' : '🦺 SWMS') + (on ? ' switched on' : ' switched off for this project'));
+            toast(({ bom: '🧱 Bill of Materials', swms: '🦺 SWMS', change: '🔁 Change control' }[mod] || mod) + (on ? ' switched on' : ' switched off for this project') + (mod === 'change' && !on ? ': changes are now committed straight away' : ''));
             document.removeEventListener('click', shut); render();
           }).catch(function (err) { box.checked = !on; box.disabled = false; fail(err); });
         };
@@ -1523,7 +1528,7 @@
       });
     };
     (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () {
-      return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ id: id, mode: 'cost', core: core, ids: ids, note: note, target: o.target || 0 }) });
+      return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' }, body: JSON.stringify({ id: id, mode: 'cost', core: core, ids: ids, note: note, target: o.target || 0 }) });
     }).then(function (r) { if (r.status === 401 || r.status === 403) throw new Error('Your session has ended. Sign in again.'); if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); })
       .catch(function (e) { if (S.estId !== id) return; S.estId = null; if (!o.auto) M.closeModal(); fail(e); });
   }
@@ -2554,7 +2559,7 @@
     var when = function (ms) { return new Date(ms).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); };
     var draw = function () {
       var L = (t.stickies || []).slice().sort(function (a, b) { return (a.done - b.done) || (b.at - a.at); }), col = S.stkCol || 'G';
-      pop.innerHTML = '<div class="stk-h"><b>🗒 Notes</b><span class="stk-t">#' + (n ? n.n : '') + ' ' + esc(String(t.name).replace(/^[✓◆\s]+/, '')) + '</span><span class="sp"></span><button type="button" class="stk-x" data-sbig title="' + (S.stkBig ? 'Make smaller' : 'Expand') + '">' + (S.stkBig ? '⤡' : '⤢') + '</button><button type="button" class="stk-x" data-sclose title="Close">✕</button></div>' +
+      pop.innerHTML = '<div class="stk-h" title="Drag to move the note"><span class="stk-grip">⠿</span><b>🗒 Notes</b><span class="stk-t">#' + (n ? n.n : '') + ' ' + esc(String(t.name).replace(/^[✓◆\s]+/, '')) + '</span><span class="sp"></span><button type="button" class="stk-x" data-sbig title="' + (S.stkBig ? 'Make smaller' : 'Expand') + '">' + (S.stkBig ? '⤡' : '⤢') + '</button><button type="button" class="stk-x" data-sclose title="Close">✕</button></div>' +
         '<div class="stk-list">' + (L.length ? L.map(function (x) {
             var ed = S.stkEdit === x.id && !ro, items = String(x.text).split('\n').filter(function (l) { return STK_LI.test(l); }), ticked = items.filter(function (l) { return /\[(x|X)\]/.test(l.match(STK_LI)[0]); }).length;
             return '<div class="stk-n stk-' + x.c + (x.done ? ' done' : '') + (ed ? ' editing' : '') + '" data-nid="' + esc(x.id) + '"><div class="stk-m">' +
@@ -2569,12 +2574,18 @@
         (ro ? '' : '<div class="stk-add"><textarea id="stkTx" rows="' + (S.stkBig ? 4 : 2) + '" maxlength="1500" placeholder="Write a note for the team…  (start lines with - to make a checklist)"></textarea><div class="stk-row">' +
           ['R', 'A', 'G'].map(function (k) { return '<button type="button" class="stk-c stk-' + k + (col === k ? ' on' : '') + '" data-scol="' + k + '" title="' + STK[k][0] + '"><i></i>' + STK[k][0] + '</button>'; }).join('') + '<span class="sp"></span><button type="button" class="btn btn-sm btn-gold" data-sadd>Add note</button></div></div>');
       var place = function () { var r = anchor && document.body.contains(anchor) ? anchor.getBoundingClientRect() : null, w = pop.offsetWidth, h = pop.offsetHeight;
+        if (S.stkPos) { pop.style.left = Math.max(4, Math.min(innerWidth - w - 4, S.stkPos.x)) + 'px'; pop.style.top = Math.max(4, Math.min(innerHeight - 40, S.stkPos.y)) + 'px'; return; }   // where it was dragged to
         if (S.stkBig || !r) { pop.style.left = Math.max(10, (innerWidth - w) / 2) + 'px'; pop.style.top = Math.max(10, (innerHeight - h) / 2) + 'px'; return; }
         var x = Math.min(innerWidth - w - 10, Math.max(10, r.left)), y = r.bottom + 6; if (y + h > innerHeight - 10) y = Math.max(10, r.top - h - 6); pop.style.left = x + 'px'; pop.style.top = y + 'px'; };
       place();
       var save = function (what) { dirty('note on #' + (n ? n.n : '') + ': ' + what); var keep = S.stkBig; setTimeout(function () { render(); var a2 = document.querySelector('[data-stk="' + tid + '"]'); anchor = a2 || anchor; S.stkBig = keep; draw(); }, 0); };
       pop.querySelector('[data-sclose]').onclick = function () { pop.remove(); };
-      pop.querySelector('[data-sbig]').onclick = function () { S.stkBig = !S.stkBig; pop.classList.toggle('big', S.stkBig); draw(); };
+      // ✥ drag the note anywhere on the screen by its top bar (mouse or touch); it stays there for the next note
+      var hd = pop.querySelector('.stk-h'); hd.onpointerdown = function (e) { if (e.target.closest('button')) return; e.preventDefault(); var r = pop.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top; pop.classList.add('dragging');
+        var mv = function (ev) { S.stkPos = { x: ev.clientX - dx, y: ev.clientY - dy }; pop.style.left = Math.max(4, Math.min(innerWidth - pop.offsetWidth - 4, S.stkPos.x)) + 'px'; pop.style.top = Math.max(4, Math.min(innerHeight - 40, S.stkPos.y)) + 'px'; };
+        var up = function () { pop.classList.remove('dragging'); document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); };
+        document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up); };
+      pop.querySelector('[data-sbig]').onclick = function () { S.stkBig = !S.stkBig; S.stkPos = null; pop.classList.toggle('big', S.stkBig); draw(); };
       pop.querySelectorAll('[data-scol]').forEach(function (b) { b.onclick = function () { S.stkCol = b.getAttribute('data-scol'); pop.querySelectorAll('[data-scol]').forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
       var add = pop.querySelector('[data-sadd]'); if (add) add.onclick = function () { var tx = $('#stkTx').value.trim(); if (!tx) { $('#stkTx').focus(); return; }
         t.stickies = (t.stickies || []).concat([{ id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), c: S.stkCol || 'G', text: tx, by: me, at: Date.now(), done: false }]); save('added (' + STK[S.stkCol || 'G'][0].toLowerCase() + ')'); };
@@ -2906,7 +2917,7 @@
         return poll();
       });
     };
-    fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
+    fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' },
       body: JSON.stringify({ id: id, mode: 'charter', core: core, fields: keys, how: how, note: note, texts: texts }) })
       .then(function (r) { if (r.status === 401 || r.status === 403) throw new Error('Your session has ended. Sign in again.'); if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); })
       .catch(function (e) { if (end()) fail(e); });
@@ -3001,37 +3012,51 @@
   function budgetCalc(p) {
     var b = bCfg(p), R = rollup(p, today()), base = 0, byCat = {}, byPh = [], tasks = [], months = {};
     BCATS.forEach(function (k) { byCat[k] = 0; });
-    phaseGroups().forEach(function (g) { var sum = 0; g.rows.forEach(function (x) { var c = cost(x.t); if (!c) return; var k = catOf(p, x.t); byCat[k] += c; sum += c; base += c; tasks.push({ n: x.n, t: x.t, c: c, cat: k, ph: g.name });
-      if (x.t.es && x.t.ef) { var d0 = Date.parse(x.t.es), d1 = Date.parse(x.t.ef), days = Math.max(1, Math.round((d1 - d0) / 864e5) + 1), per = c / days; for (var i = 0; i < days; i++) { var m = new Date(d0 + i * 864e5).toISOString().slice(0, 7); months[m] = (months[m] || 0) + per; } } });
+    var spread = function (t, c) { if (!t.es || !t.ef) return; var d0 = Date.parse(t.es), d1 = Date.parse(t.ef), days = Math.max(1, Math.round((d1 - d0) / 864e5) + 1), per = c / days; for (var i = 0; i < days; i++) { var m = new Date(d0 + i * 864e5).toISOString().slice(0, 7); months[m] = (months[m] || 0) + per; } };
+    var bomSum = 0, add = function (x, c, k, ph, bom) { byCat[k] += c; base += c; tasks.push({ n: x.n, t: x.t, c: c, cat: k, ph: ph, bom: !!bom }); spread(x.t, c); };
+    phaseGroups().forEach(function (g) { var sum = 0; g.rows.forEach(function (x) { var lab = Math.round((Number(x.t.qty) || 0) * (Number(x.t.rate) || 0) * 100) / 100, mat = Math.round((cost(x.t) - lab) * 100) / 100;
+        if (lab) { add(x, lab, catOf(p, x.t), g.name); sum += lab; } if (mat > 0.004) { add(x, mat, 'Materials', 'Bill of Materials', true); bomSum += mat; } });
       if (sum) byPh.push({ name: g.name, v: sum }); });
+    ordered().forEach(function (x) { if (x.t.dur !== 0) return; var c = cost(x.t); if (c > 0.004) { add(x, c, 'Materials', 'Bill of Materials', true); bomSum += c; } });   // the 🧱 BOM milestone carries the materials
+    if (p.bomLoose > 0) { add({ n: '', t: { name: 'BOM lines not linked to a task', id: '' } }, Number(p.bomLoose), 'Materials', 'Bill of Materials', true); bomSum += Number(p.bomLoose); }
+    if (bomSum) byPh.push({ name: 'Bill of Materials', v: Math.round(bomSum * 100) / 100 });
     var r2_ = function (v) { return Math.round(v * 100) / 100; }, cont = r2_(base * b.cont / 100), res = r2_(base * b.res / 100), total = r2_(base + cont + res), price = r2_(total * (1 + b.margin / 100)), gst = r2_(price * b.gst / 100);
     var mk = Object.keys(months).sort(); return { cfg: b, R: R, base: r2_(base), cont: cont, res: res, total: total, price: price, gst: gst, inc: r2_(price + gst), byCat: byCat, byPh: byPh, tasks: tasks,
-      months: mk.map(function (m) { return { m: m, v: r2_(months[m]) }; }), approved: (p.charter || {}).budget || 0 };
+      months: mk.map(function (m) { return { m: m, v: r2_(months[m]) }; }), approved: (p.charter || {}).budget || 0, bom: r2_(bomSum) };
   }
   var mon = function (m) { var loc = { en: 'en-AU', zh: 'zh-CN', tl: 'fil-PH', ms: 'ms-MY', km: 'km-KH' }[typeof DOCL === 'string' ? DOCL : 'en'] || DOCL; try { return new Date(m + '-01T00:00:00Z').toLocaleDateString(loc, { month: 'short', year: '2-digit', timeZone: 'UTC' }); } catch (e) { return m; } };
   function budgetTab() {
     DOCL = 'en';
     var p = S.plan, B = $('#planBody'), K = budgetCalc(p), b = K.cfg, ro = !!(M.me && M.me.scope && (M.me.mods || {}).projects !== 'edit');
     var pct = function (k, lab, tip) { return '<label class="bd-in" title="' + esc(tip) + '">' + lab + '<span><input type="number" min="0" max="100" step="0.5" data-bcfg="' + k + '" value="' + b[k] + '"' + (ro ? ' disabled' : '') + '> %</span></label>'; };
-    var img = function (kind, data, alt) { try { var c = M.studio ? M.studio.chart({ kind: kind, data: data }) : null; return c ? '<img class="bd-ch" alt="' + esc(alt) + '" src="' + c.png + '">' : ''; } catch (e) { return ''; } };
+    var cl = (window.ChampI18n && window.ChampI18n.get()) || 'en', miss = [];
+    var tr = function (t) { if (cl === 'en' || !t) return t; var v = window.ChampI18n.cached(t, cl); if (v == null) { miss.push(t); return t; } return v; };
+    var trData = function (d) { d = JSON.parse(JSON.stringify(d)); (d.items || []).forEach(function (x) { x.l = tr(x.l); }); if (d.centerLabel) d.centerLabel = tr(d.centerLabel); return d; };
+    if (M.studio && M.studio.setWords) M.studio.setWords(cl === 'en' ? null : { spend: tr('Spend in the month'), cumulative: tr('Cumulative (S-curve)'), total: tr('Total') }, cl);
+    var img = function (kind, data, alt) { data = trData(data); try { var c = M.studio ? M.studio.chart({ kind: kind, data: data }) : null; return c ? '<img class="bd-ch" alt="' + esc(alt) + '" src="' + c.png + '">' : ''; } catch (e) { return ''; } };
     var tile = function (v, l, cls) { return '<div class="bd-t ' + (cls || '') + '"><b>' + v + '</b><small>' + l + '</small></div>'; };
     var diff = K.approved ? Math.round((K.approved - K.total) * 100) / 100 : 0;
-    B.innerHTML = '<div class="card bd"><div class="card-h"><h2>💰 Budget</h2><span class="sp"></span>' +
-      '<button class="btn btn-sm" id="bdCsv" type="button">⬇ Budget (CSV)</button><button class="btn btn-sm btn-gold" id="bdSet" type="button"' + (ro ? ' disabled' : '') + '>✔ Set as the approved budget</button></div>' +
-      '<p class="muted" style="margin:-4px 0 12px">Work out the budget from the plan: every task\'s cost (quantity × rate) by phase and by category, plus contingency for known risks and a management reserve for the unknown. Change a quantity, rate or category below and the totals follow.</p>' +
+    B.innerHTML = '<div class="card bd"><div class="card-h"><h2>💰 Costing</h2><span class="sp"></span>' +
+      '<button class="btn btn-sm" id="bdCsv" type="button">⬇ Costing (CSV)</button><button class="btn btn-sm btn-gold" id="bdSet" type="button"' + (ro ? ' disabled' : '') + '>✔ Set as the approved budget</button></div>' +
+      '<p class="muted" style="margin:-4px 0 12px">Work out the costing from the plan: every task\'s cost (quantity × rate) and the signed-off Bill of Materials, by phase and by category, plus contingency for known risks and a management reserve for the unknown. Change a quantity, rate or category below and the totals follow.</p>' +
       '<div class="bd-tiles">' + tile(money(K.base), 'Base cost (BAC)', 'dark') + tile(money(K.cont), 'Contingency ' + b.cont + '%') + tile(money(K.res), 'Management reserve ' + b.res + '%') + tile(money(K.total), 'Total budget', 'gold') +
         tile(money(K.price), b.margin ? 'Client price (+' + b.margin + '% margin)' : 'Client price') + tile(money(K.inc), 'Including GST ' + b.gst + '%') + '</div>' +
       '<div class="bd-cfg">' + pct('cont', 'Contingency', 'For identified risks (known unknowns). PMBOK: part of the cost baseline.') + pct('res', 'Management reserve', 'For unforeseen work (unknown unknowns). Held by the sponsor, outside the cost baseline.') +
         pct('margin', 'Margin', 'Mark-up on the total budget, for the price to the client (0 for an internal project).') + pct('gst', 'GST / tax', 'Tax on the client price (10% GST in Australia, 8% SST in Malaysia).') +
         '<div class="bd-ap">' + (K.approved ? 'Approved budget <b>' + money(K.approved) + '</b>' + (Math.abs(diff) >= 1 ? ' · <span class="' + (diff < 0 ? 'bad' : 'good') + '">' + (diff < 0 ? money(-diff) + ' short of this budget' : money(diff) + ' to spare') + '</span>' : ' · <span class="good">matches</span>') : '<span class="muted">No approved budget yet</span>') + '</div></div>' +
+      (function () { var bm = S.plan.bom; if (!bm || !(bm.lines || []).length || (S.mods && S.mods.bom === false)) return ''; var v = bm.lines.reduce(function (a, l) { return a + (Number(l.qty) || 0) * (Number(l.price) || 0); }, 0);
+        return bm.status === 'Signed off' ? '<div class="bd-bomst ok">🧱 <b>Bill of Materials signed off</b> by ' + esc(bm.signedBy || '') + ': <b>' + money(v) + '</b> is in this costing as Materials.</div>'
+          : '<div class="bd-bomst">🧱 <b>Bill of Materials: ' + money(v) + ' waiting for sign-off.</b> It is added to this costing once the preparer signs it off. <a href="#plan/' + esc(S.core) + '/bom">Open the BOM</a></div>'; })() +
       '<div class="bd-charts"><div><h3>Cost by phase</h3>' + (K.byPh.length ? img('bar', { items: K.byPh.map(function (x) { return { l: x.name, v: x.v, t: money(x.v) }; }) }, 'Cost by phase') : '<p class="muted">No costs yet.</p>') + '</div>' +
         '<div><h3>Cost by category</h3>' + (K.base ? img('donut', { items: BCATS.map(function (k) { return { l: k, v: K.byCat[k], t: money(K.byCat[k]) }; }), center: money(K.base), centerLabel: 'Base cost' }, 'Cost by category') : '<p class="muted">No costs yet.</p>') + '</div></div>' +
       (K.months.length ? '<h3>Cash flow by month</h3>' + img('scurve', { points: K.months.map(function (x) { return { l: mon(x.m), v: x.v }; }) }, 'Cash flow') : '') +
       '<h3>Cost breakdown</h3><div class="table-wrap"><table class="rt bd-tbl"><thead><tr><th>#</th><th>Task</th><th>Phase</th><th>Category</th><th class="num">Qty</th><th>Unit</th><th class="num">Rate</th><th class="num">Cost</th></tr></thead><tbody>' +
-      K.tasks.map(function (x) { return '<tr><td>' + x.n + '</td><td>' + esc(x.t.name) + '</td><td><small>' + esc(x.ph) + '</small></td><td><select data-bcat="' + esc(x.t.id) + '"' + (ro ? ' disabled' : '') + '>' + BCATS.map(function (k) { return '<option' + (k === x.cat ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></td>' +
+      K.tasks.map(function (x) { if (x.bom) return '<tr class="bd-bom"><td>' + x.n + '</td><td>🧱 ' + esc(String(x.t.name).replace(/^[🧱\s]+/, '')) + '</td><td><small>Bill of Materials</small></td><td>Materials</td><td class="num" colspan="3"><small class="muted">from the signed-off BOM</small></td><td class="num"><b>' + money(x.c) + '</b></td></tr>';
+        return '<tr><td>' + x.n + '</td><td>' + esc(x.t.name) + '</td><td><small>' + esc(x.ph) + '</small></td><td><select data-bcat="' + esc(x.t.id) + '"' + (ro ? ' disabled' : '') + '>' + BCATS.map(function (k) { return '<option' + (k === x.cat ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></td>' +
         '<td class="num"><input type="number" step="any" min="0" data-bq="' + esc(x.t.id) + '" value="' + (x.t.qty || 0) + '"' + (ro ? ' disabled' : '') + '></td><td>' + esc(x.t.unit || '') + '</td><td class="num"><input type="number" step="any" min="0" data-br="' + esc(x.t.id) + '" value="' + (x.t.rate || 0) + '"' + (ro ? ' disabled' : '') + '></td><td class="num"><b>' + money(x.c) + '</b></td></tr>'; }).join('') +
       '</tbody><tfoot><tr><td colspan="7">Base cost (BAC)</td><td class="num"><b>' + money(K.base) + '</b></td></tr><tr><td colspan="7">Contingency (' + b.cont + '%)</td><td class="num">' + money(K.cont) + '</td></tr><tr><td colspan="7">Management reserve (' + b.res + '%)</td><td class="num">' + money(K.res) + '</td></tr><tr class="bd-tot"><td colspan="7">Total budget</td><td class="num"><b>' + money(K.total) + '</b></td></tr></tfoot></table></div>' +
       (K.tasks.length ? '' : '<div class="empty">No task has a cost yet. Give tasks a quantity and a rate on the Schedule tab (Costs view), or here once they have one.</div>') + '</div>';
+    if (miss.length && !S.bdTr) { S.bdTr = true; window.ChampI18n.strings(miss, cl).then(function () { S.bdTr = false; if (S.tab === 'budget' && $('.bd-tiles')) budgetTab(); }, function () { S.bdTr = false; }); }
     var byId = {}; p.tasks.forEach(function (t) { byId[t.id] = t; });
     B.querySelectorAll('[data-bcfg]').forEach(function (i) { i.onchange = function () { var v = Math.max(0, Math.min(100, +this.value || 0)); bCfg(p)[this.getAttribute('data-bcfg')] = v; dirty('budget ' + this.getAttribute('data-bcfg') + ' ' + v + '%'); setTimeout(budgetTab, 0); }; });
     B.querySelectorAll('[data-bcat]').forEach(function (s0) { s0.onchange = function () { bCfg(p).cat[this.getAttribute('data-bcat')] = this.value; dirty('budget category'); setTimeout(budgetTab, 0); }; });
@@ -3043,7 +3068,7 @@
       var q = function (v) { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
       var L = [['#', 'Task', 'Phase', 'Category', 'Qty', 'Unit', 'Rate', 'Cost']].concat(K.tasks.map(function (x) { return [x.n, x.t.name, x.ph, x.cat, x.t.qty || 0, x.t.unit || '', x.t.rate || 0, x.c]; }))
         .concat([[], ['', 'Base cost (BAC)', '', '', '', '', '', K.base], ['', 'Contingency ' + b.cont + '%', '', '', '', '', '', K.cont], ['', 'Management reserve ' + b.res + '%', '', '', '', '', '', K.res], ['', 'Total budget', '', '', '', '', '', K.total], ['', 'Client price', '', '', '', '', '', K.price], ['', 'GST ' + b.gst + '%', '', '', '', '', '', K.gst], ['', 'Including GST', '', '', '', '', '', K.inc]]);
-      M.report.save(new Blob(['﻿' + L.map(function (r) { return r.map(q).join(','); }).join('\r\n')], { type: 'text/csv' }), ((S.job.ref || 'Project') + '-Budget.csv').replace(/[^\w.-]+/g, '-')); };
+      M.report.save(new Blob(['﻿' + L.map(function (r) { return r.map(q).join(','); }).join('\r\n')], { type: 'text/csv' }), ((S.job.ref || 'Project') + '-Costing.csv').replace(/[^\w.-]+/g, '-')); };
   }
 
   /* ---------- documents bar (replaces Plan → Quote → Invoice in GKH Project Champ) ---------- */
@@ -3051,7 +3076,7 @@
     var el = $('#planChain'); if (!el) return; var p = S.plan, K = budgetCalc(p), c = p.charter || {}, last = S.pdoc && S.pdoc.core === S.core ? S.pdoc.doc : null;
     var step = function (on, icon, title, sub, btn) { return '<div class="vstep' + (on ? ' done' : '') + '"><b>' + icon + ' ' + esc(title) + '</b><small>' + sub + '</small>' + btn + '</div>'; };
     el.innerHTML = '<div class="vchain docs3">' +
-      step(!!c.budget, '💰', 'Budget', c.budget ? 'approved ' + esc(money(c.budget)) + (Math.abs(c.budget - K.total) >= 1 ? ' · works out at ' + esc(money(K.total)) : '') : 'works out at ' + esc(money(K.total)) + ' · not approved yet', '<button class="btn btn-sm btn-gold" data-dact="budget">💰 Work out the budget</button>') +
+      step(!!c.budget, '💰', 'Costing', c.budget ? 'approved ' + esc(money(c.budget)) + (Math.abs(c.budget - K.total) >= 1 ? ' · works out at ' + esc(money(K.total)) : '') : 'works out at ' + esc(money(K.total)) + ' · not approved yet', '<button class="btn btn-sm btn-gold" data-dact="budget">💰 Work out the costing</button>') +
       step(c.docStatus === 'Approved', '📜', 'Project charter', 'v' + esc(c.docVersion || '1.0') + ' · ' + esc(c.docStatus || 'Draft') + ' · up to 4 pages', '<button class="btn btn-sm" data-dact="charter">📜 Generate the charter</button>') +
       step(!!last, '📘', 'Project plan', last ? 'AI narrative ' + esc(new Date(last.at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })) + ' · about 20 pages' : 'about 20 pages · PDF and Word', '<button class="btn btn-sm" data-dact="plan">📘 Generate the project plan</button>') + '</div>';
     el.querySelectorAll('[data-dact]').forEach(function (b) { b.onclick = function () { var a = b.getAttribute('data-dact'); if (a === 'budget') location.hash = '#plan/' + S.core + '/budget'; else if (a === 'charter') charterDialog(); else planDocDialog(); }; });
@@ -3072,6 +3097,33 @@
     box.querySelectorAll('button[data-thm]').forEach(function (b) { b.onclick = function () { set(b.getAttribute('data-thm')); }; });
     var cs = function () { set({ ink: box.querySelector('[data-thc=ink]').value, accent: box.querySelector('[data-thc=accent]').value }); };
     box.querySelectorAll('[data-thc]').forEach(function (i) { i.oninput = cs; i.onclick = function () { if (typeof docTheme() !== 'object') cs(); }; });
+  }
+  // 🌐 the project's data (typed or drafted in another language) into the console language, in one go: task names, phases, risks, issues, stakeholder roles, charter, BOM lines
+  function dataStrings(p, fn) {   // fn(text, set) for each piece of project data people read
+    var f = function (o, k) { if (o && typeof o[k] === 'string' && /\p{L}/u.test(o[k]) && !/@/.test(o[k])) fn(o[k], function (v) { o[k] = v; }); };
+    f(p, 'name'); (p.phases || []).forEach(function (x) { f(x, 'name'); });
+    (p.tasks || []).forEach(function (t) { f(t, 'name'); f(t, 'desc'); f(t, 'basis'); (t.subs || []).forEach(function (x) { f(x, 'name'); f(x, 'desc'); (x.steps || []).forEach(function (q) { f(q, 'name'); f(q, 'text'); }); }); });
+    (p.risks || []).forEach(function (r) { ['title', 'cause', 'action'].forEach(function (k) { f(r, k); }); });
+    (p.issues || []).forEach(function (r) { ['title', 'detail', 'resolution'].forEach(function (k) { f(r, k); }); });
+    (p.stakeholders || []).forEach(function (r) { f(r, 'role'); });
+    var c = p.charter || {}; ['objective', 'background', 'inScope', 'outScope', 'deliverables', 'acceptance', 'assumptions'].forEach(function (k) { f(c, k); });
+    ((p.bom || {}).lines || []).forEach(function (l) { f(l, 'name'); f(l, 'note'); f(l, 'basis'); });
+  }
+  function translateData() {
+    var l = (window.ChampI18n && window.ChampI18n.get()) || 'en'; if (l === 'en') return;
+    var p = S.plan, list = [], jobs = [];
+    var split = function (t) { return String(t).split('\n').map(function (ln) { var m = ln.match(/^(\s*(?:[-•*]|\d+[.)])\s+)?(.*)$/); return { pre: m[1] || '', body: m[2] || '' }; }); };
+    dataStrings(p, function (t, set) { var L = split(t); L.forEach(function (x) { if (/\p{L}/u.test(x.body) && x.body.length < 700) list.push(x.body.trim()); }); jobs.push([L, set]); });
+    if (!list.length) { toast('Nothing to translate'); return; }
+    M.confirmBox('Translate this project\'s data?', 'Task names, phases, risks, issues, stakeholder roles, the charter and the BOM lines (' + pl(list.length, 'piece') + ' of text) are written in <b>' + esc(window.ChampI18n.name(l)) + '</b>, so everyone reads the same language. Names, emails, numbers and codes stay as they are. You can undo it straight after.', 'Translate').then(function (ok) {
+      if (!ok) return; toast('Translating the project data…');
+      var snap = JSON.parse(JSON.stringify(p));
+      window.ChampI18n.strings(list, l).then(function (map) {
+        var n = 0; jobs.forEach(function (j) { var changed = false, v = j[0].map(function (x) { var k = x.body.trim(), tr = map[k]; if (tr && tr !== k) { changed = true; n++; return x.pre + tr; } return x.pre + x.body; }).join('\n'); if (changed) j[1](v); });
+        S.trUndo = { core: S.core, plan: snap }; dirty('project data translated (' + l + ')'); render();
+        toast(pl(n, 'piece') + ' translated. “Undo translation” puts it back.');
+      }).catch(fail);
+    });
   }
   function docLang() { var l = (window.ChampI18n && window.ChampI18n.get && window.ChampI18n.get()) || 'en'; return l; }
   function langSelect(id, l) { var L = (window.ChampI18n && window.ChampI18n.langs) || [['en', 'English']]; return '<label>Language<select id="' + id + '" data-noi18n>' + L.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === l ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label>'; }
@@ -3202,7 +3254,7 @@
     $('#pdPdf').onclick = function () { make('pdf'); }; $('#pdDocx').onclick = function () { make('docx'); };
     $('#pdAi').onclick = function () {
       if (busy) return; busy = true; var b = this, id = rid(), lang = $('#pdLang').value, K = budgetCalc(S.plan), t0 = Date.now(); b.disabled = true; msg.innerHTML = '<span class="ask-think">✨ The AI is writing the plan in three parts at once (about 1 to 3 minutes)…</span>';
-      fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
+      fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' },
         body: JSON.stringify({ id: id, core: core, mode: 'plandoc', lang: lang, budget: { base: K.base, contingency: K.cont, reserve: K.res, total: K.total, approved: (S.plan.charter || {}).budget || 0, by_phase: K.byPh, by_category: K.byCat, months: K.months.length } }) })
         .then(function (r) { if (r.status === 401 || r.status === 403) throw new Error('Your session has ended, or you need edit access to projects.'); if (r.status !== 202 && !r.ok) throw new Error('Could not start the AI (' + r.status + ')'); })
         .then(function poll() { return new Promise(function (res) { setTimeout(res, 2500); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
@@ -3679,7 +3731,7 @@
       });
     };
     (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () {
-      return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ mode: 'meet', id: id, core: core, meeting: m.id }) });
+      return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' }, body: JSON.stringify({ mode: 'meet', id: id, core: core, meeting: m.id }) });
     }).then(function (r) { if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); }).catch(function (e) { end(); fail(e); });
   }
   function cmShow(mid) {
@@ -3717,7 +3769,7 @@
     if (cr && !sent) return area + '<div class="im-box"><h4>' + (crLock ? 'The changes in this request' : 'Changes in this request: untick any that should not go ahead') + '</h4><div class="im-prev" data-imprev></div>' + g.map(function (x) { return '<div class="im-g"><b class="im-gh">' + x[0] + '</b>' + x[1].join('') + '</div>'; }).join('') + '</div>';
     if (sent) return area + '<div class="im-box"><h4>Proposed changes (sent to change control)</h4>' + g.map(function (x) { return '<div class="im-g"><b class="im-gh">' + x[0] + '</b>' + x[1].join('') + '</div>'; }).join('') + '<div class="cr-sent" style="margin-top:10px">🔁 Sent to change control as <b>' + crNo(sent) + '</b> · <span class="cr-st ' + CR_CLS[sent.status] + '">' + esc(sent.status) + '</span> <button class="btn btn-sm" type="button" data-imcropen="' + esc(sent.id) + '">Open ' + crNo(sent) + '</button></div></div>';
     if (!applied) return area + '<div class="im-box"><h4>Proposed changes to the plan</h4><div class="im-prev" data-imprev></div>' + g.map(function (x) { return '<div class="im-g"><b class="im-gh">' + x[0] + '</b>' + x[1].join('') + '</div>'; }).join('') +
-      '<div class="row" style="gap:8px;margin-top:10px;align-items:center"><button class="btn btn-gold" data-imcr type="button">➜ Send to change control</button><span class="muted" style="font-size:12.5px">Nothing changes yet. The ticked changes become a change request: reviewed (at a change control meeting if needed) and approved and signed by the project manager or project director before they go into the plan and registers.</span></div></div>';
+      '<div class="row" style="gap:8px;margin-top:10px;align-items:center">' + (ccOff() ? '<button class="btn btn-gold" data-imcr type="button">✓ Commit to the plan</button><span class="muted" style="font-size:12.5px">Change control is off for this project: the ticked changes go into the plan and registers straight away (kept on record).</span>' : '<button class="btn btn-gold" data-imcr type="button">➜ Send to change control</button><span class="muted" style="font-size:12.5px">Nothing changes yet. The ticked changes become a change request: reviewed (at a change control meeting if needed) and approved and signed by the project manager or project director before they go into the plan and registers.</span>') + '</div></div>';
     return area + '<div class="im-box"><h4>Changes to apply to the plan</h4><div class="im-prev" data-imprev></div>' + g.map(function (x) { return '<div class="im-g"><b class="im-gh">' + x[0] + '</b>' + x[1].join('') + '</div>'; }).join('') +
       '<div class="row" style="gap:6px;margin-top:8px">' + (applied ? '<span class="cm-ok">✓ Applied to the plan ' + esc(new Date(m.applied).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' })) + '</span>' + (S.fitUndo && S.fitUndo.core === S.core && S.fitUndo.meet === m.id ? '<button class="btn btn-sm" data-imundo type="button">↶ Undo</button>' : '')
         : '<button class="btn btn-gold" data-imgo type="button">✓ Apply the ticked changes</button><span class="muted" style="font-size:12.5px">The Gantt chart, budget, scope and registers update; ↶ Undo puts it back.</span>') + '</div></div>';
@@ -3779,6 +3831,7 @@
       var c = crNew({ title: m ? 'Changes from the meeting: ' + m.title : 'Changes suggested by Project Intelligence', desc: a.outcome || (a.summary || []).join('\n'), reason: (a.decisions || []).map(function (x) { return '- ' + x; }).join('\n'),
         source: m ? 'meeting' : 'intel', srcRef: m ? m.id : '', srcTitle: m ? m.title + ' (' + dmy(m.date) + ')' : 'Project Intelligence answer', items: items, picks: picks });
       if (m) { var mm = (S.plan.meetings || []).filter(function (x) { return x.id === m.id; })[0]; if (mm) mm.cr = c.id; }
+      if (ccOff()) { crCommitNow(c); return; }
       dirty(crNo(c) + ' raised'); S.crView = c.id; toast(crNo(c) + ' raised in change control: review it, then approve and sign to add it to the plan');
       location.hash = '#plan/' + S.core + '/change';
     };
@@ -3985,6 +4038,7 @@
   }
   function bomSync() {   // BOM ➜ tasks: each task's stock materials are the BOM lines on it that are Inventory items
     var p = S.plan, b = bomOf(); if (!b) return;
+    if (b.status !== 'Signed off') { p.tasks.forEach(function (t) { t.mats = []; delete t.bomx; }); p.bomLoose = 0; return; }   // GKH Project Champ: the BOM goes into the costing once it is signed off
     var by = {};
     b.lines.forEach(function (l) { if (!l.task || !l.item) return; var g = by[l.task] = by[l.task] || {}, x = g[l.item] = g[l.item] || { qty: 0, val: 0 }; x.qty += Number(l.qty) || 0; x.val += (Number(l.qty) || 0) * (Number(l.price) || 0); });
     p.tasks.forEach(function (t) { var g = by[t.id] || {}; t.mats = Object.keys(g).map(function (id) { var x = g[id]; return { item: id, qty: q3c(x.qty), price: x.qty ? r2(x.val / x.qty) : 0 }; }); });
@@ -4032,17 +4086,17 @@
       var have = 0; S.plan.tasks.forEach(function (t) { have += matsOf(t).length; });
       B.innerHTML = '<div class="card bom-intro"><h2>🧱 Bill of Materials: ' + esc(S.plan.name) + '</h2><p>Every material, fixing and consumable the job needs, with quantities and prices: checked and signed off <b>before the work starts</b>. In the Gantt chart it is one milestone, <b>🧱 Bill of Materials</b>, just before the build starts (e.g. before site set-out and excavation), and all the materials are costed there.</p>' +
         '<ol class="bom-how"><li><b>✨ Draft with AI</b> from the plan, the scope and our stock, or start from a <b>📋 template</b> (e.g. a standard bathroom), or add lines yourself.</li>' +
-        '<li><b>Stock first:</b> each line is matched to Inventory; you see what is in stock, free and short, and re-order the shortfall.</li>' +
-        '<li><b>Into the plan:</b> all of it is on the 🧱 Bill of Materials milestone (set aside in stock, costed, on the quote). Long-lead items can get an ordering task before it.</li>' +
-        '<li><b>Check and sign off:</b> tick each line as checked, then sign. After that it is locked; changes need a reason, and go through 🔁 Change control where they change the contract.</li></ol>' +
+        '<li><b>One milestone:</b> all of it sits on the 🧱 Bill of Materials milestone in the Gantt chart, just before the work starts.</li>' +
+        '<li><b>Check and sign off:</b> the preparer ticks each line as checked, then signs. Signed off, the BOM is locked and its total goes into the 💰 Costing as materials.</li></ol>' +
         (have ? '<p class="muted">The ' + pl(have, 'material') + ' already on the tasks (📦) will become the first lines.</p>' : '') +
         '<div class="actions" style="justify-content:flex-start"><button class="btn btn-gold" id="bomGo" type="button">🧱 Start the BOM</button></div></div>';
       $('#bomGo').onclick = function () { bomStart(); bomSave('BOM started'); bomLoadStock().then(bomTab); };
       return;
     }
     if (!bomLocked() && bomEnsure()) b = bomOf();   // v99: one milestone for all the materials
-    if (!S.bomStockAt || S.bomStockCore !== S.core) { S.bomStockCore = S.core; S.bomStockAt = 1; bomLoadStock().then(function () { if (S.tab === 'bom') bomTab(); }); }
-    var lock = bomLocked(), T = bomTotals(b), st = bomStock(), dis = lock ? ' disabled' : '';
+    var NOINV = true;   // GKH Project Champ: no Inventory (the BOM is for costing only)
+    if (!NOINV && (!S.bomStockAt || S.bomStockCore !== S.core)) { S.bomStockCore = S.core; S.bomStockAt = 1; bomLoadStock().then(function () { if (S.tab === 'bom') bomTab(); }); }
+    var lock = bomLocked(), T = bomTotals(b), st = NOINV ? {} : bomStock(), dis = lock ? ' disabled' : '';
     var shorts = Object.keys(st).filter(function (id) { return st[id].short > 0; });
     var opts = function (cur) { return '<option value="">– not linked to a task –</option>' + S.plan.tasks.map(function (t, i) { return '<option value="' + esc(t.id) + '"' + (t.id === cur ? ' selected' : '') + '>#' + (i + 1) + ' ' + esc(t.name.slice(0, 60)) + '</option>'; }).join(''); };
     var stockCell = function (l) {
@@ -4053,8 +4107,7 @@
       return '<span class="bom-st' + (s.short ? ' short' : '') + '" title="' + esc(i.name + ': ' + s.onHand + ' ' + s.unit + ' on hand, ' + s.free + ' free for this job' + (s.onOrder ? ', ' + s.onOrder + ' on order' : '')) + '">' + (s.short ? 'Short ' + s.short + ' ' + esc(s.unit) : '✓ ' + s.free + ' ' + esc(s.unit) + ' free') + (s.onOrder ? ' · ' + s.onOrder + ' on order' : '') + '</span>' + (lock ? '' : '<button class="btn btn-sm bom-pk" data-blink type="button" title="Change the stock item (Inventory)">📦</button>');
     };
     // v100: numbered lines, a search and quick filters, compact rows
-    var BF = { all: ['All', function () { return true; }], check: ['To check', function (l) { return !l.checked; }], short: ['Short', function (l) { return !l.item || (st[l.item] && st[l.item].short > 0); }],
-      nostock: ['Not in Inventory', function (l) { return !l.item; }], noprice: ['No price', function (l) { return !(Number(l.price) > 0); }] };
+    var BF = { all: ['All', function () { return true; }], check: ['To check', function (l) { return !l.checked; }], noprice: ['No price', function (l) { return !(Number(l.price) > 0); }] };
     var fk = BF[S.bomF] ? S.bomF : 'all', q = String(S.bomQ || '').toLowerCase().trim();
     var vis = function (l) { return BF[fk][1](l) && (!q || [l.name, l.note, l.unit].join(' ').toLowerCase().indexOf(q) >= 0); }, shown = b.lines.filter(vis).length;
     var fbar = '<div class="bom-fbar"><input id="bomQ" type="search" placeholder="Find a material…" value="' + esc(S.bomQ || '') + '" autocomplete="off">' + Object.keys(BF).map(function (k) { var n = b.lines.filter(BF[k][1]).length;
@@ -4066,7 +4119,7 @@
             '<td class="num"><input data-bf="qty" type="number" min="0" step="any" value="' + l.qty + '"' + dis + '></td><td><input data-bf="unit" value="' + esc(l.unit) + '" class="bom-u"' + dis + '></td>' +
             '<td class="num"><input data-bf="price" type="number" min="0" step="any" value="' + l.price + '"' + (!(Number(l.price) > 0) ? ' class="bom-zero" title="No price: this line adds $0 to the quote"' : '') + dis + '></td><td class="num"><b>' + money(tot) + '</b></td>' +
             '<td class="num"><input data-bf="lead" type="number" min="0" max="365" value="' + (l.lead || 0) + '" title="Lead time: working days to arrive after ordering"' + dis + '></td>' +
-            '<td class="bom-stk">' + stockCell(l) + '</td><td>' + (lock ? '' : '<button class="btn btn-sm bom-del" data-bdel type="button" title="Delete this line" aria-label="Delete line">🗑</button>') + '</td></tr>';
+            (NOINV ? '' : '<td class="bom-stk">' + stockCell(l) + '</td>') + '<td>' + (lock ? '' : '<button class="btn btn-sm bom-del" data-bdel type="button" title="Delete this line" aria-label="Delete line">🗑</button>') + '</td></tr>';
     }).join('');
     var ords = b.orders || {}, still = function (id) { return Math.max(0, q3c(st[id].short - ((ords[id] || {}).qty || 0))); }, toOrder = shorts.filter(function (id) { return still(id) > 0; });   // v92: what has been re-ordered
     var shortHtml = shorts.length ? '<div class="card bom-short' + (toOrder.length ? '' : ' all-ordered') + '"><div class="card-h"><h2>Shortfall: ' + pl(shorts.length, 'item') + '</h2><span class="bom-ostat">' + (shorts.length - toOrder.length ? '<span class="ok">✓ ' + (shorts.length - toOrder.length) + ' ordered</span>' : '') + (toOrder.length ? '<span class="bad">' + toOrder.length + ' still to order</span>' : '') + '</span><span class="sp"></span>' +
@@ -4084,16 +4137,16 @@
       (lock ? '<b>' + esc(bs ? bs.name : 'the end') + '</b>' : '<select id="bomBefore" title="Where the build (physical work) starts: the materials are needed before it"><option value="">– the end of the plan –</option>' + S.plan.tasks.filter(function (t) { return t.id !== ms.id; }).map(function (t) { return '<option value="' + esc(t.id) + '"' + (bs && bs.id === t.id ? ' selected' : '') + '>#' + (S.plan.tasks.indexOf(t) + 1) + ' ' + esc(t.name.slice(0, 70)) + '</option>'; }).join('') + '</select>') +
       '<small class="muted">where the build starts. All the materials are costed and set aside there.</small></div>' : '';
     B.innerHTML = bomPhases() + '<div class="card"><div class="card-h"><h2>🧱 Bill of Materials: ' + esc(S.plan.name) + '</h2><span class="bom-pill ' + (lock ? 'ok' : '') + '">' + (lock ? '✓ Signed off' : 'Draft') + '</span><span class="sp"></span>' +
-        (lock ? '' : '<button class="btn btn-sm" id="bomAi" type="button">✨ Draft with AI</button><button class="btn btn-sm" id="bomAdd" type="button">＋ Line</button><button class="btn btn-sm" id="bomStock" type="button" title="Pick materials from Inventory">📦 From stock</button>') +
+        (lock ? '' : '<button class="btn btn-sm" id="bomAi" type="button">✨ Draft with AI</button><button class="btn btn-sm" id="bomAdd" type="button">＋ Line</button>' + (NOINV ? '' : '<button class="btn btn-sm" id="bomStock" type="button" title="Pick materials from Inventory">📦 From stock</button>') + '') +
         '<button class="btn btn-sm" id="bomTpl" type="button">📋 Templates</button><button class="btn btn-sm" id="bomDoc" type="button">📄 Document</button><button class="btn btn-sm" id="bomXls" type="button">⬇ Excel</button>' +
         (lock ? '<button class="btn btn-sm" id="bomOpen" type="button">🔓 Reopen</button>' : '<button class="btn btn-sm btn-gold" id="bomSign" type="button"' + (b.lines.length && T.checked === b.lines.length && !T.noTask && !T.zero ? '' : ' disabled title="' + (T.zero ? 'Every line needs a price first (no $0 lines)' : T.noTask ? 'Link every line to a task first (so its cost is in the plan)' : 'Tick every line as checked first') + '"') + '>✍ Sign off</button>') + '</div>' +
-      '<div class="bom-kpi"><span><b>' + pl(b.lines.length, 'line') + '</b></span><span>Value <b>' + money(T.value) + '</b> ex GST</span><span>In the plan cost <b>' + money(T.inPlan) + '</b></span>' + (T.value - T.inPlan > 0.005 ? '<span class="bad" title="Lines not linked to a task: the quote adds them as a separate line, but the plan budget does not have them">Not in the budget <b>' + money(r2(T.value - T.inPlan)) + '</b></span>' : '') + '<span>Checked <b>' + T.checked + ' / ' + b.lines.length + '</b></span>' +
-        '' + (shorts.length ? (toOrder.length ? '<span class="bad">To order: <b>' + toOrder.length + '</b></span>' : '<span class="ok">✓ Shortfall ordered</span>') : '') + (T.noItem ? '<span>Not in stock: <b>' + T.noItem + '</b></span>' : '') + '</div>' +
+      '<div class="bom-kpi"><span><b>' + pl(b.lines.length, 'line') + '</b></span><span>Value <b>' + money(T.value) + '</b> ex GST</span><span>' + (lock ? 'In the costing' : 'In the costing once signed off') + ' <b>' + money(lock ? T.inPlan : T.value) + '</b></span>' + (T.value - T.inPlan > 0.005 ? '<span class="bad" title="Lines not linked to a task: the quote adds them as a separate line, but the plan budget does not have them">Not in the budget <b>' + money(r2(T.value - T.inPlan)) + '</b></span>' : '') + '<span>Checked <b>' + T.checked + ' / ' + b.lines.length + '</b></span>' +
+        '' + (shorts.length ? (toOrder.length ? '<span class="bad">To order: <b>' + toOrder.length + '</b></span>' : '<span class="ok">✓ Shortfall ordered</span>') : '') + (T.noItem && !NOINV ? '<span>Not in stock: <b>' + T.noItem + '</b></span>' : '') + '</div>' +
       place + (lock ? '<p class="bom-signed">✍ Signed off by <b>' + esc(b.signedBy) + '</b>' + (b.signedRole ? ', ' + esc(b.signedRole) : '') + ' on ' + esc(dmy(new Date(b.signedAt).toISOString().slice(0, 10))) + (b.sig ? ' · signature: <i>' + esc(b.sig) + '</i>' : '') + '. The BOM is locked: to change it, reopen it with a reason' + ' (raise a 🔁 change request where it changes the contract or budget).</p>' : '') +
       (T.zero && !lock ? '<div class="est-warn bom-zwarn"><div class="est-ic">$</div><div class="est-tx"><b>' + pl(T.zero, 'line') + ' with no price</b> (highlighted): ' + (T.zero === 1 ? 'it adds' : 'they add') + ' $0 to the plan and the quote, so the job would be under-priced. Put in the unit price (ex GST). The BOM can\'t be signed off until every line has a price.</div></div>' : '') +
       (T.est && !lock ? '<div class="est-warn"><div class="est-ic">⚠</div><div class="est-tx"><b>' + pl(T.est, 'line') + ' marked ≈ est</b> came from the AI or a template: check the quantity and price of each (and the waste allowance) against the drawings and supplier quotes, then tick it as checked.</div></div>' : '') +
-      (T.noItem && !lock ? '<p class="muted" style="font-size:12.5px;margin:6px 0">Every line is costed: the 🧱 Bill of Materials milestone and the quote include it. Lines that are not in Inventory are not set aside or tracked in stock: press <b>＋ Add to Inventory</b> (or 📦 to pick an existing stock item)' + (T.noItem > 1 ? ', or <button class="btn btn-sm" id="bomInvAll" type="button">＋ Add all ' + T.noItem + ' to Inventory</button>' : '') + '.</p>' : '') +
-      (b.lines.length ? fbar + '<div class="table-wrap bom-scroll"><table class="rt bom-tbl"><thead><tr><th class="bom-no">#</th><th class="c" title="Checked">✓</th><th class="bom-mat">Material</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit $</th><th class="num">Total</th><th class="num" title="Lead time (working days)">Lead</th><th>Stock</th><th></th></tr></thead><tbody>' + rows +
+      (T.noItem && !lock && !NOINV ? '<p class="muted" style="font-size:12.5px;margin:6px 0">Every line is costed: the 🧱 Bill of Materials milestone and the quote include it. Lines that are not in Inventory are not set aside or tracked in stock: press <b>＋ Add to Inventory</b> (or 📦 to pick an existing stock item)' + (T.noItem > 1 ? ', or <button class="btn btn-sm" id="bomInvAll" type="button">＋ Add all ' + T.noItem + ' to Inventory</button>' : '') + '.</p>' : '') +
+      (b.lines.length ? fbar + '<div class="table-wrap bom-scroll"><table class="rt bom-tbl"><thead><tr><th class="bom-no">#</th><th class="c" title="Checked">✓</th><th class="bom-mat">Material</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit $</th><th class="num">Total</th><th class="num" title="Lead time (working days)">Lead</th>' + (NOINV ? '' : '<th>Stock</th>') + '<th></th></tr></thead><tbody>' + rows +
         (rows ? '' : '<tr><td colspan="10" class="empty" style="padding:14px">No lines match. <button class="btn btn-sm" data-bomf="all" type="button">Show all</button></td></tr>') + (lock ? '' : '<tr class="bom-addrow"><td></td><td></td><td colspan="8"><button class="btn btn-sm" id="bomAdd2" type="button">＋ Add a line</button> <button class="btn btn-sm" id="bomStock2" type="button">📦 Add from Inventory</button> <small class="muted">Anything else the job needs: type it in, or pick it from stock.</small></td></tr>') +
         '</tbody><tfoot><tr><td></td><td></td><td colspan="4"><b>Total materials</b> <small class="muted">(' + pl(b.lines.length, 'line') + ')</small> <small class="muted">ex GST</small></td><td class="num"><b>' + money(T.value) + '</b></td><td colspan="3"></td></tr></tfoot></table></div>'
         : '<div class="empty">No lines yet. ✨ Draft with AI, apply a 📋 template, or ＋ add a line.</div>') + '</div>' + shortHtml +
@@ -4251,17 +4304,18 @@
     $('#bsF').onsubmit = function (e) {
       e.preventDefault(); var f = this;
       b.status = 'Signed off'; b.signedBy = f.by.value.trim(); b.signedRole = f.role.value; b.sig = f.sig.value.trim(); b.signedAt = Date.now();
-      bomLog('Signed off by ' + b.signedBy + ', ' + b.signedRole + ' (' + money(T.value) + ')'); M.closeModal(); bomSave('BOM signed off'); toast('BOM signed off and locked');
+      bomLog('Signed off by ' + b.signedBy + ', ' + b.signedRole + ' (' + money(T.value) + '): added to the costing'); M.closeModal(); bomSync(); dirty('BOM signed off: ' + money(T.value) + ' added to the costing');
+      toast('✍ BOM signed off: ' + money(T.value) + ' added to the 💰 Costing as materials'); location.hash = '#plan/' + S.core + '/budget';
     };
   }
   function bomReopenDialog() {
     var b = bomOf();
-    M.modal('<h2>🔓 Reopen the BOM</h2><p class="muted" style="margin:-4px 0 10px">It was signed off by ' + esc(b.signedBy) + '. Say why it needs to change: the reason is kept in its history. Where the change affects the contract or the budget, raise a 🔁 change request as well.</p>' +
+    M.modal('<h2>🔓 Reopen the BOM</h2><p class="muted" style="margin:-4px 0 10px">It was signed off by ' + esc(b.signedBy) + '. Say why it needs to change: the reason is kept in its history. While it is reopened its materials come out of the costing; sign it off again to put them back.</p>' +
       '<form class="form" id="boF"><label class="full">Reason<textarea name="why" rows="2" required maxlength="280"></textarea></label><div class="actions full"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" type="submit">🔓 Reopen</button></div></form>');
     $('#boF').onsubmit = function (e) {
       e.preventDefault(); var why = this.why.value.trim(); if (!why) return;
       bomLog('Reopened by ' + bomMe() + ' (was signed off by ' + b.signedBy + '): ' + why); b.status = 'Draft'; b.signedBy = ''; b.signedRole = ''; b.sig = ''; b.signedAt = 0;
-      M.closeModal(); bomSave('BOM reopened'); toast('BOM reopened: sign it off again when the changes are checked');
+      M.closeModal(); bomSave('BOM reopened'); toast('BOM reopened: its materials are out of the costing until it is signed off again');
     };
   }
   function bomAiDialog() {   // v99: the whole job, physical materials only
@@ -4285,7 +4339,7 @@
       });
     };
     (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () {
-      return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ id: id, mode: 'bom', core: core, only: only, note: note }) });
+      return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' }, body: JSON.stringify({ id: id, mode: 'bom', core: core, only: only, note: note }) });
     }).then(function (r) { if (r.status === 401 || r.status === 403) throw new Error('Your session has ended, or you cannot edit projects.'); if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); })
       .catch(function (e) { if (S.bomAiId !== id) return; S.bomAiId = null; M.closeModal(); fail(e); });
   }
@@ -4505,7 +4559,7 @@
       if (d.status === 'error') throw new Error(d.error || 'The AI could not assess it');
       if (Date.now() - t0 > 250000) throw new Error('The AI is taking too long. Try again in a minute.');
       return poll(); }); };
-    (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () { return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ id: id, mode: 'cr', core: core, title: c.title, text: c.desc + (c.reason ? '\nWhy: ' + c.reason : '') }) }); })
+    (S.timer ? saveNow() : (S.q || Promise.resolve())).then(function () { return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' }, body: JSON.stringify({ id: id, mode: 'cr', core: core, title: c.title, text: c.desc + (c.reason ? '\nWhy: ' + c.reason : '') }) }); })
       .then(function (r) { if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); }).catch(function (e) { if (S.crAi !== id) return; S.crAi = null; M.closeModal(); fail(e); });
   }
   function crSign(c, outcome) {
@@ -4519,10 +4573,17 @@
       '<div class="full actions"><button class="btn" data-close type="button">Cancel</button><button class="btn ' + (ok ? 'btn-gold' : '') + '" type="submit">' + (ok ? '✍ Approve and add to the plan' : outcome === 'Rejected' ? '✕ Reject' : '⏸ Defer') + '</button></div></form>');
     $('#crSignF').onsubmit = function (e) { e.preventDefault(); var f = e.target, by = f.by.value.trim();
       if (ok && f.sig.value.trim().toLowerCase() !== by.toLowerCase()) return toast('The signature must be your full name, as typed in Name', true);
+      var msg = crDecide(c, outcome, by, f.role.value, f.note.value.trim(), ok ? f.sig.value.trim() : '');
+      M.closeModal(); dirty(msg); changeTab(); toast(msg); crRecord(c);
+    };
+  }
+  // the decision on a change request: recorded, and when approved added to the plan and registers (also used when change control is switched off)
+  function crDecide(c, outcome, by, role, note, sig, direct) {
+    var ok = outcome === 'Approved', pk = crPicks(c), n = Object.keys(pk).length;
       var snap = JSON.parse(JSON.stringify(S.plan)), d0 = crDelta(c);
       c.effect = { days: d0.days, cost: d0.cost, f0: d0.R0.finish || '', f1: d0.R1.finish || '', b0: d0.R0.BAC || 0, b1: d0.R1.BAC || 0, est: !!d0.est };
-      c.decision = { by: by, role: f.role.value, at: Date.now(), note: f.note.value.trim(), sig: ok ? f.sig.value.trim() : '', outcome: outcome };
-      c.status = outcome; crLog(c, outcome + ' by ' + by + ' (' + f.role.value + ')' + (c.decision.note ? ': ' + c.decision.note : ''));
+      c.decision = { by: by, role: role, at: Date.now(), note: note || '', sig: sig || '', outcome: outcome }; if (direct) c.direct = true;
+      c.status = outcome; crLog(c, outcome + ' by ' + by + ' (' + role + ')' + (c.decision.note ? ': ' + c.decision.note : ''));
       var msg = crNo(c) + ' ' + outcome.toLowerCase();
       if (ok && c.items && n) {
         var R0 = rollup(S.plan, today()), k = impactApply(S.plan, c.items, pk, { tag: ' (' + crNo(c) + ')' }), R1 = rollup(S.plan, today());
@@ -4536,8 +4597,13 @@
         msg = crNo(c) + ' approved and added to the plan: ' + pl(k, 'change') + '. Finish ' + dmy(R1.finish) + ', budget ' + money(R1.BAC);
       }
       S.crUndo = { core: S.core, id: c.id, plan: snap };
-      M.closeModal(); dirty(msg); changeTab(); toast(msg); crRecord(c);
-    };
+      return msg;
+  }
+  // GKH Project Champ: change control is a module. Switched off (small projects), a change is committed straight away: no review
+  function ccOff() { return !!(S.mods && S.mods.change === false); }
+  function crCommitNow(c) {
+    var me = bomMe(), msg = crDecide(c, 'Approved', me, 'Project manager', 'Change control is switched off for this project: committed straight away, without a review.', '', true);
+    dirty(msg); render(); toast('✓ ' + msg.replace(/^CR-\d+ approved and added/, 'Committed and added')); crRecord(c, true); return msg;
   }
   function crMeetDialog(ids) {
     var p = S.plan, open = (p.changes || []).filter(function (c) { return !CR_DONE[c.status]; }).sort(function (a, b) { return a.num - b.num; });
@@ -4870,7 +4936,7 @@
         return poll();
       });
     };
-    fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ mode: 'report', id: id, core: core, facts: facts }) })
+    fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' }, body: JSON.stringify({ mode: 'report', id: id, core: core, facts: facts }) })
       .then(function (x) { if (x.status >= 400) throw new Error('Could not start the AI (' + x.status + ')'); return poll(); }).catch(function (e) { end(); fail(e); });
   }
 
@@ -4988,6 +5054,7 @@
     var imp = {}; AREA_N.forEach(function (x) { imp[x[0]] = impact[x[0]] || { level: 'None', text: '' }; });
     var items = Object.assign({ meeting: null, outcome: title, summary: [], decisions: [], actions: [], impact: imp, task_changes: [], new_tasks: [], scope_changes: [], risks: [], issues: [], stakeholders: [], quality: [], follow_ups: [] }, parts);
     var c = crNew({ title: title, desc: desc, reason: 'Suggested by Project Intelligence in answer to: “' + String(e.q || '').slice(0, 300) + '”', source: 'intel', srcRef: piCrRef(e, kind), srcTitle: 'Project Intelligence answer', items: items, picks: {} });
+    if (ccOff()) { crCommitNow(c); return; }
     dirty(crNo(c) + ' raised'); S.crView = c.id; toast(crNo(c) + ' raised in change control: approve and sign it to add them to the register');
     location.hash = '#plan/' + S.core + '/change';
   }
@@ -5065,12 +5132,13 @@
       if (rpb && st.rp) {
         impactWire(rpb, st.rp.a, null, intelTab);
         var sendR = rpb.querySelector('[data-imcr]');
-        if (sendR) { sendR.textContent = '➜ Send the re-plan to change control'; sendR.onclick = function () {
+        if (sendR) { sendR.textContent = ccOff() ? '✓ Commit the re-plan' : '➜ Send the re-plan to change control'; sendR.onclick = function () {
           var picks = impactPicks(rpb); if (!Object.keys(picks).length) return toast('Tick the changes to send', true);
           var a = JSON.parse(JSON.stringify(st.rp.a)), d = st.rp;
           var c = crNew({ title: a.outcome, desc: 'Finish ' + dmy(d.R0.finish) + ' → ' + dmy(d.R1.finish) + '; budget ' + money(d.R0.BAC) + ' → ' + money(d.R1.BAC) + '.' + (a.summary.length ? '\n' + a.summary.join('\n') : '') + '\nOnce approved and signed, the new schedule and budget become the baseline.',
             reason: 'Suggested by Project Intelligence in answer to: “' + String(e.q || '').slice(0, 300) + '”', source: 'intel', srcRef: piCrRef(e, 'p'), srcTitle: 'Project Intelligence answer', items: a, picks: picks, priority: 'High',
             estDays: d.R1.finish && d.R0.finish ? (d.R1.finish > d.R0.finish ? workBetween(d.R0.finish, d.R1.finish) - 1 : -(workBetween(d.R1.finish, d.R0.finish) - 1)) : 0, estCost: Math.round((d.R1.BAC - d.R0.BAC) * 100) / 100 });
+          if (ccOff()) { crCommitNow(c); return; }
           dirty(crNo(c) + ' raised'); S.crView = c.id; toast(crNo(c) + ' raised: approve and sign it to redraw the Gantt chart and re-baseline the budget');
           location.hash = '#plan/' + S.core + '/change';
         }; }
@@ -5101,7 +5169,7 @@
         return poll();
       });
     };
-    fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
+    fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' },
       body: JSON.stringify({ mode: 'intel', id: id, core: core, question: q, history: hist }) })
       .then(function (r) { if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); })
       .catch(function (e) { done(); fail(e); });

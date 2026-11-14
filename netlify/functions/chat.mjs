@@ -171,7 +171,7 @@ const tCalls = new Map();
 function tLimited(ip) {   // at most 60 model calls per address per 10 minutes for uncached text
   const now = Date.now(), list = (tCalls.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
   list.push(now); tCalls.set(ip, list); if (tCalls.size > 5000) tCalls.clear();
-  return list.length > (Number(env('CHAMP_I18N_LIMIT')) || 60);
+  return list.length > (Number(env('CHAMP_I18N_LIMIT')) || 300);
 }
 const hash = (s) => createHash('sha1').update(s).digest('base64url').slice(0, 16);
 async function i18n(body, ip) {
@@ -194,10 +194,12 @@ Return JSON only: {"t": [ ... ]} with exactly one translation per input string, 
 - Natural, professional ${LANGS[code]}, as a local software product would say it. Keep short UI labels short.
 - Keep unchanged: product and brand names (GKH, Global Knowledge House, Project Champ, Champ), PMBOK, PRINCE2, Scrum, Kanban, Gantt, RACI, RAID, BOM, SWMS, SPI, CPI, EAC, BAC, emoji, numbers, money, dates, email addresses, phone numbers and URLs.
 - Keep placeholders in curly braces, such as {name} and {email}, exactly as they are.
+- Keep people's names, company names, project and document codes (such as P-261114-000001, PG-002, CR-001, Q-1043) and file names as they are.
+- Translate units and short labels the way local software shows them (e.g. 'each', 'set', 'pack', 'day').
 - Never add notes, quotes or explanations.`;
     try {
       const r = await fetch(`${base}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, temperature: 0.1, max_tokens: 6000, stream: false, response_format: { type: 'json_object' },
+        body: JSON.stringify({ model, temperature: 0.1, max_tokens: 8000, stream: false, response_format: { type: 'json_object' },
           messages: [{ role: 'system', content: sys }, { role: 'user', content: JSON.stringify({ strings: need }) }] }) });
       if (!r.ok) return json(502, { error: 'Translation is busy right now. Please try again.', map });
       const data = await r.json();

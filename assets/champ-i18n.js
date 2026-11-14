@@ -1,7 +1,7 @@
 /* GKH Project Champ: switch the language of the website and the console on the fly.
    🌐 in the top-right cluster. Text is translated by the AI (chat function, mode "i18n") once per language and
    cached on the server (Netlify Blobs) and in this browser, so it is quick after the first time.
-   Website: the whole page. Console: menus, buttons, tabs, headings and labels only; project data stays as typed.
+   Website and console: everything on screen (menus, labels, tables, lists, drop-downs, chips, tips); what people type in boxes stays as typed.
    The choice also sets Champ's language. English is the original and needs no translation. */
 (function () {
   'use strict';
@@ -17,7 +17,7 @@
   root.setAttribute('lang', lang === 'en' ? 'en-AU' : lang);
 
   // what gets translated
-  var SKIP = 'script,style,noscript,code,pre,svg,textarea,input,select:not([data-i18n]),[contenteditable],[data-noi18n],.cc-box,.ct-langmenu,.ref';
+  var SKIP = 'script,style,noscript,code,pre,svg,textarea,input,[contenteditable],[data-noi18n],.cc-box,.ct-langmenu,.ref';
   var CONSOLE_UI = 'nav,button,.btn,label,th,h1,h2,h3,h4,legend,summary,.side-h,.card-h,.pcol-h,.pcol header small,.cs-tile span,.cs-tile small,.cs-note,.cs-health small,.cs-tagline,.empty,.noaccess,.pflag,.gkh-bar,.login-card,.ct-panel,.tabs,[role=tab],.pkpis,.hint,.help,p.muted,small.muted';
   var CONSOLE_DATA = 'td,.pc-name,.pc-title,.pc-meta,.who,#newPlanJob,.gantt,.gt-name,.bar-label,[data-plan] b,.plan-name,.ptask,.ttl';
   var SKIP_TEXT = /^[\s\d.,:;%$€£¥+\-–—/()#@*×x=<>|·•→←↻✓✕⇄✨📊▦📅＋🔐🕘🎨🌐☀☾]*$/;
@@ -31,10 +31,7 @@
     try { var s = JSON.stringify(mem[l]); if (s.length > 900000) { mem[l] = {}; s = '{}'; } localStorage.setItem('champI18n:' + l, s); } catch (e) {}
   }
   function wanted(el) {
-    if (!el || el.closest(SKIP)) return false;
-    if (!isConsole) return true;
-    if (el.closest(CONSOLE_DATA)) return false;
-    return !!el.closest(CONSOLE_UI);
+    return !!el && !el.closest(SKIP);   // GKH Project Champ: the whole console, not only its labels (someone who reads no English must not meet half-English screens)
   }
   function collect(scope) {
     var items = [], w = document.createTreeWalker(scope || document.body, NodeFilter.SHOW_TEXT, null);
@@ -63,23 +60,31 @@
     for (var n = w.nextNode(); n; n = w.nextNode()) if (orig.has(n)) n.nodeValue = orig.get(n);
     document.querySelectorAll('[placeholder],[title],[aria-label]').forEach(function (el) { var m = origAttr.get(el); if (m) Object.keys(m).forEach(function (a) { el.setAttribute(a, m[a]); }); });
   }
-  var busy = 0, queued = false;
+  // what is still untranslated is gathered from every redraw and sent together (a few big requests instead of one per redraw)
+  var busy = 0, queue = [], waiters = [], flushT = null, inflight = 0, failNote = 0;
+  function flush() {
+    flushT = null; if (!queue.length || inflight >= 3) return;
+    var l = lang, cache = cacheOf(l), batch = [];
+    while (queue.length && batch.length < 80) { var t = queue.shift(); if (cache[t] == null && batch.indexOf(t) < 0) batch.push(t); }
+    if (!batch.length) { settle(); if (queue.length) flush(); return; }
+    inflight++; busy++; root.classList.add('i18n-busy');
+    fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'i18n', lang: l, strings: batch }) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) { var e = new Error(j.error || 'Translation unavailable'); e.retry = r.status === 429 || r.status >= 500; throw e; } return j; }); })
+      .then(function (j) { Object.keys(j.map || {}).forEach(function (k) { cache[k] = j.map[k]; }); saveCache(l); })
+      .catch(function (e) { if (Date.now() - failNote > 60000) { failNote = Date.now(); note(e.message); } if (e.retry) setTimeout(function () { batch.forEach(function (t) { if (queue.indexOf(t) < 0) queue.push(t); }); schedule(8000); }, 0); })
+      .then(function () { inflight--; busy--; if (!busy) root.classList.remove('i18n-busy'); settle(); if (queue.length) schedule(60); });
+    if (queue.length) flush();   // up to three requests at a time
+  }
+  function schedule(ms) { if (!flushT) flushT = setTimeout(flush, ms == null ? 250 : ms); }
+  function settle() { var l = lang, cache = cacheOf(l); waiters = waiters.filter(function (w) { if (w.l !== l) return false; var left = false; w.items.forEach(function (it) { if (cache[it.t] != null) put(it, cache[it.t]); else left = true; }); return left; }); }
   function translate(scope) {
     if (lang === 'en') return Promise.resolve();
-    var l = lang, cache = cacheOf(l), items = collect(scope), need = [];
-    items.forEach(function (it) { if (cache[it.t] != null) put(it, cache[it.t]); else if (need.indexOf(it.t) < 0) need.push(it.t); });
-    if (!need.length) return Promise.resolve();
-    busy++; if (!scope) root.classList.add('i18n-busy');
-    var batches = []; for (var i = 0; i < need.length; i += 80) batches.push(need.slice(i, i + 80));
-    return Promise.all(batches.map(function (b) {
-      return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'i18n', lang: l, strings: b }) })
-        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || 'Translation unavailable'); return j; }); })
-        .then(function (j) { Object.keys(j.map || {}).forEach(function (k) { cache[k] = j.map[k]; }); });
-    })).then(function () {
-      saveCache(l);
-      if (l === lang) items.forEach(function (it) { if (cache[it.t] != null) put(it, cache[it.t]); });
-    }).catch(function (e) { if (!scope) note(e.message); })
-      .then(function () { busy--; if (!busy) root.classList.remove('i18n-busy'); });
+    var l = lang, cache = cacheOf(l), items = collect(scope), need = 0;
+    items.forEach(function (it) { if (cache[it.t] != null) put(it, cache[it.t]); else { need++; if (queue.indexOf(it.t) < 0) queue.push(it.t); } });
+    if (!need) return Promise.resolve();
+    waiters.push({ l: l, items: items.filter(function (it) { return cache[it.t] == null; }) });
+    if (!scope) root.classList.add('i18n-busy');
+    schedule(); return Promise.resolve();
   }
   function note(msg) {
     var d = document.createElement('div'); d.className = 'ct-note'; d.textContent = msg;
@@ -106,7 +111,7 @@
     document.body.appendChild(m);
     var draw = function () {
       m.innerHTML = '<b>🌐 Language</b>' + LANGS.map(function (x) { return '<button type="button" role="menuitem" data-l="' + x[0] + '"' + (x[0] === lang ? ' aria-current="true"' : '') + '>' + x[1] + '</button>'; }).join('') +
-        '<small>' + (isConsole ? 'Menus and labels are translated by AI; your project data stays as typed.' : 'Translated by AI.') + ' Champ answers in the same language.</small>';
+        '<small>' + (isConsole ? 'Everything on screen is translated by AI; what you type stays as typed.' : 'Translated by AI.') + ' Champ answers in the same language.</small>';
     };
     var open = function (on) { if (on) draw(); m.hidden = !on; b.setAttribute('aria-expanded', on ? 'true' : 'false'); };
     b.onclick = function (e) { e.stopPropagation(); open(m.hidden); };
@@ -144,5 +149,5 @@
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || 'Translation unavailable'); return j; }); })
       .then(function (j) { Object.keys(j.map || {}).forEach(function (x) { cache[x] = j.map[x]; out[x] = j.map[x]; }); }); }
   }
-  window.ChampI18n = { set: setLang, get: function () { return lang; }, langs: LANGS, strings: strings, name: function (l) { return (BY[l || lang] || BY.en)[1]; } };
+  window.ChampI18n = { set: setLang, get: function () { return lang; }, langs: LANGS, strings: strings, cached: function (t, l) { l = l || lang; if (l === 'en') return t; var c = cacheOf(l)[String(t || '').trim()]; return c == null ? null : c; }, name: function (l) { return (BY[l || lang] || BY.en)[1]; } };
 })();

@@ -250,3 +250,9 @@ html.dark .stkpop,body.dark .stkpop{color:#1F1D18}
 .stk-n.done .stk-cl{text-decoration:none}.stk-n.done .stk-li span{text-decoration:line-through}
 .stk-n.editing{box-shadow:0 0 0 2px var(--stk)}.stk-ed{display:grid;gap:6px}.stk-ed textarea{width:100%;border:1px solid #EADFA8;border-radius:8px;padding:7px 9px;font:inherit;resize:vertical}
 .stk-tx[data-sedit]{cursor:text}
+.stk-h{cursor:move;user-select:none;touch-action:none}.stk-grip{color:#B9A65A;font-size:14px;letter-spacing:-1px}
+.stkpop.dragging{opacity:.92;box-shadow:0 26px 60px -16px rgba(60,45,0,.65)}
+/* GKH Project Champ: no Inventory */
+.pkbtn{display:none!important}
+.bd-bomst{margin:0 0 14px;padding:10px 14px;border-radius:10px;background:#FFF8E1;border:1px solid #F0DFA0;font-size:13.5px}.bd-bomst.ok{background:#ECFDF3;border-color:#BBE5CB}
+.bd-tbl tr.bd-bom td{background:#FBF8EC}

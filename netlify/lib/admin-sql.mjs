@@ -1,3 +1,4 @@
+import { langLine } from './ai.mjs';
 // SQL wizard support: read-only tables for the browser (queries run in the browser, nothing can be changed),
 // an AI-written narrative (DeepSeek) and a PDF report.
 import { env, stripThinking } from './shared.mjs';
@@ -271,7 +272,7 @@ export async function narrative({ title, sql, columns, rows, focus }) {
     const r = await fetch(`${base}/chat/completions`, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({ model, temperature: 0.3, stream: false, max_tokens: 600, response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: 'You are a senior PMO analyst for GKH Project Champ (project, program and portfolio management, PMBOK). Explain schedule and cost health with earned value (SPI, CPI) where the data has it. ' +
+          { role: 'system', content: langLine() + ' You are a senior PMO analyst for GKH Project Champ (project, program and portfolio management, PMBOK). Explain schedule and cost health with earned value (SPI, CPI) where the data has it. ' +
             'Write a short, plain-English report on the data you are given. Australian spelling, dollars in AUD, GST is 10%. Only state what the data shows; do not invent numbers. ' +
             'Reply as JSON: {"title": string (max 70 chars), "summary": string (2-3 sentences), "insights": [3-5 short bullet strings with specific figures], "recommendations": [1-3 short practical actions]}.' },
           { role: 'user', content: JSON.stringify({ report_title: title, question_or_focus: focus || '', sql, row_count: rows.length, columns: s.columns, rows: s.rows }) }
@@ -413,7 +414,7 @@ export async function answerFromRows({ question, title, sql, columns, rows, rowC
   if (!llmSetup() || !rows.length) return { answer: basic, ai: false, tokens: 0 };
   try {
     const { data: o, used } = await llmJson([
-      { role: 'system', content: 'Answer the business owner in 1-3 short plain-English sentences using ONLY these query results: direct answer and key figures first, Australian spelling, $1,234.56. Never guess removed private details. JSON: {"answer":""}' },
+      { role: 'system', content: langLine() + ' Answer the business owner in 1-3 short plain sentences using ONLY these query results: direct answer and key figures first, Australian spelling, $1,234.56. Never guess removed private details. JSON: {"answer":""}' },
       { role: 'user', content: JSON.stringify({ q: String(question).slice(0, 300), title, row_count: rowCount || rows.length, columns: s.columns, rows: s.rows.slice(0, 20) }) }
     ], { maxTokens: 200, temperature: 0.2 });
     const today = await usage(false, used);

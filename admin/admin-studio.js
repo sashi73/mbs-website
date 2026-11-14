@@ -559,5 +559,5 @@
   }
 
   function themes() { return Object.keys(THEMES).map(function (k) { var t = THEMES[k]; return { id: k, name: t[0], ink: '#' + HEX(t[1]), accent: '#' + HEX(t[2]), light: '#' + HEX(t[3]), second: '#' + HEX(t[4]), paper: '#' + HEX(t[5]) }; }); }
-  M.studio = { pdf: function (D) { return translate(D).then(function () { return pdf(D); }); }, docx: function (D) { return translate(D).then(function () { return docx(D); }); }, print: printView, html: html, themes: themes, needsPrint: needsPrint, translate: translate, art: art, chart: chart, clean: clean };
+  M.studio = { pdf: function (D) { return translate(D).then(function () { return pdf(D); }); }, docx: function (D) { return translate(D).then(function () { return docx(D); }); }, print: printView, html: html, themes: themes, setWords: function (w, l) { CURW = w || {}; CURL = l || 'en'; setTheme('champ'); }, needsPrint: needsPrint, translate: translate, art: art, chart: chart, clean: clean };
 })();

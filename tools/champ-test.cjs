@@ -389,6 +389,40 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Login', 'sashi73 / sashi98 signs in and lands on Programs', /\/admin\/(#programs)?$/.test(p.url()) || /#programs/.test(p.url()), p.url());
   await p.waitForSelector('#app:not([hidden])', { timeout: 10000 }).catch(() => {});
   await sleep(800);
+  // ---- 🌐 language audit: with the console in Malay, every page and every project tab must show no English ----
+  {
+    const ap = (await (await api('planNewProject', { name: 'Audit web app', client: 'Acme', program: 'Digital health' })).json()).core;
+    await p.goto(`${BASE}/admin/#plan/${ap}`); await p.waitForSelector('[data-mode=type]', { timeout: 10000 }).catch(() => {});
+    await p.fill('#tplScope', 'A three-tier web application for online orders.').catch(() => {}); await p.click('[data-mode=type]').catch(() => {}); await p.waitForSelector('#tplType', { timeout: 5000 }).catch(() => {});
+    await p.selectOption('#tplType', 'cl-3tier').catch(() => {}); await sleep(500); await p.click('#tplCreate').catch(() => {}); await sleep(2500);
+    await p.evaluate(() => { localStorage.setItem('champLang', 'ms'); localStorage.setItem('champChatLang', 'ms'); });
+    const ALLOW = /^(GKH|Project Champ|Champ|GKH Project Champ|PC \d[\d.]*|sashi73|Owner|AI|BOM|SWMS|RACI|Gantt|Kanban|PMBOK|SPI|CPI|EAC|BAC|SQL|CSV|PDF|Word|MS|EN|Acme)$/;
+    const audit = async (where) => {
+      await sleep(400); for (let i = 0; i < 40; i++) { if (!(await p.evaluate(() => document.documentElement.classList.contains('i18n-busy')).catch(() => false))) break; await sleep(250); } await sleep(1600);
+      const left = await p.evaluate((allow) => {
+        const A = new RegExp(allow), out = [], vis = (el) => { if (!el) return false; const r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity !== 0; };
+        const skip = 'script,style,noscript,code,pre,svg,textarea,input,[contenteditable],[data-noi18n],.cc-box,.ct-langmenu,.ref,#stkPop';
+        const bad = (t) => { t = t.trim(); return t && /\p{L}/u.test(t) && !/\[Bahas/i.test(t) && !A.test(t) && !/^[\w.+-]+@[\w.-]+$/.test(t) && !/^[A-Z]{1,3}-[\d-]+$/.test(t) && !/^https?:/.test(t) && !/^[\d\s.,:%$/()+\-–·×]+[a-z]{0,2}$/i.test(t); };
+        const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+        for (let n = w.nextNode(); n; n = w.nextNode()) { const el = n.parentElement; if (!el || el.closest(skip)) continue; if (el.tagName === 'OPTION') { const sel = el.closest('select'); if (!sel || !vis(sel) || sel.closest(skip)) continue; } else if (!vis(el)) continue; if (bad(n.nodeValue)) out.push(n.nodeValue.trim().slice(0, 60)); }
+        document.querySelectorAll('[placeholder]').forEach((el) => { if (vis(el) && !el.closest('[data-noi18n],.cc-box') && bad(el.getAttribute('placeholder'))) out.push('placeholder: ' + el.getAttribute('placeholder').slice(0, 50)); });
+        return [...new Set(out)];
+      }, ALLOW.source).catch((e) => ['(audit failed: ' + e.message + ')']);
+      if (left.length) console.log('AUDITDBG', where, global.I18N_CALLS, JSON.stringify(await p.evaluate(async (t) => { let c = {}; try { c = JSON.parse(localStorage.getItem('champI18n:ms') || '{}'); } catch (e) {} const r = await fetch('/.netlify/functions/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'i18n', lang: 'ms', strings: [t] }) }).then((x) => x.status + ' ' + x.statusText).catch((e) => e.message); return [Object.keys(c).length, c[t] || null, document.documentElement.lang, r]; }, left[0]).catch((e) => e.message)));
+      ok('Language audit', where + ' has no English left (Malay)', left.length === 0, left.length + ': ' + left.slice(0, 25).join(' | '));
+    };
+    await p.goto(`${BASE}/admin/#programs`); await p.reload(); await p.waitForSelector('#app:not([hidden])', { timeout: 10000 }).catch(() => {});
+    const navs = await p.$$eval('.side-nav a[href^="#"]:not([hidden])', (as) => as.map((a) => a.getAttribute('href')));
+    for (const h of navs) { await p.goto(`${BASE}/admin/${h}`); await audit('Page ' + h); }
+    const tabsA = ['overview', 'schedule', 'budget', 'critical', 'board', 'bom', 'stakeholders', 'scope', 'risks', 'issues', 'contracts', 'comms', 'reports', 'change', 'intel'];
+    for (const t of tabsA) { await p.goto(`${BASE}/admin/#plan/${ap}/${t}`); await p.waitForSelector('#planBody', { timeout: 8000 }).catch(() => {}); await audit('Project tab ' + t); }
+    await p.goto(`${BASE}/admin/#plan/${ap}/schedule`); await sleep(800); await p.click('[data-dact=plan]').catch(() => {}); await audit('Project plan window');
+    await p.goto(`${BASE}/admin/#plan/${ap}/schedule`); await sleep(800); await p.click('[data-dact=charter]').catch(() => {}); await audit('Charter window');
+    await p.evaluate(() => { localStorage.removeItem('champLang'); localStorage.removeItem('champChatLang'); });
+    await api('planProjectDelete', { core: ap });
+    if (process.env.AUDIT_ONLY) { try { srv.kill(); } catch (e) {} const bad = results.filter((x) => !x.pass); for (const x of results) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(`\n${results.length - bad.length}/${results.length} passed`); process.exit(0); }
+    await p.goto(`${BASE}/admin/#programs`); await p.reload(); await p.waitForSelector('#app:not([hidden])', { timeout: 10000 }).catch(() => {}); await sleep(800);
+  }
   const menu = await p.$$eval('.side-nav a:not([hidden])', (as) => as.map((a) => a.textContent.trim()));
   ok('Console', 'menu shows only the project element (+ admin)', JSON.stringify(menu) === JSON.stringify(['🗂Programs', '🔗Dependency board', '📊Summary', '▦Pipeline board', '📅All projects', '＋New project', '📨Enquiries', '👋Visitors & leads', '✨Ask AI', '📈Reports & data', '🔐Users & access', '🕘Activity log', '🏷Builds']), menu.join(' | '));
   ok('Console', 'branded GKH Project Champ', (await p.textContent('.gkh-bar')).includes('GKH Project Champ') && (await p.title()).includes('Project Champ'));
@@ -466,7 +500,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.goto(`${BASE}/admin/#plan/${core}/overview`); await p.reload(); await p.waitForSelector('#modBtn', { timeout: 8000 }).catch(() => {});
   ok('Modules', 'BOM and SWMS tabs on by default', (await tabNames()).some((t) => /BOM/.test(t)) && (await tabNames()).some((t) => /SWMS/.test(t)));
   await p.click('#modBtn');
-  ok('Modules', '⚙ Modules opens sliders for BOM and SWMS', (await p.$$('#modPop [data-mod]')).length === 2);
+  ok('Modules', '⚙ Modules opens sliders for change control, BOM and SWMS', (await p.$$('#modPop [data-mod]')).length === 3 && !!(await p.$('#modPop [data-mod=change]')));
   await p.click('#modPop .mod-row:has([data-mod=swms]) .bom-slider'); await sleep(1500);
   r = await api('planGet', { core }); let ch = (await r.json()).champ;
   ok('Modules', 'switching SWMS off is saved, BOM untouched', ch.swms === false && ch.bom === true, JSON.stringify(ch));
@@ -689,6 +723,51 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Documents', 'in Tamil the PDF opens as a print view (the browser draws Tamil properly)', !!pop && (await pop.evaluate(() => document.documentElement.lang).catch(() => '')) === 'ta', pop ? await pop.evaluate(() => document.documentElement.lang).catch((e) => e.message) : 'no popup');
   if (pop) await pop.close().catch(() => {});
   await p.click('#modal [data-close]').catch(() => {});
+  // ---- 🔁 change control as a module: off = committed straight away; 🧱 BOM signed off = in the costing; 🗒 notes move ----
+  {
+    const cc = (await (await api('planNewProject', { name: 'Small refresh', client: 'Acme', program: 'Digital health' })).json()).core;
+    await p.goto(`${BASE}/admin/#plan/${cc}`); await p.reload(); await p.waitForSelector('[data-mode=type]', { timeout: 10000 }).catch(() => {});
+    await p.fill('#tplScope', 'Refresh the office website.').catch(() => {}); await p.click('[data-mode=type]').catch(() => {}); await p.waitForSelector('#tplType', { timeout: 5000 }).catch(() => {});
+    await p.selectOption('#tplType', 'cl-static').catch(() => {}); await sleep(500); await p.click('#tplCreate').catch(() => {}); await sleep(2500);
+    await p.click('#modBtn').catch(() => {}); await p.waitForSelector('#modPop [data-mod=change]', { timeout: 5000 }).catch(() => {});
+    await p.click('#modPop .mod-row:has([data-mod=change]) .bom-slider').catch(() => {}); await sleep(1500);
+    ok('Change control', 'switched off for a small project: the Change control tab is hidden', !(await p.$$eval('a.tab', (as) => as.some((a) => /Change control/.test(a.textContent))).catch(() => true)));
+    await p.goto(`${BASE}/admin/#plan/${cc}/intel`); await p.waitForSelector('#piQ', { timeout: 10000 }).catch(() => {});
+    await p.fill('#piQ', 'Can you regenerate the Gantt chart on the 24-week / $380,000 remodelled plan instead?'); await p.click('#piGo');
+    await p.waitForSelector('[data-replan] [data-imcr]', { timeout: 30000 }).catch(() => {});
+    const commitTxt = await p.textContent('[data-replan] [data-imcr]').catch(() => '');
+    await p.click('[data-replan] [data-imcr]').catch(() => {}); await sleep(2500);
+    const ccp = (await (await api('planGet', { core: cc })).json()).plan || {};
+    const cr0 = (ccp.changes || [])[0] || {};
+    ok('Change control', 'off: a re-plan is committed straight away (no review), and still kept on record', /Commit/.test(commitTxt) && cr0.status === 'Implemented' && cr0.direct === true && /switched off/.test((cr0.decision || {}).note || ''), commitTxt + ' | ' + JSON.stringify([cr0.status, cr0.direct, (cr0.decision || {}).note]));
+    // BOM: draft lines stay out of the costing; signed off, they are in it as Materials
+    await p.goto(`${BASE}/admin/#plan/${cc}/bom`); await p.waitForSelector('#bomGo, #bomAdd', { timeout: 8000 }).catch(() => {});
+    await p.click('#bomGo').catch(() => {}); await sleep(1200);
+    ok('BOM', 'no Inventory in the BOM (no stock column, no stock filters, no "Add to Inventory")', !/Not in Inventory|Add to Inventory|From stock|Not in stock/.test(await p.textContent('#planBody').catch(() => '')) && !(await p.$('th:text("Stock")')));
+    await p.evaluate(() => { const S = window.MBS && window.MBS._planState; return !!S; }).catch(() => false);
+    await p.click('#bomAdd').catch(() => {}); await sleep(600);
+    await p.fill('.bom-tbl tr[data-bk="0"] [data-bf=name]', 'Domain and SSL certificate').catch(() => {}); await p.dispatchEvent('.bom-tbl tr[data-bk="0"] [data-bf=name]', 'change').catch(() => {}); await sleep(400);
+    await p.fill('.bom-tbl tr[data-bk="0"] [data-bf=qty]', '1').catch(() => {}); await p.dispatchEvent('.bom-tbl tr[data-bk="0"] [data-bf=qty]', 'change').catch(() => {}); await sleep(400);
+    await p.fill('.bom-tbl tr[data-bk="0"] [data-bf=price]', '450').catch(() => {}); await p.dispatchEvent('.bom-tbl tr[data-bk="0"] [data-bf=price]', 'change').catch(() => {}); await sleep(600);
+    await p.goto(`${BASE}/admin/#plan/${cc}/budget`); await p.waitForSelector('.bd-tiles', { timeout: 8000 }).catch(() => {});
+    const cst = [await p.textContent('#planTabs').catch((e) => 'ERR ' + e.message), await p.textContent('.bd-bomst').catch(() => 'no bomst'), (await p.textContent('#planBody').catch(() => '')).slice(0, 160), JSON.stringify(((await (await api('planGet', { core: cc })).json()).plan.bom || {}).lines)];
+    ok('Costing', 'the tab is called Costing; a draft BOM ($450) waits for sign-off and is not in the costing yet', /Costing/.test(cst[0]) && /waiting for sign-off/.test(cst[1]) && !/from the signed-off BOM/.test(cst[2]), cst.join(' || ').slice(0, 600));
+    await p.goto(`${BASE}/admin/#plan/${cc}/bom`); await p.waitForSelector('.bom-tbl', { timeout: 8000 }).catch(() => {});
+    await p.check('.bom-tbl tr[data-bk="0"] .bom-ck input').catch(() => {}); await sleep(800);
+    const signOn = await p.isEnabled('#bomSign').catch(() => false);
+    await p.click('#bomSign').catch(() => {}); await p.waitForSelector('#bsF', { timeout: 5000 }).catch(() => {});
+    await p.fill('#bsF [name=by]', 'Sashi Kumar Sivam').catch(() => {}); await p.fill('#bsF [name=sig]', 'Sashi Kumar Sivam').catch(() => {}); await p.click('#bsF [type=submit]').catch(() => {}); await sleep(2500);
+    const bt2 = await p.textContent('#planBody').catch(() => '');
+    ok('Costing', 'the preparer signs off the BOM: it goes into the costing as Materials ($450), no change control', /#plan\/[^/]+\/budget/.test(p.url()) && /signed off/i.test(bt2) && /from the signed-off BOM/.test(bt2) && /450/.test(bt2), 'sign enabled=' + signOn + ' ' + p.url() + ' ' + bt2.slice(0, 200));
+    // a sticky note moves where it is dragged
+    await p.goto(`${BASE}/admin/#plan/${cc}/board`); await sleep(1500); await p.hover('.kcard').catch(() => {}); await p.click('.kstk-add', { timeout: 5000 }).catch(() => {}); await p.waitForSelector('#stkPop .stk-h', { timeout: 5000 }).catch(() => {});
+    const bx = await p.$eval('#stkPop .stk-h', (e) => { const r = e.getBoundingClientRect(); return [r.left + 60, r.top + 10]; }).catch(() => [0, 0]);
+    await p.mouse.move(bx[0], bx[1]); await p.mouse.down(); await p.mouse.move(bx[0] + 220, bx[1] + 140, { steps: 8 }); await p.mouse.up(); await sleep(300);
+    const moved = await p.$eval('#stkPop', (e) => [parseInt(e.style.left, 10), parseInt(e.style.top, 10)]).catch(() => [0, 0]);
+    ok('Sticky notes', 'the note panel can be dragged across the screen', Math.abs(moved[0] - (bx[0] - 60 + 220)) < 30 && Math.abs(moved[1] - (bx[1] - 10 + 140)) < 30, JSON.stringify([bx, moved]));
+    await p.keyboard.press('Escape');
+    await api('planProjectDelete', { core: cc });
+  }
   await api('planProjectDelete', { core: esg });
 
   // ---- builds ----
@@ -870,7 +949,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.waitForFunction(() => /\[Bahas/.test(document.querySelector('.side-nav').textContent), null, { timeout: 8000 }).catch(() => {});
   ok('Language', 'console menu translated', /\[Bahas/.test(await p.textContent('.side-nav')), (await p.textContent('.side-nav')).slice(0, 160) + ' / lang=' + (await p.evaluate(() => localStorage.getItem('champLang'))));
   const dataCell = await p.$$eval('#view table', (ts) => { const t = ts[ts.length - 1]; const c = t && t.querySelector('tbody tr td:nth-child(3)'); return c ? c.textContent : ''; }).catch(() => '');
-  ok('Language', 'project names (data) are not translated', dataCell.includes('Head office fit-out') && !dataCell.includes('[Bahas'), dataCell);
+  ok('Language', 'project names are shown in the chosen language too (no half-English screens), codes kept', dataCell.includes('[Bahas] Head office fit-out') && /PP-\d/.test(dataCell), dataCell);
   await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=en]'); await sleep(300);
   await p.evaluate(() => { localStorage.removeItem('champChatLang'); localStorage.removeItem('champLang'); });
 

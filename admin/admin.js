@@ -23,7 +23,7 @@
   var tel = function (p) { return String(p || '').replace(/[^\d+]/g, ''); };
 
   function api(action, data) {
-    return fetch(API, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify(Object.assign({ action: action }, data || {})) })
+    return fetch(API, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' }, body: JSON.stringify(Object.assign({ action: action }, data || {})) })
       .then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) {
           if (r.status === 401 && action !== 'login') { showLogin(); throw new Error('Please log in again'); }

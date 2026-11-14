@@ -1,3 +1,4 @@
+import { langCtx } from '../lib/ai.mjs';
 // MBS Console: "✨ Ask AI to build the plan", and (v38) "✨ Fit to finish-by". A Netlify background function (name ends in -background):
 // the browser gets an immediate 202, the AI can take up to a couple of minutes, and the result is saved in Blobs
 // as aiplan:<id>; the console asks for it with the "planAiStatus" action until it is ready.
@@ -16,6 +17,10 @@ import * as PLANDOC from '../lib/plandoc.mjs';
 
 const ok = () => new Response('', { status: 202 });
 export default async (req) => {
+  const lg = String(req.headers.get('x-champ-lang') || '').slice(0, 5).toLowerCase();   // 🌐 the console language: the AI writes in it
+  return langCtx.run(/^[a-z]{2}$/.test(lg) ? lg : 'en', () => run(req));
+};
+async function run(req) {
   let id = '';
   try {
     if (req.method !== 'POST' || req.headers.get('x-mbs-admin') !== '1') return new Response('', { status: 403 });
@@ -98,4 +103,4 @@ export default async (req) => {
     if (id) { try { await kv.set('aiplan:' + id, { status: 'error', error: 'The AI plan could not be made: ' + e.message, at: Date.now() }); } catch {} }
   }
   return ok();   // never an error status: Netlify would retry a failed background function
-};
+}

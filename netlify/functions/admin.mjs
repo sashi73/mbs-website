@@ -1,3 +1,4 @@
+import { langCtx } from '../lib/ai.mjs';
 // MBS admin console API.  POST /.netlify/functions/admin  { action, ... }   (JSON in, JSON out)
 //                          GET  /.netlify/functions/admin?action=photo|export|backup ...
 // Every action except "login" needs a valid session cookie. POSTs must carry the X-MBS-Admin header,
@@ -80,7 +81,8 @@ async function registerBuild() {
 
 export default async (req, context) => {
   const t0 = Date.now(), first = served++ === 0;
-  const res = await handle(req, context);
+  const lg = String(req.headers.get('x-champ-lang') || '').slice(0, 5).toLowerCase();   // 🌐 the console language: the AI writes in it
+  const res = await langCtx.run(/^[a-z]{2}$/.test(lg) ? lg : 'en', () => handle(req, context));
   try { res.headers.set('Server-Timing', `app;dur=${Date.now() - t0}`); res.headers.set('X-MBS-Start', first ? 'cold' : 'warm'); } catch {}
   return res;
 };

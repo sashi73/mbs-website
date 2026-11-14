@@ -45,7 +45,24 @@ export function repairJson(txt) {
   }
   return null;
 }
+// 🌐 the console language of the request: everything the AI writes for people is in it (codes and JSON keys stay as they are)
+import { AsyncLocalStorage } from 'node:async_hooks';
+export const langCtx = new AsyncLocalStorage();
+const LANG_NAMES = { ms: 'Bahasa Melayu (Malay)', id: 'Bahasa Indonesia', ta: 'Tamil', zh: 'Simplified Chinese', hi: 'Hindi', ar: 'Arabic', fa: 'Persian', vi: 'Vietnamese', th: 'Thai', tl: 'Filipino', ja: 'Japanese', ko: 'Korean', es: 'Spanish', fr: 'French', de: 'German', pt: 'Portuguese', sw: 'Kiswahili', rw: 'Kinyarwanda', km: 'Khmer (Cambodian)' };
+export function reqLang() { const l = langCtx.getStore(); return LANG_NAMES[l] ? l : 'en'; }
+export function langLine(l = reqLang()) {
+  if (!LANG_NAMES[l]) return '';
+  return ` LANGUAGE: the user works in ${LANG_NAMES[l]}. Write every human-readable text (names of items, tasks, risks, descriptions, notes, reasons, basis, answers, summaries) in natural, professional ${LANG_NAMES[l]}. ` +
+    'Keep exactly as specified: JSON keys, and any value that must be one of a fixed list (status, category, type, response, priority, RAG, units such as h, day, m2, each, lot), numbers, money, dates, emails, IDs and codes. Keep people\'s and company names as they are.';
+}
+export function withLangMsgs(messages, l = reqLang()) {
+  const line = langLine(l); if (!line || !Array.isArray(messages) || !messages.length) return messages;
+  const out = messages.slice(), i = out.findIndex((m) => m.role === 'system');
+  if (i >= 0) out[i] = { ...out[i], content: String(out[i].content) + '\n' + line }; else out.unshift({ role: 'system', content: line.trim() });
+  return out;
+}
 export async function llmJson(messages, { maxTokens = 500, timeoutMs = aiTimeout(), temperature = 0.1 } = {}) {
+  messages = withLangMsgs(messages);
   const L = llmSetup();
   if (!L) { const e = new Error('AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.'); e.code = 503; e.mbs = true; throw e; }
   const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), timeoutMs);

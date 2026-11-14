@@ -240,7 +240,7 @@ export async function writeBrief(lead, extra = {}) {
       method: 'POST', signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({ model, temperature: 0.2, stream: false, max_tokens: 300,
-        messages: [{ role: 'system', content: BRIEF_PROMPT }, { role: 'user', content: facts.join('\n') }] })
+        messages: [{ role: 'system', content: BRIEF_PROMPT + (await import('./ai.mjs')).langLine() }, { role: 'user', content: facts.join('\n') }] })
     });
     if (!r.ok) return null;
     const j = await r.json();

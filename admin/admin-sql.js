@@ -554,7 +554,7 @@
         b.onclick = function () {
           b.disabled = true; b.textContent = 'Making the PDF…';
           var lines = function (id) { return $(id).value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean); };
-          fetch(M.API, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' },
+          fetch(M.API, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' },
             body: JSON.stringify({ action: 'sqlPdf', title: $('#rpT2').value, summary: $('#rpSum').value, insights: lines('#rpIns'), recommendations: lines('#rpRec'), ai: !!n.ai,
               sql: S.sql, columns: $('#rpTable').checked ? S.cols : [], rows: $('#rpTable').checked ? S.rows.slice(0, 200) : [], chart: $('#rpChart').checked ? chartImage() : '' }) })
             .then(function (r) { if (!r.ok) return r.json().then(function (j) { throw new Error(j.error || 'PDF failed'); }); return r.blob(); })

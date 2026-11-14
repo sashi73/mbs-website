@@ -21,7 +21,7 @@
         if (d.status === 'done') return d; if (d.status === 'error') throw new Error(d.error || 'The SWMS could not be written'); return poll(); });
     };
     if (onMsg) onMsg('The AI is writing the SWMS from the project plan… usually 1 to 3 minutes.');
-    return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ mode: 'swms', id: id, core: core }) })
+    return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' }, body: JSON.stringify({ mode: 'swms', id: id, core: core }) })
       .then(function (r) { if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); });
   }
 
