@@ -359,6 +359,16 @@ async function handle(req, context) {
       }
 
       // ---------- GKH Project Champ: a new project without the CRM ----------
+      case 'guideAsk': {   // 🎙 Ask Champ (dashboard): which on-screen guide answers the question, and a short answer in the console's language
+        const q = clean(body.q, 300), tours = (Array.isArray(body.tours) ? body.tours : []).slice(0, 40).map((t) => ({ id: clean(t.id, 20), t: clean(t.t, 80) })).filter((t) => t.id);
+        if (!q) return bad('Ask a question');
+        const { llmJson } = await import('../lib/ai.mjs');
+        const r = await llmJson([{ role: 'system', content: 'You are Champ, the guide inside the GKH Project Champ project-management console. People ask how to do things in the console. ' +
+          'Pick the ONE guide from the list that shows them how (its id), or "" if none fits. Then write a short, friendly answer (1-2 sentences, plain words) that says what you will show them, or answers briefly if no guide fits. ' +
+          'Do not invent screens or buttons. JSON only: {"tour":"id or empty","answer":"..."}' }, { role: 'user', content: JSON.stringify({ question: q, guides: tours }) }], { maxTokens: 300 }).catch(() => null);
+        const tour = r && tours.some((t) => t.id === r.tour) ? r.tour : '';
+        return out(200, { tour, answer: clean(r && r.answer, 400) });
+      }
       case 'planNewProject': {
         const pname = clean(body.name, 120), client = clean(body.client, 120);
         if (!pname || !client) return bad('A project name and a client are needed');

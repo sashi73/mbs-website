@@ -860,6 +860,26 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       await p.fill('#champNew [name=name]', 'Scope 3 baseline'); await p.click('#champNew [type=submit]'); await p.waitForURL(/#plan\//, { timeout: 10000 }).catch(() => {});
       const core = (p.url().match(/#plan\/([^/]+)/) || [])[1]; const job = core ? ((await (await api('planGet', { core })).json()).job || {}) : {};
       ok('Programs', 'the new project keeps the sponsor and project manager from the program', job.sponsor === 'Board of Directors' && job.manager === 'Sashi Kumar Sivam' && job.name === 'National Airlines', JSON.stringify(job).slice(0, 200)); }
+    // 🎙 Ask Champ in the dashboard: ask how, and Champ points at each place to click
+    { await p.goto(`${BASE}/admin/#projects`); await p.waitForSelector('#cgBtn', { timeout: 8000 }).catch(() => {});
+      await p.click('#cgBtn').catch(() => {}); await p.waitForSelector('#cgMic', { timeout: 5000 }).catch(() => {});
+      const panel = await p.evaluate(() => ({ mic: !!document.querySelector('#cgMic'), lang: !!document.querySelector('#cgPanel select, #cgPanel [data-l]') }));
+      await p.fill('#cgQ', 'show me how to generate the project charter'); await p.press('#cgQ', 'Enter'); await sleep(1500);
+      const s1 = await p.evaluate(() => ({ tip: (document.querySelector('.cg-tip') || {}).textContent || '', spot: !!document.querySelector('.cg-spot:not([hidden])'), on: !!document.querySelector('#cgLayer.on') }));
+      await p.click('tr[data-plan]').catch(() => {}); await p.waitForURL(/#plan\//, { timeout: 8000 }).catch(() => {}); await sleep(2500);
+      const s2 = await p.evaluate(() => { const sp = document.querySelector('.cg-spot'), b = document.querySelector('[data-dact=charter]'); if (!sp || !b) return null; const a = sp.getBoundingClientRect(), c = b.getBoundingClientRect(); return { tip: document.querySelector('.cg-tip').textContent, over: a.left <= c.left && a.right >= c.right && a.top <= c.top && a.bottom >= c.bottom }; });
+      await p.click('[data-dact=charter]').catch(() => {}); await sleep(2500);
+      const s3 = await p.evaluate(() => ({ tip: (document.querySelector('.cg-tip') || {}).textContent || '', dlg: !!document.querySelector('#chPdf') }));
+      ok('Guide', 'Ask Champ in the dashboard: a big microphone, no language questions', panel.mic && !panel.lang, JSON.stringify(panel));
+      ok('Guide', '“show me how to generate the project charter”: Champ asks you to open a project and lights up the list', s1.on && s1.spot && /open a project/i.test(s1.tip), JSON.stringify(s1).slice(0, 200));
+      ok('Guide', 'then it points at “Generate the charter” (spotlight on the button), and after the click walks through the charter dialog', s2 && s2.over && /Generate the charter/.test(s2.tip) && s3.dlg && /theme|Preview|PDF/i.test(s3.tip), JSON.stringify([s2, s3]).slice(0, 300));
+      await p.click('#cgEnd').catch(() => {}); await p.keyboard.press('Escape'); await sleep(300);
+      await p.evaluate(() => window.MBS.guide.ask('how do I create a new user')); await sleep(2500);
+      const s4 = await p.evaluate(() => ({ hash: location.hash, tip: (document.querySelector('.cg-tip') || {}).textContent || '', lit: (() => { const sp = document.querySelector('.cg-spot'), b = document.querySelector('#usNew'); if (!sp || !b) return false; const a = sp.getBoundingClientRect(), c = b.getBoundingClientRect(); return a.left <= c.left && a.right >= c.right; })() }));
+      ok('Guide', '“how do I create a new user”: Champ opens Users & access and points at ＋ New user', s4.hash === '#users' && s4.lit && /New user/.test(s4.tip), JSON.stringify(s4).slice(0, 200));
+      await p.click('#cgShow').catch(() => {}); await sleep(3500);
+      ok('Guide', '“Show me” clicks the safe steps for you (opens the New user form)', !!(await p.$('#nuF')));
+      await p.click('#cgEnd').catch(() => {}); await p.keyboard.press('Escape'); await sleep(300); await p.evaluate(() => { const m = document.getElementById('modal'); if (m && !m.hidden) { const x = m.querySelector('[data-close]'); if (x) x.click(); } }); }
     ok('BOM', 'one BOM per project: Draft with AI and Templates are off until the BOM is deleted (no appending)', await p.goto(`${BASE}/admin/#plan/${cc}/bom`).then(() => p.waitForSelector('#bomOpen, #bomAi', { timeout: 8000 })).then(async () => { await p.click('#bomOpen').catch(() => {}); await p.fill('#boF [name=why]', 'Add a line').catch(() => {}); await p.click('#boF [type=submit]').catch(() => {}); await sleep(1200); return (await p.isDisabled('#bomAi').catch(() => false)) && (await p.isDisabled('#bomTpl').catch(() => false)); }).catch(() => false));
     await p.goto(`${BASE}/admin/#plan/${cc}/budget`); await p.waitForSelector('.bd-tiles', { timeout: 8000 }).catch(() => {});
     ok('Costing', 'reopened, the BOM is out of the costing until it is signed off again', /waiting for sign-off/.test(await p.textContent('.bd-bomst').catch(() => '')) && !(await p.$('[data-gobom]')));
