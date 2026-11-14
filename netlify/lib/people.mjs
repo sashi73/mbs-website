@@ -18,6 +18,11 @@ const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
 const out = (status, body) => new Response(JSON.stringify(body), { status, headers: H });
 
 export const TYPES = ['Employee', 'Contractor'];
+// GKH Project Champ: two groups of people. Technical & general projects (IT, cloud, ESG, consulting, events ...) and
+// Construction (the Fixit register: trades, tickets, licences, permits, insurance, workers comp). Both keep credentials
+// (education, qualifications, certifications), a resume and the rate per hour they quote.
+export const GROUPS = ['Technical & general', 'Construction'];
+export const TECH_ROLES = ['Project manager', 'Project director', 'Contractor', 'Project personnel'];
 export const EMPLOYMENT = ['Full-time', 'Part-time', 'Casual', 'Apprentice', 'Trainee'];
 export const STATUS = ['Active', 'On leave', 'Inactive'];
 export const ROLES = ['Project director', 'Project manager', 'Site supervisor', 'Leading hand', 'Estimator', 'Tradesperson', 'Labourer', 'Apprentice', 'Designer', 'Engineer', 'Safety officer', 'Office / admin', 'Accounts', 'Sales', 'Other'];
@@ -26,6 +31,11 @@ export const TICKETS = [['whiteCard', 'White card (general construction inductio
   ['heights', 'Working at heights', false, true], ['confined', 'Confined spaces', false, true], ['ewp', 'EWP (elevated work platform)', false, true], ['forklift', 'Forklift (LF)', false, true], ['asbestos', 'Asbestos awareness', false, true]];
 const TR = Object.fromEntries(TRADES.map((t) => [t[0], t]));
 
+const listOf = (a, n, fn) => (Array.isArray(a) ? a : []).map(fn).filter((x) => Object.values(x).some((v) => v)).slice(0, n);
+const eduOf = (x) => ({ qual: str((x || {}).qual, 120), inst: str((x || {}).inst, 120), year: str((x || {}).year, 9) });
+const qualOf = (x) => ({ name: str((x || {}).name, 140), year: str((x || {}).year, 9) });
+const certOf = (x) => ({ name: str((x || {}).name, 140), issuer: str((x || {}).issuer, 100), number: str((x || {}).number, 60), expiry: ymd((x || {}).expiry) });
+const permitOf = (x) => ({ name: str((x || {}).name, 140), number: str((x || {}).number, 60), issuer: str((x || {}).issuer, 100), expiry: ymd((x || {}).expiry) });
 function doc(expiry, needed, now) {
   if (!expiry) return needed ? 'missing' : 'n/a';
   if (expiry < now) return 'expired';
@@ -36,22 +46,25 @@ function doc(expiry, needed, now) {
 // and for contractors public liability and workers comp (unless a sole trader)
 export function compliance(p, now = sydToday()) {
   const t = p.tickets || {}, list = [];
-  const site = p.status !== 'Inactive' && !['Office / admin', 'Accounts', 'Sales'].includes(p.role);
+  const con = (p.group || 'Construction') === 'Construction', site = con && p.status !== 'Inactive' && !['Office / admin', 'Accounts', 'Sales'].includes(p.role);
   if (site) list.push(['White card', t.whiteCard && (t.whiteCard.number || t.whiteCard.has) ? 'ok' : 'missing']);
   const licNeeded = !!(TR[p.trade] || [])[2];
-  list.push(['Trade licence', doc((t.licence || {}).expiry, licNeeded && !!p.trade, now)]);
+  if (con) list.push(['Trade licence', doc((t.licence || {}).expiry, licNeeded && !!p.trade, now)]);
   for (const [k, name] of TICKETS) if (!['whiteCard', 'licence'].includes(k) && t[k] && t[k].expiry) list.push([name.replace(/ \(.*\)$/, ''), doc(t[k].expiry, false, now)]);
-  if (p.type === 'Contractor') {
+  if (p.type === 'Contractor' && con) {
     list.push(['Public liability', doc((p.insurance || {}).expiry, true, now)]);
     list.push(['Workers comp', (p.workersComp || {}).soleTrader ? 'n/a' : doc((p.workersComp || {}).expiry, true, now)]);
-  }
+  } else if ((p.insurance || {}).expiry) list.push(['Insurance', doc(p.insurance.expiry, false, now)]);
+  for (const c of p.certs || []) if (c.expiry) list.push([c.name || 'Certification', doc(c.expiry, false, now)]);
+  for (const c of p.permits || []) if (c.expiry) list.push(['Permit: ' + (c.name || ''), doc(c.expiry, false, now)]);
   const worst = list.some((x) => x[1] === 'expired') ? 'expired' : list.some((x) => x[1] === 'missing') ? 'missing' : list.some((x) => x[1] === 'due') ? 'due' : 'ok';
   return { worst, items: list.filter((x) => x[1] !== 'n/a'), problems: list.filter((x) => x[1] !== 'ok' && x[1] !== 'n/a').map((x) => x[0] + ': ' + x[1]) };
 }
 
 const tick = (x) => ({ number: str((x || {}).number, 40), class: str((x || {}).class, 60), expiry: ymd((x || {}).expiry), has: !!(x || {}).has });
 function clean(f, old = {}) {
-  const type = TYPES.includes(f.type) ? f.type : 'Employee';
+  const group = GROUPS.includes(f.group) ? f.group : GROUPS.includes(old.group) ? old.group : 'Technical & general', tech = group !== 'Construction';
+  const type = tech ? (f.role === 'Contractor' ? 'Contractor' : 'Employee') : TYPES.includes(f.type) ? f.type : 'Employee';
   const tickets = {}; for (const [k] of TICKETS) { const v = tick((f.tickets || {})[k]); if (v.number || v.class || v.expiry || v.has) tickets[k] = v; }
   return { ...old, type, name: str(f.name, 100), role: str(f.role, 60), trade: TR[f.trade] ? f.trade : '', skills: str(f.skills, 300),
     employment: type === 'Employee' ? (EMPLOYMENT.includes(f.employment) ? f.employment : 'Full-time') : '',
@@ -59,14 +72,16 @@ function clean(f, old = {}) {
     phone: str(f.phone, 40), email: str(f.email, 160).toLowerCase(), address: str(f.address, 200), suburb: str(f.suburb, 60),
     start: ymd(f.start), end: ymd(f.end), status: STATUS.includes(f.status) ? f.status : 'Active', hours: Math.max(0, Math.min(80, Math.round(Number(f.hours) || 0))), availability: str(f.availability, 160),
     costRate: r2(f.costRate), chargeRate: r2(f.chargeRate), emergency: { name: str((f.emergency || {}).name, 80), phone: str((f.emergency || {}).phone, 40) },
-    tickets, insurance: type === 'Contractor' ? { insurer: str((f.insurance || {}).insurer, 80), policy: str((f.insurance || {}).policy, 40), cover: r2((f.insurance || {}).cover), expiry: ymd((f.insurance || {}).expiry) } : {},
-    workersComp: type === 'Contractor' ? { policy: str((f.workersComp || {}).policy, 40), expiry: ymd((f.workersComp || {}).expiry), soleTrader: !!(f.workersComp || {}).soleTrader } : {},
+    group, education: listOf(f.education, 12, eduOf), quals: listOf(f.quals, 20, qualOf), certs: listOf(f.certs, 30, certOf), permits: tech ? [] : listOf(f.permits, 30, permitOf),
+    cv: old.cv || null, linkedin: str(f.linkedin, 200),
+    tickets, insurance: type === 'Contractor' || !tech ? { insurer: str((f.insurance || {}).insurer, 80), policy: str((f.insurance || {}).policy, 40), cover: r2((f.insurance || {}).cover), expiry: ymd((f.insurance || {}).expiry) } : {},
+    workersComp: type === 'Contractor' && !tech ? { policy: str((f.workersComp || {}).policy, 40), expiry: ymd((f.workersComp || {}).expiry), soleTrader: !!(f.workersComp || {}).soleTrader } : {},
     rating: Math.max(0, Math.min(5, Math.round(Number(f.rating) || 0))), notes: str(f.notes, 2000), archived: !!f.archived };
 }
-const summary = (p) => ({ id: p.id, type: p.type, name: p.name, role: p.role, trade: p.trade, employment: p.employment, business: p.business, phone: p.phone, email: p.email, suburb: p.suburb,
+const summary = (p) => ({ id: p.id, group: p.group || 'Construction', certN: (p.certs || []).length, certs: (p.certs || []).filter((c) => c.expiry).map((c) => ({ name: c.name, expiry: c.expiry })), permits: (p.permits || []).filter((c) => c.expiry).map((c) => ({ name: c.name, expiry: c.expiry })), eduN: (p.education || []).length, cv: !!(p.cv && p.cv.name), type: p.type, name: p.name, role: p.role, trade: p.trade, employment: p.employment, business: p.business, phone: p.phone, email: p.email, suburb: p.suburb,
   status: p.status, costRate: p.costRate, chargeRate: p.chargeRate, hours: p.hours, rating: p.rating, archived: !!p.archived, archivedAt: p.archivedAt || 0, start: p.start, updated: p.updated || 0,
   tickets: Object.fromEntries(Object.entries(p.tickets || {}).map(([k, v]) => [k, { expiry: v.expiry, has: !!(v.number || v.has), class: v.class }])),
-  insurance: { expiry: (p.insurance || {}).expiry || '' }, workersComp: { expiry: (p.workersComp || {}).expiry || '', soleTrader: !!(p.workersComp || {}).soleTrader } });
+  insurance: { expiry: (p.insurance || {}).expiry || '' }, linkedin: p.linkedin || '', workersComp: { expiry: (p.workersComp || {}).expiry || '', soleTrader: !!(p.workersComp || {}).soleTrader } });
 
 async function index() { return (await kv.get('ppl-index')) || { people: {} }; }
 export async function get(id) { return /^P-\d{3,5}$/.test(id || '') ? kv.get('ppl:' + id) : null; }
@@ -81,6 +96,9 @@ function diff(a, b) {
   if (JSON.stringify(a.insurance || {}) !== JSON.stringify(b.insurance || {})) ch.push('Public liability updated');
   if (JSON.stringify(a.workersComp || {}) !== JSON.stringify(b.workersComp || {})) ch.push('Workers comp updated');
   if (JSON.stringify(a.emergency || {}) !== JSON.stringify(b.emergency || {})) ch.push('Emergency contact updated');
+  if ((a.group || '') !== (b.group || '')) ch.push('Group ' + (a.group || '–') + ' → ' + b.group);
+  for (const [k, n] of [['education', 'Education'], ['quals', 'Qualifications'], ['certs', 'Certifications'], ['permits', 'Permits']]) if (JSON.stringify(a[k] || []) !== JSON.stringify(b[k] || [])) ch.push(n + ' updated');
+  if ((a.linkedin || '') !== (b.linkedin || '')) ch.push('LinkedIn updated');
   if (!!a.archived !== !!b.archived) ch.push(b.archived ? 'Archived' : 'Restored');
   return ch;
 }
@@ -105,7 +123,7 @@ export async function save(f, by, o = {}) {
 export async function list() {
   const idx = await index(), now = sydToday();
   const people = Object.values(idx.people || {}).map((p) => ({ ...p, comp: compliance(p, now) })).sort((a, b) => (a.name.toLowerCase() > b.name.toLowerCase() ? 1 : -1));
-  return { people, types: TYPES, employment: EMPLOYMENT, statuses: STATUS, roles: ROLES, tickets: TICKETS.map((t) => ({ key: t[0], name: t[1] })), trades: TRADES.map((t) => ({ key: t[0], name: t[1], licence: t[2] })), today: now };
+  return { people, groups: GROUPS, techRoles: TECH_ROLES, types: TYPES, employment: EMPLOYMENT, statuses: STATUS, roles: ROLES, tickets: TICKETS.map((t) => ({ key: t[0], name: t[1] })), trades: TRADES.map((t) => ({ key: t[0], name: t[1], licence: t[2] })), today: now };
 }
 // is this person allowed to log in? (in the register, not archived, not inactive)
 export async function canLogin(id) { const p = await get(id); return !!(p && !p.archived && p.status !== 'Inactive'); }
@@ -272,9 +290,50 @@ async function testLoad(body, by) {
   return { ids };
 }
 
-export async function pplPost(action, body, { who, by, audit, unlogin }) {
+// the signed-in person's own record: matched by their login email
+async function mine(email) { const em = String(email || '').toLowerCase(); if (!em) return null; const hit = Object.values((await index()).people || {}).find((x) => !x.archived && (x.email || '').toLowerCase() === em); return hit ? get(hit.id) : null; }
+const SELF_KEEP = ['role', 'status', 'archived', 'rating', 'notes', 'chargeRate'];   // only the PM sets these
+const CV_OK = /^(application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document)$/;
+async function cvPut(p, body, by) {
+  const name = str(body.name, 120), type = str(body.type, 100), b64 = String(body.data || '').replace(/^data:[^,]*,/, '');
+  if (!name || !CV_OK.test(type)) return { error: 'Upload the resume as a PDF or Word file.' };
+  const buf = Buffer.from(b64, 'base64'); if (!buf.length) return { error: 'The file is empty.' };
+  if (buf.length > 3 * 1024 * 1024) return { error: 'The resume is over 3 MB. Save it smaller (PDF) and try again.' };
+  await kv.putFile('ppl-cv:' + p.id, buf, { name, type });
+  const q = await get(p.id); q.cv = { name, type, size: buf.length, at: Date.now(), by: str(by, 60) };
+  q.history = (q.history || []).concat([{ at: Date.now(), by: str(by, 60), what: 'Resume uploaded: ' + name }]).slice(-100);
+  await kv.set('ppl:' + q.id, q); await kv.update('ppl-index', (x) => { x.people = x.people || {}; x.people[q.id] = summary(q); return x; }, () => ({ people: {} }));
+  return { cv: q.cv };
+}
+async function cvGet(p) { if (!p || !p.cv) return { error: 'No resume on file.', code: 404 }; const f = await kv.getFile('ppl-cv:' + p.id); if (!f) return { error: 'No resume on file.', code: 404 }; const buf = f.buf; return { name: p.cv.name, type: p.cv.type, data: buf.toString('base64') }; }
+export async function selfMake(u, by) {   // a new login: their People record, ready for them to fill in (the PM makes the login)
+  if (!u || !u.email || (await mine(u.email))) return null;
+  const role = TECH_ROLES.includes(u.role) ? u.role : 'Project personnel';
+  return save({ group: 'Technical & general', name: u.name || u.email, email: u.email, role, status: 'Active' }, by, { via: 'Login made' });
+}
+
+export async function pplPost(action, body, { who, by, audit, unlogin, ctx }) {
   const log = (t) => (audit ? audit(who, t) : null);
+  const pm = !ctx || ctx.owner;   // only the project manager (super user) adds or changes other people
+  if (['pplSave', 'pplBulk', 'pplImport', 'pplDelete', 'pplCvUpload', 'pplSampleLoad', 'pplTestLoad'].includes(action) && !pm) return out(403, { error: 'Only the project manager (super user) can add or change people. Use My profile for your own details.' });
   switch (action) {
+    case 'pplMe': {   // My profile
+      const p = await mine(ctx && ctx.who); const L = await list();
+      return out(200, { person: p, comp: p ? compliance(p) : null, assign: p ? (await assignments(p.id))[p.id] : null, groups: GROUPS, techRoles: TECH_ROLES, types: TYPES, employment: EMPLOYMENT, roles: ROLES, tickets: L.tickets, trades: L.trades, email: (ctx && ctx.who) || '', role: (ctx && ctx.role) || '' });
+    }
+    case 'pplMeSave': {
+      const em = String((ctx && ctx.who) || '').toLowerCase(); if (!/@/.test(em)) return out(400, { error: 'My profile is for logins made with an email.' });
+      const old = await mine(em), f = { ...(body.person || {}) };
+      for (const k of SELF_KEEP) { if (old) f[k] = old[k]; else delete f[k]; }
+      f.id = old ? old.id : ''; f.email = em; if (!old) { f.role = TECH_ROLES.includes(ctx.role) ? ctx.role : 'Project personnel'; f.status = 'Active'; }
+      const r = await save(f, by, { via: 'My profile' }); if (r.error) return out(400, r);
+      await log(`My profile saved: ${r.person.id} ${r.person.name}`);
+      return out(200, { person: r.person, comp: compliance(r.person), same: !!r.same });
+    }
+    case 'pplMeCv': { const p = await mine(ctx && ctx.who); if (!p) return out(400, { error: 'Save your profile first.' }); const r = await cvPut(p, body, by); if (r.error) return out(400, r); await log(`Resume uploaded (own): ${p.id}`); return out(200, r); }
+    case 'pplMeCvGet': { const r = await cvGet(await mine(ctx && ctx.who)); return r.error ? out(r.code || 400, r) : out(200, r); }
+    case 'pplCvUpload': { const p = await get(str(body.id, 10)); if (!p) return out(404, { error: 'Person not found' }); const r = await cvPut(p, body, by); if (r.error) return out(400, r); await log(`Resume uploaded: ${p.id} ${p.name}`); return out(200, r); }
+    case 'pplCvGet': { const r = await cvGet(await get(str(body.id, 10))); return r.error ? out(r.code || 400, r) : out(200, r); }
     case 'pplList': return out(200, await list());
     case 'pplGet': {
       const p = await get(str(body.id, 10)); if (!p) return out(404, { error: 'Person not found' });

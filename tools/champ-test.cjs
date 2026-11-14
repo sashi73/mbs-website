@@ -70,7 +70,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     global.LAST_SSML = b; global.AZ_KEY = q.headers['ocp-apim-subscription-key']; s3.setHeader('Content-Type', 'audio/mpeg'); s3.end(Buffer.from('ID3fakeaudio')); }); }).listen(0);
   await sleep(100);
   const env = { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', NETLIFY_BLOBS_CONTEXT: ctxB64, ADMIN_USERNAME: '', ADMIN_PASSWORD: '', ADMIN_SESSION_SECRET: '',
-    GOOGLE_CLIENT_ID: CLIENT, GOOGLE_TOKENINFO_URL: `http://127.0.0.1:${g.address().port}/tokeninfo`, LLM_API_KEY: 'test-key', CHAMP_I18N_LIMIT: '400', LLM_BASE_URL: `http://127.0.0.1:${llm.address().port}`, LLM_MODEL: 'deepseek-chat', TELEGRAM_BOT_TOKEN: '', AZURE_SPEECH_KEY: 'az-test', AZURE_SPEECH_BASE: `http://127.0.0.1:${az.address().port}`, AZURE_STT_ENDPOINT: `http://127.0.0.1:${az.address().port}`, RESEND_API_KEY: '', SITE_ENV: '' };
+    GOOGLE_CLIENT_ID: CLIENT, GOOGLE_TOKENINFO_URL: `http://127.0.0.1:${g.address().port}/tokeninfo`, LLM_API_KEY: 'test-key', CHAMP_I18N_LIMIT: '400', LIMIT_ADMIN: '5000/10', LLM_BASE_URL: `http://127.0.0.1:${llm.address().port}`, LLM_MODEL: 'deepseek-chat', TELEGRAM_BOT_TOKEN: '', AZURE_SPEECH_KEY: 'az-test', AZURE_SPEECH_BASE: `http://127.0.0.1:${az.address().port}`, AZURE_STT_ENDPOINT: `http://127.0.0.1:${az.address().port}`, RESEND_API_KEY: '', SITE_ENV: '' };
   const srv = spawn('node', ['local-server.mjs'], { cwd: SITE, env, stdio: ['ignore', 'pipe', 'pipe'] }); global.SRV = srv;
   let log = ''; srv.stdout.on('data', (d) => (log += d)); srv.stderr.on('data', (d) => (log += d));
   for (let i = 0; i < 60 && !/running/i.test(log); i++) await sleep(150);
@@ -424,7 +424,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     await p.goto(`${BASE}/admin/#programs`); await p.reload(); await p.waitForSelector('#app:not([hidden])', { timeout: 10000 }).catch(() => {}); await sleep(800);
   }
   const menu = await p.$$eval('.side-nav a:not([hidden])', (as) => as.map((a) => a.textContent.trim()));
-  ok('Console', 'menu shows only the project element (+ admin)', JSON.stringify(menu) === JSON.stringify(['🗂Programs', '🔗Dependency board', '📊Summary', '▦Pipeline board', '📅All projects', '＋New project', '📨Enquiries', '👋Visitors & leads', '✨Ask AI', '📈Reports & data', '🔐Users & access', '🕘Activity log', '🏷Builds']), menu.join(' | '));
+  ok('Console', 'menu shows only the project element (+ admin)', JSON.stringify(menu) === JSON.stringify(['🗂Programs', '🔗Dependency board', '📊Summary', '▦Pipeline board', '📅All projects', '＋New project', '👥People', '📅Team calendar', '📊Workload', '🙋My profile', '📨Enquiries', '👋Visitors & leads', '✨Ask AI', '📈Reports & data', '🔐Users & access', '🕘Activity log', '🏷Builds']), menu.join(' | '));
   ok('Console', 'branded GKH Project Champ', (await p.textContent('.gkh-bar')).includes('GKH Project Champ') && (await p.title()).includes('Project Champ'));
   await p.waitForSelector('.pg-grid, .cs-tiles', { timeout: 8000 }).catch(() => {});
   ok('Programs', 'the console opens on Programs', /Programs/.test(await p.textContent('#view')) && (await p.$$('.cs-tabs .btn.on')).length === 1);
@@ -798,7 +798,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     // 🔐 Users & access: the super user makes a login (email + password), confirms, then sets permissions
     { await p.goto(`${BASE}/admin/#users`); await p.waitForSelector('#usNew', { timeout: 8000 }).catch(() => {});
       const head = await p.textContent('#view, main').catch(() => '');
-      ok('Users', 'Users & access: super user, project managers, contractors, project personnel, Google; no sub-contractor logins', /Super user/.test(head) && /Project manager/.test(head) && /Contractor/.test(head) && /Project personnel/.test(head) && /Google/.test(head) && !/Sub-contractor login/.test(head), head.slice(0, 200));
+      ok('Users', 'Users & access: super user, project managers, contractors, project personnel, Google; no sub-contractor logins', /super user/i.test(head) && /Project manager/.test(head) && /Contractor/.test(head) && /Project personnel/.test(head) && /Google/.test(head) && !/Sub-contractor login/.test(head), head.slice(0, 200));
       await p.click('#usNew').catch(() => {}); await p.waitForSelector('#nuF', { timeout: 5000 }).catch(() => {});
       await p.fill('#nuF [name=email]', 'aisha.contractor@example.com'); await p.fill('#nuF [name=name]', 'Aisha Rahman');
       await p.check('#nuF [name=role][value="Contractor"]').catch(() => {});
@@ -817,6 +817,39 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       const mk = await post('userCreate', { user: { email: 'x@example.com', password: 'Welcome2026x', role: 'Project manager' } });
       ok('Users', 'the contractor signs in with that password, sees only their project, and cannot make logins', li.status() === 200 && (pl.plans || []).length === 1 && pl.plans[0].core === cc && mk.status() === 403, `login=${li.status()} plans=${(pl.plans || []).length} make=${mk.status()}`);
       await c2.close(); }
+    // 👥 People: two groups, credentials, rate, resume; only the PM adds people; everyone keeps My profile; calendar and workload
+    { await p.goto(`${BASE}/admin/#people`); await p.waitForSelector('#ppNew', { timeout: 8000 }).catch(() => {});
+      const nav = await p.textContent('.side-nav').catch(() => '');
+      await p.click('#ppNew').catch(() => {}); await p.waitForSelector('#pfF', { timeout: 5000 }).catch(() => {});
+      await p.fill('#pfF [data-k=name]', 'Priya Shah'); await p.selectOption('#pfF [data-k=roleT]', 'Project director').catch(() => {});
+      await p.fill('#pfF [data-k=email]', 'priya.shah@example.com'); await p.fill('#pfF [data-k=costRate]', '150');
+      await p.click('#pfF [data-radd=education]'); await p.fill('#pfF [data-rep=education] .pp-rep-r:last-of-type [data-rf=qual]', 'MBA'); await p.fill('#pfF [data-rep=education] .pp-rep-r:last-of-type [data-rf=inst]', 'AGSM');
+      await p.click('#pfF [data-radd=certs]'); await p.fill('#pfF [data-rep=certs] .pp-rep-r:last-of-type [data-rf=name]', 'PMP'); await p.fill('#pfF [data-rep=certs] .pp-rep-r:last-of-type [data-rf=expiry]', '2027-03-01');
+      const conHidden = await p.isHidden('#pfF [data-rep=permits]').catch(() => false);
+      await p.click('#ppSave').catch(() => {}); await sleep(2000);
+      const pl = (await (await api('pplList')).json()).people || [], pr = pl.find((x) => x.name === 'Priya Shah') || {};
+      const pg = pr.id ? (await (await api('pplGet', { id: pr.id })).json()).person : {};
+      ok('People', 'menu has People, Team calendar, Workload and My profile; no payroll', /People/.test(nav) && /Team calendar/.test(nav) && /Workload/.test(nav) && /My profile/.test(nav) && !/Payroll/.test(nav), nav.slice(0, 200));
+      ok('People', 'the PM adds a technical person: group, role, rate per hour, education and certifications (no construction fields)', pg.group === 'Technical & general' && pg.role === 'Project director' && pg.costRate === 150 && (pg.education || [])[0].qual === 'MBA' && (pg.certs || [])[0].name === 'PMP' && conHidden, JSON.stringify(pg).slice(0, 300));
+      const cr = await (await api('pplSave', { person: { group: 'Construction', name: 'Tom Walsh', type: 'Contractor', role: 'Site supervisor', costRate: 85, permits: [{ name: 'Builder licence', number: 'BL-77', expiry: '2026-11-20' }], insurance: { insurer: 'QBE', expiry: '2027-01-01' } } })).json();
+      ok('People', 'a construction person keeps permits and insurance; a permit expiring soon shows in compliance', cr.person && cr.person.permits[0].number === 'BL-77' && cr.person.insurance.insurer === 'QBE' && /Permit: Builder licence: due/.test((cr.comp || {}).problems.join(' ')), JSON.stringify(cr.comp));
+      await api('userCreate', { user: { email: 'sam.personnel@example.com', name: 'Sam Lee', role: 'Project personnel', password: 'Welcome2026x' } });
+      const sam = ((await (await api('pplList')).json()).people || []).find((x) => x.email === 'sam.personnel@example.com') || {};
+      ok('People', 'making a login also makes their People record, ready for them to fill in', sam.role === 'Project personnel' && sam.group === 'Technical & general', JSON.stringify(sam).slice(0, 200));
+      const c3 = await b.newContext(); const post = (action, data = {}) => c3.request.post(`${BASE}/.netlify/functions/admin`, { data: { action, ...data }, headers: { 'X-MBS-Admin': '1', 'X-Forwarded-For': '203.0.113.61' } });
+      await post('login', { username: 'sam.personnel@example.com', password: 'Welcome2026x' });
+      const me1 = await (await post('pplMe')).json();
+      const sv = await (await post('pplMeSave', { person: { ...me1.person, costRate: 72, role: 'Project director', quals: [{ name: 'PRINCE2 Practitioner', year: '2021' }] } })).json();
+      const cv = await post('pplMeCv', { name: 'Sam Lee CV.pdf', type: 'application/pdf', data: Buffer.from('%PDF-1.4 test').toString('base64') });
+      const cvg = await (await post('pplMeCvGet')).json();
+      const other = await post('pplSave', { person: { name: 'Someone else' } });
+      ok('People', 'My profile: they save their own rate and qualifications and upload a resume, but cannot change their role or add others', sv.person && sv.person.costRate === 72 && sv.person.role === 'Project personnel' && sv.person.quals[0].name === 'PRINCE2 Practitioner' && cv.status() === 200 && Buffer.from(cvg.data || '', 'base64').toString() === '%PDF-1.4 test' && other.status() === 403, `rate=${sv.person && sv.person.costRate} role=${sv.person && sv.person.role} cv=${cv.status()} other=${other.status()}`);
+      await c3.close();
+      await p.goto(`${BASE}/admin/#people/calendar`); await p.waitForSelector('.pc-t', { timeout: 10000 }).catch(() => {});
+      const calTxt = await p.textContent('#ppBody').catch(() => '');
+      ok('People', 'the team calendar shows everyone day by day for 4 weeks', /Team calendar/.test(calTxt) && (await p.$$('.pc-t thead .pc-d')).length === 28 && /Priya Shah/.test(calTxt), calTxt.slice(0, 120));
+      await p.goto(`${BASE}/admin/#me`); await sleep(1200); const meT = await p.textContent('#view, main').catch(() => '');
+      ok('People', 'My profile opens for the super user too (with a pointer to People)', /My profile/.test(meT), meT.slice(0, 120)); }
     ok('BOM', 'one BOM per project: Draft with AI and Templates are off until the BOM is deleted (no appending)', await p.goto(`${BASE}/admin/#plan/${cc}/bom`).then(() => p.waitForSelector('#bomOpen, #bomAi', { timeout: 8000 })).then(async () => { await p.click('#bomOpen').catch(() => {}); await p.fill('#boF [name=why]', 'Add a line').catch(() => {}); await p.click('#boF [type=submit]').catch(() => {}); await sleep(1200); return (await p.isDisabled('#bomAi').catch(() => false)) && (await p.isDisabled('#bomTpl').catch(() => false)); }).catch(() => false));
     await p.goto(`${BASE}/admin/#plan/${cc}/budget`); await p.waitForSelector('.bd-tiles', { timeout: 8000 }).catch(() => {});
     ok('Costing', 'reopened, the BOM is out of the costing until it is signed off again', /waiting for sign-off/.test(await p.textContent('.bd-bomst').catch(() => '')) && !(await p.$('[data-gobom]')));

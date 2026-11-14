@@ -33,6 +33,7 @@ const all = (lv) => Object.fromEntries(MOD_KEYS.map((k) => [k, lv]));
 //   Project manager (admin: everything, all projects), Contractor and Project personnel (limited: their projects),
 //   and Google sign-ins (view only). The older roles below stay only so logins made before keep working.
 export const ROLES = {
+  'Project director': { ...all('edit'), people: 'view', users: 'view' },   // GKH Project Champ: runs projects; People and Users & access to look at
   'Project manager': { ...all('edit'), users: 'view' },
   Contractor: { ...all('none'), projects: 'edit' },
   'Project personnel': { ...all('none'), projects: 'edit', data: 'view' },
@@ -44,15 +45,15 @@ export const ROLES = {
   'Sub-contractor': { ...all('none'), projects: 'edit' },   // v91: a subbie: only their own project(s), nothing else
   Custom: null };
 export const ROLE_KEYS = Object.keys(ROLES);
-export const PICK_ROLES = ['Project manager', 'Contractor', 'Project personnel', 'Custom'];   // what the super user picks from
-const ALL_PROJECTS = (u) => u.role === 'Project manager' || u.projAll === true;
+export const PICK_ROLES = ['Project director', 'Contractor', 'Project personnel', 'Custom'];   // the project manager is the super user   // what the super user picks from
+const ALL_PROJECTS = (u) => u.role === 'Project manager' || u.role === 'Project director' || u.projAll === true;
 export const OWNER_MODS = all('edit');
 
 // which module (and level) an action needs. null = any signed-in user (me, logout, own password).
 const READ = /^(dashboard|jobs|job|reminders|report|stores|dataList|dataGet|log|pipelineBoard|aiPing|sqlUsage|sqlAsk|sqlAnswer|sqlData|sqlNarrative|sqlPdf|docForJob|docGet)$|(List|Lists|Get|Log|Status|Setup|Analysis|Info|Jobs|Insights|For|Usage|Analyse|Report|Export|Assign)$/;
 export function need(action) {
   const a = String(action || '');
-  if (['me', 'logout', 'login', 'userPassword'].includes(a)) return null;
+  if (['me', 'logout', 'login', 'userPassword', 'pplMe', 'pplMeSave', 'pplMeCv', 'pplMeCvGet'].includes(a)) return null;   // My profile: anyone signed in, their own record
   let mod;
   if (a === 'quoteStart' || a === 'planQuote') mod = 'accounts';
   else if (/^(dashboard|jobs|job|stage|note|create|reminders|remind|unremind|report|pipelineBoard)$/.test(a) || /^(cust|promo)[A-Z]/.test(a)) mod = 'crm';
@@ -129,7 +130,7 @@ export async function googleUser(email, name, by) {
 }
 // what a sub-contractor signed in to one project may do. Every request naming a project must be theirs; other requests only
 // from this list (the plan page's own lookups). Money, people and other subbies' details stay out.
-const SCOPE_FREE = new Set(['me', 'logout', 'userPassword', 'planList', 'planPipelineList', 'planAiStatus', 'commsSetup', 'planBomTplList', 'planBomTplGet', 'invList', 'invGet']);
+const SCOPE_FREE = new Set(['me', 'logout', 'userPassword', 'planList', 'planPipelineList', 'pplMe', 'pplMeSave', 'pplMeCv', 'pplMeCvGet', 'planAiStatus', 'commsSetup', 'planBomTplList', 'planBomTplGet', 'invList', 'invGet']);
 const SCOPE_DENY = new Set(['planDelete', 'planJobs', 'planQuote', 'planQuoteInfo', 'quoteStart', 'docToInvoice', 'docForJob', 'pipelineBoard', 'planBomTplSave', 'planBomTplDelete', 'pplList', 'pplAssign', 'subList', 'custFor', 'job']);
 export function scopeCheck(ctx, action, body) {
   if (!ctx || !ctx.scope) return { ok: true };
@@ -178,7 +179,7 @@ export async function login(username, password, personOk) {
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 async function projectList(arr, project) { const projects = []; for (const c of (Array.isArray(arr) ? arr : []).slice(0, 60)) { const pj = project ? await project(str(c, 30)) : null; if (pj && !projects.includes(pj.core)) projects.push(pj.core); } return projects; }
-export async function userPost(action, body, { ctx, audit, person, sub, project }) {
+export async function userPost(action, body, { ctx, audit, person, sub, project, addPerson }) {
   const log = (t) => (audit ? audit(ctx.who, t) : null);
   // only the super user makes logins, sets passwords and gives permissions
   if (!['userList', 'userPassword'].includes(action) && !ctx.owner) return out(403, { error: 'Only the super user can change logins and permissions.' });
@@ -194,6 +195,7 @@ export async function userPost(action, body, { ctx, audit, person, sub, project 
       const u = { id: 'U-' + String(n.n).padStart(3, '0'), kind: 'email', personId: '', name, email, username: email, role, mods: cleanMods(ROLES[role], role), projects: [], projAll: role === 'Project personnel',
         active: true, mustChange: f.mustChange === true, ver: 1, created: Date.now(), by: ctx.who, ...hashPw(f.password) };
       await put(u); await log(`Login made: ${email} (${name}), ${role}`);
+      if (addPerson) { try { await addPerson(u); } catch (e) { console.error('People record for the new login failed:', e.message); } }
       return out(200, { user: summary(u) });
     }
     case 'userSetPw': {   // the super user sets someone's password
@@ -220,7 +222,7 @@ export async function userPost(action, body, { ctx, audit, person, sub, project 
       if (old && old.kind !== 'google') {   // permissions: role, modules, projects, on/off
         const role = PICK_ROLES.includes(f.role) ? f.role : old.role;
         const mods = cleanMods(role === 'Custom' ? f.mods : ROLES[role], role);
-        const projAll = role === 'Project manager' ? true : f.projAll === true;
+        const projAll = role === 'Project manager' || role === 'Project director' ? true : f.projAll === true;
         const projects = projAll ? [] : await projectList(f.projects, project);
         const u = { ...old, kind: 'email', subId: '', name: str(f.name, 100) || old.name, role, mods, projAll, projects, active: f.active !== false, by: ctx.who, updated: Date.now() };
         if (old.active !== u.active || old.role !== u.role || JSON.stringify(old.mods) !== JSON.stringify(u.mods) || !!old.projAll !== projAll || JSON.stringify(old.projects || []) !== JSON.stringify(projects) || old.kind !== 'email') u.ver = (old.ver || 0) + 1;   // signs them out so it takes effect now
