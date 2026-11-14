@@ -968,6 +968,15 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   snp = (await (await api('planGet', { core: sn })).json()).plan || { tasks: [] }; sk = (snp.tasks.find((t) => (t.stickies || []).length) || {}).stickies || [];
   const cl2 = sk.find((x) => /Book the venue/.test(x.text));
   ok('Sticky notes', 'ticking the last item ticks the note as done (tick box)', cl2 && cl2.done && !!cl2.doneBy && await p.isChecked('#stkPop [data-nid="' + cl2.id + '"] [data-sdone]').catch(() => false), JSON.stringify(cl2));
+  { const bg = await p.evaluate((id) => { const e = document.querySelector('#stkPop [data-nid="' + id + '"]'); return e ? getComputedStyle(e).backgroundColor + '|' + e.textContent : ''; }, cl2 && cl2.id).catch(() => '');
+    ok('Sticky notes', 'a note with every item done turns blue with a ✓ All done', /rgb\(234, 242, 255\)/.test(bg) && /✓ All done/.test(bg), bg.slice(0, 120));
+    await p.fill('#stkTx', 'Tables set').catch(() => {}); await p.press('#stkTx', 'Enter').catch(() => {}); await sleep(1500);
+    let pl2 = (await (await api('planGet', { core: sn })).json()).plan || { tasks: [] }, sk2 = (pl2.tasks.find((t) => (t.stickies || []).length) || {}).stickies || [];
+    ok('Sticky notes', 'pressing Enter saves a new note (no button needed)', sk2.some((x) => x.text === 'Tables set'), JSON.stringify(sk2.map((x) => x.text)));
+    for (const x of sk2.filter((y) => !y.done)) { await p.click('#stkPop [data-nid="' + x.id + '"] [data-sdone]').catch(() => {}); await sleep(1200); }
+    await p.keyboard.press('Escape'); await sleep(500);
+    const pin = await p.textContent('.stkb.stk-B, .kstk.stk-B').catch(() => '');
+    ok('Sticky notes', 'when every note on a task is done its note button turns blue with a ✓', /✓/.test(pin), pin); }
   await p.keyboard.press('Escape');
   await api('planProjectDelete', { core: sn });
 

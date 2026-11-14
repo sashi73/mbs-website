@@ -293,3 +293,9 @@ body.is-subbie [data-nav=programs],body.is-subbie [data-nav=deps],body.is-subbie
 .us-rcard span{display:flex;flex-direction:column;gap:2px}.us-rcard small{color:#6B665A;font-size:11.5px;line-height:1.35}
 .us-pwrow{display:flex;gap:6px;align-items:center}.us-pwrow input{flex:1}
 .us-confirm td{padding:6px 10px;vertical-align:top}
+/* sticky notes: when every item (or the whole note) is done the note turns blue with a ✓ */
+.stk-B{--stk:#2563EB;--stkbg:#DBEAFE}
+.kstk.stk-B{background:#EAF2FF}.kstk.stk-B:hover{background:#DCE9FF}.kstk.stk-B span{color:#1E3A8A}
+.stk-n.done{opacity:1;background:#EAF2FF!important;border-color:#93C5FD!important;--stk:#2563EB;--stkbg:#DBEAFE}
+.stk-n.done .stk-tx,.stk-n.done .stk-li span{color:#1E3A8A}
+.stk-tag.stk-alldone{background:#2563EB!important;color:#fff!important;border-radius:99px;padding:1px 8px;font-weight:800}

@@ -61,4 +61,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 50 | 1.0.50| 2026-11-14 16:09| GKH-Project-Champ| `deb4d59` | Champ: this-week card, cost follows progress, Things to order, Inventory removed, script typography |
 | 51 | 1.0.51| 2026-11-14 16:56| GKH-Project-Champ| `6ff0fa4` | Champ: Sign in with Google only shows with a real OAuth client ID |
 | 52 | 1.0.52| 2026-11-14 17:22| GKH-Project-Champ| `4b22a35` | Champ: add level-1 tasks anywhere (schedule and Kanban) with their costing |
-| 53 | 1.0.53 | 2026-11-14 17:49 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 53 | 1.0.53| 2026-11-14 17:49| GKH-Project-Champ| `40028c9` | Champ: Users & access reworked: super user, project managers, contractors, project personnel, Google view only |
+| 54 | 1.0.54 | 2026-11-14 18:09 | GKH-Project-Champ | _this commit_ | _see git log_ |

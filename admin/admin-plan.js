@@ -2544,21 +2544,26 @@
       '<button type="button" class="kptb' + (pts ? ' on' : '') + '" data-k="n:' + key + '" title="Story points">' + (pts ? pts + ' pts' : 'pts') + '</button></div>';
   }
   /* ---------- 🗒 sticky notes on tasks (Kanban and Gantt): ad hoc remarks the team can read; red urgent, amber semi-urgent, green fine ---------- */
-  var STK = { R: ['Urgent', '#DC2626'], A: ['Semi-urgent', '#D97706'], G: ['Fine', '#16A34A'] };
+  var STK = { R: ['Urgent', '#DC2626'], A: ['Semi-urgent', '#D97706'], G: ['Fine', '#16A34A'], B: ['All done', '#2563EB'] };
   function stkOpen(t) { return (t.stickies || []).filter(function (n) { return !n.done; }); }
-  function stkTop(t) { var o = stkOpen(t); return o.some(function (n) { return n.c === 'R'; }) ? 'R' : o.some(function (n) { return n.c === 'A'; }) ? 'A' : o.length ? 'G' : ''; }
+  function stkTop(t) { var o = stkOpen(t); return o.some(function (n) { return n.c === 'R'; }) ? 'R' : o.some(function (n) { return n.c === 'A'; }) ? 'A' : o.length ? 'G' : (t.stickies || []).length ? 'B' : ''; }   // B: every note done (blue, ✓)
   function stkBtn(t, kind) {   // kind: 'row' (schedule table), 'pin' (Gantt bar), 'card' (Kanban)
     var all = t.stickies || [], o = stkOpen(t), c = stkTop(t), last = o[o.length - 1];
-    if (kind === 'pin') return all.length ? '<button type="button" class="gstk stk-' + (c || 'X') + '" data-stk="' + esc(t.id) + '" title="' + esc(pl(o.length, 'open note') + (last ? ': ' + last.text.slice(0, 80) : '')) + '">🗒' + (o.length > 1 ? o.length : '') + '</button>' : '';
-    if (kind === 'card') return all.length ? '<button type="button" class="kstk stk-' + (c || 'X') + '" data-stk="' + esc(t.id) + '" title="Open the notes"><b>🗒 ' + (o.length ? (STK[c] || STK.G)[0] : 'Resolved') + '</b><span>' + esc(last ? last.text : all[all.length - 1].text) + '</span>' + (all.length > 1 ? '<i>' + all.length + '</i>' : '') + '</button>'
+    if (kind === 'pin') return all.length ? '<button type="button" class="gstk stk-' + (c || 'X') + '" data-stk="' + esc(t.id) + '" title="' + esc(pl(o.length, 'open note') + (last ? ': ' + last.text.slice(0, 80) : '')) + '">🗒' + (c === 'B' ? '✓' : o.length > 1 ? o.length : '') + '</button>' : '';
+    if (kind === 'card') return all.length ? '<button type="button" class="kstk stk-' + (c || 'X') + '" data-stk="' + esc(t.id) + '" title="Open the notes"><b>🗒 ' + (o.length ? (STK[c] || STK.G)[0] : '✓ All done') + '</b><span>' + esc(last ? last.text : all[all.length - 1].text) + '</span>' + (all.length > 1 ? '<i>' + all.length + '</i>' : '') + '</button>'
       : '<button type="button" class="kstk-add" data-stk="' + esc(t.id) + '" title="Add a sticky note for the team">🗒 ＋ note</button>';
-    return '<button type="button" class="stkb stk-' + (c || 'X') + (all.length ? '' : ' none') + '" data-stk="' + esc(t.id) + '" title="' + (all.length ? esc(pl(o.length, 'open note') + ' (click to read or add)') : 'Add a sticky note for the team') + '">🗒' + (o.length ? ' ' + o.length : '') + '</button>';
+    return '<button type="button" class="stkb stk-' + (c || 'X') + (all.length ? '' : ' none') + '" data-stk="' + esc(t.id) + '" title="' + (all.length ? esc(pl(o.length, 'open note') + ' (click to read or add)') : 'Add a sticky note for the team') + '">🗒' + (c === 'B' ? ' ✓' : o.length ? ' ' + o.length : '') + '</button>';
   }
   var STK_LI = /^\s*[-•*]\s+(\[( |x|X)\]\s*)?/;
   function stkBody(x, ro) {   // a note: plain text, or a checklist when lines start with "- "
     var L = String(x.text).split('\n'); if (!L.some(function (l) { return STK_LI.test(l); })) return '<div class="stk-tx" data-sedit title="Double-click to edit">' + esc(x.text).replace(/\n/g, '<br>') + '</div>';
     return '<div class="stk-tx stk-cl" data-sedit>' + L.map(function (l, i) { var m = l.match(STK_LI); if (!m) return l.trim() ? '<div class="stk-p">' + esc(l) + '</div>' : '';
       var on = !!(m[2] && m[2].toLowerCase() === 'x'); return '<label class="stk-li' + (on ? ' on' : '') + '"><input type="checkbox" data-sitem="' + i + '"' + (on ? ' checked' : '') + (ro ? ' disabled' : '') + '><span>' + esc(l.replace(STK_LI, '')) + '</span></label>'; }).join('') + '</div>';
+  }
+  function stkNl(e) {   // Shift+Enter: a new line in the note (a checklist line carries on with "- "); plain Enter saves
+    if (e.key !== 'Enter' || !e.shiftKey) return false; var ta = e.target, v = ta.value, i = ta.selectionStart, ls = v.lastIndexOf('\n', i - 1) + 1, li = v.slice(ls, i);
+    if (STK_LI.test(li)) { e.preventDefault(); var ins = '\n- '; ta.value = v.slice(0, i) + ins + v.slice(ta.selectionEnd); ta.selectionStart = ta.selectionEnd = i + ins.length; }
+    return true;
   }
   function stkPanel(tid, anchor) {
     var p = S.plan, t = p.tasks.filter(function (x) { return x.id === tid; })[0]; if (!t) return;
@@ -2573,14 +2578,14 @@
             var ed = S.stkEdit === x.id && !ro, items = String(x.text).split('\n').filter(function (l) { return STK_LI.test(l); }), ticked = items.filter(function (l) { return /\[(x|X)\]/.test(l.match(STK_LI)[0]); }).length;
             return '<div class="stk-n stk-' + x.c + (x.done ? ' done' : '') + (ed ? ' editing' : '') + '" data-nid="' + esc(x.id) + '"><div class="stk-m">' +
               '<label class="stk-ck" title="' + (x.done ? 'Done: untick to open it again' : 'Tick when it is done') + '"><input type="checkbox" data-sdone' + (x.done ? ' checked' : '') + (ro ? ' disabled' : '') + '></label>' +
-              '<span class="stk-tag">' + STK[x.c][0] + '</span>' + (items.length ? '<span class="stk-cnt">' + ticked + '/' + items.length + '</span>' : '') +
+              (x.done ? '<span class="stk-tag stk-alldone">✓ All done</span>' : '<span class="stk-tag">' + STK[x.c][0] + '</span>') + (items.length ? '<span class="stk-cnt">' + ticked + '/' + items.length + '</span>' : '') +
               '<small>' + esc(x.by || '') + ' · ' + esc(when(x.at)) + (x.editedAt ? ' · edited' + (x.editedBy && x.editedBy !== x.by ? ' by ' + esc(x.editedBy) : '') : '') + (x.done ? ' · done' + (x.doneBy ? ' by ' + esc(x.doneBy) : '') : '') + '</small><span class="sp"></span>' +
               (ro || ed ? '' : '<button type="button" data-sed title="Edit this note">✏</button><button type="button" data-sdel title="Delete this note">🗑</button>') + '</div>' +
               (ed ? '<div class="stk-ed"><textarea data-setx rows="' + Math.max(3, Math.min(10, String(x.text).split('\n').length + 1)) + '" maxlength="1500">' + esc(x.text) + '</textarea><div class="stk-row">' +
                 ['R', 'A', 'G'].map(function (k) { return '<button type="button" class="stk-c stk-' + k + (x.c === k ? ' on' : '') + '" data-secol="' + k + '"><i></i>' + STK[k][0] + '</button>'; }).join('') +
                 '<span class="sp"></span><button type="button" class="btn btn-sm" data-secancel>Cancel</button><button type="button" class="btn btn-sm btn-gold" data-sesave>Save</button></div></div>' : stkBody(x, ro)) + '</div>'; }).join('')
           : '<p class="muted" style="margin:6px 2px">No notes yet. Leave a remark for the team: what is happening, what is blocked, what to watch.</p>') + '</div>' +
-        (ro ? '' : '<div class="stk-add"><textarea id="stkTx" rows="' + (S.stkBig ? 4 : 2) + '" maxlength="1500" placeholder="Write a note for the team…  (start lines with - to make a checklist)"></textarea><div class="stk-row">' +
+        (ro ? '' : '<div class="stk-add"><textarea id="stkTx" rows="' + (S.stkBig ? 4 : 2) + '" maxlength="1500" placeholder="Write a note, press Enter to save.  Shift+Enter for a new line; start lines with - for a checklist"></textarea><div class="stk-row">' +
           ['R', 'A', 'G'].map(function (k) { return '<button type="button" class="stk-c stk-' + k + (col === k ? ' on' : '') + '" data-scol="' + k + '" title="' + STK[k][0] + '"><i></i>' + STK[k][0] + '</button>'; }).join('') + '<span class="sp"></span><button type="button" class="btn btn-sm btn-gold" data-sadd>Add note</button></div></div>');
       var place = function () { var r = anchor && document.body.contains(anchor) ? anchor.getBoundingClientRect() : null, w = pop.offsetWidth, h = pop.offsetHeight;
         if (S.stkPos) { pop.style.left = Math.max(4, Math.min(innerWidth - w - 4, S.stkPos.x)) + 'px'; pop.style.top = Math.max(4, Math.min(innerHeight - 40, S.stkPos.y)) + 'px'; return; }   // where it was dragged to
@@ -2615,9 +2620,9 @@
       var es = pop.querySelector('[data-sesave]'); if (es) { var doSave = function () { var x = noteOf(es), tx = pop.querySelector('[data-setx]').value.trim(); if (!x) return; if (!tx) { pop.querySelector('[data-setx]').focus(); return; }
           var changed = tx !== x.text || (S.stkEditCol && S.stkEditCol !== x.c); S.stkEdit = null; if (!changed) { draw(); return; }
           x.text = tx; if (S.stkEditCol) x.c = S.stkEditCol; x.editedAt = Date.now(); x.editedBy = me; save('edited'); };
-        es.onclick = doSave; pop.querySelector('[data-setx]').onkeydown = function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doSave(); if (e.key === 'Escape') { e.stopPropagation(); S.stkEdit = null; draw(); } }; }
+        es.onclick = doSave; pop.querySelector('[data-setx]').onkeydown = function (e) { if (stkNl(e)) return; if (e.key === 'Enter') { e.preventDefault(); doSave(); } if (e.key === 'Escape') { e.stopPropagation(); S.stkEdit = null; draw(); } }; }
       pop.querySelectorAll('[data-sdel]').forEach(function (b) { b.onclick = function () { var id = b.closest('[data-nid]').getAttribute('data-nid'); t.stickies = (t.stickies || []).filter(function (q) { return q.id !== id; }); save('deleted'); }; });
-      var ta = $('#stkTx'); if (ta) { ta.onkeydown = function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) add.onclick(); }; if (first && !S.stkEdit) setTimeout(function () { ta.focus(); }, 30); } first = false;
+      var ta = $('#stkTx'); if (ta) { ta.onkeydown = function (e) { if (stkNl(e)) return; if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); add.onclick(); } }; if (first && !S.stkEdit) setTimeout(function () { ta.focus(); }, 30); } first = false;
     };
     draw();
   }
