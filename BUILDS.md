@@ -64,4 +64,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 53 | 1.0.53| 2026-11-14 17:49| GKH-Project-Champ| `40028c9` | Champ: Users & access reworked: super user, project managers, contractors, project personnel, Google view only |
 | 54 | 1.0.54| 2026-11-14 18:09| GKH-Project-Champ| `59a1dc5` | Champ: sticky notes save with Enter; all done turns the note blue with a tick |
 | 55 | 1.0.55| 2026-11-14 19:12| GKH-Project-Champ| `b9b451a` | Champ: People rebuilt: two groups, credentials, resume, rate per hour, My profile, team calendar, workload |
-| 56 | 1.0.56 | 2026-11-14 19:32 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 56 | 1.0.56| 2026-11-14 19:32| GKH-Project-Champ| `223b460` | Champ: rates in plain $ (no AUD): People form and AI prompts are not tied to a country |
+| 57 | 1.0.57 | 2026-11-14 19:50 | GKH-Project-Champ | _this commit_ | _see git log_ |

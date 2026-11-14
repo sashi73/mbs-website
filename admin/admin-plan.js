@@ -593,7 +593,10 @@
       '<div class="champ-2"><label>Program <small class="muted">(every project belongs to one)</small><select name="progPick" required><option value="">Loading programs…</option></select></label>' +
       '<label class="champ-newprog" hidden>New program name<input name="program" maxlength="80" placeholder="e.g. Hospital redevelopment"></label></div>' +
       '<label>Project name<input name="name" required maxlength="120" placeholder="e.g. Head office fit-out, ERP rollout, Bridge deck repair"></label>' +
-      '<label>Client or sponsor<input name="client" required maxlength="120" placeholder="e.g. Acme Pty Ltd or Internal: Finance"></label>' +
+      '<p class="champ-fill" id="cnFill" hidden></p>' +
+      '<label>Client<input name="client" required maxlength="120" placeholder="e.g. Acme Pty Ltd or Internal: Finance"></label>' +
+      '<div class="champ-2"><label>Sponsor <small class="muted">(optional)</small><input name="sponsor" maxlength="80" placeholder="who backs the project"></label>' +
+      '<label>Project manager <small class="muted">(optional)</small><input name="manager" maxlength="80"></label></div>' +
       '<div class="champ-2"><label>Site or location <small class="muted">(optional)</small><input name="site" maxlength="80" placeholder="e.g. Parramatta NSW"></label>' +
       '<label>Contact phone <small class="muted">(optional)</small><input name="phone" maxlength="40"></label></div>' +
       '<label>Contact email <small class="muted">(optional)</small><input name="email" type="email" maxlength="160"></label>' +
@@ -604,7 +607,22 @@
       '<div class="actions"><button class="btn btn-gold" type="submit">Create project and plan it →</button></div></form></div>';
     var want = ''; try { want = sessionStorage.getItem('champNewProg') || ''; sessionStorage.removeItem('champNewProg'); } catch (e2) {}
     var pick = $('#champNew').progPick, newBox = $('#champNew .champ-newprog'), newIn = $('#champNew').program;
-    var syncProg = function () { var isNew = pick.value === '__new'; newBox.hidden = !isNew; newIn.required = isNew; if (isNew) setTimeout(function () { newIn.focus(); }, 30); };
+    // picking a program fills in what the program (or its latest project) already knows: client, sponsor, manager, email, phone, location.
+    // Only empty boxes, or ones it filled itself before, are changed: anything typed stays.
+    var F0 = $('#champNew'), FILL = ['client', 'sponsor', 'manager', 'email', 'phone', 'site'], LBL = { client: 'client', sponsor: 'sponsor', manager: 'project manager', email: 'email', phone: 'phone', site: 'location' };
+    FILL.forEach(function (k) { F0[k].addEventListener('input', function () { F0[k].removeAttribute('data-auto'); F0[k].classList.remove('auto'); }); });
+    var fillFrom = function (name) {
+      var note = $('#cnFill');
+      if (!name || name === '__new') { FILL.forEach(function (k) { if (F0[k].hasAttribute('data-auto')) { F0[k].value = ''; F0[k].removeAttribute('data-auto'); F0[k].classList.remove('auto'); } }); note.hidden = true; return; }
+      api('planProgramDefaults', { name: name }).then(function (d) {
+        if (pick.value !== name) return; var got = [];
+        FILL.forEach(function (k) { var el = F0[k], v = d[k] || ''; if (el.value && !el.hasAttribute('data-auto')) return;
+          el.value = v; if (v) { el.setAttribute('data-auto', '1'); el.classList.add('auto'); got.push(LBL[k]); } else { el.removeAttribute('data-auto'); el.classList.remove('auto'); } });
+        note.hidden = !got.length;
+        note.innerHTML = got.length ? '✨ Filled in from the <b>' + esc(d.program || name) + '</b> program' + (d.from.project && !d.from.program ? ' (its latest project, ' + esc(d.from.project) + ')' : d.from.project ? ' and its latest project' : '') + ': ' + esc(got.join(', ')) + '. Change anything that is different for this project.' : '';
+      }).catch(function () {});
+    };
+    var syncProg = function () { var isNew = pick.value === '__new'; newBox.hidden = !isNew; newIn.required = isNew; if (isNew) setTimeout(function () { newIn.focus(); }, 30); fillFrom(pick.value); };
     pick.onchange = syncProg;
     (M.champPrograms ? M.champPrograms() : Promise.resolve([])).then(function (L) {
       pick.innerHTML = '<option value="">Choose a program…</option>' + L.map(function (x) { return '<option' + (x === want ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '<option value="__new">＋ New program…</option>';
@@ -613,7 +631,7 @@
     });
     $('#champNew').onsubmit = function (e) {
       e.preventDefault(); var f = e.target, b = f.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Creating…';
-      api('planNewProject', { name: f.name.value, client: f.client.value, site: f.site.value, phone: f.phone.value, email: f.email.value, summary: f.summary.value, program: f.progPick.value === '__new' ? f.program.value : f.progPick.value, bom: f.bom.checked, swms: f.swms.checked })
+      api('planNewProject', { name: f.name.value, client: f.client.value, site: f.site.value, phone: f.phone.value, email: f.email.value, summary: f.summary.value, sponsor: f.sponsor.value, manager: f.manager.value, program: f.progPick.value === '__new' ? f.program.value : f.progPick.value, bom: f.bom.checked, swms: f.swms.checked })
         .then(function (r) { toast('Project ' + r.ref + ' created'); location.hash = '#plan/' + r.core; })
         .catch(function (err) { fail(err); b.disabled = false; b.textContent = 'Create project and plan it →'; });
     };
@@ -764,7 +782,7 @@
     if (t.scope) inScope = inScope ? inScope + '\n\nTypical work: ' + t.scope : t.scope;
     return { name: t.name, start: start, phases: [{ id: 'ph1', name: 'Work' }], tasks: tasks,
       charter: { objective: t.objective, inScope: inScope, outScope: extra.outScope || '', deliverables: extra.deliverables || t.deliverables || '', acceptance: extra.acceptance || t.acceptance || 'Work complete, inspected and accepted by the customer; site clean; invoice issued.', assumptions: extra.assumptions || '', notes: extra.notes || '',
-        budget: r2(tasks.reduce(function (a, x) { return a + cost(x); }, 0)), customer: job.name || '', manager: '' },
+        budget: r2(tasks.reduce(function (a, x) { return a + cost(x); }, 0)), customer: job.sponsor || job.name || '', manager: job.manager || '' },
       risks: t.risks.map(function (r, i) { return { id: 'r' + (i + 1), title: r[0], cause: r[5] || '', p: r[1], i: r[2], response: r[3], action: r[4], owner: '', review: '', status: 'Open', raised: today() }; }),
       issues: [], baseline: null };
   }

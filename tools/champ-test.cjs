@@ -850,6 +850,16 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       ok('People', 'the team calendar shows everyone day by day for 4 weeks', /Team calendar/.test(calTxt) && (await p.$$('.pc-t thead .pc-d')).length === 28 && /Priya Shah/.test(calTxt), calTxt.slice(0, 120));
       await p.goto(`${BASE}/admin/#me`); await sleep(1200); const meT = await p.textContent('#view, main').catch(() => '');
       ok('People', 'My profile opens for the super user too (with a pointer to People)', /My profile/.test(meT), meT.slice(0, 120)); }
+    // 🗂 picking a program on New project fills in what the program already knows
+    { await api('planProgramSave', { name: 'ESG programme', manager: 'Sashi Kumar Sivam', sponsor: 'Board of Directors', client: 'National Airlines', email: 'esg@example.com', phone: '0400 555 111', site: 'Kuala Lumpur' });
+      await p.goto(`${BASE}/admin/#projects/new`); await p.waitForSelector('#champNew [name=progPick] option[value="__new"]', { timeout: 8000 }).catch(() => {});
+      await p.fill('#champNew [name=phone]', '0499 000 000');   // typed by hand: must stay
+      await p.selectOption('#champNew [name=progPick]', 'ESG programme').catch(() => {}); await sleep(1500);
+      const v = await p.evaluate(() => { const f = document.getElementById('champNew'); return { client: f.client.value, sponsor: f.sponsor.value, manager: f.manager.value, email: f.email.value, phone: f.phone.value, site: f.site.value, note: document.getElementById('cnFill').textContent }; });
+      ok('Programs', 'choosing a program fills in client, sponsor, manager, email and location (what you typed stays)', v.client === 'National Airlines' && v.sponsor === 'Board of Directors' && v.manager === 'Sashi Kumar Sivam' && v.email === 'esg@example.com' && v.site === 'Kuala Lumpur' && v.phone === '0499 000 000' && /ESG programme/.test(v.note), JSON.stringify(v));
+      await p.fill('#champNew [name=name]', 'Scope 3 baseline'); await p.click('#champNew [type=submit]'); await p.waitForURL(/#plan\//, { timeout: 10000 }).catch(() => {});
+      const core = (p.url().match(/#plan\/([^/]+)/) || [])[1]; const job = core ? ((await (await api('planGet', { core })).json()).job || {}) : {};
+      ok('Programs', 'the new project keeps the sponsor and project manager from the program', job.sponsor === 'Board of Directors' && job.manager === 'Sashi Kumar Sivam' && job.name === 'National Airlines', JSON.stringify(job).slice(0, 200)); }
     ok('BOM', 'one BOM per project: Draft with AI and Templates are off until the BOM is deleted (no appending)', await p.goto(`${BASE}/admin/#plan/${cc}/bom`).then(() => p.waitForSelector('#bomOpen, #bomAi', { timeout: 8000 })).then(async () => { await p.click('#bomOpen').catch(() => {}); await p.fill('#boF [name=why]', 'Add a line').catch(() => {}); await p.click('#boF [type=submit]').catch(() => {}); await sleep(1200); return (await p.isDisabled('#bomAi').catch(() => false)) && (await p.isDisabled('#bomTpl').catch(() => false)); }).catch(() => false));
     await p.goto(`${BASE}/admin/#plan/${cc}/budget`); await p.waitForSelector('.bd-tiles', { timeout: 8000 }).catch(() => {});
     ok('Costing', 'reopened, the BOM is out of the costing until it is signed off again', /waiting for sign-off/.test(await p.textContent('.bd-bomst').catch(() => '')) && !(await p.$('[data-gobom]')));
@@ -1063,7 +1073,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.waitForFunction(() => /\[Bahas/.test(document.querySelector('.side-nav').textContent), null, { timeout: 8000 }).catch(() => {});
   ok('Language', 'console menu translated', /\[Bahas/.test(await p.textContent('.side-nav')), (await p.textContent('.side-nav')).slice(0, 160) + ' / lang=' + (await p.evaluate(() => localStorage.getItem('champLang'))));
   const dataCell = await p.$$eval('#view table', (ts) => { const t = ts[ts.length - 1]; const c = t && t.querySelector('tbody tr td:nth-child(3)'); return c ? c.textContent : ''; }).catch(() => '');
-  ok('Language', 'project names are shown in the chosen language too (no half-English screens), codes kept', dataCell.includes('[Bahas] Head office fit-out') && /PP-\d/.test(dataCell), dataCell);
+  ok('Language', 'project names are shown in the chosen language too (no half-English screens), codes kept', /^\[Bahas\] \S/.test(dataCell) && /PP-\d/.test(dataCell), dataCell);
   await p.click('#champLangBtn'); await p.click('.ct-langmenu [data-l=en]'); await sleep(300);
   await p.evaluate(() => { localStorage.removeItem('champChatLang'); localStorage.removeItem('champLang'); });
 

@@ -836,6 +836,13 @@ export async function planPost(action, body, { who, by, audit }) {
       cross: (by[d.from].program || '') !== (by[d.to].program || '') }));
     return out(200, { programs: reg, cards, deps, types: PG.TYPES, statuses: PG.STATUS, today: day, at: Date.now() });
   }
+  if (action === 'planProgramDefaults') {   // a new project in this program: its details, filled in from the program (and its latest project)
+    const name = str(body.name, 80).toLowerCase(), pg = (await PG.list()).find((p) => p.name.toLowerCase() === name);
+    const last = (await J.all()).filter((j) => (j.program || '').toLowerCase() === name).sort((a, b) => (b.created || 0) - (a.created || 0))[0] || {};
+    const pick = (...v) => v.find((x) => x && String(x).trim()) || '';
+    return out(200, { found: !!pg, program: pg ? pg.name : '', key: pg ? pg.key || '' : '', client: pick(pg && pg.client, pg && pg.sponsor, last.name), sponsor: pick(pg && pg.sponsor, last.sponsor), manager: pick(pg && pg.manager, last.manager),
+      email: pick(pg && pg.email, last.email), phone: pick(pg && pg.phone, last.phone), site: pick(pg && pg.site, last.suburb), objective: (pg && pg.objective) || '', from: { program: !!pg, project: last.core ? J.refFor(last) : '' } });
+  }
   if (action === 'planProgramSave') {
     try { const r = await PG.save(body, who); if (audit) await audit(who, r.renamed ? `Program renamed: ${r.renamed.from} → ${r.renamed.to}` : `Program saved: ${r.program.name}`); return out(200, { ok: true, program: r.program }); }
     catch (e) { return out(e.code || 500, { error: e.message }); }
@@ -891,7 +898,7 @@ export async function planPost(action, body, { who, by, audit }) {
     const rems = remsAll.filter((r) => r.core === job.core).map((r) => ({ ...r, when: whenText(r.at) }));
     let costs = 0;
     try { costs = r2(Object.values((idx && idx.expenses) || {}).filter((e) => e.core === job.core).reduce((a, e) => a + (e.inc - e.gst), 0)); } catch {}
-    return out(200, { champ: modulesOf(champ, job.core), plan, job: { core: job.core, ref: J.refFor(job), name: job.name, suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), phone: job.phone || '', email: job.email || '', scope: jobScope(job), urgency: job.urgency || '', emergency: isEmergency(job) }, reminders: rems, expensesEx: costs, test: isTestSite(), bench: plan ? benchTarget(plan, job) : null });
+    return out(200, { champ: modulesOf(champ, job.core), plan, job: { core: job.core, ref: J.refFor(job), name: job.name, manager: job.manager || '', sponsor: job.sponsor || '', program: job.program || '', suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), phone: job.phone || '', email: job.email || '', scope: jobScope(job), urgency: job.urgency || '', emergency: isEmergency(job) }, reminders: rems, expensesEx: costs, test: isTestSite(), bench: plan ? benchTarget(plan, job) : null });
   }
   if (action === 'planSave') {
     if (!core || !(await J.find(core))) return out(404, { error: 'Job not found' });

@@ -68,7 +68,7 @@ export async function save(body, who) {
     if (pid && !p) throw Object.assign(new Error('That program is no longer there.'), { code: 404 });
     if (!p) { giveKeys(cur); p = { id: id(), key: 'PG-' + String((cur.lastKey = (Number(cur.lastKey) || 0) + 1)).padStart(3, '0'), created: Date.now(), color: COLORS[cur.list.length % COLORS.length] }; cur.list.push(p); }
     if (p.name && p.name !== name) renamed = { from: p.name, to: name };
-    Object.assign(p, { name, manager: s(body.manager, 80), sponsor: s(body.sponsor, 80), objective: s(body.objective, 600), status: STATUS[body.status] ? body.status : (p.status || 'active'),
+    Object.assign(p, { name, manager: s(body.manager, 80), sponsor: s(body.sponsor, 80), client: s(body.client, 120), email: s(body.email, 160), phone: s(body.phone, 40), site: s(body.site, 80), objective: s(body.objective, 600), status: STATUS[body.status] ? body.status : (p.status || 'active'),
       color: /^#[0-9a-f]{6}$/i.test(body.color || '') ? body.color : p.color, start: day(body.start), finish: day(body.finish), updated: Date.now(), updatedBy: who || '' });
     res = { ...p }; return cur;
   }, { list: [] });

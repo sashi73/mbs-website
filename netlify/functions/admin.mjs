@@ -369,7 +369,7 @@ async function handle(req, context) {
         if (known) prog = known.name; else prog = (await PGM.save({ name: prog }, who)).program.name;
         const core = await J.nextCore('P');
         await J.create({ core, name: client, phone: clean(body.phone, 40), email: clean(body.email, 160), suburb: clean(body.site, 80), service: pname,
-          summary: clean(body.summary, 1500), program: prog, source: 'Project Champ' }, by);
+          summary: clean(body.summary, 1500), program: prog, manager: clean(body.manager, 80), sponsor: clean(body.sponsor, 80), source: 'Project Champ' }, by);
         const job = await J.find(core);   // a new project starts in Pre-sales
         if (body.bom === false) await setModule(core, 'bom', false);     // optional modules chosen on the form
         if (body.swms === false) await setModule(core, 'swms', false);

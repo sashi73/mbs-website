@@ -323,3 +323,6 @@ body.is-subbie [data-nav=programs],body.is-subbie [data-nav=deps],body.is-subbie
 .pc-c{height:38px}
 .pc-b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;font-size:10.5px;font-weight:800;color:#fff}
 .pc-n1{background:#93C5FD}.pc-n2{background:#3B82F6}.pc-n3{background:#1E3A8A}.pc-b.late{background:#DC2626}
+/* new project: details filled in from the program */
+.champ-fill{margin:0;padding:8px 12px;border-radius:10px;background:#FFF8E1;border:1px solid #F0D98A;font-size:13px;color:#5B4A12}
+#champNew input.auto{background:#FFFBEB;border-color:#E9C46A}
