@@ -789,12 +789,34 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       const t2 = await nT();
       ok('Level 1', '＋ Task under the schedule adds a level-1 task at the end; ＋ on a task adds one straight below it', vis && t1.length === n0 + 1 && t2.length === n0 + 2 && t2[1].name === 'New task' && (t2[1].pred || [])[0] === firstId, `vis=${vis} ${n0}->${t1.length}->${t2.length} ${t2[1] && t2[1].name}`);
       await p.goto(`${BASE}/admin/#plan/${cc}/board`); await p.waitForSelector('[data-kaddt="doing"]', { timeout: 8000 }).catch(() => {});
-      await p.click('[data-kaddt="doing"]').catch(() => {}); await p.waitForSelector('#ktF', { timeout: 5000 }).catch(() => {});
+      await sleep(1500); await p.click('[data-kaddt="doing"]').catch(() => {}); await p.waitForSelector('#ktF', { timeout: 5000 }).catch(() => {}); await sleep(600);
       await p.fill('#ktF [name=name]', 'Venue booking').catch(() => {}); await p.fill('#ktF [name=dur]', '3').catch(() => {}); await p.fill('#ktF [name=qty]', '2').catch(() => {}); await p.fill('#ktF [name=unit]', 'lot').catch(() => {}); await p.fill('#ktF [name=rate]', '250').catch(() => {});
       const cTxt = await p.textContent('#ktC').catch(() => '');
       await p.click('#ktF [type=submit]').catch(() => {}); await sleep(2500);
       const vb = (await nT()).find((t) => t.name === 'Venue booking') || {};
       ok('Level 1', 'Kanban: ＋ Task in a column adds a level-1 task in that column with its costing (2 × $250 = $500)', /500/.test(cTxt) && vb.status === 'doing' && vb.qty === 2 && vb.rate === 250 && vb.unit === 'lot' && vb.dur === 3, cTxt + ' ' + JSON.stringify(vb).slice(0, 200)); }
+    // 🔐 Users & access: the super user makes a login (email + password), confirms, then sets permissions
+    { await p.goto(`${BASE}/admin/#users`); await p.waitForSelector('#usNew', { timeout: 8000 }).catch(() => {});
+      const head = await p.textContent('#view, main').catch(() => '');
+      ok('Users', 'Users & access: super user, project managers, contractors, project personnel, Google; no sub-contractor logins', /Super user/.test(head) && /Project manager/.test(head) && /Contractor/.test(head) && /Project personnel/.test(head) && /Google/.test(head) && !/Sub-contractor login/.test(head), head.slice(0, 200));
+      await p.click('#usNew').catch(() => {}); await p.waitForSelector('#nuF', { timeout: 5000 }).catch(() => {});
+      await p.fill('#nuF [name=email]', 'aisha.contractor@example.com'); await p.fill('#nuF [name=name]', 'Aisha Rahman');
+      await p.check('#nuF [name=role][value="Contractor"]').catch(() => {});
+      await p.fill('#nuF [name=pw]', 'Welcome2026x'); await p.fill('#nuF [name=pw2]', 'Welcome2026x');
+      await p.click('#nuF [type=submit]').catch(() => {}); await p.waitForSelector('#cnGo', { timeout: 5000 }).catch(() => {});
+      const conf = await p.textContent('#modal').catch(() => ''); const before = ((await (await api('userList')).json()).users || []).filter((u) => u.username === 'aisha.contractor@example.com').length;
+      ok('Users', 'step 2 asks to confirm (email, role, password hidden) before anything is made', /Confirm and create/.test(conf) && /aisha.contractor@example.com/.test(conf) && !/Welcome2026x/.test(conf) && before === 0, conf.slice(0, 200) + ' before=' + before);
+      await p.click('#cnGo').catch(() => {}); await p.waitForSelector('#pmSave', { timeout: 8000 }).catch(() => {});
+      await p.check(`#pmProjs input[value="${cc}"]`).catch(() => {});
+      await p.click('#pmSave').catch(() => {}); await sleep(1500);
+      const us = ((await (await api('userList')).json()).users || []).find((u) => u.username === 'aisha.contractor@example.com') || {};
+      ok('Users', 'step 3 sets the permissions: Contractor, Projects edit, only the ticked project', us.role === 'Contractor' && us.mods.projects === 'edit' && us.mods.data === 'none' && !us.projAll && (us.projects || []).join() === cc, JSON.stringify(us).slice(0, 300));
+      const c2 = await b.newContext(); const rq = c2.request, post = (action, data = {}) => rq.post(`${BASE}/.netlify/functions/admin`, { data: { action, ...data }, headers: { 'X-MBS-Admin': '1', 'X-Forwarded-For': '203.0.113.50' } });
+      const li = await post('login', { username: 'aisha.contractor@example.com', password: 'Welcome2026x' });
+      const pl = await (await post('planList')).json(); const other = await post('planGet', { core: (pl.plans || [])[0] ? 'nope' : 'nope' });
+      const mk = await post('userCreate', { user: { email: 'x@example.com', password: 'Welcome2026x', role: 'Project manager' } });
+      ok('Users', 'the contractor signs in with that password, sees only their project, and cannot make logins', li.status() === 200 && (pl.plans || []).length === 1 && pl.plans[0].core === cc && mk.status() === 403, `login=${li.status()} plans=${(pl.plans || []).length} make=${mk.status()}`);
+      await c2.close(); }
     ok('BOM', 'one BOM per project: Draft with AI and Templates are off until the BOM is deleted (no appending)', await p.goto(`${BASE}/admin/#plan/${cc}/bom`).then(() => p.waitForSelector('#bomOpen, #bomAi', { timeout: 8000 })).then(async () => { await p.click('#bomOpen').catch(() => {}); await p.fill('#boF [name=why]', 'Add a line').catch(() => {}); await p.click('#boF [type=submit]').catch(() => {}); await sleep(1200); return (await p.isDisabled('#bomAi').catch(() => false)) && (await p.isDisabled('#bomTpl').catch(() => false)); }).catch(() => false));
     await p.goto(`${BASE}/admin/#plan/${cc}/budget`); await p.waitForSelector('.bd-tiles', { timeout: 8000 }).catch(() => {});
     ok('Costing', 'reopened, the BOM is out of the costing until it is signed off again', /waiting for sign-off/.test(await p.textContent('.bd-bomst').catch(() => '')) && !(await p.$('[data-gobom]')));

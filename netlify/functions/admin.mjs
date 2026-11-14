@@ -30,7 +30,7 @@ import * as SUB from '../lib/subbies.mjs';
 // v91: who may sign in: a person in People, or a sub-contractor in Subbies
 // a real Google OAuth client ID ends in .apps.googleusercontent.com; anything else (e.g. the site URL pasted by mistake) switches the button off
 const gcid = () => { const v = env('GOOGLE_CLIENT_ID').trim().replace(/^["']|["']$/g, ''); if (v && !/\.apps\.googleusercontent\.com$/.test(v)) console.error('GOOGLE_CLIENT_ID is not an OAuth client ID (it should end in .apps.googleusercontent.com): Sign in with Google is off'); return /\.apps\.googleusercontent\.com$/.test(v) ? v : ''; };
-const canIn = (pid, u) => (u && u.kind === 'google' ? !!gcid() : u && u.kind === 'subbie' ? SUB.canLogin(u.subId) : PPL.canLogin(pid));   // v97: Google sign-ins only while the test site has it on
+const canIn = (pid, u) => (u && u.kind === 'email' ? true : u && u.kind === 'google' ? !!gcid() : u && u.kind === 'subbie' ? SUB.canLogin(u.subId) : PPL.canLogin(pid));   // v97: Google sign-ins only while the test site has it on
 // v97: "Sign in with Google" on the test site. The Google ID token is checked with Google (tokeninfo): our client ID, a verified
 // email, not expired. GOOGLE_ALLOWED (optional) limits it to some emails or @domains.
 async function googleVerify(cred) {

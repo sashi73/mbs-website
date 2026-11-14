@@ -29,9 +29,14 @@ export const MOD_KEYS = MODS.map((m) => m[0]);
 export const LEVELS = ['none', 'view', 'edit'];
 const LV = { none: 0, view: 1, edit: 2 };
 const all = (lv) => Object.fromEntries(MOD_KEYS.map((k) => [k, lv]));
+// GKH Project Champ: the super user (the Netlify login) makes every login by email and sets its password; four kinds of people:
+//   Project manager (admin: everything, all projects), Contractor and Project personnel (limited: their projects),
+//   and Google sign-ins (view only). The older roles below stay only so logins made before keep working.
 export const ROLES = {
+  'Project manager': { ...all('edit'), users: 'view' },
+  Contractor: { ...all('none'), projects: 'edit' },
+  'Project personnel': { ...all('none'), projects: 'edit', data: 'view' },
   Administrator: { ...all('edit') },
-  'Project manager': { crm: 'edit', projects: 'edit', accounts: 'view', stock: 'edit', subbies: 'edit', people: 'view', data: 'view', users: 'none' },
   'Site supervisor': { crm: 'view', projects: 'edit', accounts: 'none', stock: 'view', subbies: 'view', people: 'view', data: 'none', users: 'none' },
   Accounts: { crm: 'view', projects: 'view', accounts: 'edit', stock: 'view', subbies: 'view', people: 'view', data: 'view', users: 'none' },
   'Read only': { ...all('view'), users: 'none' },
@@ -39,6 +44,8 @@ export const ROLES = {
   'Sub-contractor': { ...all('none'), projects: 'edit' },   // v91: a subbie: only their own project(s), nothing else
   Custom: null };
 export const ROLE_KEYS = Object.keys(ROLES);
+export const PICK_ROLES = ['Project manager', 'Contractor', 'Project personnel', 'Custom'];   // what the super user picks from
+const ALL_PROJECTS = (u) => u.role === 'Project manager' || u.projAll === true;
 export const OWNER_MODS = all('edit');
 
 // which module (and level) an action needs. null = any signed-in user (me, logout, own password).
@@ -105,7 +112,7 @@ export function tempPassword() {   // easy to read out: no 0/O, 1/l
 // ---------- users ----------
 const cleanMods = (m, role) => { const base = ROLES[role] || null, o = {}; for (const k of MOD_KEYS) { const v = (m || {})[k]; o[k] = LEVELS.includes(v) ? v : base ? base[k] : 'none'; } return o; };
 const summary = (u) => ({ id: u.id, personId: u.personId, name: u.name, username: u.username, email: u.email, role: u.role, mods: u.mods, active: u.active, mustChange: !!u.mustChange, lastLogin: u.lastLogin || 0, created: u.created,
-  kind: u.kind || 'person', subId: u.subId || '', projects: u.projects || [] });
+  kind: u.kind || 'person', subId: u.subId || '', projects: u.projects || [], projAll: !!u.projAll, mustChange2: !!u.mustChange });
 // v91: a sub-contractor login: Projects only (view or edit), and only the projects it was given
 const subMods = (lv) => ({ ...all('none'), projects: lv === 'view' ? 'view' : 'edit' });
 // v97: "Sign in with Google" (test site): anyone with a verified Google account gets View on every module, nothing in Users & access
@@ -122,11 +129,11 @@ export async function googleUser(email, name, by) {
 }
 // what a sub-contractor signed in to one project may do. Every request naming a project must be theirs; other requests only
 // from this list (the plan page's own lookups). Money, people and other subbies' details stay out.
-const SCOPE_FREE = new Set(['me', 'logout', 'userPassword', 'planList', 'planAiStatus', 'commsSetup', 'planBomTplList', 'planBomTplGet', 'invList', 'invGet']);
+const SCOPE_FREE = new Set(['me', 'logout', 'userPassword', 'planList', 'planPipelineList', 'planAiStatus', 'commsSetup', 'planBomTplList', 'planBomTplGet', 'invList', 'invGet']);
 const SCOPE_DENY = new Set(['planDelete', 'planJobs', 'planQuote', 'planQuoteInfo', 'quoteStart', 'docToInvoice', 'docForJob', 'pipelineBoard', 'planBomTplSave', 'planBomTplDelete', 'pplList', 'pplAssign', 'subList', 'custFor', 'job']);
 export function scopeCheck(ctx, action, body) {
   if (!ctx || !ctx.scope) return { ok: true };
-  const a = String(action || ''), no = { ok: false, error: 'Sub-contractor logins can only work on their own project.' };
+  const a = String(action || ''), no = { ok: false, error: 'This login can only work on the projects it was given.' };
   if (SCOPE_DENY.has(a)) return no;
   const core = body && (body.core || (body.plan && body.plan.core));
   if (core) return ctx.scope.includes(String(core)) ? { ok: true } : no;
@@ -140,7 +147,7 @@ async function put(u) { await kv.set('user:' + u.id, u); await kv.update('user-i
 // the signed-in user's access (or null when the login no longer works: disabled, password reset, removed from People)
 export async function context(session, ownerName, personOk) {
   if (!session) return null;
-  if (!session.uid) return { owner: true, who: session.u, uid: '', role: 'Owner', mods: OWNER_MODS, name: session.u };
+  if (!session.uid) return { owner: true, who: session.u, uid: '', role: 'Super user', mods: OWNER_MODS, name: session.u };
   const u = await get(session.uid);
   if (!u || !u.active || (u.ver || 0) !== (session.v || 0)) return null;
   if (personOk && !(await personOk(u.personId, u))) return null;
@@ -149,6 +156,7 @@ export async function context(session, ownerName, personOk) {
     if (!session.pc || !(u.projects || []).includes(session.pc)) return null;
     return { owner: false, who: u.username, uid: u.id, role: 'Sub-contractor', mods: subMods((u.mods || {}).projects), name: u.name, mustChange: !!u.mustChange, personId: '', subId: u.subId, kind: 'subbie', scope: [session.pc] };
   }
+  if (u.kind === 'email') return { owner: false, who: u.username, uid: u.id, role: u.role, mods: cleanMods(u.mods, u.role), name: u.name, mustChange: !!u.mustChange, personId: '', kind: 'email', scope: ALL_PROJECTS(u) ? null : (u.projects || []).slice() };
   return { owner: false, who: u.username, uid: u.id, role: u.role, mods: cleanMods(u.mods, u.role), name: u.name, mustChange: !!u.mustChange, personId: u.personId };
 }
 // v90: a person deleted from People: their login goes too
@@ -168,10 +176,38 @@ export async function login(username, password, personOk) {
   return u;
 }
 
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+async function projectList(arr, project) { const projects = []; for (const c of (Array.isArray(arr) ? arr : []).slice(0, 60)) { const pj = project ? await project(str(c, 30)) : null; if (pj && !projects.includes(pj.core)) projects.push(pj.core); } return projects; }
 export async function userPost(action, body, { ctx, audit, person, sub, project }) {
   const log = (t) => (audit ? audit(ctx.who, t) : null);
+  // only the super user makes logins, sets passwords and gives permissions
+  if (!['userList', 'userPassword'].includes(action) && !ctx.owner) return out(403, { error: 'Only the super user can change logins and permissions.' });
   switch (action) {
-    case 'userList': return out(200, { users: await list(), mods: MODS.map((m) => ({ key: m[0], name: m[1], about: m[2] })), roles: ROLE_KEYS.map((r) => ({ name: r, mods: ROLES[r] })), levels: LEVELS });
+    case 'userList': return out(200, { users: await list(), mods: MODS.map((m) => ({ key: m[0], name: m[1], about: m[2] })), roles: ROLE_KEYS.map((r) => ({ name: r, mods: ROLES[r] })), pick: PICK_ROLES, levels: LEVELS, super: ctx.owner ? ctx.who : '' });
+    case 'userCreate': {   // the super user: email, name, a password they choose, the role; permissions come next (userSave)
+      const f = body.user || {}, email = str(f.email, 160).toLowerCase(), name = str(f.name, 100) || email;
+      if (!EMAIL.test(email)) return out(400, { error: 'Type their email address (it is their username).' });
+      if ((await list()).some((x) => x.username === email || (x.email || '').toLowerCase() === email)) return out(400, { error: email + ' already has a login.' });
+      const bad = pwProblem(f.password); if (bad) return out(400, { error: bad });
+      const role = PICK_ROLES.includes(f.role) && f.role !== 'Custom' ? f.role : 'Project personnel';
+      const n = await kv.update('user-seq', (x) => ({ n: ((x && x.n) || 0) + 1 }), () => ({ n: 0 }));
+      const u = { id: 'U-' + String(n.n).padStart(3, '0'), kind: 'email', personId: '', name, email, username: email, role, mods: cleanMods(ROLES[role], role), projects: [], projAll: role === 'Project personnel',
+        active: true, mustChange: f.mustChange === true, ver: 1, created: Date.now(), by: ctx.who, ...hashPw(f.password) };
+      await put(u); await log(`Login made: ${email} (${name}), ${role}`);
+      return out(200, { user: summary(u) });
+    }
+    case 'userSetPw': {   // the super user sets someone's password
+      const u = await get(str(body.id, 10)); if (!u) return out(404, { error: 'User not found' });
+      if (u.kind === 'google') return out(400, { error: 'Google sign-ins have no password here.' });
+      const bad = pwProblem(body.password); if (bad) return out(400, { error: bad });
+      Object.assign(u, hashPw(body.password)); u.mustChange = body.mustChange === true; u.ver = (u.ver || 0) + 1; await put(u);
+      await log(`Password set for ${u.username}`); return out(200, { user: summary(u) });
+    }
+    case 'userDelete': {
+      const u = await get(str(body.id, 10)); if (!u) return out(404, { error: 'User not found' });
+      await kv.del('user:' + u.id); await kv.update('user-index', (x) => { if (x.users) delete x.users[u.id]; return x; }, () => ({ users: {} }));
+      await log(`Login deleted: ${u.username}`); return out(200, { ok: true });
+    }
     case 'userSave': {
       const f = body.user || {}, id = /^U-\d{3,5}$/.test(f.id || '') ? f.id : '';
       const old = id ? await get(id) : null; if (id && !old) return out(404, { error: 'User not found' });
@@ -181,7 +217,18 @@ export async function userPost(action, body, { ctx, audit, person, sub, project 
         await put(u); await log(`Google sign-in ${u.active ? 'enabled' : 'disabled'}: ${u.username}`);
         return out(200, { user: summary(u), temp: '' });
       }
-      if ((old && old.kind === 'subbie') || (!old && f.kind === 'subbie')) {   // v91: a sub-contractor: Projects only, their projects only
+      if (old && old.kind !== 'google') {   // permissions: role, modules, projects, on/off
+        const role = PICK_ROLES.includes(f.role) ? f.role : old.role;
+        const mods = cleanMods(role === 'Custom' ? f.mods : ROLES[role], role);
+        const projAll = role === 'Project manager' ? true : f.projAll === true;
+        const projects = projAll ? [] : await projectList(f.projects, project);
+        const u = { ...old, kind: 'email', subId: '', name: str(f.name, 100) || old.name, role, mods, projAll, projects, active: f.active !== false, by: ctx.who, updated: Date.now() };
+        if (old.active !== u.active || old.role !== u.role || JSON.stringify(old.mods) !== JSON.stringify(u.mods) || !!old.projAll !== projAll || JSON.stringify(old.projects || []) !== JSON.stringify(projects) || old.kind !== 'email') u.ver = (old.ver || 0) + 1;   // signs them out so it takes effect now
+        await put(u);
+        await log(`Permissions set: ${u.username}, ${role}, ${projAll ? 'all projects' : projects.length + ' project(s)'}${u.active ? '' : ', disabled'}`);
+        return out(200, { user: summary(u), temp: '' });
+      }
+      if (!old && f.kind === 'subbie') {   // v91: a sub-contractor: Projects only, their projects only
         const sc = sub ? await sub(str(f.subId || (old && old.subId), 12)) : null;
         if (!sc) return out(400, { error: 'Pick a sub-contractor from Subbies.' });
         if (sc.archived || sc.status === 'Do not use') return out(400, { error: sc.business + ' is archived or marked "Do not use" in Subbies.' });

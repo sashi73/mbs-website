@@ -271,3 +271,25 @@ tr:hover .tins,.tins:focus-visible{opacity:.9}.tins:hover{opacity:1;background:#
 table.gt tr.taddrow td{background:#FFFCF2;padding:8px 6px}table.gt tr.taddrow small{margin-left:6px}
 .kaddt{margin-left:auto;margin-right:6px;font:700 11.5px/1 'Manrope',system-ui,sans-serif;padding:5px 8px;border-radius:8px;border:1px dashed #C9A54A;background:#FFF9E8;color:#6B5313;cursor:pointer}
 .kaddt:hover{background:#F8E7B0}
+body.is-subbie [data-nav=programs],body.is-subbie [data-nav=deps],body.is-subbie [data-nav=projnew]{display:none!important}
+/* Users & access: super user, project managers, contractors, project personnel, Google (view only) */
+.us-head{margin-bottom:12px;align-items:flex-end}
+.us-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 14px}
+.us-kpi{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #E7E1D2;border-radius:14px;padding:10px 14px}
+.us-kpi span{font-size:20px}.us-kpi b{font-size:22px;line-height:1}.us-kpi small{color:#6B665A;font-weight:700;font-size:12px;line-height:1.2}
+.us-role.us-r-pm{background:#1E3A8A;color:#fff}.us-role.us-r-ct{background:#9A3412;color:#fff}.us-role.us-r-pp{background:#166534;color:#fff}.us-role.us-r-cu{background:#4B5563;color:#fff}.us-role.us-r-g{background:#E8F0FB;color:#1F4E89}.us-role.us-r-old{background:#E7E1D2;color:#3F3A2E}
+.us-pj{font-size:12.5px;max-width:240px}
+.us-del{opacity:.6}.us-del:hover{opacity:1;background:#FEF2F2;border-color:#FCA5A5}
+.us-kinds{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.us-k{border:1px solid #E7E1D2;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;font-size:13px;background:#FFFDF7}.us-k span{color:#4A4538}
+.us-k-m{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:4px}.us-k-m i{font-style:normal;font-size:11.5px;color:#6B665A}
+.us-steps{display:flex;gap:6px;list-style:none;padding:0;margin:4px 0 14px;counter-reset:s}
+.us-steps li{flex:1;display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#8A8474;border-bottom:3px solid #E7E1D2;padding:0 0 6px}
+.us-steps li span{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#E7E1D2;color:#4A4538;font-size:12px}
+.us-steps li.on{color:#1F1D18;border-color:#C9A227}.us-steps li.on span{background:#C9A227;color:#1F1D18}.us-steps li.done{color:#166534;border-color:#86EFAC}.us-steps li.done span{background:#DCFCE7;color:#166534}
+.us-rpick{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:6px}
+.us-rcard{display:flex;gap:8px;align-items:flex-start;border:1px solid #E7E1D2;border-radius:12px;padding:9px 10px;cursor:pointer;background:#fff}
+.us-rcard:has(input:checked){border-color:#C9A227;background:#FFF8E1;box-shadow:0 0 0 2px rgba(201,162,39,.25)}
+.us-rcard span{display:flex;flex-direction:column;gap:2px}.us-rcard small{color:#6B665A;font-size:11.5px;line-height:1.35}
+.us-pwrow{display:flex;gap:6px;align-items:center}.us-pwrow input{flex:1}
+.us-confirm td{padding:6px 10px;vertical-align:top}
