@@ -45,17 +45,19 @@ async function keep(core, s, by, action, emailed, recipients) {
 
 // the email: a short digest (RAG, headline, key points), with the full report attached
 function emailHtml(s, message) {
+  const HEXOK = /^#[0-9a-f]{6}$/i, lk = s.lookHex || {}, ink = HEXOK.test(lk.ink) ? lk.ink : '#1F1D18', acc = HEXOK.test(lk.accent) ? lk.accent : '#C9A227';
   const rag = s.rag || {}, keys = Object.keys(rag).filter((k) => rag[k] && rag[k].c);
   const chip = (c, label) => `<span style="display:inline-block;padding:3px 10px;border-radius:99px;background:${RAGC[c]};color:#fff;font:600 12px Arial;margin:0 4px 4px 0">${esc(label)}: ${RAGN[c]}</span>`;
   const pts = (s.points || []).slice(0, 6).map((p) => `<li style="margin:0 0 4px">${esc(p)}</li>`).join('');
   return `<div style="font:14px/1.5 Arial,sans-serif;color:#1F1D18;max-width:620px">` +
     (message ? `<p>${esc(message).replace(/\n/g, '<br>')}</p>` : '') +
-    `<div style="border:1px solid #E7E2D4;border-radius:10px;padding:14px 16px;background:#FDFCF8">` +
-    `<div style="font:700 16px Arial">${esc(AUD[s.audience] || 'Project report')}: ${esc(s.project && s.project.name)}</div>` +
-    `<div style="color:#6B665A;font-size:12.5px;margin:2px 0 10px">${esc(s.type)} report · ${esc(s.periodText || '')}</div>` +
+    `<div style="border:1px solid #E7E2D4;border-radius:12px;overflow:hidden;background:#FDFCF8">` +
+    `<div style="background:${ink};border-bottom:4px solid ${acc};padding:14px 16px;color:#fff"><div style="font:700 11px Arial;letter-spacing:1.5px;color:${acc};text-transform:uppercase">GKH Project Champ</div>` +
+    `<div style="font:700 17px Arial;margin-top:3px">${esc(AUD[s.audience] || 'Project report')}: ${esc(s.project && s.project.name)}</div>` +
+    `<div style="opacity:.75;font-size:12.5px;margin-top:2px">${esc(s.type)} report · ${esc(s.periodText || '')}</div></div><div style="padding:12px 16px 14px">` +
     `<div>${keys.map((k) => chip(rag[k].c, rag[k].label || k)).join('')}</div>` +
-    (s.headline ? `<p style="margin:10px 0 6px"><b>${esc(s.headline)}</b></p>` : '') + (pts ? `<ul style="padding-left:18px;margin:6px 0">${pts}</ul>` : '') +
-    `<p style="margin:10px 0 0;color:#6B665A;font-size:12.5px">The full report (with the Gantt chart) is attached.</p></div>` +
+    (s.headline ? `<p style="margin:10px 0 6px;padding:8px 10px;border-left:4px solid ${acc};background:#fff"><b>${esc(s.headline)}</b></p>` : '') + (pts ? `<ul style="padding-left:18px;margin:6px 0">${pts}</ul>` : '') +
+    `<p style="margin:10px 0 0;color:#6B665A;font-size:12.5px">The full report (with the Gantt chart) is attached.</p></div></div>` +
     `<p style="color:#8A8577;font-size:12px">GKH Project Champ · Global Knowledge House</p></div>`;
 }
 function emailText(s, message) {

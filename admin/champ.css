@@ -421,3 +421,30 @@ input.pp-auto,select.pp-auto,textarea.pp-auto{background:#FFFBEB!important;borde
 .ag-charts h3{margin:0 0 6px;font-size:13px}.ag-charts canvas{flex:1;min-height:0}
 .ag-met{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}.ag-met label{display:flex;gap:6px;align-items:center;font-weight:600}
 @media (max-width:900px){.ag-plan{grid-template-columns:1fr}.ag-row{flex-wrap:wrap}.ag-act{width:100%;justify-content:flex-start}}
+/* 📊 report look: skins, colours and the live preview */
+.rp-lookw{display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:16px;align-items:start;margin-bottom:6px}
+.rp-look .thm{margin-bottom:10px}
+.sk-row{gap:10px}
+.sk-b{display:flex;flex-direction:column;gap:6px;border:2px solid var(--line,#E7E2D4);background:#fff;border-radius:14px;padding:7px;cursor:pointer;width:142px;font:inherit;text-align:left;transition:transform .15s,box-shadow .15s}
+.sk-b:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.08)}
+.sk-b.on{border-color:#C9A227;box-shadow:0 0 0 3px #FDE68A}
+.sk-t{display:block;height:84px;border-radius:9px;overflow:hidden;background:#fff;box-shadow:inset 0 0 0 1px rgba(0,0,0,.07)}
+.sk-t b,.sk-t i{font-style:normal}
+.sk-b small{font-size:10.5px;line-height:1.3;color:var(--muted,#6B665A)}.sk-b small b{display:block;font-size:12.5px;color:var(--ink,#1F1D18)}
+.rp-live{position:sticky;top:12px;display:flex;flex-direction:column;gap:6px;align-items:center;border:0;background:linear-gradient(160deg,#F4F1E8,#E9E4D6);border-radius:16px;padding:12px;cursor:zoom-in;font:inherit}
+.rp-live canvas{width:206px;aspect-ratio:210/297;background:#fff;border-radius:4px;box-shadow:0 10px 28px rgba(0,0,0,.18);transition:opacity .2s}
+.rp-live.busy canvas{opacity:.45}
+.rp-live small{font-size:11px;color:#6B665A}
+.rp-live[data-pages]::after{content:attr(data-pages) ' page(s)';font-size:10.5px;color:#8A8577;margin-top:-4px}
+@media (max-width:900px){.rp-lookw{grid-template-columns:1fr}.rp-live{display:none}}
+/* 📋 backlog item: Fibonacci story points and AI fill */
+.ag-ai{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px;padding:9px 11px;border-radius:12px;background:linear-gradient(120deg,#FFF8E1,#F5F0FF)}
+.ag-ai .muted{font-size:12px}
+.ag-pts .ag-l{display:block;font-size:13px;font-weight:600;margin-bottom:5px}
+.ag-ptr{display:flex;gap:6px;flex-wrap:wrap;border-radius:10px}
+.ag-pt{min-width:42px;height:38px;border-radius:10px;border:1.5px solid var(--line,#E7E2D4);background:#fff;font:700 15px inherit;cursor:pointer;transition:transform .12s}
+.ag-pt:hover{transform:translateY(-1px);border-color:#C9A227}
+.ag-pt.on{background:#1F1D18;color:#fff;border-color:#1F1D18;box-shadow:0 0 0 3px #FDE68A}
+.ag-pt0{color:#8A8577;font-weight:600}
+.ai-filled{animation:aiFill 1.4s ease}
+@keyframes aiFill{0%{box-shadow:0 0 0 0 rgba(201,162,39,.0)}25%{box-shadow:0 0 0 4px rgba(201,162,39,.55);background:#FFFBEB}100%{box-shadow:0 0 0 0 rgba(201,162,39,0)}}

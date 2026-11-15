@@ -215,6 +215,7 @@ function clean(p, core) {
           start: ymdOk(x.start), end: ymdOk(x.end), status: ['planned', 'active', 'closed'].includes(x.status) ? x.status : 'planned', goalMet: ['yes', 'partly', 'no'].includes(x.goalMet) ? x.goalMet : '', review: str(x.review, 600),
           committed: int(x.committed, 0, 9999, 0), done: int(x.done, 0, 9999, 0), startedAt: ymdOk(x.startedAt) || undefined, closedAt: ymdOk(x.closedAt) || undefined, items: (Array.isArray(x.items) ? x.items : []).slice(0, 300).map((q) => str(q, 20)) })) };
     })(),
+    repSkin: ['modern', 'bold', 'minimal', 'classic'].includes(p.repSkin) ? p.repSkin : undefined,   // 📊 the skin of the project's reports
     docTheme: (() => { const t = p.docTheme; if (typeof t === 'string') return /^[a-z]{2,12}$/.test(t) ? t : undefined; if (t && typeof t === 'object') { const h = (x) => (/^#[0-9a-fA-F]{6}$/.test(String(x || '')) ? String(x) : null); return h(t.ink) && h(t.accent) ? { ink: h(t.ink), accent: h(t.accent) } : undefined; } return undefined; })(),   // 🎨 document colour scheme
     budgetCfg: (() => { const b = p.budgetCfg && typeof p.budgetCfg === 'object' ? p.budgetCfg : null; if (!b) return undefined; const pc = (v, d) => (isNaN(Number(v)) ? d : Math.max(0, Math.min(100, Number(v))));   // 💰 Budget settings
       const cats = ['Labour', 'Materials', 'Subcontractors', 'Equipment', 'Travel and expenses', 'Other'], cat = {};
@@ -378,6 +379,35 @@ export async function describe(core, b) {
   let text = (summary ? summary + '\n' : '') + dodTxt();
   if (text.length > MAX) text = text.slice(0, MAX - 1) + '…';
   return { text, tokens: used, today };
+}
+
+// ---------- 📋 ✨ fill a backlog item with AI: description (with when it is done), story points, urgency and days; the owner stays with the person ----------
+const AG_PTS = [1, 2, 3, 5, 8, 13];
+export async function agFill(core, b) {
+  const job = await J.find(core); if (!job) return { error: 'Job not found', code: 404 };
+  const plan = (await get(job.core)) || { tasks: [] };
+  const name = str(b.name, 160); if (!name) return { error: 'Type the item name first' };
+  if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.', code: 503 };
+  try { await checkLimit(); } catch (e) { return { error: e.message, code: 429 }; }
+  const t = plan.tasks.find((x) => x.id === str(b.taskId, 20));
+  const system = 'You are an experienced Agile project manager (Scrum and Kanban, PMI-ACP). Fill in one Product Backlog item so it meets the Definition of Ready. ' +
+    '"desc": what the work is and why, then "Done when:" and 2 or 3 short testable checks; at most 280 characters, plain Australian English, no names of people. ' +
+    '"points": relative effort and complexity on the Fibonacci scale, one of 1, 2, 3, 5, 8, 13 (13 means it is big and should be split). ' +
+    '"priority": urgency, one of High, Medium, Low (High if other work waits on it, it is on the critical path or it is early in the plan). ' +
+    '"days": working days it is likely to take (1 to 60). Use the project and the other items for context. JSON only: {"desc":"","points":3,"priority":"Medium","days":5}';
+  const others = plan.tasks.filter((x) => x.dur > 0 && (!t || x.id !== t.id)).slice(0, 40).map((x) => scrubTask(x.name, job));
+  const user = { project: scrubTask(str(plan.name || job.service, 120), job), item: scrubTask(name, job), current_description: str(b.desc, 300) || undefined,
+    stories: t ? (t.subs || []).map((x) => scrubTask(x.name, job)).slice(0, 12) : undefined, planned_days: t ? t.dur : undefined, other_items: others };
+  let o, used;
+  try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: 400, temperature: 0.3 })); }
+  catch (e) { return { error: e.message, code: 502 }; }
+  const today = await usage(true, used);
+  let desc = str(o.desc || o.description, 400).replace(/\s+/g, ' ').trim(); if (desc.length > 300) desc = desc.slice(0, 299) + '…';
+  const n = Number(o.points), points = AG_PTS.reduce((a, x) => (Math.abs(x - n) < Math.abs(a - n) ? x : a), 3);
+  const priority = ['High', 'Medium', 'Low'].find((x) => x.toLowerCase() === String(o.priority || '').toLowerCase()) || 'Medium';
+  const days = Math.max(1, Math.min(365, Math.round(Number(o.days) || (t ? t.dur : 1) || 1)));
+  if (!desc) return { error: 'The AI did not write anything useful. Try again.' };
+  return { desc, points, priority, days, tokens: used, today };
 }
 
 // ---------- v78: ✨ indicative costs: benchmark estimates for tasks, to be reviewed by the consultant ----------
@@ -938,6 +968,11 @@ export async function planPost(action, body, { who, by, audit }) {
     const id = str(body.id, 40).replace(/[^a-z0-9]/gi, '');
     const r = id ? await kv.get('aiplan:' + id) : null;
     return out(200, r || { status: 'waiting' });
+  }
+  if (action === 'planAgFill') {
+    const r = await agFill(core, body);
+    if (r.error) return out(r.code || 400, { error: r.error });
+    return out(200, r);
   }
   if (action === 'planDescribe') {
     const r = await describe(core, body);

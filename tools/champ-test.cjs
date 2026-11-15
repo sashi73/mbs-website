@@ -22,6 +22,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   // a fake DeepSeek: says back which language and page the assistant was told to use
   const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
     const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
+    if (/Definition of Ready/.test(sys)) { s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ desc: 'Book the venue for the offsite and confirm the date. Done when: deposit paid; booking confirmed in writing.', points: 6, priority: 'high', days: 4 }) } }], usage: { total_tokens: 90 } })); }
     if (j.response_format && /Project Management Plan/.test(sys)) {   // the project plan narrative: three parts
       const task = JSON.parse(j.messages[1].content).task; global.PLANDOC_SYS = sys; global.PLANDOC_CALLS = (global.PLANDOC_CALLS || 0) + 1; global.PLANDOC_MAX = Math.max(global.PLANDOC_MAX || 0, j.max_tokens || 0);
       const ms = /Bahasa Melayu/.test(sys), w = (en, m) => (ms ? m : en), lorem = (n) => Array.from({ length: n }, (_, i) => w('The project team will deliver this work on time and on budget, with **clear governance** and weekly reporting to the sponsor.', 'Pasukan projek akan menyiapkan kerja ini tepat pada masanya dan dalam bajet, dengan **tadbir urus yang jelas** dan laporan mingguan kepada penaja.')).join(' ');
@@ -409,6 +410,38 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Login', 'sashi73 / sashi98 signs in and lands on Programs', /\/admin\/(#programs)?$/.test(p.url()) || /#programs/.test(p.url()), p.url());
   await p.waitForSelector('#app:not([hidden])', { timeout: 10000 }).catch(() => {});
   await sleep(800);
+  // ---- 📊 the look of the reports: 4 skins, the colour schemes, a live preview; PDF and Word in every skin ----
+  {
+    const rc = (await (await api('planNewProject', { name: 'Hospital ERP rollout', client: 'Northside Health', program: 'Digital health' })).json()).core;
+    const d0 = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+    const T0 = [['Kick-off and charter', 2, 100], ['Requirements workshops', 5, 100], ['Solution design', 6, 60], ['Configuration and build', 15, 10], ['Data migration', 10, 0], ['User acceptance testing', 8, 0], ['Training', 5, 0], ['Go-live', 0, 0]];
+    await api('planSave', { core: rc, plan: { name: 'Hospital ERP rollout', start: d0(-16), phases: [{ id: 'ph1', name: 'Work' }], tasks: T0.map((t, i) => ({ id: 't' + i, phase: 'ph1', name: t[0], dur: t[1], pred: i ? ['t' + (i - 1)] : [], qty: Math.max(1, t[1]) * 8, unit: 'h', rate: 150, pct: t[2], status: t[2] >= 100 ? 'done' : t[2] ? 'doing' : 'todo', res: i % 2 ? ['Priya Shah'] : ['Tom Walsh'] })),
+      risks: [{ id: 'r1', title: 'Key users not available for testing', p: 3, i: 4, response: 'Mitigate', action: 'Book testers four weeks ahead', owner: 'Priya Shah', status: 'Open' }, { id: 'r2', title: 'Legacy data quality is poor', p: 4, i: 4, response: 'Mitigate', action: 'Data cleansing sprint before migration', owner: 'Tom Walsh', status: 'Open' }],
+      issues: [{ id: 'i1', title: 'Test environment not ready', priority: 'High', owner: 'Tom Walsh', due: d0(3), status: 'Open' }] } });
+    await p.goto(`${BASE}/admin/#plan/${rc}/reports`); await p.reload(); await p.waitForSelector('.sk-b', { timeout: 12000 }).catch(() => {});
+    ok('Reports', 'the look: 4 skins (Modern, Bold, Minimal, Classic) with pictures, and the colour schemes', (await p.$$eval('.sk-b', (b) => b.map((x) => x.getAttribute('data-skin')).join(','))) === 'modern,bold,minimal,classic' && (await p.$$('#rpLook button[data-thm]')).length >= 8 && (await p.$$('.sk-b .sk-t span')).length >= 4);
+    await p.waitForFunction(() => { const c = document.querySelector('#rpLive'); return c && c.width > 300; }, null, { timeout: 20000 }).catch(() => {});
+    ok('Reports', 'the live preview draws page 1 of the report', await p.$eval('#rpLive', (c) => c.width > 300).catch(() => false));
+    await p.click('[data-skin=bold]'); await p.click('#rpLook button[data-thm=ocean]'); await sleep(2500);
+    const lp = (await (await api('planGet', { core: rc })).json()).plan;
+    ok('Reports', 'the skin and colours are kept with the project (Bold, Ocean)', lp.repSkin === 'bold' && lp.docTheme === 'ocean', JSON.stringify([lp.repSkin, lp.docTheme]));
+    fs.mkdirSync('/tmp/rpt', { recursive: true });
+    const sizes = [];
+    for (const [sk, th] of [['modern', 'champ'], ['bold', 'ocean'], ['minimal', 'forest'], ['classic', 'royal']]) {
+      await p.click(`[data-skin=${sk}]`); await p.click(`#rpLook button[data-thm=${th}]`); await sleep(300);
+      const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 30000 }), p.click('#rpPdf')]); const f = `/tmp/rpt/${sk}-${th}.pdf`; await dl.saveAs(f);
+      const buf = fs.readFileSync(f), pages = (buf.toString('latin1').match(/\/Type \/Page\b/g) || []).length;
+      const [dw] = await Promise.all([p.waitForEvent('download', { timeout: 30000 }), p.click('#rpDocx')]); const fw = `/tmp/rpt/${sk}-${th}.docx`; await dw.saveAs(fw);
+      sizes.push([sk, buf.slice(0, 4).toString() === '%PDF' && pages >= 1 && pages <= 4, pages, fs.readFileSync(fw).slice(0, 2).toString() === 'PK']);
+      await sleep(400);
+    }
+    ok('Reports', 'every skin makes a PDF (at most 4 pages) and a Word file', sizes.every((x) => x[1] && x[3]), JSON.stringify(sizes));
+    const lg = (await (await api('reportLog', { core: rc })).json()).list || [], last = lg.slice(-1)[0];
+    const snap = last ? (await (await api('reportGet', { core: rc, id: last.id })).json()).report : null;
+    ok('Reports', 'the report log keeps the look it was made with, so it comes out the same again', snap && snap.skin === 'classic' && snap.theme === 'royal' && snap.lookHex && /^#[0-9A-F]{6}$/.test(snap.lookHex.accent), JSON.stringify(snap && [snap.skin, snap.theme, snap.lookHex]));
+    if (process.env.RPT_ONLY) { for (const x of results) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
+    await api('planProjectDelete', { core: rc });
+  }
   // ---- 🌐 language audit: with the console in Malay, every page and every project tab must show no English ----
   {
     const ap = (await (await api('planNewProject', { name: 'Audit web app', client: 'Acme', program: 'Digital health' })).json()).core;
@@ -833,7 +866,13 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       const blN = (await p.$$('.ag-row')).length, nWork = (await nT()).filter((t) => t.dur > 0 && !(t.pct >= 100)).length;
       ok('Backlog', 'the Board asks Kanban or Scrum; then every Gantt task is in the Product Backlog (a tidy list)', chooser && blN === nWork && blN > 0, `${blN} of ${nWork}`);
       await p.click('#agNew').catch(() => {}); await p.waitForSelector('#agF', { timeout: 5000 }).catch(() => {});
-      await p.fill('#agF [name=name]', 'Venue booking'); await p.fill('#agF [name=desc]', 'Book the hall for 120 guests; done when the deposit is paid'); await p.selectOption('#agF [name=pts]', '5'); await p.selectOption('#agF [name=prio]', 'High'); await p.fill('#agF [name=owner]', 'Priya Shah'); await p.fill('#agF [name=dur]', '3');
+      const chips = await p.$$eval('#agF [data-pt]', (b) => b.map((x) => x.textContent).join(','));
+      await p.fill('#agF [name=name]', 'Offsite venue'); await p.click('#agAi'); await p.waitForFunction(() => /Done when/.test((document.querySelector('#agF [name=desc]') || {}).value || ''), null, { timeout: 10000 }).catch(() => {});
+      const af = await p.evaluate(() => { const F = document.querySelector('#agF'); return [F.desc.value.slice(0, 20), F.pts.value, F.prio.value, F.dur.value, F.owner.value]; });
+      ok('Backlog', 'story points are picked from 1, 2, 3, 5, 8, 13; ✨ Fill it in with AI writes the description, points (snapped to the scale), urgency and days, and leaves the owner to you', chips === '1,2,3,5,8,13,?' && /Book the venue/.test(af[0]) && af[1] === '5' && af[2] === 'High' && af[3] === '4' && af[4] === '', JSON.stringify([chips, af]));
+      await p.click('#agF [data-close]').catch(() => {}); await sleep(300);
+      await p.click('#agNew').catch(() => {}); await p.waitForSelector('#agF', { timeout: 5000 }).catch(() => {});
+      await p.fill('#agF [name=name]', 'Venue booking'); await p.fill('#agF [name=desc]', 'Book the hall for 120 guests; done when the deposit is paid'); await p.click('#agF [data-pt="5"]'); await p.selectOption('#agF [name=prio]', 'High'); await p.fill('#agF [name=owner]', 'Priya Shah'); await p.fill('#agF [name=dur]', '3');
       await p.click('#agF [type=submit]').catch(() => {}); await sleep(2000);
       const vb = (await nT()).find((t) => t.name === 'Venue booking') || {}; const vRow = await p.textContent(`.ag-row[data-tid="${vb.id}"]`).catch(() => '');
       const partial = await p.textContent('.ag-row:not(.ok) .dor').catch(() => '');

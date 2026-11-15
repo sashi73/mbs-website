@@ -2555,7 +2555,7 @@
     };
     $('#kdSave').onclick = function () { o.desc = ta.value.trim().slice(0, max); dirty('description of ' + o.name); M.closeModal(); toast(o.desc ? 'Description saved' : 'Description cleared'); after(); };
   }
-  function themePts(t) { return (t.subs || []).length ? t.subs.reduce(function (a, x) { return a + (x.points || 0); }, 0) : (t.points || 0); }
+  function themePts(t) { var n = (t.subs || []).reduce(function (a, x) { return a + (x.points || 0); }, 0); return n > 0 ? n : (t.points || 0); }   // the stories' points, or the item's own when its stories have none
   function kPop(btn, html, wire) {   // a small menu under a button (like the stock picker)
     var old = document.getElementById('kPop'); if (old) { var same = old.getAttribute('data-for') === btn.getAttribute('data-k'); old.remove(); if (same) return; }
     var r = btn.getBoundingClientRect(), m = document.createElement('div'); m.id = 'kPop'; m.className = 'kpop'; m.setAttribute('data-for', btn.getAttribute('data-k') || ''); m.innerHTML = html; document.body.appendChild(m);
@@ -2822,14 +2822,30 @@
     p.tasks.forEach(function (x) { var n = ownerOf(x); if (n && owners.indexOf(n) < 0) owners.push(n); });
     t = t || { name: '', desc: '', dur: 1, points: 0, priority: '', owner: '' };
     M.modal('<h2>' + (isNew ? '＋ Backlog item' : '✏ ' + esc(t.name)) + '</h2><p class="muted" style="margin:-4px 0 10px">' + (isNew ? 'It is added to the Gantt chart too (at the end).' : 'Changes here change the Gantt chart too.') + ' Description, points, urgency and owner make it ✅ DOR ready.</p>' +
+      '<div class="ag-ai"><button type="button" class="btn btn-sm btn-gold" id="agAi">✨ Fill it in with AI</button><span class="muted" id="agAiMsg">writes the description (with when it is done), story points and urgency' + (isNew ? ', and the days' : '') + '; you choose the owner</span></div>' +
       '<form class="form" id="agF"><label class="full">Item (task)<input name="name" required maxlength="160" value="' + esc(t.name) + '" placeholder="e.g. Venue booking"></label>' +
       '<label class="full">Description<textarea name="desc" rows="3" maxlength="300" placeholder="What is it, and when is it done?">' + esc(t.desc || '') + '</textarea></label>' +
-      (subs.length ? '<label>Story points<input value="' + themePts(t) + ' (from its ' + subs.length + ' stories)" disabled></label>' : '<label>Story points<select name="pts"><option value="0">–</option>' + PTS.map(function (n) { return '<option' + (+t.points === n ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select></label>') +
+      (function () { var sp = (subs.reduce(function (a, x) { return a + (x.points || 0); }, 0)); return sp > 0 ? '<label class="full">Story points<input value="' + sp + ' (its ' + subs.length + ' stories add up to this: change them on the board)" disabled></label>' :
+        '<div class="full ag-pts"><span class="ag-l">Story points <small class="muted">relative effort (Fibonacci)' + (subs.length ? '; its ' + subs.length + ' stories have none yet' : '') + '</small></span><div class="ag-ptr">' + PTS.map(function (n) { return '<button type="button" class="ag-pt' + (+t.points === n ? ' on' : '') + '" data-pt="' + n + '">' + n + '</button>'; }).join('') + '<button type="button" class="ag-pt ag-pt0' + (!+t.points ? ' on' : '') + '" data-pt="0" title="Not sized yet">?</button></div><input type="hidden" name="pts" value="' + (+t.points || 0) + '"></div>'; })() +
       '<label>Urgency<select name="prio"><option value="">–</option>' + PRIO.map(function (x) { return '<option' + (t.priority === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label>' +
       '<label>Owner (main person)<input name="owner" list="agOwn" maxlength="80" value="' + esc(ownerOf(t)) + '"><datalist id="agOwn">' + owners.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist></label>' +
-      '<label>Days<input name="dur" type="number" min="1" max="365" value="' + (t.dur || 1) + '"></label>' +
+      '<label>Days<input name="dur" type="number" min="1" max="365" value="' + (t.dur || 1) + '"><small class="muted" id="agDurHint"></small></label>' +
       '<div class="full actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" type="submit">' + (isNew ? 'Add to the backlog' : 'Save') + '</button></div></form>');
     var F = $('#agF'); setTimeout(function () { F.name.focus(); }, 30);
+    var setPts = function (n) { if (!F.pts) return; F.pts.value = n; F.querySelectorAll('[data-pt]').forEach(function (b) { b.classList.toggle('on', +b.getAttribute('data-pt') === +n); }); };
+    F.querySelectorAll('[data-pt]').forEach(function (b) { b.onclick = function () { setPts(+b.getAttribute('data-pt')); }; });
+    var flash = function (el) { if (!el) return; el.classList.remove('ai-filled'); void el.offsetWidth; el.classList.add('ai-filled'); };
+    $('#agAi').onclick = function () {
+      var bt = this, nm = F.name.value.trim(), msg = $('#agAiMsg'); if (!nm) { F.name.focus(); return toast('Type the item name first', true); }
+      bt.disabled = true; bt.textContent = '✨ Thinking…';
+      api('planAgFill', { core: S.core, taskId: isNew ? '' : t.id, name: nm, desc: F.desc.value }).then(function (d) {
+        F.desc.value = d.desc; flash(F.desc);
+        if (F.pts) { setPts(d.points); flash(F.querySelector('.ag-ptr')); }
+        F.prio.value = d.priority; flash(F.prio);
+        if (isNew) { F.dur.value = d.days; flash(F.dur); } else if (+F.dur.value !== d.days) $('#agDurHint').textContent = 'AI estimate: ' + pl(d.days, 'day') + ' (the Gantt keeps its own unless you change it)';
+        msg.textContent = 'Filled in: check it, pick the owner, then save.' + (F.owner.value.trim() ? '' : ''); if (!F.owner.value.trim()) F.owner.focus();
+      }).catch(fail).then(function () { bt.disabled = false; bt.textContent = '✨ Fill it in again'; });
+    };
     F.onsubmit = function (e) {
       e.preventDefault(); var x = isNew ? null : t;
       if (isNew) { var last = p.tasks[p.tasks.length - 1]; x = { id: 't' + Date.now().toString(36), phase: (last && last.phase) || 'ph1', name: '', dur: 1, res: [], lead: '', resource: '', qty: 0, unit: '', rate: 0, actual: 0, pct: 0, status: 'todo', pred: last ? [last.id] : [], snet: '', notes: '' }; p.tasks.push(x); }
@@ -3493,6 +3509,46 @@
     box.querySelectorAll('button[data-thm]').forEach(function (b) { b.onclick = function () { set(b.getAttribute('data-thm')); }; });
     var cs = function () { set({ ink: box.querySelector('[data-thc=ink]').value, accent: box.querySelector('[data-thc=accent]').value }); };
     box.querySelectorAll('[data-thc]').forEach(function (i) { i.oninput = cs; i.onclick = function () { if (typeof docTheme() !== 'object') cs(); }; });
+  }
+  // 📊 the look of every report (status reports, change requests, BOM, decisions): a skin + the project's colour scheme
+  M.reportLook = function () { return S.plan ? { theme: docTheme(), skin: S.plan.repSkin || 'modern' } : {}; };
+  function repSkin() { return (S.plan && S.plan.repSkin) || 'modern'; }
+  function skinThumb(id) {   // a little picture of the skin in the current colours
+    var L = M.report && M.report.lookOf ? M.report.lookOf({ theme: docTheme(), skin: id }) : null; if (!L) return '';
+    var h = function (c) { return '#' + c; }, X = L.hex, ln = function (w, c, m) { return '<b style="display:block;height:3px;border-radius:2px;width:' + w + '%;background:' + (c || h(X.line)) + ';margin:' + (m || '3px 0 0') + '"></b>'; };
+    var tiles = function (st) { return '<span style="display:flex;gap:3px;margin-top:5px">' + [0, 1, 2].map(function (i) { return '<i style="flex:1;height:11px;border-radius:' + (id === 'classic' ? 0 : 3) + 'px;' + st(i) + '"></i>'; }).join('') + '</span>'; };
+    var body;
+    if (id === 'modern') body = '<span style="display:block;height:26px;background:' + h(X.ink) + ';position:relative;overflow:hidden;border-bottom:2px solid ' + h(X.acc) + '"><i style="position:absolute;right:-9px;top:-11px;width:30px;height:30px;border-radius:50%;background:' + h(X.acc) + '"></i><i style="position:absolute;right:20px;bottom:-5px;width:12px;height:12px;border-radius:50%;background:' + h(X.light) + ';opacity:.6"></i>' + ln(42, '#fff', '8px 0 0 6px') + ln(26, h(X.onDark2), '3px 0 0 6px') + '</span><span style="display:block;padding:0 6px">' + tiles(function (i) { return 'background:#fff;border:1px solid ' + h(X.line) + ';border-top:2px solid ' + h(X.acc); }) + '<span style="display:flex;gap:3px;align-items:center;margin-top:5px"><i style="width:6px;height:6px;border-radius:2px;background:' + h(X.acc) + '"></i>' + ln(40, h(X.ink), '0') + '</span>' + ln(90) + ln(75) + '</span>';
+    else if (id === 'bold') body = '<span style="display:block;height:24px;background:linear-gradient(118deg,' + h(X.acc) + ' 0 58%,' + h(X.ink) + ' 58%);border-bottom:2px solid ' + h(X.ink) + '">' + ln(46, h(X.onAcc), '7px 0 0 6px') + ln(28, h(X.onAcc), '3px 0 0 6px') + '</span><span style="display:block;padding:0 6px">' + tiles(function (i) { return 'background:' + (i ? h(X.tint) : h(X.acc)); }) + '<span style="display:block;height:7px;border-radius:2px;background:' + h(X.ink) + ';margin-top:5px;border-left:6px solid ' + h(X.acc) + '"></span>' + ln(90) + ln(70) + '</span>';
+    else if (id === 'minimal') body = '<span style="display:block;padding:7px 6px 0">' + ln(18, h(X.acc), '0') + ln(55, h(X.ink), '5px 0 0') + ln(32, h(X.line)) + '<b style="display:block;width:14px;height:2px;background:' + h(X.acc) + ';margin-top:4px"></b><span style="display:flex;gap:0;margin-top:6px">' + [0, 1, 2].map(function (i) { return '<i style="flex:1;height:9px;' + (i ? 'border-left:1px solid ' + h(X.line) + ';' : '') + '"><b style="display:block;width:60%;height:3px;margin:3px 0 0 3px;background:' + h(X.ink) + '"></b></i>'; }).join('') + '</span>' + ln(30, h(X.accD), '6px 0 0') + ln(92) + ln(80) + '</span>';
+    else body = '<span style="display:block;height:15px;background:' + h(X.ink) + ';border-bottom:1.5px solid ' + h(X.acc) + '">' + ln(40, '#fff', '6px 0 0 6px') + '</span><span style="display:block;padding:0 6px"><span style="display:flex;margin-top:5px">' + ['G', 'A', 'G'].map(function (c) { return '<i style="flex:1;height:8px;background:' + { G: '#15803D', A: '#D97706' }[c] + ';border:1px solid #fff"></i>'; }).join('') + '</span>' + ln(40, h(X.ink), '6px 0 0') + '<b style="display:block;height:1px;background:' + h(X.acc) + ';margin-top:2px"></b>' + ln(92) + ln(80) + ln(86) + '</span>';
+    return '<span class="sk-t">' + body + '</span>';
+  }
+  function skinPick() {
+    var cur = repSkin(), K = (M.report && M.report.skins && M.report.skins()) || [];
+    return '<div class="full thm"><span class="thm-l">Skin</span><div class="thm-row sk-row">' + K.map(function (k) { return '<button type="button" class="sk-b' + (cur === k.id ? ' on' : '') + '" data-skin="' + k.id + '" title="' + esc(k.blurb) + '">' + skinThumb(k.id) + '<small><b>' + esc(k.name) + '</b>' + esc(k.blurb) + '</small></button>'; }).join('') + '</div></div>';
+  }
+  function lookWire(box, after) {
+    themeWire(box);
+    var redo = function () { box.querySelectorAll('[data-skin]').forEach(function (b) { b.querySelector('.sk-t').outerHTML = skinThumb(b.getAttribute('data-skin')); }); if (after) after(); };
+    box.querySelectorAll('button[data-thm]').forEach(function (b) { b.addEventListener('click', redo); });
+    box.querySelectorAll('[data-thc]').forEach(function (i) { i.addEventListener('change', redo); });
+    box.querySelectorAll('[data-skin]').forEach(function (b) { b.onclick = function () { S.plan.repSkin = b.getAttribute('data-skin'); dirty('report skin'); box.querySelectorAll('[data-skin]').forEach(function (x) { x.classList.toggle('on', x === b); }); if (after) after(); }; });
+  }
+  // 👁 live preview: page 1 of the report as it will look, redrawn when the skin or the colours change
+  var rpLiveT = 0, rpLiveN = 0;
+  function rpLive(r) {
+    clearTimeout(rpLiveT); rpLiveT = setTimeout(function () {
+      var cv = $('#rpLive'), n = ++rpLiveN; if (!cv || !M.report) return; var box = cv.parentNode; box.classList.add('busy');
+      var s0 = repSnapshot(r);
+      M.report.pdf(JSON.parse(JSON.stringify(s0))).then(function (o) {
+        return piLoad('vendor/pdf.min.js?v=3111', function () { return !!window.pdfjsLib; }).then(function () { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js?v=3111';
+          return o.blob.arrayBuffer(); }).then(function (buf) { return window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise; }).then(function (pd) {
+          box.setAttribute('data-pages', o.pages); return pd.getPage(1); }).then(function (pg) {
+          if (n !== rpLiveN || !document.body.contains(cv)) return; var vp0 = pg.getViewport({ scale: 1 }), sc = (cv.clientWidth || 240) * 2 / vp0.width, vp = pg.getViewport({ scale: sc });
+          cv.width = vp.width; cv.height = vp.height; return pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise; });
+      }).catch(function () {}).then(function () { if (n === rpLiveN) box.classList.remove('busy'); });
+    }, 350);
   }
   // 🌐 the project's data (typed or drafted in another language) into the console language, in one go: task names, phases, risks, issues, stakeholder roles, charter, BOM lines
   // 🌐 the console is in another language but this project's tasks are not: offer to translate the whole project
@@ -5233,7 +5289,7 @@
     var kpis, sections = [];
     var pctRow = { label: 'Complete', value: R.pct + '%' }, cust = r.aud === 'customer';
     // v63: the same four parts in every report: what was done, what we plan to do, blockers, risks and issues
-    var who = function (t) { return t.resource || (cust ? 'MBS' : 'Not assigned'); }, rag3 = function (pr) { return pr === 'Critical' ? 'R' : pr === 'High' ? 'A' : undefined; };
+    var who = function (t) { return t.resource || (cust ? 'Our team' : 'Not assigned'); }, rag3 = function (pr) { return pr === 'Critical' ? 'R' : pr === 'High' ? 'A' : undefined; };
     var doneRows = F.done.map(function (x) { return { x: x, s: { t: 'Done ' + dmy(x.t.ef), rag: 'G' } }; }).concat(F.doing.map(function (x) { var late = x.t.ef < today(); return { x: x, s: { t: x.t.pct + '% done' + (late ? ', late' : ''), rag: late ? 'R' : undefined } }; }));
     var SDone = { kind: 'table', title: 'What was done (' + dmy(r.from) + ' to ' + dmy(r.to) + ')', head: cust ? ['Work', 'Progress'] : ['#', 'Task', 'Who', 'Progress'], wordCols: cust ? [7, 3] : [1, 6, 4, 3],
       rows: doneRows.map(function (d) { return cust ? [d.x.t.name, d.s] : [String(d.x.n), d.x.t.name, who(d.x.t), d.s]; }), cols: cust ? { 1: { cellWidth: 40 } } : { 0: { cellWidth: 9 }, 3: { cellWidth: 32 } }, always: true, empty: 'No work finished or under way in this period.' };
@@ -5276,7 +5332,7 @@
     var nameSafe = (S.job.ref + '-' + A.name.replace(/\s+/g, '-') + '-' + r.to).replace(/[^\w.-]+/g, '');
     return { id: r.id, no: no, audience: r.aud, type: r.type, from: r.from, to: r.to, periodText: dmy(r.from) + ' to ' + dmy(r.to), date: today(), title: A.name,
       project: { name: p.name, ref: S.job.ref, client: S.job.name, manager: (p.charter || {}).manager || '' }, rag: rag, headline: w.headline, points: w.points, next: w.next, asks: w.asks, kpis: kpis, gantt: g, sections: sections,
-      recipients: chosen, fileBase: nameSafe };
+      recipients: chosen, fileBase: nameSafe, theme: docTheme(), skin: repSkin() };
   }
   function reportsTab() {
     var B = $('#planBody'), r = repState(), A = RAUD[r.aud];
@@ -5305,12 +5361,18 @@
       (list.length ? '<div class="cm-who">' + list.map(function (x) { return '<label class="sc-cb"><input type="checkbox" data-rr="' + esc(x.id) + '"' + (r.rcp.indexOf(x.id) >= 0 ? ' checked' : '') + '> <span><b>' + esc(x.name) + '</b>' + (x.raci ? ' <span class="raci raci-' + x.raci + '">' + x.raci + '</span>' : '') + '<br><small class="muted">' + esc(x.role) + ' · ' + esc(x.email) + '</small></span></label>'; }).join('') + '</div>' : '<p class="muted">Nobody with an email yet: add people on the 👥 Stakeholders tab, or type an email below.</p>') +
       '<div class="inline-form" style="margin-top:8px"><input type="email" id="rpGuest" placeholder="Someone else? name@company.com.au"><button class="btn btn-sm" id="rpGuestAdd" type="button">＋ Add</button></div>' +
       (r.guests.length ? '<div class="cm-guests">' + r.guests.map(function (e, i) { return '<div class="cm-guest"><span>✉ ' + esc(e) + '</span><span class="cm-gnote">Not in the Stakeholder register</span><span class="sp"></span><button class="btn btn-sm btn-gold" data-rpreg="' + i + '" type="button">＋ Add to Stakeholders</button><button class="btn btn-sm" data-rpgx="' + i + '" type="button">✕</button></div>'; }).join('') + '</div><p class="sk-warn" style="margin:8px 0 0">💡 Best to add them to the Stakeholder register so it stays a true record of who is involved.</p>' : '') +
+      '<h3 class="rp-h">🎨 The look <small class="muted">a skin and colours for every report from this project (status reports, change requests, BOM); the charter and the plan share the colours</small></h3>' +
+      '<div class="rp-lookw"><div class="rp-look" id="rpLook">' + skinPick() + themePick() + '</div><button type="button" class="rp-live" id="rpLiveBox" title="Open the full preview"><canvas id="rpLive"></canvas><small>Live preview · page 1</small></button></div>' +
       '<div class="rp-go"><button class="btn" id="rpPrev" type="button">👁 Preview</button><button class="btn" id="rpPdf" type="button">⬇ PDF</button><button class="btn" id="rpDocx" type="button">⬇ Word</button>' +
         '<button class="btn btn-gold" id="rpSend" type="button">✉ ' + (r.email ? 'Email it to ' + (s.recipients.length === 1 ? '1 person' : s.recipients.length + ' people') : 'Email it') + '</button><span class="muted" id="rpMsg" style="font-size:12.5px"></span></div>' +
       (r.email ? (r.test ? '<p class="muted" style="font-size:12px;margin:6px 0 0">🧪 Test site: emails go to the owner only, marked [TEST], with the names they would have gone to.</p>' : '') : '<p class="muted" style="font-size:12px;margin:6px 0 0">Email sending is not set up (RESEND_API_KEY), so ✉ opens your email app with the summary: attach the PDF you download.</p>') + '</div>' +
       '<div class="card"><div class="card-h"><h2>🗂 Report log</h2><span class="sp"></span><span class="muted">' + pl((r.log || []).length, 'report') + '</span></div>' +
         ((r.log || []).length ? '<div class="table-wrap"><table class="pi-tbl rp-log"><thead><tr><th>When</th><th>Report</th><th>Type / period</th><th>RAG</th><th>Headline</th><th>To</th><th>How</th><th></th></tr></thead><tbody>' + logRows + '</tbody></table></div>' : '<div class="empty">No reports yet. Every report you download or email is kept here.</div>') + '</div></div>';
     reportsWire(B, r, list);
+    var lk = $('#rpLook'); if (lk) lookWire(lk, function () { rpLive(r); });
+    B.querySelectorAll('[data-rw],[data-rn]').forEach(function (el) { el.addEventListener('input', function () { if (!phone()) rpLive(r); }); });
+    var lb = $('#rpLiveBox'); if (lb) lb.onclick = function () { $('#rpPrev').click(); };
+    if (!phone()) rpLive(r); else if (lb) lb.style.display = 'none';
   }
   function reportsWire(B, r, list) {
     var redraw = function () { reportsTab(); };
