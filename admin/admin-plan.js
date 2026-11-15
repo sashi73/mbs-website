@@ -1339,7 +1339,7 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Schedule & Gantt'], ['budget', '💰 Costing'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Project Intelligence']]);
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Gantt'], ['budget', '💰 Costing'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Project Intelligence']]);
     var MODS = S.mods || {}; tabs = tabs.filter(function (t) { return MODS[t[0]] !== false; });   // GKH Project Champ: optional modules switched off
     if (MODS[S.tab] === false) S.tab = 'overview';
     var sub = !!(M.me && M.me.scope), hide = sub ? ' style="display:none"' : '';   // v91: a sub-contractor signed in to this project
