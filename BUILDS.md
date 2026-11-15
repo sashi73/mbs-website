@@ -80,4 +80,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 69 | 1.0.69| 2026-11-15 17:02| GKH-Project-Champ| `7a83c4c` | Champ: edit items and stories from sprint planning, sprint achievability check, plan the sprints with AI |
 | 70 | 1.0.70| 2026-11-15 18:07| GKH-Project-Champ| `c1b9c67` | Champ: sign-in log in Visitors (name, email, IP, location, device; failed tries too) |
 | 71 | 1.0.71| 2026-11-15 18:55| GKH-Project-Champ| `bfcea87` | Champ: start a new project from a document (requirements, feasibility study, RFP) with RAG, and plan from it |
-| 72 | 1.0.72 | 2026-11-15 22:05 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 72 | 1.0.72| 2026-11-15 22:05| GKH-Project-Champ| `3531c8c` | Champ: labour costed as people x hours x rate; Gantt resources use the Stakeholder register |
+| 73 | 1.0.73 | 2026-11-15 22:52 | GKH-Project-Champ | _this commit_ | _see git log_ |

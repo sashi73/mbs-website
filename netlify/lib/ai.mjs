@@ -18,9 +18,9 @@ export function llmSetup() {
   return { key, base, model };
 }
 // Token limits (DeepSeek bills per token): the reply is capped (AI_QUERY_MAX_TOKENS, 200-1000, default 500 for writing
-// the query; the answer gets 200), the instructions are kept short, and AI_QUERY_DAILY_LIMIT questions a day (default 50).
+// the query; the answer gets 200), the instructions are kept short, and AI_QUERY_DAILY_LIMIT questions a day (default 500 for Project Champ).
 export const tokCap = () => Math.max(200, Math.min(1000, Number(env('AI_QUERY_MAX_TOKENS', '500')) || 500));
-export const dayLimit = () => Math.max(1, Number(env('AI_QUERY_DAILY_LIMIT', '50')) || 50);
+export const dayLimit = () => Math.max(1, Number(env('AI_QUERY_DAILY_LIMIT', '500')) || 500);
 // Netlify stops a normal function after about 10 seconds (26 s on Pro if Netlify raises it), so the AI gets 8.5 s by default
 // and the console retries once. Raise AI_TIMEOUT_SECONDS only if your Netlify functions are allowed to run longer.
 export const aiTimeout = () => Math.max(3000, Math.min(55000, (Number(env('AI_TIMEOUT_SECONDS', '8.5')) || 8.5) * 1000));
