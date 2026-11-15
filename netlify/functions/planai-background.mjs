@@ -14,6 +14,7 @@ import * as SUB from '../lib/subbies.mjs';
 import * as PPL from '../lib/people.mjs';
 import * as BOM from '../lib/bom.mjs';
 import * as PLANDOC from '../lib/plandoc.mjs';
+import * as DOCI from '../lib/docingest.mjs';
 
 const ok = () => new Response('', { status: 202 });
 export default async (req) => {
@@ -36,6 +37,12 @@ async function run(req) {
     if (!U.allowsBg(ctx, body.mode)) return new Response('', { status: 403 });
     if (ctx.scope && !ctx.scope.includes(String(body.core || ''))) return new Response('', { status: 403 });   // v91: a sub-contractor: their own project only
     await kv.set('aiplan:' + id, { status: 'working', at: Date.now() });
+    if (body.mode === 'docIngest') {   // 📄 read a project document (RAG) to fill in a new project
+      const r = await DOCI.ingest({ sid: body.sid, lang: String(body.lang || '').slice(0, 5) }, `Admin (${session.u})`);
+      await kv.set('aiplan:' + id, { ingest: r.error ? null : r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
+      if (!r.error) await A.audit(session.u, `AI read the project document "${String(r.doc.name).slice(0, 60)}" (${r.doc.used} of ${r.doc.chunks} chunks, ${r.tokens || 0} tokens)`);
+      return ok();
+    }
     if (body.mode === 'swms') {   // v57: 🦺 write the SWMS from the project plan
       const r = await SWMS.generate({ core: body.core }, `Admin (${session.u})`);
       await kv.set('aiplan:' + id, { swms: r.swms ? true : false, error: r.error, tokens: r.tokens, cutOff: r.cutOff, status: r.error ? 'error' : 'done', at: Date.now() });

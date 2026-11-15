@@ -602,6 +602,8 @@
     if (!can) { V().innerHTML = '<div class="card noaccess"><h2>🔒 View only</h2><p class="muted">Your login can look at projects but not start new ones.</p></div>'; return; }
     V().innerHTML = '<div class="card champ-new"><div class="card-h"><h2>＋ New project</h2><a class="btn btn-sm" href="#projects">← All projects</a></div>' +
       '<p class="muted">Give the project a name and a client. Next you pick a template (or a blank plan, or ✨ AI) and Project Champ builds the schedule, Gantt chart, Board, budget, risks and reports.</p>' +
+      '<div class="cn-doc" id="cnDoc"><div class="cn-dh"><span class="cn-ic">📄</span><div><b>Start from a document</b> <small class="muted">(optional)</small><p class="muted">Usually a <b>requirements document</b>, a <b>feasibility study</b> or <b>part of an RFP</b> (or a brief, business case or deck): Word, PowerPoint or PDF, 100+ pages is fine. The AI reads all of it (retrieval over vectors of every part, up to 80,000 tokens), fills in the project below and plans it from the document. No document? Just type the details.</p></div>' +
+        '<label class="btn btn-gold cn-pick">Choose a file<input type="file" id="cnFile" accept=".pdf,.docx,.pptx,.txt,.md" hidden></label></div><div id="cnDocOut"></div></div>' +
       '<form id="champNew" class="champ-form">' +
       '<div class="champ-2"><label>Program <small class="muted">(every project belongs to one)</small><select name="progPick" required><option value="">Loading programs…</option></select></label>' +
       '<label class="champ-newprog" hidden>New program name<input name="program" maxlength="80" placeholder="e.g. Hospital redevelopment"></label></div>' +
@@ -613,7 +615,7 @@
       '<div class="champ-2"><label>Site or location <small class="muted">(optional)</small><input name="site" maxlength="80" placeholder="e.g. Parramatta NSW"></label>' +
       '<label>Contact phone <small class="muted">(optional)</small><input name="phone" maxlength="40"></label></div>' +
       '<label>Contact email <small class="muted">(optional)</small><input name="email" type="email" maxlength="160"></label>' +
-      '<label>What is the project about? <small class="muted">(the AI uses this to draft the plan)</small><textarea name="summary" rows="4" maxlength="1500" placeholder="Objective, scope, constraints, budget, key dates…"></textarea></label>' +
+      '<label>What is the project about? <small class="muted">(the AI uses this to draft the plan)</small><textarea name="summary" rows="5" maxlength="4000" placeholder="Objective, scope, constraints, budget, key dates…"></textarea></label>' +
       '<fieldset class="champ-mods"><legend>Optional modules <small class="muted">(you can change these later with ⚙ Modules)</small></legend>' +
       '<label class="mod-row"><span><b>🧱 Bill of Materials (BOM)</b><small>For projects with materials to buy (construction, fit-outs, installs)</small></span><span class="bom-switch"><input type="checkbox" name="bom" checked><span class="bom-slider"></span></span></label>' +
       '<label class="mod-row"><span><b>🦺 SWMS</b><small>Safe Work Method Statements for high-risk construction work</small></span><span class="bom-switch"><input type="checkbox" name="swms" checked><span class="bom-slider"></span></span></label></fieldset>' +
@@ -626,10 +628,10 @@
     FILL.forEach(function (k) { F0[k].addEventListener('input', function () { F0[k].removeAttribute('data-auto'); F0[k].classList.remove('auto'); }); });
     var fillFrom = function (name) {
       var note = $('#cnFill');
-      if (!name || name === '__new') { FILL.forEach(function (k) { if (F0[k].hasAttribute('data-auto')) { F0[k].value = ''; F0[k].removeAttribute('data-auto'); F0[k].classList.remove('auto'); } }); note.hidden = true; return; }
+      if (!name || name === '__new') { FILL.forEach(function (k) { if (F0[k].hasAttribute('data-auto') && F0[k].getAttribute('data-auto') !== 'doc') { F0[k].value = ''; F0[k].removeAttribute('data-auto'); F0[k].classList.remove('auto'); } }); note.hidden = true; return; }
       api('planProgramDefaults', { name: name }).then(function (d) {
         if (pick.value !== name) return; var got = [];
-        FILL.forEach(function (k) { var el = F0[k], v = d[k] || ''; if (el.value && !el.hasAttribute('data-auto')) return;
+        FILL.forEach(function (k) { var el = F0[k], v = d[k] || ''; if (el.value && (!el.hasAttribute('data-auto') || el.getAttribute('data-auto') === 'doc')) return;
           el.value = v; if (v) { el.setAttribute('data-auto', '1'); el.classList.add('auto'); got.push(LBL[k]); } else { el.removeAttribute('data-auto'); el.classList.remove('auto'); } });
         note.hidden = !got.length;
         note.innerHTML = got.length ? '✨ Filled in from the <b>' + esc(d.program || name) + '</b> program' + (d.from.project && !d.from.program ? ' (its latest project, ' + esc(d.from.project) + ')' : d.from.project ? ' and its latest project' : '') + ': ' + esc(got.join(', ')) + '. Change anything that is different for this project.' : '';
@@ -642,10 +644,58 @@
       if (!want && L.length === 1) pick.value = L[0];
       syncProg();
     });
+    // 📄 start from a document: the AI reads all of it (RAG) and fills in the form; the document goes with the project to Ask AI and the plan builder
+    var CN = { sid: '', file: null, got: null };
+    var cnSay = function (h) { $('#cnDocOut').innerHTML = h; };
+    var cnFill = function (r) {
+      var F1 = $('#champNew'), f = r.fields, set = function (k, v) { if (!v || !F1[k]) return; F1[k].value = v; F1[k].setAttribute('data-auto', 'doc'); F1[k].classList.add('auto', 'ai-filled'); };
+      set('name', f.name); set('client', f.client); set('sponsor', f.sponsor); set('manager', f.manager); set('site', f.site); set('summary', f.summary);
+      var d = r.doc, pg = function (k) { var L = (r.pages || {})[k]; return L && L.length ? ' <small class="muted">(p. ' + L.join(', ') + ')</small>' : ''; };
+      var row = function (lbl, v, k) { return v ? '<li><b>' + lbl + '</b> ' + esc(v) + pg(k) + '</li>' : ''; };
+      cnSay('<div class="cn-res"><div class="cn-rh"><b>✅ Read “' + esc(d.name) + '”</b><span class="cn-pill">' + (d.pages ? pl(d.pages, /\.pptx$/i.test(d.name) ? 'slide' : 'page') + ' · ' : '') + d.chunks + ' chunks · ' + (d.whole ? 'read in full' : d.used + ' most relevant chunks (' + d.coverage + '% of the text)') + ' · ' + Number(r.tokens || 0).toLocaleString('en-AU') + ' tokens</span><span class="cn-pill cn-' + r.confidence + '">' + esc(r.confidence) + ' confidence</span></div>' +
+        '<ul class="cn-got">' + row('Read as', f.kind) + row('Project', f.name, 'name') + row('Client', f.client, 'client') + row('Sponsor', f.sponsor, 'sponsor') + row('Manager', f.manager, 'manager') + row('Location', f.site, 'site') + row('Type', f.type) + row('Dates', (f.start || f.finish) ? (f.start ? dmy(f.start) : '?') + ' to ' + (f.finish ? dmy(f.finish) : '?') : '', 'dates') + row('Budget', f.budget, 'budget') + '</ul>' +
+        (r.gaps && r.gaps.length ? '<div class="cn-gaps"><b>Still to find out</b><ul>' + r.gaps.map(function (g) { return '<li>' + esc(g) + '</li>'; }).join('') + '</ul></div>' : '') +
+        '<details class="cn-brief"><summary>📋 The brief the AI will plan from (' + Math.round(r.briefText.length / 100) / 10 + 'k characters)</summary><pre>' + esc(r.briefText) + '</pre></details>' +
+        '<p class="muted" style="font-size:12.5px;margin:6px 0 0">Check the boxes below (filled ones are highlighted). On <b>Create project and plan it</b> the document is attached to the project\'s <b>Ask AI</b>, and the AI builds the plan from it straight away.</p></div>');
+    };
+    var cnRead = function (file) {
+      if (!file) return; CN = { sid: '', file: file, got: null };
+      if (file.size > 60 * 1024 * 1024) return cnSay('<p class="bad">That file is over 60 MB. Save a smaller copy (or a PDF without images) and try again.</p>');
+      cnSay('<p class="ask-think">Reading “' + esc(file.name) + '”…</p>');
+      piExtract(file, function (k, n) { if (k % 5 === 1 || k === n) cnSay('<p class="ask-think">Reading “' + esc(file.name) + '”: page ' + k + ' of ' + n + '…</p>'); }).then(function (x) {
+        if (/\.docx$/i.test(file.name) && !/\[page \d+\]/.test(x.text)) x = withPages(x.text);
+        if (!x.text || x.text.replace(/\[(page|slide) \d+\]/g, '').trim().length < 200) throw new Error('No text found in “' + file.name + '”. If it is a scanned PDF (pictures of pages), save it as a text PDF or Word file first.');
+        cnSay('<p class="ask-think">Indexing ' + Math.round(x.text.length / 1000) + 'k characters into vectors…</p>');
+        return api('planDocStage', { name: file.name, pages: x.pages, text: x.text, kind: (file.name.split('.').pop() || '').toLowerCase() });
+      }).then(function (st) {
+        CN.sid = st.sid; var id = rid(), t0 = Date.now();
+        cnSay('<p class="ask-think">✨ The AI is reading ' + (st.pages ? pl(st.pages, 'page') + ', ' : '') + st.chunks + ' chunks (' + (st.whole ? 'all of it fits: read in full' : 'the most relevant parts for every field, up to ' + Number(st.budget).toLocaleString('en-AU') + ' tokens') + ')' + (st.truncated ? ' (very long: the first 1.5 million characters)' : '') + '. This takes 1 to 4 minutes for a big document.</p>');
+        var poll = function () { return new Promise(function (r2) { setTimeout(r2, 2500); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
+          if (CN.sid !== st.sid) return;
+          if (d.status === 'done' && d.ingest) { CN.got = d.ingest; cnFill(d.ingest); toast('Project filled in from the document'); return; }
+          if (d.status === 'error') throw new Error(d.error || 'The document could not be read');
+          if (Date.now() - t0 > 660000) throw new Error('The AI is taking too long. Try again.');
+          return poll(); }); };
+        return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': tplLang() },
+          body: JSON.stringify({ id: id, mode: 'docIngest', sid: st.sid, lang: tplLang() }) }).then(function (r) { if (r.status === 401 || r.status === 403) throw new Error('Your session has ended. Sign in again.'); if (r.status !== 202 && !r.ok) throw new Error('Could not start the AI (' + r.status + ').'); return poll(); });
+      }).catch(function (e) { CN.sid = ''; cnSay('<p class="bad">' + esc(e.message || String(e)) + '</p>'); });
+    };
+    var fi = $('#cnFile'); fi.onchange = function () { cnRead(fi.files[0]); fi.value = ''; };
+    var dz = $('#cnDoc');
+    ['dragenter', 'dragover'].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add('drag'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove('drag'); }); });
+    dz.addEventListener('drop', function (e) { var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) cnRead(f); });
     $('#champNew').onsubmit = function (e) {
       e.preventDefault(); var f = e.target, b = f.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Creating…';
-      api('planNewProject', { name: f.name.value, client: f.client.value, site: f.site.value, phone: f.phone.value, email: f.email.value, summary: f.summary.value, sponsor: f.sponsor.value, manager: f.manager.value, program: f.progPick.value === '__new' ? f.program.value : f.progPick.value, bom: f.bom.checked, swms: f.swms.checked })
-        .then(function (r) { toast('Project ' + r.ref + ' created'); location.hash = '#plan/' + r.core; })
+      api('planNewProject', { name: f.name.value, client: f.client.value, site: f.site.value, phone: f.phone.value, email: f.email.value, summary: f.summary.value, sponsor: f.sponsor.value, manager: f.manager.value, program: f.progPick.value === '__new' ? f.program.value : f.progPick.value, bom: f.bom.checked, swms: f.swms.checked,
+          docSid: CN.got ? CN.sid : '', brief: CN.got ? CN.got.briefText : '', docStart: CN.got ? CN.got.fields.start : '', docFinish: CN.got ? CN.got.fields.finish : '' })
+        .then(function (r) {
+          toast('Project ' + r.ref + ' created' + (r.docId ? ': the document is in its Ask AI' : ''));
+          var go = function () { if (r.docId) { try { sessionStorage.setItem('champAutoPlan', r.core); } catch (e3) {} } location.hash = '#plan/' + r.core; };
+          if (!r.docId || !CN.file || CN.file.size > 3.5 * 1024 * 1024) return go();
+          return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).replace(/^data:[^,]*,/, '')); }; rd.readAsDataURL(CN.file); })
+            .then(function (b64) { return api('intelDocPutFile', { core: r.core, id: r.docId, file: b64, type: CN.file.type }); }).catch(function () {}).then(go);
+        })
         .catch(function (err) { fail(err); b.disabled = false; b.textContent = 'Create project and plan it →'; });
     };
   }
@@ -892,17 +942,18 @@
   function chooser() {
     setTimeout(function () { dateBoxes(V()); }, 0);
     $('#title').textContent = 'Project plan';
-    var j = S.job, scope0 = j.scope || '';
+    var j = S.job, scope0 = j.brief || j.scope || '';
     var guess = guessType(j.title + ' ' + scope0);
-    S.mode = 'type'; S.aiDraft = null; S.aiId = ''; S.aiText = ''; S.tplType = ''; S.aiFinish = ''; S.tplWeek = false; S.coolZero = false; S.datesTouched = false; S.lastDates = '';
+    S.mode = j.brief ? 'ai' : 'type'; S.aiDraft = null; S.aiId = ''; S.aiText = j.brief || ''; S.tplType = ''; S.aiFinish = j.docFinish && j.docFinish > today() ? j.docFinish : ''; S.tplWeek = false; S.coolZero = false; S.datesTouched = false; S.lastDates = '';
     V().innerHTML = '<div class="row" style="margin-bottom:14px"><a class="btn btn-sm" href="#job/' + esc(j.core) + '">← ' + esc(j.ref) + '</a><h2 style="font-size:22px">Plan this project: ' + esc(j.name) + ': ' + esc(j.title || j.service || 'Job') + '</h2></div>' +
       '<div class="card"><h2>1. What the project must deliver (scope of work)</h2>' +
       '<p class="jobline"><span class="ref">' + esc(j.ref) + '</span> <b>' + esc(j.title || '') + '</b>' + [j.suburb, j.source ? 'from ' + j.source : ''].filter(Boolean).map(function (x) { return ' · ' + esc(x); }).join('') + '</p>' +
       '<p class="muted" style="margin:0 0 8px">The tasks (WBS) and Gantt chart are built from this, so it is needed. It is filled in from the project description: check it and add what is missing (objective, deliverables, where, constraints, budget, deadline).</p>' +
-      '<textarea id="tplScope" rows="5" placeholder="e.g. Bathroom exhaust fan is noisy and has stopped working. Replace it with a quieter fan, duct it outside through the eave, patch and paint the ceiling around it.">' + esc(scope0) + '</textarea></div>' +
+      (j.docName ? '<div class="cn-from">📄 From <b>' + esc(j.docName) + '</b>: the scope below is the brief the AI read from it. The AI plans from the brief <b>and</b> the parts of the document about phases, dates, deliverables and requirements (it is also in this project\'s 🧠 Ask AI).</div>' : '') +
+      '<textarea id="tplScope" rows="' + (j.brief ? 12 : 5) + '" placeholder="e.g. Bathroom exhaust fan is noisy and has stopped working. Replace it with a quieter fan, duct it outside through the eave, patch and paint the ceiling around it.">' + esc(scope0) + '</textarea></div>' +
       '<div class="card"><h2>2. How do you want to build the plan?</h2>' +
       '<div class="row pdates">' +
-        '<label style="display:grid;gap:4px;font-weight:700">Start date<input type="date" id="tplStart" value="' + today() + '" style="width:auto"></label>' +
+        '<label style="display:grid;gap:4px;font-weight:700">Start date<input type="date" id="tplStart" value="' + (j.docStart && j.docStart >= today() ? j.docStart : today()) + '" style="width:auto"></label>' +
         '<label style="display:grid;gap:4px;font-weight:700"><span>Finish by <small class="muted" style="font-weight:400">(optional)</small></span><input type="date" id="aiFinish" value="' + esc(S.aiFinish || '') + '" style="width:auto"></label>' +
         '<input type="checkbox" id="tplEmerg" hidden>' +
         '<label class="qchk" title="Tick if the crew can work Saturday and Sunday: the schedule counts every day and finishes sooner"><input type="checkbox" id="tplWeek"' + (S.tplWeek ? ' checked' : '') + '> 📅 Weekends (Sat, Sun) allowed</label>' +
@@ -980,6 +1031,8 @@
     V().querySelectorAll('[data-mode]').forEach(function (b) { b.onclick = function () { S.mode = b.getAttribute('data-mode'); mode(); }; });
     $('#tplStart').onchange = function () { if (S.mode === 'type' && $('#tplType') && $('#tplType').value) $('#tplType').onchange(); };
     mode();
+    var auto = ''; try { auto = sessionStorage.getItem('champAutoPlan') || ''; if (auto === j.core) sessionStorage.removeItem('champAutoPlan'); } catch (e4) {}
+    if (auto === j.core && j.brief && $('#aiGo')) setTimeout(function () { if ($('#aiGo') && !S.aiId) { $('#aiGo').click(); toast('✨ Building the plan from the document'); } }, 400);
     $('#tplEmerg').onchange = function () { S.emergTouched = true; if (S.mode === 'ai' && S.aiDraft) showDraft(); };
     $('#tplWeek').onchange = function () { S.tplWeek = this.checked; if (S.mode === 'ai' && S.aiDraft) showDraft(); else if (S.mode === 'type' && $('#tplType') && $('#tplType').value) $('#tplType').onchange(); };
     var keepOrder = function (changed) {
@@ -5773,21 +5826,55 @@
       .then(function (r) { if (r.status >= 400) throw new Error('Could not start the AI (' + r.status + ')'); return poll(); })
       .catch(function (e) { done(); fail(e); });
   }
-  function piExtract(f) {
+  // 📄 PowerPoint (.pptx) and estimated pages for Word: a .pptx is a zip of XML files; read it with the browser's own inflate
+  function unzipEntries(buf, want) {
+    var dv = new DataView(buf), u8 = new Uint8Array(buf), e = -1;
+    for (var i = u8.length - 22; i >= Math.max(0, u8.length - 66000); i--) if (dv.getUint32(i, true) === 0x06054b50) { e = i; break; }
+    if (e < 0) return Promise.reject(new Error('This file is not a valid PowerPoint (.pptx) file.'));
+    var n = dv.getUint16(e + 10, true), off = dv.getUint32(e + 16, true), list = [], dec = new TextDecoder();
+    for (var k = 0; k < n; k++) {
+      var method = dv.getUint16(off + 10, true), csize = dv.getUint32(off + 20, true), nl = dv.getUint16(off + 28, true), xl = dv.getUint16(off + 30, true), cl = dv.getUint16(off + 32, true), lho = dv.getUint32(off + 42, true);
+      var name = dec.decode(u8.subarray(off + 46, off + 46 + nl)); off += 46 + nl + xl + cl;
+      if (!want(name)) continue;
+      var ds = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true);
+      list.push({ name: name, method: method, data: u8.subarray(ds, ds + csize) });
+    }
+    return Promise.all(list.map(function (x) {
+      if (x.method === 0) return Promise.resolve({ name: x.name, text: dec.decode(x.data) });
+      if (typeof DecompressionStream === 'undefined') return Promise.reject(new Error('This browser cannot open PowerPoint files: use Chrome, Edge, Safari or Firefox (current versions), or save the deck as PDF.'));
+      return new Response(new Blob([x.data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text().then(function (t) { return { name: x.name, text: t }; });
+    }));
+  }
+  function xmlText(x) { var parts = x.replace(/<\/a:p>/g, '\u0001').replace(/<a:br\/>/g, '\u0001').match(/<a:t(?:\s[^>]*)?>[^<]*<\/a:t>|\u0001/g) || [];
+    return parts.map(function (q) { return q === '\u0001' ? '\n' : q.replace(/^<a:t[^>]*>/, '').replace(/<\/a:t>$/, ''); }).join('').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, function (m, d) { return String.fromCharCode(+d); }).replace(/&amp;/g, '&').replace(/\n{2,}/g, '\n').trim(); }
+  function pptxText(f) {
+    return f.arrayBuffer().then(function (buf) { return unzipEntries(buf, function (n) { return /^ppt\/(slides\/slide|notesSlides\/notesSlide)\d+\.xml$/.test(n); }); }).then(function (L) {
+      var S2 = {}, N = {}; L.forEach(function (x) { var m = x.name.match(/(\d+)\.xml$/); (/notesSlide/.test(x.name) ? N : S2)[+m[1]] = xmlText(x.text); });
+      var nums = Object.keys(S2).map(Number).sort(function (a, b) { return a - b; });
+      return { text: nums.map(function (k) { return '[slide ' + k + ']\n' + S2[k] + (N[k] && N[k].replace(/^\d+$/, '').trim() ? '\n\nSpeaker notes: ' + N[k] : ''); }).join('\n\n'), pages: nums.length };
+    });
+  }
+  function withPages(t, per) {   // Word has no pages in its text: mark about every 3,000 characters, at a paragraph break (for "p." references)
+    per = per || 3000; var out = [], n = 1, cur = 0; String(t || '').split(/\n{2,}/).forEach(function (p) { if (cur > per) { n++; cur = 0; out.push('[page ' + n + ']'); } out.push(p); cur += p.length; });
+    return { text: '[page 1]\n' + out.join('\n\n'), pages: n };
+  }
+  function piExtract(f, onProg) {
     var name = f.name.toLowerCase();
     if (/\.pdf$/.test(name)) return piLoad('vendor/pdf.min.js?v=3111', function () { return !!window.pdfjsLib; }).then(function () {
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js?v=3111';
       return f.arrayBuffer().then(function (buf) { return window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise; }).then(function (doc) {
         var parts = [], n = doc.numPages, chain = Promise.resolve();
-        for (var k = 1; k <= n; k++) (function (k) { chain = chain.then(function () { return doc.getPage(k).then(function (pg) { return pg.getTextContent(); }).then(function (c) {
+        for (var k = 1; k <= n; k++) (function (k) { chain = chain.then(function () { if (onProg) onProg(k, n); return doc.getPage(k).then(function (pg) { return pg.getTextContent(); }).then(function (c) {
           var s = ''; c.items.forEach(function (it) { s += it.str + (it.hasEOL ? '\n' : ' '); }); parts.push('[page ' + k + ']\n' + s.replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').trim()); }); }); })(k);
         return chain.then(function () { return { text: parts.join('\n\n'), pages: n }; });
       });
     });
     if (/\.docx$/.test(name)) return piLoad('vendor/mammoth.browser.min.js?v=180', function () { return !!window.mammoth; }).then(function () { return f.arrayBuffer(); }).then(function (buf) { return window.mammoth.extractRawText({ arrayBuffer: buf }); }).then(function (r) { return { text: r.value, pages: 0 }; });
+    if (/\.pptx$/.test(name)) return pptxText(f);
+    if (/\.(ppt|pps)$/.test(name)) return Promise.reject(new Error('Old PowerPoint .ppt files can\'t be read: open it in PowerPoint and save as .pptx or PDF.'));
     if (/\.doc$/.test(name)) return Promise.reject(new Error('Old Word .doc files can\'t be read: open it in Word and save as .docx or PDF.'));
     if (/\.(txt|md|csv|json|eml|html?|vtt|srt)$/.test(name) || /^text\//.test(f.type)) return f.text().then(function (t) { if (/\.html?$/.test(name)) { var d = document.createElement('div'); d.innerHTML = t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ''); t = d.textContent; } return { text: t, pages: 0 }; });
-    return Promise.reject(new Error('“' + f.name + '” is not a PDF, Word (.docx) or text file.'));
+    return Promise.reject(new Error('“' + f.name + '” is not a PDF, Word (.docx), PowerPoint (.pptx) or text file.'));
   }
   M.readDoc = piExtract;   // People: read a resume (PDF or Word) in the browser
   function piUpload(files) {

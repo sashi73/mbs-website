@@ -88,6 +88,8 @@ async function change(input, fn) {
   await indexJob(job);
   return { job, result };
 }
+// GKH Project Champ: set a few fields of a project (e.g. the document it was started from)
+export async function update(input, fields) { const r = await change(input, (j) => { Object.assign(j, fields); }); return r && r.job; }
 // GKH Project Champ: put a project in a program (a group of related projects); '' takes it out
 export async function setProgram(input, program) { const r = await change(input, (j) => { j.program = program; }); return r && r.job; }
 // GKH Project Champ: delete a project record for good (its plan is deleted separately, by the caller)
@@ -122,7 +124,7 @@ export async function create(fields, by = 'website') {
   const now = Date.now();
   const job = { core: fields.core, trade: fields.core[0], stage: 'new', created: now, updated: now,
     name: fields.name || '', phone: fields.phone || '', email: fields.email || '', suburb: fields.suburb || '', service: fields.service || '',
-    best_time: fields.best_time || '', program: fields.program || '', manager: fields.manager || '', sponsor: fields.sponsor || '', summary: fields.summary || '', details: fields.details || '', urgency: fields.urgency || '', mapsUrl: fields.mapsUrl || '', source: fields.source || '',
+    best_time: fields.best_time || '', program: fields.program || '', manager: fields.manager || '', sponsor: fields.sponsor || '', summary: fields.summary || '', details: fields.details || '', brief: fields.brief || '', docStart: fields.docStart || '', docFinish: fields.docFinish || '', urgency: fields.urgency || '', mapsUrl: fields.mapsUrl || '', source: fields.source || '',
     history: [{ at: now, by, text: `Enquiry received (${fields.source || 'website'})` }], notes: [] };
   const saved = await save(job);
   await CU.attach(saved);   // customer database: same phone (+ email) = same customer

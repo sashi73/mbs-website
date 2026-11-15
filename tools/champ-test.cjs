@@ -22,6 +22,25 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   // a fake DeepSeek: says back which language and page the assistant was told to use
   const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
     const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
+    if (/project document analyst/.test(sys)) {   // 📄 a project from a document: answers only from what the retrieval gave it
+      const u = JSON.parse(j.messages[1].content), x = u.extracts || '', m = (re) => ((x.match(re) || [])[1] || '').trim();
+      global.INGEST = (global.INGEST || []).concat([{ len: x.length, whole: u.given_whole, given: u.chunks_given, total: u.chunks_total, p87: /\[p\. 87\]/.test(x), p64: /\[p\. 64\]/.test(x), p1: /\[p\. 1\]/.test(x), doc: u.document }]);
+      const name = m(/(Northside Health ERP Modernisation|Library Digitisation Project|Fleet EV Transition)/);
+      const o = { name, client: m(/Prepared for ([^\n]+)/) || m(/Client: ([^\n.]+)/), sponsor: m(/(?:Project s|S)ponsor: ([^\n.]+)/), site: m(/head office in ([A-Za-z]+, NSW)/) || m(/Location: ([^\n.]+)/), start_date: /Jan to Mar 2027/.test(x) ? '2027-01-11' : '', finish_date: /30 June 2027/.test(x) ? '2027-06-30' : '',
+        budget: m(/budget is (AUD [\d.]+ million)/), project_type: 'ERP implementation', summary: name + ' replaces 18-year-old finance, HR, payroll and supply systems across 14 sites with one cloud ERP, to cut month-end close from 12 to 5 days and go live by 30 June 2027.',
+        brief: { objectives: ['One cloud ERP for finance, HR, payroll and supply', 'Month-end close in 5 days'], in_scope: ['Finance', 'HR and payroll', 'Supply chain'], out_of_scope: ['Clinical systems'], deliverables: ['Configured ERP', 'Trained staff'],
+          phases: [{ name: 'Discovery and design', when: 'Jan to Mar 2027', what: 'Requirements and design' }, { name: 'Build and configure', when: 'Apr to May 2027' }, { name: 'Test and train', when: 'May to Jun 2027' }, { name: 'Go-live and hypercare', when: 'Jul 2027' }],
+          milestones: [{ name: 'Go-live', date: '30 June 2027' }], stakeholders: [{ who: 'Steering committee', role: 'Meets monthly' }], requirements: [], constraints: ['Go live by 30 June 2027'], assumptions: [], risks: ['Data migration quality'], success_criteria: ['Close in 5 days'], budget_notes: 'Includes 10% contingency' },
+        doc_kind: /Library/.test(name) ? 'requirements' : 'other', pages: { sponsor: [87], budget: [64], client: [1] }, confidence: 'high', gaps: ['Who is the project manager?'] };
+      s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }], usage: { total_tokens: Math.round(x.length / 3.6) + 900 } }));
+    }
+    if (/Build a practical WATERFALL project plan/.test(sys)) {   // ✨ the AI plan
+      global.PLAN_USER = j.messages[1].content; global.PLAN_SYS = sys;
+      const o = { name: 'ERP Modernisation', objective: 'One cloud ERP', in_scope: ['Finance'], out_of_scope: ['Clinical'], deliverables: ['ERP'], acceptance: 'Signed off', assumptions: [], tips: ['Book testers early'],
+        tasks: [{ ph: 'Discovery and design', n: 'Requirements workshops', d: 10, after: [], q: 80, u: 'h', r: 150, b: 'p. 95' }, { ph: 'Build and configure', n: 'Configure finance', d: 20, after: [1], q: 160, u: 'h', r: 150 }, { ph: 'Go-live and hypercare', n: 'Go-live', d: 0, after: [2] }],
+        risks: [['Data migration quality', 'Old data', 3, 4, 'Mitigate', 'Cleanse early']] };
+      s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }], usage: { total_tokens: 3000 } }));
+    }
     if (/Scrum Master and Agile coach/.test(sys)) { s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ sprints: [{ id: 'S1', items: ['m0', 'm1', 'm2', 'zz'], goal: 'People can sign in and manage their profile', objective: 'Login and profile pass UAT', verdict: 'achievable', assessment: '10 of ~10 pts, all ready' }, { id: 'S2', items: ['m3', 'm0'], goal: 'People can pay in the app', objective: 'A test payment clears', verdict: 'risky', assessment: 'Payments is 8 pts' }], refine: [{ id: 'm3', why: 'Split it' }], advice: 'Split Payments' }) } }], usage: { total_tokens: 90 } })); }
     if (/Definition of Ready/.test(sys)) { s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ desc: 'Book the venue for the offsite and confirm the date. Done when: deposit paid; booking confirmed in writing.', points: 6, priority: 'high', days: 4, story_points: [3, 4], new_stories: [{ name: 'Shortlist three venues', points: 2 }, { name: 'Pay the deposit', points: 1 }] }) } }], usage: { total_tokens: 90 } })); }
     if (j.response_format && /Project Management Plan/.test(sys)) {   // the project plan narrative: three parts
@@ -440,7 +459,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     const lg = (await (await api('reportLog', { core: rc })).json()).list || [], last = lg.slice(-1)[0];
     const snap = last ? (await (await api('reportGet', { core: rc, id: last.id })).json()).report : null;
     ok('Reports', 'the report log keeps the look it was made with, so it comes out the same again', snap && snap.skin === 'classic' && snap.theme === 'royal' && snap.lookHex && /^#[0-9A-F]{6}$/.test(snap.lookHex.accent), JSON.stringify(snap && [snap.skin, snap.theme, snap.lookHex]));
-    if (process.env.RPT_ONLY) { for (const x of results) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
+    if (process.env.RPT_ONLY && !process.env.DOC_ONLY) { for (const x of results) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
     await api('planProjectDelete', { core: rc });
   }
   // ---- 🔐 the sign-in log: who signed in, by password or Google, from which IP and place, on what device ----
@@ -454,6 +473,36 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     await p.goto(`${BASE}/admin/#visitors`); await p.reload(); await p.waitForSelector('#siCard', { timeout: 10000 }).catch(() => {});
     const st = await p.textContent('#siCard').catch(() => '');
     ok('Sign-ins', 'Visitors shows the sign-in log to the super user (who, email, how, IP, location)', /Sydney, New South Wales, Australia/.test(st) && /mallory@example\.com/.test(st) && /Password/.test(st), st.slice(0, 200));
+  }
+  // ---- 📄 start a project from a document (PDF, Word, PowerPoint): the AI reads it with retrieval, fills the form, attaches it to Ask AI and plans from it ----
+  {
+    await p.goto(`${BASE}/admin/#projects/new`); await p.reload(); await p.waitForSelector('#cnFile', { state: 'attached', timeout: 10000 }).catch(() => {});
+    await p.setInputFiles('#cnFile', path.join(SITE, 'tools/test-data/northside-erp-brief.pdf')); await p.waitForSelector('.cn-res', { timeout: 90000 }).catch(() => {});
+    const fv = await p.evaluate(() => { const F = document.querySelector('#champNew'); return { name: F.name.value, client: F.client.value, sponsor: F.sponsor.value, site: F.site.value, summary: F.summary.value.length, res: (document.querySelector('.cn-res') || {}).textContent || (document.querySelector('#cnDocOut') || {}).textContent }; });
+    if (process.env.DOC_ONLY) await p.screenshot({ path: '/tmp/cn.png', fullPage: true });
+    const g0 = (global.INGEST || [])[0] || {};
+    ok('New project', '📄 a 120-page PDF: the AI reads it with retrieval (the opening pages and the pages that answer each field, within 80,000 tokens) and fills in name, client, sponsor, location and a long description', fv.name === 'Northside Health ERP Modernisation' && /Northside Local Health District/.test(fv.client) && /Amelia Hart/.test(fv.sponsor) && fv.site === 'Parramatta, NSW' && fv.summary > 150 && g0.whole === false && g0.given < g0.total && g0.p1 && g0.p87 && g0.p64 && g0.len <= 80000 * 3.6 && /120 pages/.test(fv.res) && /p\. 87/.test(fv.res), JSON.stringify([fv, g0]));
+    await p.waitForFunction(() => document.querySelectorAll('#champNew [name=progPick] option').length > 1, null, { timeout: 8000 }).catch(() => {});
+    await p.selectOption('#champNew [name=progPick]', { index: 1 }).catch(() => {}); await sleep(600);
+    if (await p.isVisible('#champNew [name=program]')) await p.fill('#champNew [name=program]', 'Digital health');
+    global.PLAN_USER = '';
+    await Promise.all([p.waitForURL(/#plan\//, { timeout: 20000 }).catch(() => {}), p.click('#champNew button[type=submit]')]);
+    const ncore = (p.url().match(/#plan\/([^/]+)/) || [])[1] || '';
+    if (!ncore) console.log('DOCDBG', JSON.stringify(await p.evaluate(() => [location.hash, document.querySelector('#champNew') && document.querySelector('#champNew').checkValidity(), [...document.querySelectorAll('#champNew :invalid')].map((e) => e.name), (document.querySelector('.toast,#toast') || {}).textContent, document.querySelector('#champNew [name=progPick]') && document.querySelector('#champNew [name=progPick]').value])));
+    for (let i = 0; i < 40 && !global.PLAN_USER; i++) await sleep(500);
+    await p.waitForSelector('#aiOut .aifit', { timeout: 20000 }).catch(() => {});
+    const scopeV = await p.inputValue('#tplScope').catch(() => ''), fromBox = await p.textContent('.cn-from').catch(() => '');
+    const idocs = ncore ? (await (await api('intelGet', { core: ncore })).json()).docs || [] : [];
+    ok('New project', 'on Create, the document goes to the project\'s Ask AI (with the file), and the AI builds the plan from the brief and the parts of the document about phases and dates', idocs.length === 1 && /northside-erp-brief\.pdf/.test(idocs[0].name) && idocs[0].hasFile && idocs[0].pages === 120 && /From the project document/.test(scopeV) && /northside-erp-brief/.test(fromBox) && /document_extracts/.test(global.PLAN_USER) && /Phase 1 Discovery/.test(global.PLAN_USER) && /COMES FROM A PROJECT DOCUMENT/.test(global.PLAN_SYS || ''), JSON.stringify([ncore, idocs.map((d) => [d.name, d.hasFile, d.pages]), scopeV.slice(0, 60), fromBox.slice(0, 60), String(global.PLAN_USER).length]));
+    await p.goto(`${BASE}/admin/#projects/new`); await p.reload(); await p.waitForSelector('#cnFile', { state: 'attached', timeout: 10000 }).catch(() => {});
+    await p.setInputFiles('#cnFile', path.join(SITE, 'tools/test-data/library-brief.docx')); await p.waitForSelector('.cn-res', { timeout: 60000 }).catch(() => {});
+    const wv = await p.evaluate(() => { const F = document.querySelector('#champNew'); return [F.name.value, F.sponsor.value, F.site.value, (document.querySelector('.cn-res') || {}).textContent || '']; });
+    await p.goto(`${BASE}/admin/#projects/new`); await p.reload(); await p.waitForSelector('#cnFile', { state: 'attached', timeout: 10000 }).catch(() => {});
+    await p.setInputFiles('#cnFile', path.join(SITE, 'tools/test-data/fleet-ev.pptx')); await p.waitForSelector('.cn-res', { timeout: 60000 }).catch(() => {});
+    const pv = await p.evaluate(() => { const F = document.querySelector('#champNew'); return [F.name.value, F.client.value, (document.querySelector('.cn-res') || {}).textContent || (document.querySelector('#cnDocOut') || {}).textContent]; });
+    const last = (global.INGEST || []).slice(-1)[0] || {};
+    ok('New project', 'Word (.docx) and PowerPoint (.pptx, slides and speaker notes) are read too; a short document goes in whole; the kind of document (requirements, feasibility study, RFP) is recognised', wv[0] === 'Library Digitisation Project' && /Grace Liu/.test(wv[1]) && /Parramatta/.test(wv[2]) && /Read as Requirements document/.test(wv[3]) && pv[0] === 'Fleet EV Transition' && pv[1] === 'Acme Logistics' && /2 slides/.test(pv[2]) && last.whole === true, JSON.stringify([wv, pv, last]));
+    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
   }
   // ---- 🌐 language audit: with the console in Malay, every page and every project tab must show no English ----
   {

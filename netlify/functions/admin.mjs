@@ -20,7 +20,8 @@ import { invPost } from '../lib/inventory.mjs';
 import { custPost } from '../lib/admin-cust.mjs';
 import { planQuotePost } from '../lib/plan-quote.mjs';
 import { subPost } from '../lib/subbies.mjs';
-import { intelPost } from '../lib/plan-intel.mjs';
+import { intelPost, upload as intelUpload } from '../lib/plan-intel.mjs';
+import * as DOCI from '../lib/docingest.mjs';
 import { swmsPost } from '../lib/swms.mjs';
 import { commsPost } from '../lib/comms.mjs';
 import { reportPost } from '../lib/reports.mjs';
@@ -422,12 +423,24 @@ async function handle(req, context) {
         if (known) prog = known.name; else prog = (await PGM.save({ name: prog }, who)).program.name;
         const core = await J.nextCore('P');
         await J.create({ core, name: client, phone: clean(body.phone, 40), email: clean(body.email, 160), suburb: clean(body.site, 80), service: pname,
-          summary: clean(body.summary, 1500), program: prog, manager: clean(body.manager, 80), sponsor: clean(body.sponsor, 80), source: 'Project Champ' }, by);
-        const job = await J.find(core);   // a new project starts in Pre-sales
+          summary: clean(body.summary, 4000), program: prog, manager: clean(body.manager, 80), sponsor: clean(body.sponsor, 80), source: 'Project Champ',
+          brief: clean(body.brief, 16000), docStart: /^\d{4}-\d{2}-\d{2}$/.test(String(body.docStart || '')) ? body.docStart : '', docFinish: /^\d{4}-\d{2}-\d{2}$/.test(String(body.docFinish || '')) ? body.docFinish : '' }, by);
+        let job = await J.find(core);   // a new project starts in Pre-sales
+        // 📄 started from a document: it becomes the project's first Ask AI document, and the plan builder reads it
+        let docId = '';
+        if (body.docSid) {
+          const d = await DOCI.staged(body.docSid);
+          if (d) { const r = await intelUpload(core, { name: d.name, text: d.text, pages: d.pages, kind: 'Project document' }, by); if (r.doc) { docId = r.doc.id; await J.update(core, { docId, docName: d.name }); job = await J.find(core); } }
+        }
         if (body.bom === false) await setModule(core, 'bom', false);     // optional modules chosen on the form
         if (body.swms === false) await setModule(core, 'swms', false);
         await A.audit(who, `${J.refFor(job)}: project created (${pname})`);
-        return out(200, { core, ref: J.refFor(job) });
+        return out(200, { core, ref: J.refFor(job), docId });
+      }
+      case 'planDocStage': {   // 📄 a document for a new project: its text, staged for the AI to read (RAG)
+        const r = await DOCI.stage({ name: body.name, pages: body.pages, text: body.text, kind: body.kind }, who);
+        if (r.error) return bad(r.error);
+        return out(200, { ...r, budget: DOCI.budget() });
       }
 
       // ---------- data explorer ----------

@@ -308,6 +308,14 @@ export async function intelPost(action, body, { who, by, audit }) {
       if (!f) return out(404, { error: 'The PDF for that record was not found' });
       return out(200, { name: f.metadata.name || key + '.pdf', type: 'application/pdf', file: f.buf.toString('base64') });
     }
+    case 'intelDocPutFile': {   // 📄 the original file of a document whose text came in first (a project started from a document)
+      const id = str(body.id, 20), buf = Buffer.from(String(body.file || ''), 'base64');
+      const d = (await docList(core)).find((x) => x.id === id); if (!d) return out(404, { error: 'Document not found' });
+      if (!buf.length || buf.length > MAX_FILE) return out(400, { error: 'The file is too big to keep (3.5 MB at most); its text is kept.' });
+      await kv.putFile(`pdocfile:${core}:${id}`, buf, { name: d.name, type: str(body.type, 100) });
+      await kv.update('pdocs:' + core, (x) => { (x.docs || []).forEach((y) => { if (y.id === id) { y.hasFile = true; y.size = buf.length; y.type = str(body.type, 100) || y.type; } }); return x; }, () => ({ docs: [] }));
+      return out(200, { ok: true });
+    }
     case 'intelDocDelete': { await remove(core, str(body.id, 20)); if (audit) await audit(who, `Project ${core}: document deleted from Ask AI`); return out(200, { ok: true }); }
     case 'intelDocFile': {
       const id = str(body.id, 20), f = await kv.getFile(`pdocfile:${core}:${id}`);

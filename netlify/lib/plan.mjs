@@ -643,11 +643,12 @@ export function privateOut(text, job = {}) {
 
 // ---------- ✨ AI builds a plan (runs in a background function, so it can take longer than a normal request) ----------
 // AI plan reply cap (v56): default 10,000 tokens so big multi-phase projects are planned end to end; AI_PLAN_MAX_TOKENS 2,000-32,000
-const planCap = () => Math.max(2000, Math.min(32000, Number(env('AI_PLAN_MAX_TOKENS', '10000')) || 10000));
+const planCap = (big) => { const n = Math.max(2000, Math.min(32000, Number(env('AI_PLAN_MAX_TOKENS', '10000')) || 10000)); return big ? Math.max(n, Math.min(32000, Number(env('AI_DOC_PLAN_MAX_TOKENS', '16000')) || 16000)) : n; };
 export async function buildAiPlan({ core, describe, scope, type, start, finish, emergency, weekends, lang }, by) {
   const job = core ? await J.find(core) : null;
   if (!job) return { error: 'Job not found' };
-  const text = privateOut(str(describe, 6000) || str(scope, 6000), job);   // never send the customer's name, phone or email
+  const fromDoc = !!(job.docId || job.brief), cap = fromDoc ? 16000 : 6000;
+  const text = privateOut(str(describe, cap) || str(scope, cap), job);   // never send the customer's name, phone or email
   if (text.length < 10) return { error: 'Describe the job first (what the customer wants done).' };
   if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.' };
   try { await checkLimit(); } catch (e) { return { error: e.message }; }
@@ -664,13 +665,18 @@ export async function buildAiPlan({ core, describe, scope, type, start, finish, 
     'If finish_by is given, the whole plan must finish by then: everything has to fit in working_days_available (order long-lead items first, run tasks in parallel only where it is safe and give those tasks the same "after"). If it truly cannot fit, say so in the FIRST tip with the realistic number of working days. ' +
     'Set "emergency": true only if the description says it is an emergency or urgent (e.g. burst pipe, active leak doing damage, storm damage, "ASAP"). ' +
     'JSON only: {"emergency":false,"name":"short plan name","objective":"one sentence","in_scope":"","out_of_scope":"","deliverables":"","acceptance":"","assumptions":"","tips":[""],"tasks":[{"ph":"","n":"","d":1,"after":[],"q":0,"u":"h","r":0,"b":"","s":[["",0,1]]}],"risks":[["","",3,3,"Mitigate",""]]}';
+  // 📄 a project started from a document: the plan follows the document (its phases, deliverables, milestones and dates), with the parts of it the plan needs (RAG)
+  let docX = '';
+  if (job.docId) { const t = await kv.get(`pdoctext:${job.core}:${job.docId}`).catch(() => null); if (t && t.text) { const { extracts, PLAN_QUERIES } = await import('./docingest.mjs'); docX = privateOut(extracts(t.text, PLAN_QUERIES, Number(process.env.DOC_PLAN_CHARS) || 90000), job); } }
   const st = ymdOk(start) || new Date().toISOString().slice(0, 10), fin = ymdOk(finish);
   const user = { job_type: str(type, 120), work: str(job.service, 120), suburb: str(job.suburb, 60), start_date: st, emergency: !!emergency, weekends_allowed: !!weekends, cooling_off_days: emergency ? 0 : 3, description: text };
+  if (docX) { user.project_document = job.docName || 'the project document'; user.document_extracts = docX; }
   if (fin && fin >= st) { user.finish_by = fin; user.working_days_available = workBetween(nextWork(st, !!(emergency || weekends)), fin, !!(emergency || weekends)); }
   let o, used, cutOff = false;
   const LN = { ms: 'Bahasa Melayu (Malay)', id: 'Bahasa Indonesia', ta: 'Tamil', zh: 'Simplified Chinese', hi: 'Hindi', ar: 'Arabic', fa: 'Persian', vi: 'Vietnamese', th: 'Thai', tl: 'Filipino', ja: 'Japanese', ko: 'Korean', es: 'Spanish', fr: 'French', de: 'German', pt: 'Portuguese', sw: 'Kiswahili', rw: 'Kinyarwanda', km: 'Khmer (Cambodian)' }[lang];
-  const sys2 = LN ? system + ` Write every task name, sub-task name, phase name, risk, objective, scope, deliverable and acceptance text in ${LN} (natural, professional ${LN}); JSON keys, codes, units and numbers stay as specified.` : system;
-  try { ({ data: o, used, cutOff } = await llmJson([{ role: 'system', content: sys2 }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: planCap(), timeoutMs: 600000, temperature: 0.3 })); }
+  const sysD = fromDoc ? system + ' THIS PROJECT COMES FROM A PROJECT DOCUMENT (description = the brief read from it; document_extracts = the parts of it about phases, schedule, deliverables and requirements, with page numbers). The document is the basis: the industry is whatever it says (not necessarily construction, so skip site inspection, quote and cooling-off unless the document has them); follow its phases, work packages, deliverables, milestones and dates; name tasks the way the document does; put every deliverable and milestone it lists in the plan; respect its constraints; add the realistic tasks a professional would add that it leaves out (mobilisation, governance, reviews, testing, training, handover, closure). Make it comprehensive: a large document usually means 60 to 140 tasks across all phases. In "b" (basis) cite the page where useful, e.g. "p. 12".' : system;
+  const sys2 = LN ? sysD + ` Write every task name, sub-task name, phase name, risk, objective, scope, deliverable and acceptance text in ${LN} (natural, professional ${LN}); JSON keys, codes, units and numbers stay as specified.` : sysD;
+  try { ({ data: o, used, cutOff } = await llmJson([{ role: 'system', content: sys2 }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: planCap(fromDoc), timeoutMs: 600000, temperature: 0.3 })); }
   catch (e) { return { error: e.message }; }
   const today = await usage(true, used);
   const tasks = (Array.isArray(o.tasks) ? o.tasks : []).slice(0, 150).map((t) => ({
@@ -983,7 +989,7 @@ export async function planPost(action, body, { who, by, audit }) {
     const rems = remsAll.filter((r) => r.core === job.core).map((r) => ({ ...r, when: whenText(r.at) }));
     let costs = 0;
     try { costs = r2(Object.values((idx && idx.expenses) || {}).filter((e) => e.core === job.core).reduce((a, e) => a + (e.inc - e.gst), 0)); } catch {}
-    return out(200, { champ: modulesOf(champ, job.core), plan, job: { core: job.core, ref: J.refFor(job), name: job.name, manager: job.manager || '', sponsor: job.sponsor || '', program: job.program || '', suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), phone: job.phone || '', email: job.email || '', scope: jobScope(job), urgency: job.urgency || '', emergency: isEmergency(job) }, reminders: rems, expensesEx: costs, test: isTestSite(), bench: plan ? benchTarget(plan, job) : null });
+    return out(200, { champ: modulesOf(champ, job.core), plan, job: { core: job.core, ref: J.refFor(job), name: job.name, manager: job.manager || '', sponsor: job.sponsor || '', program: job.program || '', suburb: job.suburb, service: job.service, stage: job.stage, source: job.source || '', title: jobTitle(job), phone: job.phone || '', email: job.email || '', scope: jobScope(job), brief: job.brief || '', docName: job.docName || '', docId: job.docId || '', docStart: job.docStart || '', docFinish: job.docFinish || '', urgency: job.urgency || '', emergency: isEmergency(job) }, reminders: rems, expensesEx: costs, test: isTestSite(), bench: plan ? benchTarget(plan, job) : null });
   }
   if (action === 'planSave') {
     if (!core || !(await J.find(core))) return out(404, { error: 'Job not found' });
