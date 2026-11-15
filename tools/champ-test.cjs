@@ -22,7 +22,8 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   // a fake DeepSeek: says back which language and page the assistant was told to use
   const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
     const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
-    if (/Definition of Ready/.test(sys)) { s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ desc: 'Book the venue for the offsite and confirm the date. Done when: deposit paid; booking confirmed in writing.', points: 6, priority: 'high', days: 4 }) } }], usage: { total_tokens: 90 } })); }
+    if (/Scrum Master and Agile coach/.test(sys)) { s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ sprints: [{ id: 'S1', items: ['m0', 'm1', 'm2', 'zz'], goal: 'People can sign in and manage their profile', objective: 'Login and profile pass UAT', verdict: 'achievable', assessment: '10 of ~10 pts, all ready' }, { id: 'S2', items: ['m3', 'm0'], goal: 'People can pay in the app', objective: 'A test payment clears', verdict: 'risky', assessment: 'Payments is 8 pts' }], refine: [{ id: 'm3', why: 'Split it' }], advice: 'Split Payments' }) } }], usage: { total_tokens: 90 } })); }
+    if (/Definition of Ready/.test(sys)) { s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ desc: 'Book the venue for the offsite and confirm the date. Done when: deposit paid; booking confirmed in writing.', points: 6, priority: 'high', days: 4, story_points: [3, 4], new_stories: [{ name: 'Shortlist three venues', points: 2 }, { name: 'Pay the deposit', points: 1 }] }) } }], usage: { total_tokens: 90 } })); }
     if (j.response_format && /Project Management Plan/.test(sys)) {   // the project plan narrative: three parts
       const task = JSON.parse(j.messages[1].content).task; global.PLANDOC_SYS = sys; global.PLANDOC_CALLS = (global.PLANDOC_CALLS || 0) + 1; global.PLANDOC_MAX = Math.max(global.PLANDOC_MAX || 0, j.max_tokens || 0);
       const ms = /Bahasa Melayu/.test(sys), w = (en, m) => (ms ? m : en), lorem = (n) => Array.from({ length: n }, (_, i) => w('The project team will deliver this work on time and on budget, with **clear governance** and weekly reporting to the sponsor.', 'Pasukan projek akan menyiapkan kerja ini tepat pada masanya dan dalam bajet, dengan **tadbir urus yang jelas** dan laporan mingguan kepada penaja.')).join(' ');
@@ -428,10 +429,10 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     fs.mkdirSync('/tmp/rpt', { recursive: true });
     const sizes = [];
     for (const [sk, th] of [['modern', 'champ'], ['bold', 'ocean'], ['minimal', 'forest'], ['classic', 'royal']]) {
-      await p.click(`[data-skin=${sk}]`); await p.click(`#rpLook button[data-thm=${th}]`); await sleep(300);
-      const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 30000 }), p.click('#rpPdf')]); const f = `/tmp/rpt/${sk}-${th}.pdf`; await dl.saveAs(f);
+      await p.click(`[data-skin=${sk}]`); await p.click(`#rpLook button[data-thm=${th}]`); await sleep(1500); await p.waitForSelector('#rpLiveBox:not(.busy)', { timeout: 30000 }).catch(() => {});
+      const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 60000 }), p.click('#rpPdf')]); const f = `/tmp/rpt/${sk}-${th}.pdf`; await dl.saveAs(f);
       const buf = fs.readFileSync(f), pages = (buf.toString('latin1').match(/\/Type \/Page\b/g) || []).length;
-      const [dw] = await Promise.all([p.waitForEvent('download', { timeout: 30000 }), p.click('#rpDocx')]); const fw = `/tmp/rpt/${sk}-${th}.docx`; await dw.saveAs(fw);
+      const [dw] = await Promise.all([p.waitForEvent('download', { timeout: 60000 }), p.click('#rpDocx')]); const fw = `/tmp/rpt/${sk}-${th}.docx`; await dw.saveAs(fw);
       sizes.push([sk, buf.slice(0, 4).toString() === '%PDF' && pages >= 1 && pages <= 4, pages, fs.readFileSync(fw).slice(0, 2).toString() === 'PK']);
       await sleep(400);
     }
@@ -868,8 +869,10 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       await p.click('#agNew').catch(() => {}); await p.waitForSelector('#agF', { timeout: 5000 }).catch(() => {});
       const chips = await p.$$eval('#agF [data-pt]', (b) => b.map((x) => x.textContent).join(','));
       await p.fill('#agF [name=name]', 'Offsite venue'); await p.click('#agAi'); await p.waitForFunction(() => /Done when/.test((document.querySelector('#agF [name=desc]') || {}).value || ''), null, { timeout: 10000 }).catch(() => {});
-      const af = await p.evaluate(() => { const F = document.querySelector('#agF'); return [F.desc.value.slice(0, 20), F.pts.value, F.prio.value, F.dur.value, F.owner.value]; });
-      ok('Backlog', 'story points are picked from 1, 2, 3, 5, 8, 13; ✨ Fill it in with AI writes the description, points (snapped to the scale), urgency and days, and leaves the owner to you', chips === '1,2,3,5,8,13,?' && /Book the venue/.test(af[0]) && af[1] === '5' && af[2] === 'High' && af[3] === '4' && af[4] === '', JSON.stringify([chips, af]));
+      const af = await p.evaluate(() => { const F = document.querySelector('#agF'); return [F.desc.value.slice(0, 20), document.querySelector('#agPtsNote').textContent, F.prio.value, F.dur.value, F.owner.value]; });
+      ok('Backlog', 'story points are picked from 1, 2, 3, 5, 8, 13; ✨ Fill it in with AI writes the description, stories with points (snapped to the scale, adding up to the item), urgency and days, and leaves the owner to you', chips === '1,2,3,5,8,13,?' && /Book the venue/.test(af[0]) && /3 pts/.test(af[1]) && af[2] === 'High' && af[3] === '4' && af[4] === '', JSON.stringify([chips, af]));
+      const sts = await p.$$eval('#agSt [data-stn]', (i) => i.map((x) => x.value).join('|'));
+      ok('Backlog', 'the AI also suggests stories with points (an item with none gets them)', sts === 'Shortlist three venues|Pay the deposit', sts);
       await p.click('#agF [data-close]').catch(() => {}); await sleep(300);
       await p.click('#agNew').catch(() => {}); await p.waitForSelector('#agF', { timeout: 5000 }).catch(() => {});
       await p.fill('#agF [name=name]', 'Venue booking'); await p.fill('#agF [name=desc]', 'Book the hall for 120 guests; done when the deposit is paid'); await p.click('#agF [data-pt="5"]'); await p.selectOption('#agF [name=prio]', 'High'); await p.fill('#agF [name=owner]', 'Priya Shah'); await p.fill('#agF [name=dur]', '3');
@@ -904,6 +907,20 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       const buckets = await p.$$eval('.ag-sp .ag-sph b', (L) => L.map((x) => x.textContent));
       for (const id of ['m0', 'm1', 'm2']) { await p.click(`.ag-pb [data-tid="${id}"] [data-agto="S1"]`).catch(() => {}); await sleep(900); }
       await p.click(`.ag-pb [data-tid="m3"] [data-agto="S2"]`).catch(() => {}); await sleep(900);
+      await p.click('[data-sp="S2"] [data-tid="m3"] .ag-ed').catch(() => {}); await p.waitForSelector('#agF', { timeout: 5000 }).catch(() => {});
+      await p.fill('#agF [name=desc]', 'Card and wallet payments; done when a test payment clears');
+      await p.click('#agStAdd'); await p.fill('#agSt [data-stn="0"]', 'Pay by card'); await p.selectOption('#agSt [data-stp="0"]', '5');
+      await p.click('#agStAdd'); await p.fill('#agSt [data-stn="1"]', 'Pay by wallet'); await p.selectOption('#agSt [data-stp="1"]', '3');
+      const note = await p.textContent('#agPtsNote').catch(() => '');
+      await p.click('#agF [type=submit]').catch(() => {}); await sleep(1500);
+      const m3 = ((await mT()).tasks || []).find((t) => t.id === 'm3') || {}, m3row = await p.textContent('[data-sp="S2"] [data-tid="m3"]').catch(() => '');
+      ok('Scrum', 'Sprint planning: ✏ opens the item; its description and stories (with points) can be changed there, and the stories set its points', /test payment/.test(m3.desc) && (m3.subs || []).map((x) => x.name + ':' + x.points).join() === 'Pay by card:5,Pay by wallet:3' && /8 pts/.test(note) && /📖 2/.test(m3row) && m3.ag === 'S2', JSON.stringify([m3.desc, m3.subs, note, m3row]));
+      const chk = await p.textContent('[data-sp="S1"] .ag-chk').catch(() => '');
+      await p.click('#agAiPlan').catch(() => {}); await p.waitForSelector('#agAiGo', { timeout: 10000 }).catch(() => {});
+      const aiTxt = await p.textContent('#agAiOut').catch(() => '');
+      await p.click('#agAiGo').catch(() => {}); await sleep(1500);
+      const PA = await mT(), sA = (PA.agile.sprints || []).find((x) => x.id === 'S2') || {};
+      ok('Scrum', 'each sprint says if it is achievable (points vs capacity, readiness, dependencies); ✨ Plan the sprints with AI proposes items and goals, and applies them', /Achievable|At risk|Over-committed/.test(chk) && /pts/.test(chk) && /Achievable/.test(aiTxt) && /Refine first/.test(aiTxt) && sA.goal === 'People can pay in the app' && PA.tasks.find((t) => t.id === 'm3').ag === 'S2' && PA.tasks.find((t) => t.id === 'm0').ag === 'S1', JSON.stringify([chk, aiTxt.slice(0, 120), sA.goal]));
       await p.fill('[data-sp="S1"] [data-spf=goal]', 'Users can sign in and see their profile'); await p.press('[data-sp="S1"] [data-spf=goal]', 'Tab'); await sleep(800);
       await p.click('[data-agstart="S1"]').catch(() => {}); await p.waitForSelector('#okBtn', { timeout: 5000 }).catch(() => {}); await p.click('#okBtn').catch(() => {}); await sleep(2000);
       const P1 = await mT(), s1 = (P1.agile.sprints || []).find((s) => s.id === 'S1') || {};

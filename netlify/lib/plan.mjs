@@ -394,10 +394,13 @@ export async function agFill(core, b) {
     '"desc": what the work is and why, then "Done when:" and 2 or 3 short testable checks; at most 280 characters, plain Australian English, no names of people. ' +
     '"points": relative effort and complexity on the Fibonacci scale, one of 1, 2, 3, 5, 8, 13 (13 means it is big and should be split). ' +
     '"priority": urgency, one of High, Medium, Low (High if other work waits on it, it is on the critical path or it is early in the plan). ' +
-    '"days": working days it is likely to take (1 to 60). Use the project and the other items for context. JSON only: {"desc":"","points":3,"priority":"Medium","days":5}';
+    '"days": working days it is likely to take (1 to 60). ' +
+    '"story_points": if "stories" are given, the points (1, 2, 3, 5, 8, 13) for each of them, in the same order. ' +
+    '"new_stories": if no stories are given, or "more_stories" is true, 2 to 5 user stories that split the item into pieces of value ("As a <role>, I want <goal> so that <benefit>" or a short action), each with its points; do not repeat the given stories. ' +
+    'Use the project and the other items for context. JSON only: {"desc":"","points":3,"priority":"Medium","days":5,"story_points":[2,3],"new_stories":[{"name":"","points":2}]}';
   const others = plan.tasks.filter((x) => x.dur > 0 && (!t || x.id !== t.id)).slice(0, 40).map((x) => scrubTask(x.name, job));
   const user = { project: scrubTask(str(plan.name || job.service, 120), job), item: scrubTask(name, job), current_description: str(b.desc, 300) || undefined,
-    stories: t ? (t.subs || []).map((x) => scrubTask(x.name, job)).slice(0, 12) : undefined, planned_days: t ? t.dur : undefined, other_items: others };
+    stories: (Array.isArray(b.stories) ? b.stories : t ? (t.subs || []).map((x) => x.name) : []).map((x) => scrubTask(str(x, 160), job)).filter(Boolean).slice(0, 12), more_stories: b.mode === 'stories' || undefined, planned_days: t ? t.dur : undefined, other_items: others };
   let o, used;
   try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: 400, temperature: 0.3 })); }
   catch (e) { return { error: e.message, code: 502 }; }
@@ -406,8 +409,47 @@ export async function agFill(core, b) {
   const n = Number(o.points), points = AG_PTS.reduce((a, x) => (Math.abs(x - n) < Math.abs(a - n) ? x : a), 3);
   const priority = ['High', 'Medium', 'Low'].find((x) => x.toLowerCase() === String(o.priority || '').toLowerCase()) || 'Medium';
   const days = Math.max(1, Math.min(365, Math.round(Number(o.days) || (t ? t.dur : 1) || 1)));
-  if (!desc) return { error: 'The AI did not write anything useful. Try again.' };
-  return { desc, points, priority, days, tokens: used, today };
+  const snap = (v) => { const k = Number(v); return k > 0 ? AG_PTS.reduce((a, x) => (Math.abs(x - k) < Math.abs(a - k) ? x : a), 3) : 0; };
+  const storyPoints = (Array.isArray(o.story_points) ? o.story_points : []).slice(0, user.stories.length).map(snap);
+  const stories = (Array.isArray(o.new_stories) ? o.new_stories : []).map((x) => ({ name: str(typeof x === 'string' ? x : x && x.name, 160), points: snap(x && x.points) || 2 })).filter((x) => x.name).slice(0, 6);
+  if (!desc && !stories.length) return { error: 'The AI did not write anything useful. Try again.' };
+  return { desc, points, priority, days, storyPoints, stories, tokens: used, today };
+}
+
+// ---------- 🗓 ✨ plan the sprints with AI: what is achievable in Sprint n and n+1, with goals; the Gantt dates stay the base ----------
+export async function agSprintAi(core, b) {
+  const job = await J.find(core); if (!job) return { error: 'Job not found', code: 404 };
+  const plan = (await get(job.core)) || { tasks: [] };
+  if (!llmSetup()) return { error: 'AI is not set up yet: add LLM_API_KEY (DeepSeek) in Netlify.', code: 503 };
+  try { await checkLimit(); } catch (e) { return { error: e.message, code: 429 }; }
+  const known = new Set(plan.tasks.map((t) => t.id));
+  const items = (Array.isArray(b.items) ? b.items : []).filter((x) => x && known.has(String(x.id))).slice(0, 120).map((x) => ({ id: str(x.id, 20), name: scrubTask(str(x.name, 160), job), points: Number(x.points) || 0, priority: str(x.priority, 10), owner: x.owner ? 'yes' : 'no',
+    dor_ready: !!x.ready, missing: (Array.isArray(x.missing) ? x.missing : []).map((m) => str(m, 20)), gantt_start: str(x.start, 10), gantt_finish: str(x.finish, 10), after: (Array.isArray(x.after) ? x.after : []).map((m) => scrubTask(str(m, 120), job)).slice(0, 5), now_in: str(x.in, 6), status: str(x.status, 10) }));
+  const sprints = (Array.isArray(b.sprints) ? b.sprints : []).slice(0, 2).map((x) => ({ id: str(x.id, 6), n: Number(x.n) || 1, start: str(x.start, 10), end: str(x.end, 10), started: x.status === 'active', goal: str(x.goal, 300), objective: str(x.objective, 600), capacity_points: Number(x.capacity) || 0, capacity_basis: str(x.capacity_basis, 80), current_check: str(x.check, 300) }));
+  if (!sprints.length) return { error: 'There is no sprint to plan' };
+  const system = 'You are an experienced Scrum Master and Agile coach (PMI-ACP, CSM). Plan the next sprints for a team from its Product Backlog, and judge honestly what is achievable. ' +
+    'Rules: a sprint that has started ("started": true) keeps its items: only assess whether its goal can still be met. For each sprint not started, choose item ids for it. ' +
+    'Fill each sprint up to about its capacity_points (never more than 110% of it; if capacity is 0, use the Gantt dates: items whose gantt_start..gantt_finish overlap the sprint dates). ' +
+    'Prefer, in order: items already in it, High urgency, items the Gantt has due in the sprint dates, items other work waits on, then DOR ready ones. An item goes in a later sprint than the items in its "after" list (unless those are done). ' +
+    'Avoid items that are not DOR ready; if one must go in, list it in "refine" with what is missing. Each item is in at most one sprint. Never change Gantt dates. ' +
+    'Write for each sprint: a one-sentence goal (the outcome, not a task list), an objective (how we will know: 1 or 2 measurable checks), a verdict ("achievable", "risky" or "over") and a short assessment (at most 220 characters: points vs capacity, readiness, dependencies, dates). ' +
+    'Then one piece of advice for the product owner (at most 200 characters). Australian English. ' +
+    'JSON only: {"sprints":[{"id":"S1","items":["t1"],"goal":"","objective":"","verdict":"achievable","assessment":""}],"refine":[{"id":"t1","why":""}],"advice":""}';
+  const user = { project: scrubTask(str(plan.name || job.service, 120), job), sprint_length_days: Number(b.cycle) === 28 ? 28 : 14, velocity: Number(b.velocity) || 0, sprints, backlog: items };
+  let o, used;
+  try { ({ data: o, used } = await llmJson([{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: 1600, timeoutMs: 90000, temperature: 0.2 })); }
+  catch (e) { return { error: e.message, code: 502 }; }
+  const today = await usage(true, used);
+  const ok = new Set(items.map((x) => x.id)), taken = new Set();
+  const outS = sprints.map((sp) => {
+    const r = (Array.isArray(o.sprints) ? o.sprints : []).find((x) => x && String(x.id) === sp.id) || {};
+    let ids = sp.started ? items.filter((x) => x.now_in === sp.id).map((x) => x.id) : (Array.isArray(r.items) ? r.items : []).map((x) => str(x, 20)).filter((x) => ok.has(x) && !taken.has(x));
+    ids = [...new Set(ids)]; ids.forEach((x) => taken.add(x));
+    const v = String(r.verdict || '').toLowerCase();
+    return { id: sp.id, items: ids, goal: str(r.goal, 300) || sp.goal, objective: str(r.objective, 600) || sp.objective, verdict: ['achievable', 'risky', 'over'].includes(v) ? v : 'risky', assessment: str(r.assessment, 300) };
+  });
+  const refine = (Array.isArray(o.refine) ? o.refine : []).filter((x) => x && ok.has(String(x.id))).slice(0, 10).map((x) => ({ id: str(x.id, 20), why: str(x.why, 200) }));
+  return { sprints: outS, refine, advice: str(o.advice, 300), tokens: used, today };
 }
 
 // ---------- v78: ✨ indicative costs: benchmark estimates for tasks, to be reviewed by the consultant ----------
@@ -968,6 +1010,11 @@ export async function planPost(action, body, { who, by, audit }) {
     const id = str(body.id, 40).replace(/[^a-z0-9]/gi, '');
     const r = id ? await kv.get('aiplan:' + id) : null;
     return out(200, r || { status: 'waiting' });
+  }
+  if (action === 'planAgSprintAi') {
+    const r = await agSprintAi(core, body);
+    if (r.error) return out(r.code || 400, { error: r.error });
+    return out(200, r);
   }
   if (action === 'planAgFill') {
     const r = await agFill(core, body);

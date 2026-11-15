@@ -2816,44 +2816,131 @@
     B.querySelectorAll('[data-agdel]').forEach(function (b) { b.onclick = function () { taskDelete(find(b)); }; });
     B.querySelectorAll('[data-agto]').forEach(function (b) { b.onclick = function () { var t = find(b), to = b.getAttribute('data-agto'); if (agPull(t, to)) { dirty(t.name + ' → ' + (to === 'board' ? 'board' : 'Sprint ' + agSprint(A, to).n)); render(); } }; });
   }
-  function agEdit(t) {   // edit (or add) a backlog item: it is the Gantt task itself
-    var p = S.plan, isNew = !t, subs = t ? (t.subs || []) : [], owners = [];
+  function agStC(t) { var n = (t.subs || []).length; return n ? '<span class="ag-stc" title="' + n + (n === 1 ? ' story' : ' stories') + '">📖 ' + n + '</span>' : ''; }
+  function agEdit(t) {   // edit (or add) a backlog item: it is the Gantt task itself, with its stories (the Gantt sub-tasks)
+    var p = S.plan, isNew = !t, owners = [];
     (p.stakeholders || []).forEach(function (x) { var n = x.name || x.role; if (n && owners.indexOf(n) < 0) owners.push(n); });
     p.tasks.forEach(function (x) { var n = ownerOf(x); if (n && owners.indexOf(n) < 0) owners.push(n); });
     t = t || { name: '', desc: '', dur: 1, points: 0, priority: '', owner: '' };
+    var ST = (t.subs || []).map(function (x) { return { id: x.id, name: x.name, points: x.points || 0, done: x.status === 'done' }; });   // the stories, edited here and saved together
+    var ptsSel = function (v, i) { return '<select data-stp="' + i + '" title="Story points"><option value="0">–</option>' + PTS.map(function (n) { return '<option' + (+v === n ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select>'; };
     M.modal('<h2>' + (isNew ? '＋ Backlog item' : '✏ ' + esc(t.name)) + '</h2><p class="muted" style="margin:-4px 0 10px">' + (isNew ? 'It is added to the Gantt chart too (at the end).' : 'Changes here change the Gantt chart too.') + ' Description, points, urgency and owner make it ✅ DOR ready.</p>' +
-      '<div class="ag-ai"><button type="button" class="btn btn-sm btn-gold" id="agAi">✨ Fill it in with AI</button><span class="muted" id="agAiMsg">writes the description (with when it is done), story points and urgency' + (isNew ? ', and the days' : '') + '; you choose the owner</span></div>' +
+      '<div class="ag-ai"><button type="button" class="btn btn-sm btn-gold" id="agAi">✨ Fill it in with AI</button><span class="muted" id="agAiMsg">writes the description (with when it is done), story points, urgency and stories' + (isNew ? ', and the days' : '') + '; you choose the owner</span></div>' +
       '<form class="form" id="agF"><label class="full">Item (task)<input name="name" required maxlength="160" value="' + esc(t.name) + '" placeholder="e.g. Venue booking"></label>' +
       '<label class="full">Description<textarea name="desc" rows="3" maxlength="300" placeholder="What is it, and when is it done?">' + esc(t.desc || '') + '</textarea></label>' +
-      (function () { var sp = (subs.reduce(function (a, x) { return a + (x.points || 0); }, 0)); return sp > 0 ? '<label class="full">Story points<input value="' + sp + ' (its ' + subs.length + ' stories add up to this: change them on the board)" disabled></label>' :
-        '<div class="full ag-pts"><span class="ag-l">Story points <small class="muted">relative effort (Fibonacci)' + (subs.length ? '; its ' + subs.length + ' stories have none yet' : '') + '</small></span><div class="ag-ptr">' + PTS.map(function (n) { return '<button type="button" class="ag-pt' + (+t.points === n ? ' on' : '') + '" data-pt="' + n + '">' + n + '</button>'; }).join('') + '<button type="button" class="ag-pt ag-pt0' + (!+t.points ? ' on' : '') + '" data-pt="0" title="Not sized yet">?</button></div><input type="hidden" name="pts" value="' + (+t.points || 0) + '"></div>'; })() +
+      '<div class="full ag-pts"><span class="ag-l">Story points <small class="muted" id="agPtsNote">relative effort (Fibonacci)</small></span><div class="ag-ptr">' + PTS.map(function (n) { return '<button type="button" class="ag-pt' + (+t.points === n ? ' on' : '') + '" data-pt="' + n + '">' + n + '</button>'; }).join('') + '<button type="button" class="ag-pt ag-pt0' + (!+t.points ? ' on' : '') + '" data-pt="0" title="Not sized yet">?</button></div><input type="hidden" name="pts" value="' + (+t.points || 0) + '"></div>' +
+      '<div class="full ag-stw"><span class="ag-l">📖 Stories <small class="muted">the pieces of work inside it (Gantt sub-tasks); their points add up to the item</small></span><div id="agSt"></div>' +
+        '<div class="ag-sta"><button type="button" class="btn btn-sm" id="agStAdd">＋ Story</button><button type="button" class="btn btn-sm" id="agStAi">✨ Suggest stories</button></div></div>' +
       '<label>Urgency<select name="prio"><option value="">–</option>' + PRIO.map(function (x) { return '<option' + (t.priority === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label>' +
       '<label>Owner (main person)<input name="owner" list="agOwn" maxlength="80" value="' + esc(ownerOf(t)) + '"><datalist id="agOwn">' + owners.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist></label>' +
       '<label>Days<input name="dur" type="number" min="1" max="365" value="' + (t.dur || 1) + '"><small class="muted" id="agDurHint"></small></label>' +
       '<div class="full actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" type="submit">' + (isNew ? 'Add to the backlog' : 'Save') + '</button></div></form>');
-    var F = $('#agF'); setTimeout(function () { F.name.focus(); }, 30);
-    var setPts = function (n) { if (!F.pts) return; F.pts.value = n; F.querySelectorAll('[data-pt]').forEach(function (b) { b.classList.toggle('on', +b.getAttribute('data-pt') === +n); }); };
-    F.querySelectorAll('[data-pt]').forEach(function (b) { b.onclick = function () { setPts(+b.getAttribute('data-pt')); }; });
-    var flash = function (el) { if (!el) return; el.classList.remove('ai-filled'); void el.offsetWidth; el.classList.add('ai-filled'); };
-    $('#agAi').onclick = function () {
-      var bt = this, nm = F.name.value.trim(), msg = $('#agAiMsg'); if (!nm) { F.name.focus(); return toast('Type the item name first', true); }
-      bt.disabled = true; bt.textContent = '✨ Thinking…';
-      api('planAgFill', { core: S.core, taskId: isNew ? '' : t.id, name: nm, desc: F.desc.value }).then(function (d) {
-        F.desc.value = d.desc; flash(F.desc);
-        if (F.pts) { setPts(d.points); flash(F.querySelector('.ag-ptr')); }
-        F.prio.value = d.priority; flash(F.prio);
-        if (isNew) { F.dur.value = d.days; flash(F.dur); } else if (+F.dur.value !== d.days) $('#agDurHint').textContent = 'AI estimate: ' + pl(d.days, 'day') + ' (the Gantt keeps its own unless you change it)';
-        msg.textContent = 'Filled in: check it, pick the owner, then save.' + (F.owner.value.trim() ? '' : ''); if (!F.owner.value.trim()) F.owner.focus();
-      }).catch(fail).then(function () { bt.disabled = false; bt.textContent = '✨ Fill it in again'; });
+    var F = $('#agF'); setTimeout(function () { if (isNew) F.name.focus(); }, 30);
+    var stSum = function () { return ST.reduce(function (a, x) { return a + (+x.points || 0); }, 0); };
+    var ptsState = function () {   // the stories' points, when they have any, are the item's points
+      var n = stSum(), on = n > 0; F.querySelector('.ag-ptr').classList.toggle('dis', on);
+      $('#agPtsNote').textContent = on ? 'from its stories: ' + n + ' pts' : 'relative effort (Fibonacci)' + (ST.length ? '; its stories have no points yet' : '');
     };
+    var drawSt = function () {
+      $('#agSt').innerHTML = ST.length ? ST.map(function (x, i) { return '<div class="ag-str' + (x.done ? ' done' : '') + (x.fresh ? ' fresh' : '') + '"><span class="ag-n">' + (i + 1) + '</span><input data-stn="' + i + '" maxlength="160" value="' + esc(x.name) + '" placeholder="As a … I want … so that …"' + (x.done ? ' disabled title="Done: locked"' : '') + '>' + ptsSel(x.points, i) +
+        (x.done ? '<span class="ag-stl" title="Done stories stay">🔒</span>' : '<button type="button" class="btn btn-sm" data-stx="' + i + '" title="Remove the story">✕</button>') + '</div>'; }).join('') : '<div class="muted ag-stn">No stories yet: add them, or let the AI suggest some.</div>';
+      $('#agSt').querySelectorAll('[data-stn]').forEach(function (el) { el.oninput = function () { ST[+el.getAttribute('data-stn')].name = el.value; }; el.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); $('#agStAdd').click(); } }; });
+      $('#agSt').querySelectorAll('[data-stp]').forEach(function (el) { el.onchange = function () { ST[+el.getAttribute('data-stp')].points = +el.value || 0; ptsState(); }; });
+      $('#agSt').querySelectorAll('[data-stx]').forEach(function (b) { b.onclick = function () { ST.splice(+b.getAttribute('data-stx'), 1); drawSt(); }; });
+      ptsState();
+    };
+    drawSt();
+    $('#agStAdd').onclick = function () { ST.push({ name: '', points: 0, fresh: true }); drawSt(); var ins = $('#agSt').querySelectorAll('[data-stn]'); if (ins.length) ins[ins.length - 1].focus(); };
+    var setPts = function (n) { F.pts.value = n; F.querySelectorAll('[data-pt]').forEach(function (b) { b.classList.toggle('on', +b.getAttribute('data-pt') === +n); }); };
+    F.querySelectorAll('[data-pt]').forEach(function (b) { b.onclick = function () { if (stSum() > 0) return toast('Its stories set the points: change them below', true); setPts(+b.getAttribute('data-pt')); }; });
+    var flash = function (el) { if (!el) return; el.classList.remove('ai-filled'); void el.offsetWidth; el.classList.add('ai-filled'); };
+    var ask = function (mode, bt, label) {
+      var nm = F.name.value.trim(), msg = $('#agAiMsg'); if (!nm) { F.name.focus(); return toast('Type the item name first', true); }
+      bt.disabled = true; var was = bt.textContent; bt.textContent = '✨ Thinking…';
+      api('planAgFill', { core: S.core, taskId: isNew ? '' : t.id, name: nm, desc: F.desc.value, mode: mode, stories: ST.map(function (x) { return x.name; }).filter(function (x) { return String(x).trim(); }) }).then(function (d) {
+        var live = ST.filter(function (x) { return String(x.name).trim(); });
+        if (live.length && d.storyPoints && d.storyPoints.length) live.forEach(function (x, i) { if (!+x.points && d.storyPoints[i]) x.points = d.storyPoints[i]; });
+        if ((mode === 'stories' || !live.length) && d.stories && d.stories.length) ST = live.concat(d.stories.map(function (x) { return { name: x.name, points: x.points, fresh: true }; }));
+        drawSt(); flash($('#agSt'));
+        if (mode !== 'stories') {
+          F.desc.value = d.desc; flash(F.desc);
+          if (!(stSum() > 0)) { setPts(d.points); flash(F.querySelector('.ag-ptr')); }
+          F.prio.value = d.priority; flash(F.prio);
+          if (isNew) { F.dur.value = d.days; flash(F.dur); } else if (+F.dur.value !== d.days) $('#agDurHint').textContent = 'AI estimate: ' + pl(d.days, 'day') + ' (the Gantt keeps its own unless you change it)';
+        }
+        msg.textContent = mode === 'stories' ? 'Stories suggested: edit or remove any, then save.' : 'Filled in: check it, pick the owner, then save.'; if (mode !== 'stories' && !F.owner.value.trim()) F.owner.focus();
+      }).catch(fail).then(function () { bt.disabled = false; bt.textContent = label || was; });
+    };
+    $('#agAi').onclick = function () { ask('all', this, '✨ Fill it in again'); };
+    $('#agStAi').onclick = function () { ask('stories', this, '✨ Suggest more'); };
     F.onsubmit = function (e) {
       e.preventDefault(); var x = isNew ? null : t;
       if (isNew) { var last = p.tasks[p.tasks.length - 1]; x = { id: 't' + Date.now().toString(36), phase: (last && last.phase) || 'ph1', name: '', dur: 1, res: [], lead: '', resource: '', qty: 0, unit: '', rate: 0, actual: 0, pct: 0, status: 'todo', pred: last ? [last.id] : [], snet: '', notes: '' }; p.tasks.push(x); }
-      x.name = F.name.value.trim().slice(0, 160) || 'New item'; x.desc = F.desc.value.trim().slice(0, 300); if (F.pts) x.points = +F.pts.value || 0; x.priority = F.prio.value;
+      x.name = F.name.value.trim().slice(0, 160) || 'New item'; x.desc = F.desc.value.trim().slice(0, 300); x.points = +F.pts.value || 0; x.priority = F.prio.value;
       var on = F.owner.value.trim(), sh = (p.stakeholders || []).filter(function (s) { return (s.name || s.role) === on; })[0]; x.owner = sh ? sh.id : on;
       x.dur = Math.max(1, Math.min(365, +F.dur.value || 1));
+      // the stories: kept ones updated, removed ones gone (done ones always stay), new ones added across the item's days
+      var old = {}, n0 = 0; (x.subs || []).forEach(function (sb) { old[sb.id] = sb; });
+      var keep = ST.filter(function (st) { return st.done || String(st.name).trim(); }).map(function (st) {
+        var sb = st.id && old[st.id]; if (sb) { if (!st.done) sb.name = st.name.trim().slice(0, 160); sb.points = +st.points || 0; return sb; }
+        return { id: 's' + Date.now().toString(36) + (n0++), name: st.name.trim().slice(0, 160), owner: '', off: 0, dur: Math.max(1, x.dur), status: 'todo', priority: '', points: +st.points || 0 }; });
+      (x.subs || []).forEach(function (sb) { if (sb.status === 'done' && keep.indexOf(sb) < 0) keep.push(sb); });
+      x.subs = keep; fitSubs(x); derive(x);
       M.closeModal(); dirty((isNew ? 'backlog item added: ' : 'backlog item changed: ') + x.name); render();
     };
+  }
+  // ---------- 🧮 is the sprint achievable? (worked out from the plan) and ✨ plan the sprints with AI ----------
+  function agVel(A) { var c = (A.sprints || []).filter(function (s) { return s.status === 'closed'; }); return c.length ? Math.round(c.slice(-3).reduce(function (a, s) { return a + s.done; }, 0) / Math.min(3, c.length)) : 0; }
+  function agCap(A, s) {   // what the team can take on: past velocity, or (first sprints) the points the Gantt has due in the sprint's dates
+    var v = agVel(A); if (v) return { pts: v, how: 'velocity (last ' + Math.min(3, (A.sprints || []).filter(function (x) { return x.status === 'closed'; }).length) + ' sprints)' };
+    var due = S.plan.tasks.filter(function (t) { return agItem(t) && !agDone(t) && t.es && t.es <= s.end && t.ef >= s.start; }).reduce(function (a, t) {
+      var d0 = t.es > s.start ? t.es : s.start, d1 = t.ef < s.end ? t.ef : s.end, all = Math.max(1, workDays(t.es, t.ef)); return a + themePts(t) * workDays(d0, d1) / all; }, 0);
+    return { pts: Math.round(due), how: 'the Gantt (points due in these dates; no velocity yet)' };
+  }
+  function agCheck(A, s) {
+    var L = S.plan.tasks.filter(function (t) { return t.ag === s.id; }), pts = L.reduce(function (a, t) { return a + themePts(t); }, 0), cap = agCap(A, s), byId = {};
+    S.plan.tasks.forEach(function (t) { byId[t.id] = t; });
+    var notReady = L.filter(function (t) { return !dorOf(t).ready; }), unsized = L.filter(function (t) { return !themePts(t); }), off = L.filter(function (t) { return agFit(t, s); });
+    var blocked = L.filter(function (t) { return (t.pred || []).some(function (id) { var q = byId[id]; if (!q || agDone(q) || !agItem(q)) return false; var qs = q.ag && agSprint(A, q.ag); return !(qs && qs.n <= s.n); }); });
+    var load = cap.pts ? pts / cap.pts : 0, live = s.status === 'active';
+    var lvl = !L.length ? 'none' : (cap.pts && load > 1.25) || blocked.length > 1 ? 'r' : (cap.pts && load > 1) || notReady.length || blocked.length || off.length > 1 ? 'a' : 'g';
+    var why = [];
+    if (cap.pts) why.push(pts + ' of ~' + cap.pts + ' pts (' + Math.round(load * 100) + '% of ' + cap.how + ')'); else if (L.length) why.push(pts + ' pts; no capacity figure yet');
+    if (unsized.length) why.push(pl(unsized.length, 'item') + ' with no points');
+    if (notReady.length) why.push(pl(notReady.length, 'item') + ' not DOR ready');
+    if (blocked.length) why.push(pl(blocked.length, 'item') + ' waiting on work not done or planned earlier');
+    if (off.length) why.push(pl(off.length, 'item') + ' with Gantt dates outside the sprint');
+    if (live) { var left = Math.max(0, workDays(today(), s.end)), done = L.filter(agDone).reduce(function (a, t) { return a + themePts(t); }, 0), all = Math.max(1, workDays(s.start, s.end)), need = pts ? (pts - done) / pts : 0, time = left / all;
+      why.unshift(done + ' of ' + pts + ' pts done, ' + pl(left, 'working day') + ' left'); if (need > time + 0.25) lvl = 'r'; else if (need > time + 0.1 && lvl === 'g') lvl = 'a'; }
+    return { lvl: lvl, pts: pts, cap: cap, why: why, label: { none: 'Nothing in it yet', g: 'Achievable', a: 'At risk', r: live ? 'Off track' : 'Over-committed' }[lvl] };
+  }
+  function agCheckHtml(A, s) { var c = agCheck(A, s); if (c.lvl === 'none') return ''; return '<div class="ag-chk ag-chk-' + c.lvl + '"><b>' + ({ g: '✅ ', a: '⚠ ', r: '⛔ ' })[c.lvl] + c.label + '</b><span>' + esc(c.why.join(' · ')) + '</span>' + (c.cap.pts ? '<i class="ag-load"><i style="width:' + Math.min(100, Math.round(c.pts / c.cap.pts * 100)) + '%"></i></i>' : '') + '</div>'; }
+  function agAiPlan(A) {
+    var p = S.plan, two = agOpen(A).slice(0, 2), act = agActive(A), byId = {}; p.tasks.forEach(function (t) { byId[t.id] = t; });
+    var rows = ordered().filter(function (r) { return agItem(r.t) && !agDone(r.t) && (agWhere(r.t, A) === 'backlog' || two.some(function (s) { return r.t.ag === s.id; })); });
+    var items = rows.map(function (r) { var t = r.t, d = dorOf(t); return { id: t.id, n: r.n, name: t.name.replace(/^[✓◆\s]+/, ''), points: themePts(t), priority: t.priority || '', owner: ownerOf(t), ready: d.ready, missing: d.miss, start: t.es, finish: t.ef, after: (t.pred || []).map(function (id) { return byId[id] ? byId[id].name : ''; }).filter(Boolean), in: t.ag || '', status: t.status }; });
+    var sprints = two.map(function (s) { var c = agCheck(A, s); return { id: s.id, n: s.n, start: s.start, end: s.end, status: s.status, goal: s.goal, objective: s.objective, capacity: c.cap.pts, capacity_basis: c.cap.how, check: c.why.join('; ') }; });
+    M.modal('<h2>✨ Plan the sprints with AI</h2><p class="muted" style="margin:-4px 0 10px">The AI weighs urgency, Definition of Ready, the Gantt dates (the base), dependencies and capacity (' + (agVel(A) ? 'velocity ~' + agVel(A) + ' pts' : 'no velocity yet: the Gantt load') + '), then proposes what fits in ' + two.map(function (s) { return 'Sprint ' + s.n; }).join(' and ') + ', with a goal for each. Nothing changes until you apply it.</p><div id="agAiOut"><div class="empty"><span class="ask-think">Evaluating ' + pl(items.length, 'item') + '…</span></div></div>');
+    api('planAgSprintAi', { core: S.core, cycle: A.cycle, velocity: agVel(A), sprints: sprints, items: items }).then(function (d) {
+      var out = $('#agAiOut'); if (!out) return;
+      var name = function (id) { var t = byId[id]; return t ? t.name.replace(/^[✓◆\s]+/, '') : id; };
+      var col = function (sp) { var s = agSprint(A, sp.id), live = s.status === 'active', pts = sp.items.reduce(function (a, id) { return a + themePts(byId[id] || {}); }, 0);
+        return '<div class="ag-aic"><h3>' + (live ? '🏃 ' : '') + 'Sprint ' + s.n + ' <small class="muted">' + esc(pretty(s.start)) + ' – ' + esc(prettyY(s.end)) + ' · ' + pts + ' pts</small></h3><div class="ag-aiv ag-chk-' + (sp.verdict === 'achievable' ? 'g' : sp.verdict === 'over' ? 'r' : 'a') + '"><b>' + esc({ achievable: '✅ Achievable', risky: '⚠ At risk', over: '⛔ Too much' }[sp.verdict] || '⚠ At risk') + '</b> ' + esc(sp.assessment) + '</div>' +
+          (live ? '<p class="muted" style="font-size:12px">Started: its items stay as they are.</p>' : '<label class="ag-aig">🎯 Goal<input data-aig="' + s.id + '" value="' + esc(sp.goal) + '"></label><label class="ag-aig">Objective<textarea data-aio="' + s.id + '" rows="2">' + esc(sp.objective) + '</textarea></label>') +
+          '<ol class="ag-ail">' + sp.items.map(function (id) { var t = byId[id] || {}; return '<li>' + esc(name(id)) + ' <span class="muted">' + (themePts(t) || '?') + ' pts</span>' + (dorOf(t).ready ? '' : ' <span class="dor dor-p">DOR ' + dorOf(t).pct + '%</span>') + '</li>'; }).join('') + '</ol></div>'; };
+      out.innerHTML = '<div class="ag-aip">' + d.sprints.map(col).join('') + '</div>' +
+        (d.refine && d.refine.length ? '<div class="ag-aix"><b>Refine first</b><ul>' + d.refine.map(function (x) { return '<li><b>' + esc(name(x.id)) + '</b>: ' + esc(x.why) + '</li>'; }).join('') + '</ul></div>' : '') +
+        (d.advice ? '<p class="ag-aia">💡 ' + esc(d.advice) + '</p>' : '') +
+        '<div class="actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Not now</button><button class="btn btn-gold" id="agAiGo" type="button">Apply to sprint planning</button></div>';
+      $('#agAiGo').onclick = function () {
+        var moved = 0;
+        d.sprints.forEach(function (sp) { var s = agSprint(A, sp.id); if (!s || s.status !== 'planned') return;
+          p.tasks.forEach(function (t) { if (t.ag === s.id && sp.items.indexOf(t.id) < 0) { agPull(t, 'backlog'); moved++; } });
+          var g = document.querySelector('[data-aig="' + s.id + '"]'), o = document.querySelector('[data-aio="' + s.id + '"]'); if (g) s.goal = g.value.trim().slice(0, 300); if (o) s.objective = o.value.trim().slice(0, 600); });
+        d.sprints.forEach(function (sp) { var s = agSprint(A, sp.id); if (!s || s.status !== 'planned') return; sp.items.forEach(function (id) { var t = byId[id]; if (t && t.ag !== s.id && agPull(t, s.id)) moved++; }); });
+        M.closeModal(); dirty('sprints planned with AI'); render(); toast('Sprint planning updated (' + pl(moved, 'move') + ')');
+      };
+    }).catch(function (e) { var out = $('#agAiOut'); if (out) out.innerHTML = '<p class="bad">' + esc(e.message || String(e)) + '</p><div class="actions"><button class="btn" data-close type="button">Close</button></div>'; });
   }
   // ---------- 🗓 Scrum: plan Sprint n and Sprint n+1 from the backlog ----------
   function agPlan(A) {
@@ -2865,12 +2952,12 @@
       var tone = live ? (left <= 1 ? 'r' : left <= 3 ? 'a' : 'g') : '';
       return '<div class="ag-sp' + (live ? ' live ag-' + tone : '') + '" data-sp="' + s.id + '"><div class="ag-sph"><b>' + (live ? '🏃 ' : '') + 'Sprint ' + s.n + '</b><span>' + esc(pretty(s.start)) + ' – ' + esc(prettyY(s.end)) + '</span>' + (live ? '<span class="ag-left">' + (left > 0 ? pl(left, 'day') + ' left' : 'due today') + '</span>' : '') + '</div>' +
         '<div class="ag-goal"><label>🎯 Sprint goal<input data-spf="goal" maxlength="300" value="' + esc(s.goal) + '" placeholder="One sentence: what this sprint achieves"' + (live ? ' disabled' : '') + '></label><label>Objective<textarea data-spf="objective" rows="2" maxlength="600" placeholder="How we will know"' + (live ? ' disabled' : '') + '>' + esc(s.objective) + '</textarea></label></div>' +
-        '<div class="ag-spm"><span>' + pl(L.length, 'item') + ' · <b>' + pts + ' pts</b></span>' + (vel ? '<span class="muted" title="Average of the last sprints">velocity ~' + vel + ' pts</span>' : '') + (vel && pts > vel * 1.2 ? '<span class="bad">over the usual velocity</span>' : '') + '</div>' +
-        '<div class="ag-spl">' + (L.length ? L.map(function (r) { var t = r.t; return '<div class="ag-si" data-tid="' + esc(t.id) + '"><span class="ag-n">#' + r.n + '</span><span class="ag-sn">' + esc(t.name.replace(/^[✓◆\s]+/, '')) + '</span>' + dorTag(t) + '<span class="ag-gd' + (agFit(t, s) ? ' off' : '') + '" title="' + esc(agFit(t, s) ? ({ before: 'The Gantt has it finishing before this sprint starts', after: 'The Gantt has it starting after this sprint ends', over: 'The Gantt has it running past the end of this sprint' })[agFit(t, s)] : 'Gantt dates (the base: a sprint never moves them)') + '">' + esc(pretty(t.es) + (t.ef !== t.es ? '–' + pretty(t.ef) : '')) + '</span><span class="muted">' + (themePts(t) || '–') + '</span>' + (live ? '<span class="ag-st st-' + t.status + '">' + esc(stName[t.status]) + '</span>' : '<button type="button" class="btn btn-sm" data-agback title="Back to the backlog">↩</button>') + '</div>'; }).join('') : '<div class="kempty">Pull items in from the backlog (→ Sprint ' + s.n + ')</div>') + '</div>' +
+        '<div class="ag-spm"><span>' + pl(L.length, 'item') + ' · <b>' + pts + ' pts</b></span>' + (vel ? '<span class="muted" title="Average of the last sprints">velocity ~' + vel + ' pts</span>' : '') + '</div>' + agCheckHtml(A, s) +
+        '<div class="ag-spl">' + (L.length ? L.map(function (r) { var t = r.t; return '<div class="ag-si" data-tid="' + esc(t.id) + '"><span class="ag-n">#' + r.n + '</span><span class="ag-sn" data-agedit title="Open: description, stories, points">' + esc(t.name.replace(/^[✓◆\s]+/, '')) + '</span>' + agStC(t) + '<button type="button" class="ag-ed" data-agedit title="Edit: description, stories, points (✨ AI)">✏</button>' + dorTag(t) + '<span class="ag-gd' + (agFit(t, s) ? ' off' : '') + '" title="' + esc(agFit(t, s) ? ({ before: 'The Gantt has it finishing before this sprint starts', after: 'The Gantt has it starting after this sprint ends', over: 'The Gantt has it running past the end of this sprint' })[agFit(t, s)] : 'Gantt dates (the base: a sprint never moves them)') + '">' + esc(pretty(t.es) + (t.ef !== t.es ? '–' + pretty(t.ef) : '')) + '</span><span class="muted">' + (themePts(t) || '–') + '</span>' + (live ? '<span class="ag-st st-' + t.status + '">' + esc(stName[t.status]) + '</span>' : '<button type="button" class="btn btn-sm" data-agback title="Back to the backlog">↩</button>') + '</div>'; }).join('') : '<div class="kempty">Pull items in from the backlog (→ Sprint ' + s.n + ')</div>') + '</div>' +
         (live ? '<div class="ag-spb"><button type="button" class="btn btn-sm" data-agv="board">Open the sprint board</button><button type="button" class="btn btn-sm btn-gold" data-agclose="' + s.id + '">■ Complete sprint</button></div>'
           : !act && s === agOpen(A)[0] ? '<div class="ag-spb"><button type="button" class="btn btn-gold" data-agstart="' + s.id + '">▶ Start sprint</button></div>' : '<div class="ag-spb muted" style="font-size:12px">Starts after Sprint ' + (s.n - 1) + '</div>') + '</div>';
     };
-    $('#planBody').innerHTML = agileBar(A, 'plan') + '<div class="ag-plan"><div class="card ag-pb"><h3>📋 Product Backlog <small class="muted">' + pl(back.length, 'item') + '</small></h3><div class="ag-spl">' + (back.length ? back.map(function (r) { var t = r.t; return '<div class="ag-si" data-tid="' + esc(t.id) + '"><span class="ag-n">#' + r.n + '</span><span class="ag-sn" data-agedit>' + esc(t.name.replace(/^[✓◆\s]+/, '')) + '</span>' + dorTag(t) + '<span class="muted">' + (themePts(t) || '–') + '</span>' + two.filter(function (s) { return s.status === 'planned'; }).map(function (s) { return '<button type="button" class="btn btn-sm" data-agto="' + s.id + '">→ S' + s.n + '</button>'; }).join('') + '</div>'; }).join('') : '<div class="kempty">The backlog is empty</div>') + '</div></div>' +
+    $('#planBody').innerHTML = agileBar(A, 'plan') + '<div class="ag-aibar"><button type="button" class="btn btn-gold" id="agAiPlan">✨ Plan the sprints with AI</button><span class="muted">weighs urgency, readiness, Gantt dates, dependencies and capacity, then proposes what fits, with goals</span></div>' + '<div class="ag-plan"><div class="card ag-pb"><h3>📋 Product Backlog <small class="muted">' + pl(back.length, 'item') + '</small></h3><div class="ag-spl">' + (back.length ? back.map(function (r) { var t = r.t; return '<div class="ag-si" data-tid="' + esc(t.id) + '"><span class="ag-n">#' + r.n + '</span><span class="ag-sn" data-agedit title="Open: description, stories, points">' + esc(t.name.replace(/^[✓◆\s]+/, '')) + '</span>' + agStC(t) + '<button type="button" class="ag-ed" data-agedit title="Edit: description, stories, points (✨ AI)">✏</button>' + dorTag(t) + '<span class="muted">' + (themePts(t) || '–') + '</span>' + two.filter(function (s) { return s.status === 'planned'; }).map(function (s) { return '<button type="button" class="btn btn-sm" data-agto="' + s.id + '">→ S' + s.n + '</button>'; }).join('') + '</div>'; }).join('') : '<div class="kempty">The backlog is empty</div>') + '</div></div>' +
       two.map(bucket).join('') + '</div>' + (closed.length ? '<p class="muted" style="margin:8px 0 0;font-size:12.5px">Done: ' + closed.map(function (s) { return 'Sprint ' + s.n + ' (' + s.done + '/' + s.committed + ' pts' + (s.goalMet ? ', goal ' + ({ yes: 'met ✓', partly: 'partly met', no: 'not met' })[s.goalMet] : '') + ')'; }).join(' · ') + '</p>' : '');
     var B = $('#planBody'); agileWire(B);
     var find = function (el) { var id = el.closest('[data-tid]').getAttribute('data-tid'); return p.tasks.filter(function (t) { return t.id === id; })[0]; };
@@ -2879,6 +2966,7 @@
     B.querySelectorAll('[data-agedit]').forEach(function (b) { b.onclick = function () { agEdit(find(b)); }; });
     B.querySelectorAll('[data-spf]').forEach(function (el) { el.onchange = function () { var s = agSprint(A, el.closest('[data-sp]').getAttribute('data-sp')); s[el.getAttribute('data-spf')] = el.value.trim(); dirty('sprint ' + s.n + ' ' + el.getAttribute('data-spf')); }; });
     B.querySelectorAll('[data-agstart]').forEach(function (b) { b.onclick = function () { agStart(A, agSprint(A, b.getAttribute('data-agstart'))); }; });
+    var aip = $('#agAiPlan'); if (aip) aip.onclick = function () { agAiPlan(A); };
     B.querySelectorAll('[data-agclose]').forEach(function (b) { b.onclick = function () { agClose(A, agSprint(A, b.getAttribute('data-agclose'))); }; });
   }
   function agStart(A, s) {

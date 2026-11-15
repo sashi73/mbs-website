@@ -448,3 +448,34 @@ input.pp-auto,select.pp-auto,textarea.pp-auto{background:#FFFBEB!important;borde
 .ag-pt0{color:#8A8577;font-weight:600}
 .ai-filled{animation:aiFill 1.4s ease}
 @keyframes aiFill{0%{box-shadow:0 0 0 0 rgba(201,162,39,.0)}25%{box-shadow:0 0 0 4px rgba(201,162,39,.55);background:#FFFBEB}100%{box-shadow:0 0 0 0 rgba(201,162,39,0)}}
+/* 📖 stories inside a backlog item, and the edit button on sprint planning rows */
+.ag-stw{border:1px solid #EFE7D2;border-radius:12px;padding:9px 10px;background:#FFFDF7}
+#agSt{display:flex;flex-direction:column;gap:6px;margin:4px 0 8px}
+.ag-str{display:flex;gap:6px;align-items:center}
+.ag-str input{flex:1;min-width:0}.ag-str select{width:64px}
+.ag-str .ag-n{font-size:11px;color:#8A8577;width:16px;text-align:right}
+.ag-str.done input{opacity:.65}.ag-str.fresh input{border-color:#C9A227}
+.ag-stn{font-size:12.5px}
+.ag-sta{display:flex;gap:6px;flex-wrap:wrap}
+.ag-ptr.dis{opacity:.4}
+.ag-ed{border:0;background:transparent;cursor:pointer;font-size:13px;padding:2px 4px;border-radius:6px;opacity:.65}.ag-ed:hover{opacity:1;background:#F7F3E6}
+.ag-stc{font-size:11px;color:#6B665A;background:#F4F1E8;border-radius:99px;padding:1px 7px;white-space:nowrap}
+.ag-sn[data-agedit]:hover{text-decoration:underline}
+/* 🧮 sprint check and ✨ AI sprint planning */
+.ag-chk{display:flex;flex-direction:column;gap:3px;border-radius:10px;padding:7px 9px;margin:6px 0;font-size:12px;border:1px solid}
+.ag-chk b{font-size:12.5px}.ag-chk span{color:#4B4739}
+.ag-chk-g{background:#ECFDF5;border-color:#A7F3D0}.ag-chk-g b{color:#047857}
+.ag-chk-a{background:#FFFBEB;border-color:#FDE68A}.ag-chk-a b{color:#B45309}
+.ag-chk-r{background:#FEF2F2;border-color:#FECACA}.ag-chk-r b{color:#B91C1C}
+.ag-load{display:block;height:5px;border-radius:9px;background:rgba(0,0,0,.08);overflow:hidden;margin-top:2px}.ag-load i{display:block;height:100%;background:currentColor;border-radius:9px;max-width:100%}
+.ag-chk-g .ag-load i{background:#10B981}.ag-chk-a .ag-load i{background:#F59E0B}.ag-chk-r .ag-load i{background:#EF4444}
+.ag-aibar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px;padding:9px 12px;border-radius:12px;background:linear-gradient(120deg,#FFF8E1,#F5F0FF)}
+.ag-aibar .muted{font-size:12.5px}
+.ag-aip{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.ag-aic{border:1px solid #EFE7D2;border-radius:12px;padding:10px 12px;background:#FFFDF7}
+.ag-aic h3{margin:0 0 6px;font-size:15px}
+.ag-aiv{border-radius:9px;padding:7px 9px;font-size:12.5px;margin-bottom:8px;border:1px solid}
+.ag-aig{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:600;margin-bottom:6px}
+.ag-ail{margin:4px 0 0;padding-left:20px;font-size:13px}.ag-ail li{margin:2px 0}
+.ag-aix{margin-top:10px;border-radius:10px;background:#FFF7ED;border:1px solid #FED7AA;padding:8px 12px;font-size:13px}.ag-aix ul{margin:4px 0 0;padding-left:18px}
+.ag-aia{margin:10px 0 0;font-size:13px}
