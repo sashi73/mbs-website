@@ -109,7 +109,12 @@
   // v56: a task's cost = its own qty x rate (labour, hire ...) + its stock materials (each item x its quantity)
   var matsOf = function (t) { return Array.isArray(t.mats) ? t.mats : []; };
   var matCost = function (t) { return r2(matsOf(t).reduce(function (a, m) { return a + (Number(m.qty) || 0) * (Number(m.price) || 0); }, 0)); };
-  var cost = function (t) { return r2((Number(t.qty) || 0) * (Number(t.rate) || 0) + matCost(t) + (Number(t.bomx) || 0)); };   // v93: + BOM materials not in stock
+  // 👷 labour (hours, days, weeks, shifts) is people × quantity per person × rate; materials, lots and items are quantity × rate
+  var LABU = /^(h|hr|hrs|hours?|d|days?|wk|weeks?|shifts?)$/i;
+  var isLab = function (t) { return LABU.test(String(t.unit || '').trim()); };
+  var crewOf = function (t) { return isLab(t) ? Math.max(1, Math.min(500, Math.round(+t.crew || 0)) || 1) : 1; };
+  var crewAuto = function (t) { if (!t.crewSet) { var n = (t.res || []).length; if (n) t.crew = Math.min(500, n); } };   // the resources say how many, until the people are typed by hand
+  var cost = function (t) { return r2(crewOf(t) * (Number(t.qty) || 0) * (Number(t.rate) || 0) + matCost(t) + (Number(t.bomx) || 0)); };   // v93: + BOM materials not in stock
   function rollup(p, day) {
     schedule(p);
     var T = p.tasks, frac = function (t) { return !t.es ? 0 : day < t.es ? 0 : day >= t.ef ? 1 : workBetween(t.es, day) / Math.max(1, workBetween(t.es, t.ef)); };
@@ -1157,7 +1162,7 @@
     var k = 1 + Math.max(0, Math.min(200, +margin || 0)) / 100;
     var costed = S.plan.tasks.filter(function (t) { return cost(t) > 0; });
     if (mode === 'lump') { var tot = r2(costed.reduce(function (a, t) { return a + cost(t); }, 0) * k); return tot > 0 ? [{ qty: 1, price: tot }] : []; }
-    return costed.map(function (t) { return { qty: r2(t.qty), price: r2(r2(t.rate) * k) }; });
+    return costed.map(function (t) { return { qty: r2(t.qty * crewOf(t)), price: r2(r2(t.rate) * k) }; });
   }
   function quoteDialog(updating) {
     var c = (S.chain && S.chain.customer) || {}, p = S.plan;
@@ -1571,7 +1576,7 @@
     var sh = B.querySelector('[data-estshow]'); if (sh) sh.onclick = function () { S.cols = 'c'; try { localStorage.setItem('mbsPlanCols', 'c'); } catch (e) {} render(); };
     var un = B.querySelector('[data-estundo]'); if (un) un.onclick = function () {
       var u = S.estUndo; if (!u || u.core !== S.core) return;
-      S.plan.tasks.forEach(function (t) { var o = u.prev[t.id]; if (o) { t.qty = o.qty; t.unit = o.unit; t.rate = o.rate; t.est = o.est; t.basis = o.basis; } });
+      S.plan.tasks.forEach(function (t) { var o = u.prev[t.id]; if (o) { t.qty = o.qty; t.unit = o.unit; t.rate = o.rate; t.est = o.est; t.basis = o.basis; if ('crew' in o) t.crew = o.crew; } });
       S.estUndo = null; dirty('Indicative costs undone'); render(); toast('Indicative costs removed: back to what you had');
     };
     var ok = B.querySelector('[data-estok]'); if (ok) ok.onclick = function () {
@@ -1630,7 +1635,7 @@
   }
   function estApply(r, auto) {
     var by = {}, rows = estRows(r), prev = {}; S.plan.tasks.forEach(function (t) { by[t.id] = t; });
-    rows.forEach(function (c) { var t = by[c.id]; prev[t.id] = { qty: t.qty, unit: t.unit, rate: t.rate, est: !!t.est, basis: t.basis || '' }; t.qty = c.qty; t.unit = c.unit; t.rate = c.rate; t.est = true; t.basis = c.basis || 'AI benchmark'; });
+    rows.forEach(function (c) { var t = by[c.id]; prev[t.id] = { qty: t.qty, unit: t.unit, rate: t.rate, est: !!t.est, basis: t.basis || '', crew: t.crew }; t.qty = c.qty; t.unit = c.unit; t.rate = c.rate; t.est = true; t.basis = c.basis || 'AI benchmark'; if (c.crew > 0 && !t.crewSet) t.crew = (t.res || []).length || c.crew; });
     S.estUndo = { core: S.core, prev: prev }; M.closeModal(); dirty('Indicative costs added (' + rows.length + ' tasks)'); render();
     var R = rollup(S.plan, today());
     toast((auto ? 'Sample indicative costs added: ' : 'Indicative costs added: ') + pl(rows.length, 'task') + ', plan budget now ' + money(R.BAC) + '. Review and change each one (marked ≈ est).');
@@ -1638,12 +1643,13 @@
   function estShow(r) {
     var p = S.plan, num = {}, by = {}; ordered().forEach(function (x) { num[x.t.id] = x.n; }); p.tasks.forEach(function (t) { by[t.id] = t; });
     var rows = estRows(r).sort(function (a, b) { return (num[a.id] || 0) - (num[b.id] || 0); });
-    var tot = r2(rows.reduce(function (a, c) { return a + c.qty * c.rate; }, 0)), R0 = rollup(p, today());
+    var cq = function (c) { var t = by[c.id] || {}; return LABU.test(c.unit) ? ((t.res || []).length || c.crew || 1) : 1; };
+    var tot = r2(rows.reduce(function (a, c) { return a + cq(c) * c.qty * c.rate; }, 0)), R0 = rollup(p, today());
     M.modal('<h2>✨ Indicative costs: ' + pl(rows.length, 'task') + ', ' + money(tot) + '</h2>' +
       '<div class="est-warn est-in-dlg"><div class="est-ic">⚠</div><div class="est-tx"><b>Reference benchmarks only, based on our research of Australian and international benchmarks.</b> Check the basis of each one: the hours actually worked per day, the people, the rate and the quantity. ' +
       '<b>Change them for accuracy before you quote or set the budget.</b> They stay marked <span class="est-tag">≈ est</span> until you change them.' + (r.scaled ? '<br><b>' + esc(r.scaled) + '</b>' : '') + (r.builtIn ? '<br><i>The AI was not available' + (r.why ? ' (' + esc(r.why) + ')' : '') + ', so these come from the console\'s built-in benchmarks: rougher still.</i>' : '') + (r.caveat ? '<br><i>Biggest uncertainty: ' + esc(r.caveat) + '</i>' : '') + '</div></div>' +
-      '<div class="table-wrap" style="max-height:44vh;overflow:auto"><table class="mini est-tbl"><thead><tr><th>#</th><th>Task</th><th>Basis</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit $</th><th class="num">Cost</th></tr></thead><tbody>' +
-      rows.map(function (c) { var t = by[c.id]; return '<tr><td>' + (num[c.id] || '') + '</td><td>' + esc(t.name) + '<br><small class="muted">' + pl(t.dur, 'day') + '</small></td><td class="muted">' + esc(c.basis || '–') + '</td><td class="num">' + c.qty + '</td><td>' + esc(c.unit) + '</td><td class="num">' + money(c.rate) + '</td><td class="num"><b>' + money(r2(c.qty * c.rate)) + '</b></td></tr>'; }).join('') +
+      '<div class="table-wrap" style="max-height:44vh;overflow:auto"><table class="mini est-tbl"><thead><tr><th>#</th><th>Task</th><th>Basis</th><th class="num">People × Qty</th><th>Unit</th><th class="num">Unit $</th><th class="num">Cost</th></tr></thead><tbody>' +
+      rows.map(function (c) { var t = by[c.id]; return '<tr><td>' + (num[c.id] || '') + '</td><td>' + esc(t.name) + '<br><small class="muted">' + pl(t.dur, 'day') + '</small></td><td class="muted">' + esc(c.basis || '–') + '</td><td class="num">' + (cq(c) > 1 ? cq(c) + ' × ' : '') + c.qty + '</td><td>' + esc(c.unit) + '</td><td class="num">' + money(c.rate) + '</td><td class="num"><b>' + money(r2(cq(c) * c.qty * c.rate)) + '</b></td></tr>'; }).join('') +
       '</tbody><tfoot><tr><td></td><td colspan="5"><b>Total indicative</b> <small class="muted">(plan budget now ' + money(R0.BAC) + ')</small></td><td class="num"><b>' + money(tot) + '</b></td></tr></tfoot></table></div>' +
       '<label class="est-ack"><input type="checkbox" id="estAck"> I understand these are indicative benchmarks only, and I will review and change them before quoting or setting the budget.</label>' +
       '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="estApply" type="button" disabled>Add them as indicative costs</button></div>');
@@ -1752,7 +1758,7 @@
       '</div><div class="pviews">' +
       '<div class="tabs" style="margin:0" title="Which columns to show"><button class="tab' + (S.cols === 's' ? ' on' : '') + '" data-cols="s">📅 Dates</button><button class="tab' + (S.cols === 'c' ? ' on' : '') + '" data-cols="c">$ Costs</button><button class="tab' + (S.cols === 'a' ? ' on' : '') + '" data-cols="a">All columns</button></div>' +
       '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button></div></div></div>' +
-      '<div class="gsplit" id="gSplit"><div class="gpane gleft" id="gLeft"' + (S.split ? ' style="flex:0 0 ' + S.split + 'px;max-width:none"' : '') + '><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task <button type="button" class="gfz-chip" id="gFreezeBtn" title="Freeze columns (like Excel) and column widths">❄ ' + esc(gfzName()) + '</button></th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th>Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th></tr></thead><tbody>';
+      '<div class="gsplit" id="gSplit"><div class="gpane gleft" id="gLeft"' + (S.split ? ' style="flex:0 0 ' + S.split + 'px;max-width:none"' : '') + '><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task <button type="button" class="gfz-chip" id="gFreezeBtn" title="Freeze columns (like Excel) and column widths">❄ ' + esc(gfzName()) + '</button></th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th title="Labour: people × hours (or days) each. Materials: quantity">People × Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th></tr></thead><tbody>';
     var G = '';   // rows of the Gantt pane (kept the same height as the grid rows)
     rows.forEach(function (r) {
       var t = r.t, late = t.pct < 100 && t.ef < t0, base = p.baseline && p.baseline.tasks ? p.baseline.tasks[t.id] : null;
@@ -1766,10 +1772,10 @@
         '<td><input data-k="snet" type="date" value="' + esc(t.es) + '" min="' + esc(nextWork(p.start)) + '" class="' + (t.snet ? 'pinned' : '') + '" title="' + (t.fixed && t.snet ? 'Start set by hand: ' + dmy(t.snet) + '. It runs in parallel (the After # link is not used). Clear the date to follow After # again.' : t.snet ? 'Starts no earlier than ' + dmy(t.snet) + ' (clear the date box to remove)' : 'Worked out from the tasks before it. Type or pick a date to start it earlier (in parallel) or later: between the project start and finish.') + '"></td>' +
         '<td class="nowrap">' + esc(dmy(t.ef)) + (base && base.ef && base.ef !== t.ef ? '<br><small class="' + (t.ef > base.ef ? 'bad' : 'good') + '">base ' + esc(dmy(base.ef)) + '</small>' : '') + '</td>' +
         '<td><input data-k="pred" value="' + esc((t.pred || []).map(function (id) { return num[id]; }).filter(Boolean).join(', ')) + '" placeholder="e.g. 2,3" style="width:58px"' + (t.fixed && t.snet ? ' class="predoff" title="Not used while the start date is set by hand (runs in parallel)"' : '') + '></td>' +
-        '<td><input data-k="qty" inputmode="decimal" value="' + esc(t.qty || '') + '" style="width:60px"' + estAttr(t) + '></td>' +
+        '<td class="nowrap">' + (isLab(t) ? '<span class="crewq" title="People on it (from the Resources column until you type a number): the cost is people × ' + esc(t.unit) + ' each × Unit $"><input data-k="crew" type="number" min="1" max="500" value="' + crewOf(t) + '" aria-label="People"><b>×</b></span>' : '') + '<input data-k="qty" inputmode="decimal" value="' + esc(t.qty || '') + '" style="width:60px"' + estAttr(t) + ' title="' + (isLab(t) ? 'Hours (or days) for each person' : 'Quantity') + '"></td>' +
         '<td><input data-k="unit" value="' + esc(t.unit || '') + '" placeholder="h, m², lot" style="width:56px"' + estAttr(t) + '></td>' +
         '<td><input data-k="rate" inputmode="decimal" value="' + esc(t.rate || '') + '" style="width:74px"' + estAttr(t) + '></td>' +
-        '<td class="num' + (isEst(t) ? ' est-c' : '') + '"' + (isEst(t) ? ' title="' + esc('≈ Indicative benchmark, not reviewed: ' + (t.basis || 'AI estimate') + '. Check the hours actually worked per day, the rate and the quantity, then change it.') + '"' : '') + '>' + (isEst(t) ? '<span class="est-tag">≈ est</span> ' : '') + money(cost(t)) + '</td>' +
+        '<td class="num' + (isEst(t) ? ' est-c' : '') + '"' + (isEst(t) ? ' title="' + esc('≈ Indicative benchmark, not reviewed: ' + (t.basis || 'AI estimate') + '. Check the hours actually worked per day, the rate and the quantity, then change it.') + '"' : '') + '>' + (isEst(t) ? '<span class="est-tag">≈ est</span> ' : '') + money(cost(t)) + (isLab(t) && (+t.qty || 0) > 0 && (+t.rate || 0) > 0 ? '<br><small class="muted crewx">' + crewOf(t) + ' × ' + (+t.qty) + ' ' + esc(t.unit) + ' × ' + money(+t.rate) + '</small>' : '') + '</td>' +
         '<td><input data-k="actual" inputmode="decimal" value="' + esc(t.actual || '') + '" style="width:80px"></td>' +
         '<td><select data-k="status" class="stsel st-' + t.status + '"' + (subs.length ? ' title="Setting this moves all its sub-tasks too"' : '') + '>' + STATUS.map(function (x) { return '<option value="' + x[0] + '"' + (t.status === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></td>' +
         '<td><input data-k="pct" type="number" min="0" max="100" step="1" value="' + t.pct + '" style="width:54px"' + (subs.length ? ' disabled title="Worked out from the sub-tasks"' : '') + '></td>' +
@@ -1813,7 +1819,7 @@
       '<div class="gsplitter" id="gSplitter" title="Drag to make the task list or the Gantt chart wider (double-click to reset)"><span></span></div>' +
       '<div class="gpane gright" id="gRight"><table class="gt gtr"><thead><tr><th class="gcol">' + scale + '</th></tr></thead><tbody>' + G + '</tbody><tfoot><tr><td class="gcol"><div class="gleg" title="Bar colours: how far each task and sub-task has got">' + [0, 25, 50, 75, 100].map(function (n) { return '<span><i class="pb-' + n + '"></i>' + (n === 100 ? '100% done' : n + '%') + '</span>'; }).join('') + '<span><i class="pb-late"></i>Late</span><span><i class="pb-mile"></i>Milestone</span></div></td></tr></tfoot></table></div></div>' +
       '<div class="res-tip" id="resTip" hidden><b>Tip:</b> you can add more than one person or trade. Press <kbd>Enter</kbd> or type a comma after each name. <b>★</b> = the lead: the first one added is the lead; click another name to make them the lead.</div>' +
-      '<datalist id="resList">' + pplOpts() + Array.from(new Set([].concat.apply([], p.tasks.map(function (t) { return t.res || []; })).concat(['Labourer', 'Tiler', 'Plumber', 'Electrician', 'Painter', 'Carpenter', 'Waterproofer', 'Supplier', 'Customer']))).filter(function (r) { return r && !pplNames()[r.toLowerCase()]; }).map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist></div>';
+      '<datalist id="resList">' + pplOpts() + stakeOpts(pplNames()) + Array.from(new Set([].concat.apply([], p.tasks.map(function (t) { return t.res || []; })).concat(['Labourer', 'Tiler', 'Plumber', 'Electrician', 'Painter', 'Carpenter', 'Waterproofer', 'Supplier', 'Customer']))).filter(function (r) { var k = r && r.toLowerCase(); return r && !pplNames()[k] && !(p.stakeholders || []).some(function (x) { return (x.name || '').toLowerCase() === k; }); }).map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist></div>';
     $('#planBody').innerHTML = html;
     var B = $('#planBody'); estWire(B);
     dateBoxes(B);   // before the rows are lined up with the Gantt chart
@@ -1858,6 +1864,7 @@
           }
         }
         else if (k === 'pred') { t.pred = el.value.split(/[,\s]+/).map(function (s) { return idOf[+s]; }).filter(function (id) { return id && id !== t.id; }); }
+        else if (k === 'crew') { var cv = Math.round(+el.value || 0); if (cv > 0) { t.crew = Math.min(500, cv); t.crewSet = true; } else { t.crewSet = false; t.crew = Math.max(1, (t.res || []).length); } if (t.est) t.est = false; }
         else if (['qty', 'rate', 'actual'].indexOf(k) >= 0) { t[k] = r2(String(el.value).replace(/[$,]/g, '')); if (k !== 'actual' && t.est) t.est = false; }
         else { t[k] = el.value; if (k === 'unit' && t.est) { t.est = false; var tr = el.closest('tr'); tr.querySelectorAll('.est-in').forEach(function (i) { i.classList.remove('est-in'); i.removeAttribute('title'); }); var tg = tr.querySelector('.est-tag'); if (tg) { tg.parentNode.classList.remove('est-c'); tg.parentNode.removeAttribute('title'); tg.remove(); } } }
         dirty(k === 'done' || k === 'status' ? stName[t.status] + ': ' + t.name : '');
@@ -1869,9 +1876,9 @@
     var addNames = function (t, text) {
       var added = false;
       String(text).split(',').map(function (x) { return x.trim().slice(0, 60); }).filter(Boolean).forEach(function (name) {
-        if (t.res.map(function (x) { return x.toLowerCase(); }).indexOf(name.toLowerCase()) < 0 && t.res.length < 12) { t.res.push(name); added = true; }
+        if (t.res.map(function (x) { return x.toLowerCase(); }).indexOf(name.toLowerCase()) < 0 && t.res.length < 12) { t.res.push(name); added = true; stakeEnsure(name); }
       });
-      if (added) { fixRes(t); dirty(); }
+      if (added) { fixRes(t); crewAuto(t); dirty(); }
       return added;
     };
     B.querySelectorAll('[data-radd]').forEach(function (inp) {
@@ -1883,12 +1890,13 @@
       inp.addEventListener('blur', function () { tip.hidden = true; if (inp.value.trim() && addNames(task(inp), inp.value)) { inp.value = ''; render(); } });
       inp.addEventListener('keydown', function (e) {
         if ((e.key === 'Enter' || e.key === ',') && inp.value.trim()) { e.preventDefault(); if (addNames(task(inp), inp.value)) { inp.value = ''; refocus(); } else inp.value = ''; }
-        else if (e.key === 'Backspace' && !inp.value) { var t = task(inp); if (t.res.length) { t.res.pop(); fixRes(t); dirty(); refocus(); } }
+        else if (e.key === 'Backspace' && !inp.value) { var t = task(inp); if (t.res.length) { t.res.pop(); fixRes(t); crewAuto(t); dirty(); refocus(); } }
       });
       inp.addEventListener('input', function () { if (inp.value.indexOf(',') >= 0 && addNames(task(inp), inp.value)) { inp.value = ''; refocus(); } });
     });
+    B.querySelectorAll('[data-sk="owner"]').forEach(function (inp) { inp.addEventListener('change', function () { if (stakeEnsure(inp.value)) dirty('stakeholder added'); }); });
     B.querySelectorAll('[data-rlead]').forEach(function (b) { b.onclick = function () { var t = task(b); t.lead = b.getAttribute('data-rlead'); fixRes(t); dirty(); render(); }; });
-    B.querySelectorAll('[data-rx]').forEach(function (b) { b.onclick = function () { var t = task(b), n = b.getAttribute('data-rx'); t.res = t.res.filter(function (x) { return x !== n; }); fixRes(t); dirty(); render(); }; });
+    B.querySelectorAll('[data-rx]').forEach(function (b) { b.onclick = function () { var t = task(b), n = b.getAttribute('data-rx'); t.res = t.res.filter(function (x) { return x !== n; }); fixRes(t); crewAuto(t); dirty(); render(); }; });
     B.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { taskDelete(task(b)); }; });
     // type a number in # to move it there (1 = first); the rest close up behind it
     var place = function (arr, item, v) {
@@ -2618,17 +2626,26 @@
     setTimeout(function () { document.addEventListener('pointerdown', close, true); }, 0);
     wire(m, function () { close(); m.remove(); document.removeEventListener('pointerdown', close, true); });
   }
+  // 👥 a person's name typed anywhere (Gantt resources, sub-task owner, Kanban owner) goes into the Stakeholder register (RACI R); trades and teams do not
+  var NOT_PERSON = /^(labou?rers?|tilers?|plumbers?|electricians?|painters?|carpenters?|waterproofers?|suppliers?|customers?|clients?|vendors?|contractors?|sub-?contractors?|consultants?|builders?|crews?|staff|team|tbc|tba|tbd|n\/?a|none|everyone|all|admin|pmo|it|hr|finance|legal|procurement|operations|ops|management|board|steering committee|sponsor|project manager|pm|ba|qa|devops|developers?|engineers?|testers?|designers?|architects?|analysts?|trainers?|users?)$/i;
+  function looksPerson(n) { n = String(n || '').trim(); return n.length > 1 && !NOT_PERSON.test(n) && !/\b(team|crew|contractor|subcontractor|supplier|department|committee|group|vendor|services|pty|ltd|inc)\b/i.test(n) && !/^\d/.test(n) && !(M.people && M.people.trades && M.people.trades().some(function (t) { return String(t).toLowerCase() === n.toLowerCase(); })); }
+  function stakeEnsure(n, quiet) {
+    n = String(n || '').trim(); if (!n || !S.plan || !looksPerson(n)) return false;
+    var sh = (S.plan.stakeholders = S.plan.stakeholders || []), ln = n.toLowerCase();
+    if (sh.some(function (x) { return (x.name || '').toLowerCase() === ln || (!x.name && (x.role || '').toLowerCase() === ln); })) return false;
+    var pe = pplNames()[ln];
+    sh.push({ id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4), name: pe ? pe.name || n : n, role: pe ? pe.role || '' : '', raci: 'R', phone: pe ? pe.phone || '' : '', email: pe ? pe.email || '' : '', sub: '', person: pe ? pe.id : '' });
+    if (!quiet) toast(n + ' added to the Stakeholder register' + (pe ? ' (from People, with their contact details)' : ': add their role and contact details on the 👥 Stakeholders tab'));
+    return true;
+  }
+  function stakeOpts(skip) {   // the people in the Stakeholder register (names only), for the resource and owner lists
+    var seen = {}; return (S.plan.stakeholders || []).filter(function (x) { var n = (x.name || '').trim(), k = n.toLowerCase(); if (!n || seen[k] || (skip && skip[k])) return false; seen[k] = 1; return true; })
+      .map(function (x) { return '<option value="' + esc(x.name) + '" label="Stakeholder' + (x.role ? ' · ' + esc(x.role) : '') + '">'; }).join('');
+  }
   function ownerPick(btn, cur, set0) {
     var sh = (S.plan.stakeholders || []).filter(function (x) { return x.name || x.role; });
     // v67: a new name typed here goes into the Stakeholder register too (RACI R), so the register stays complete
-    var set = function (n) {
-      if (n && !sh.some(function (x) { return (x.name || x.role || '').toLowerCase() === n.toLowerCase(); })) {
-        var pe = pplNames()[n.toLowerCase()];
-        (S.plan.stakeholders = S.plan.stakeholders || []).push({ id: 's' + Date.now().toString(36), name: n, role: pe ? pe.role || '' : '', raci: 'R', phone: pe ? pe.phone || '' : '', email: pe ? pe.email || '' : '', sub: '', person: pe ? pe.id : '' });
-        toast(n + ' added to the Stakeholder register' + (pe ? ' (from People, with their contact details)' : ': add their role and contact details on the 👥 Stakeholders tab'));
-      }
-      set0(n);
-    };
+    var set = function (n) { if (n && !sh.some(function (x) { return (x.name || x.role || '').toLowerCase() === n.toLowerCase(); })) stakeEnsure(n); set0(n); };
     kPop(btn, '<input class="kpop-q" placeholder="Search, or type a name">' + '<div class="kpop-list"></div>' + (cur ? '<button type="button" class="kpop-clear">✕ No owner</button>' : ''), function (m, done) {
       var q = m.querySelector('.kpop-q'), L = m.querySelector('.kpop-list');
       var draw = function () {
@@ -3597,10 +3614,10 @@
       '<div class="bd-charts"><div><h3>Cost by phase</h3>' + (K.byPh.length ? img('bar', { items: K.byPh.map(function (x) { return { l: x.name, v: x.v, t: money(x.v) }; }) }, 'Cost by phase') : '<p class="muted">No costs yet.</p>') + '</div>' +
         '<div><h3>Cost by category</h3>' + (K.base ? img('donut', { items: BCATS.map(function (k) { return { l: k, v: K.byCat[k], t: money(K.byCat[k]) }; }), center: money(K.base), centerLabel: 'Base cost' }, 'Cost by category') : '<p class="muted">No costs yet.</p>') + '</div></div>' +
       (K.months.length ? '<h3>Cash flow by month</h3>' + img('scurve', { points: K.months.map(function (x) { return { l: mon(x.m), v: x.v }; }) }, 'Cash flow') : '') +
-      '<h3>Cost breakdown</h3><div class="table-wrap"><table class="rt bd-tbl"><thead><tr><th>#</th><th>Task</th><th>Phase</th><th>Category</th><th class="num">Qty</th><th>Unit</th><th class="num">Rate</th><th class="num">Cost</th></tr></thead><tbody>' +
+      '<h3>Cost breakdown</h3><div class="table-wrap"><table class="rt bd-tbl"><thead><tr><th>#</th><th>Task</th><th>Phase</th><th>Category</th><th class="num">People × Qty</th><th>Unit</th><th class="num">Rate</th><th class="num">Cost</th></tr></thead><tbody>' +
       K.tasks.map(function (x) { if (x.bom) return '<tr class="bd-bom" data-gobom title="Open the BOM to change it, then sign it off again to put it back in the costing"><td>' + x.n + '</td><td>🧱 ' + esc(String(x.t.name).replace(/^[🧱\s]+/, '')) + '</td><td><small>Bill of Materials</small></td><td>Materials</td><td class="num" colspan="3"><small class="muted">from the signed-off BOM · <u>edit in the BOM</u></small></td><td class="num"><b>' + money(x.c) + '</b></td></tr>';
         return '<tr><td>' + x.n + '</td><td>' + esc(x.t.name) + '</td><td><small>' + esc(x.ph) + '</small></td><td><select data-bcat="' + esc(x.t.id) + '"' + (ro ? ' disabled' : '') + '>' + BCATS.map(function (k) { return '<option' + (k === x.cat ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></td>' +
-        '<td class="num"><input type="number" step="any" min="0" data-bq="' + esc(x.t.id) + '" value="' + (x.t.qty || 0) + '"' + (ro ? ' disabled' : '') + '></td><td>' + esc(x.t.unit || '') + '</td><td class="num"><input type="number" step="any" min="0" data-br="' + esc(x.t.id) + '" value="' + (x.t.rate || 0) + '"' + (ro ? ' disabled' : '') + '></td><td class="num"><b>' + money(x.c) + '</b></td></tr>'; }).join('') +
+        '<td class="num nowrap">' + (isLab(x.t) ? '<small class="muted" title="People (set on the Gantt: Resources, or People × Qty)">' + crewOf(x.t) + ' ×</small> ' : '') + '<input type="number" step="any" min="0" data-bq="' + esc(x.t.id) + '" value="' + (x.t.qty || 0) + '"' + (ro ? ' disabled' : '') + '></td><td>' + esc(x.t.unit || '') + '</td><td class="num"><input type="number" step="any" min="0" data-br="' + esc(x.t.id) + '" value="' + (x.t.rate || 0) + '"' + (ro ? ' disabled' : '') + '></td><td class="num"><b>' + money(x.c) + '</b></td></tr>'; }).join('') +
       '</tbody><tfoot><tr><td colspan="7">Base cost (BAC)</td><td class="num"><b>' + money(K.base) + '</b></td></tr><tr><td colspan="7">Contingency (' + b.cont + '%)</td><td class="num">' + money(K.cont) + '</td></tr><tr><td colspan="7">Management reserve (' + b.res + '%)</td><td class="num">' + money(K.res) + '</td></tr><tr class="bd-tot"><td colspan="7">Total budget</td><td class="num"><b>' + money(K.total) + '</b></td></tr></tfoot></table></div>' +
       (K.tasks.length ? '' : '<div class="empty">No task has a cost yet. Give tasks a quantity and a rate on the Schedule tab (Costs view), or here once they have one.</div>') + '</div>';
     B.querySelectorAll('[data-gobom]').forEach(function (r) { r.onclick = function () { location.hash = '#plan/' + S.core + '/bom'; if (bomLocked()) setTimeout(function () { toast('The BOM is signed off: 🔓 Reopen it to edit, then ✍ sign it off again to put it back in the costing'); }, 300); }; });
@@ -4412,7 +4429,7 @@
       var t = byId[c.id]; if (!picks['t:' + i] || !t) return; n++;
       if (c.durTo !== c.durFrom) { t.dur = c.durTo; fitSubs(t); derive(t); }
       if (c.notBefore && (!t.snet || c.notBefore > t.snet)) t.snet = c.notBefore;
-      if (c.extra) { if ((+t.qty || 0) > 0) t.rate = Math.round(((+t.rate || 0) + c.extra / t.qty) * 100) / 100; else { t.qty = 1; t.rate = c.extra; t.unit = t.unit || 'item'; } }
+      if (c.extra) { if ((+t.qty || 0) > 0) t.rate = Math.round(((+t.rate || 0) + c.extra / (t.qty * crewOf(t))) * 100) / 100; else { t.qty = 1; t.rate = c.extra; t.unit = t.unit || 'item'; } }
       t.notes = ((t.notes ? t.notes + '\n' : '') + (c.why || 'Changed') + tag).slice(0, 1000);
     });
     a.new_tasks.forEach(function (x, i) {

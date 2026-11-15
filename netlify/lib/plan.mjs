@@ -155,7 +155,7 @@ function clean(p, core) {
     const o = {
     id: uid(t.id, 't'), name: str(t.name, 160) || 'New task', phase: phIds.has(t.phase) ? t.phase : phases[0].id,
     dur: int(t.dur, 0, 365, 1), snet: ymdOk(t.snet), fixed: !!(t.fixed && ymdOk(t.snet)), pred: (Array.isArray(t.pred) ? t.pred : []).map((x) => str(x, 20)).slice(0, 10),
-    item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000),
+    item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), crew: int(t.crew, 0, 500, 0) || undefined, crewSet: t.crewSet ? true : undefined, unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000),
     // v64: the Board: owner (a stakeholder), priority and story points
     desc: str(t.desc, 300), owner: str(t.owner, 80),
     // the Product Backlog (Kanban or Scrum): where the item is ('', 'board' or a sprint id), when it was pulled in and when it was done
@@ -268,8 +268,11 @@ function crClean(c) {
 }
 // what a task costs: its own quantity x rate (labour, hire ...) plus the stock materials on it
 export function matsOf(t) { return Array.isArray(t.mats) && t.mats.length ? t.mats : t.item ? [{ item: t.item, qty: Number(t.qty) || 0, price: Number(t.rate) || 0, legacy: true }] : []; }
+// 👷 labour (hours, days, weeks, shifts) is people × quantity per person × rate; materials and lots are quantity × rate
+export const LABU = /^(h|hr|hrs|hours?|d|days?|wk|weeks?|shifts?)$/i;
+export function crewOf(t) { return LABU.test(String(t.unit || '').trim()) ? Math.max(1, Math.min(500, Math.round(Number(t.crew) || 0)) || 1) : 1; }
 export function taskCost(t) {
-  const m = matsOf(t), own = m.length && m[0].legacy ? 0 : (Number(t.qty) || 0) * (Number(t.rate) || 0);
+  const m = matsOf(t), own = m.length && m[0].legacy ? 0 : crewOf(t) * (Number(t.qty) || 0) * (Number(t.rate) || 0);
   return r2(own + m.reduce((a, x) => a + (Number(x.qty) || 0) * (Number(x.price) || 0), 0) + (Number(t.bomx) || 0));   // v93: + BOM materials not in stock
 }
 export async function save(core, plan, rev, by) {
@@ -467,10 +470,10 @@ const PRO = /feasib|study|design|concept|drawing|report|review|survey|engineer|c
 function builtInCost(t) {
   const n = t.name || '', d = Math.max(1, t.dur || 1), ppl = Math.max(1, (t.res || []).length);
   if (BUY.test(n)) return { qty: 1, unit: 'lot', rate: Math.round(4000 * d), basis: 'benchmark supply package, ' + d + ' d lead time (lot)', lot: true };
-  if (WAIT.test(n)) return { qty: r2(d * 1 * ppl), unit: 'h', rate: 180, basis: d + ' d x 1 h/d follow-up x ' + ppl + ' @ $180/h, plus fees by lot', lot: false, fee: Math.round(1500 + d * 150) };
-  if (PRO.test(n)) return { qty: r2(d * 5 * ppl), unit: 'h', rate: 220, basis: d + ' d x 5 h/d x ' + ppl + ' consultant @ $220/h', lot: false };
+  if (WAIT.test(n)) return { qty: r2(d * 1), crew: ppl, unit: 'h', rate: 180, basis: ppl + ' x ' + d + ' d x 1 h/d follow-up @ $180/h, plus fees by lot', lot: false, fee: Math.round(1500 + d * 150) };
+  if (PRO.test(n)) return { qty: r2(d * 5), crew: ppl, unit: 'h', rate: 220, basis: ppl + ' consultant' + (ppl > 1 ? 's' : '') + ' x ' + d + ' d x 5 h/d @ $220/h', lot: false };
   const crew = Math.max(2, ppl);
-  return { qty: r2(d * 7.5 * crew), unit: 'h', rate: 95, basis: d + ' d x 7.5 h/d x ' + crew + ' crew @ $95/h', lot: false };
+  return { qty: r2(d * 7.5), crew, unit: 'h', rate: 95, basis: crew + ' crew x ' + d + ' d x 7.5 h/d @ $95/h', lot: false };
 }
 export async function costEstimate({ core, ids, note, target: tgt }, by) {
   const job = await J.find(core); if (!job) return { error: 'Job not found' };
@@ -482,12 +485,12 @@ export async function costEstimate({ core, ids, note, target: tgt }, by) {
   const known = r2(plan.tasks.filter((t) => !want.has(t.id)).reduce((a, t) => a + taskCost(t), 0));
   const all = !!(plan.emergency || plan.weekends);
   const system = 'You are a quantity surveyor and cost planner for construction and building services projects in NSW, Australia. Give an INDICATIVE cost for each task: a reference benchmark from Australian and international benchmarks, $ ex tax. ' +
-    'Labour and professional services in hours: q = days x the hours ACTUALLY worked on it per day x people. Do not assume 8 hours a day: desk work (feasibility, design, reviews, reports) is often 2 to 6 hours a day, waiting for approvals or lead times 0.5 to 1 hour a day of follow-up, site crews 7 to 8. u "h", r = a typical hourly rate for the role. ' +
+    'Labour and professional services in hours: q = days x the hours ACTUALLY worked on it per day, FOR ONE PERSON; "p" = how many people work on it (use the task\'s people where given). The cost is p x q x r. Do not assume 8 hours a day: desk work (feasibility, design, reviews, reports) is often 2 to 6 hours a day, waiting for approvals or lead times 0.5 to 1 hour a day of follow-up, site crews 7 to 8. u "h", r = a typical hourly rate for the role. ' +
     'Materials, equipment, fees and subcontract packages: q 1, u "lot" (or a real quantity and unit), r = a benchmark price scaled to the size of this project (use the project description). Milestones cost 0. ' +
-    '"b": the basis in a few words, e.g. "8 d x 5 h/d x 1 consultant @ $220/h". Plain words, no em dashes. ' +
+    '"b": the basis in a few words, e.g. "2 consultants x 8 d x 5 h/d @ $220/h". Plain words, no em dashes. ' +
     (note ? 'The consultant also says: ' + str(note, 300) + '. ' : '') +
     (target ? 'Benchmark for the whole project: about $' + Math.round(target).toLocaleString('en-AU') + (bench ? ' (' + bench.basis + ')' : '') + '; other tasks already cost $' + Math.round(known).toLocaleString('en-AU') + '. Size the lump sums so the total is close to it. ' : '') +
-    'JSON only: {"costs":[{"id":"","q":0,"u":"h","r":0,"b":""}],"caveat":"one sentence: the biggest uncertainty in these numbers"}';
+    'JSON only: {"costs":[{"id":"","p":1,"q":0,"u":"h","r":0,"b":""}],"caveat":"one sentence: the biggest uncertainty in these numbers"}';
   const user = { project: privateOut(str(plan.name, 120), job), work: privateOut(str(job.service, 120), job), location: str(job.suburb, 60), description: privateOut(jobScope(job), 1500),
     objective: privateOut(str((plan.charter || {}).objective, 600), job), days_are: all ? 'calendar days' : 'working days (Mon to Fri)',
     tasks: list.map((t) => ({ id: t.id, name: scrubTask(t.name, job), days: t.dur, people: (t.res || []).length || undefined, trades: (t.res || []).slice(0, 4).map((x) => scrubTask(x, job)), steps: (t.subs || []).slice(0, 8).map((x) => scrubTask(x.name, job)) })) };
@@ -497,22 +500,22 @@ export async function costEstimate({ core, ids, note, target: tgt }, by) {
     catch (e) { why = e.message; o = null; }
   } else why = 'AI is not set up';
   const ok = new Set(list.map((t) => t.id));
-  let costs = o ? (Array.isArray(o.costs) ? o.costs : []).map((c) => ({ id: str(c.id, 20), qty: Math.max(0, Math.min(1e7, r2(c.q ?? c.qty))), unit: str(c.u ?? c.unit, 12) || 'lot', rate: Math.max(0, Math.min(1e10, r2(c.r ?? c.rate))),
+  let costs = o ? (Array.isArray(o.costs) ? o.costs : []).map((c) => ({ id: str(c.id, 20), qty: Math.max(0, Math.min(1e7, r2(c.q ?? c.qty))), unit: str(c.u ?? c.unit, 12) || 'lot', rate: Math.max(0, Math.min(1e10, r2(c.r ?? c.rate))), crew: Math.max(1, Math.min(500, Math.round(Number(c.p ?? c.people ?? c.crew) || 1))),
     basis: str(c.b ?? c.basis, 160).replace(/\s*[—–]\s*/g, ', ') })).filter((c) => ok.has(c.id) && c.qty * c.rate > 0) : [];
   let builtIn = false;
   if (!costs.length) {   // the built-in benchmark: always gives a starting point
     builtIn = true;
-    costs = list.map((t) => { const b = builtInCost(t); const out = { id: t.id, qty: b.qty, unit: b.unit, rate: b.rate, basis: b.basis }; if (b.fee) { out.rate = r2((b.qty * b.rate + b.fee) / b.qty); out.basis += ' $' + b.fee.toLocaleString('en-AU'); } return out; });
+    costs = list.map((t) => { const b = builtInCost(t); const out = { id: t.id, qty: b.qty, crew: b.crew || 1, unit: b.unit, rate: b.rate, basis: b.basis }; if (b.fee) { out.rate = r2((b.qty * b.crew * b.rate + b.fee) / (b.qty * b.crew)); out.basis += ' $' + b.fee.toLocaleString('en-AU'); } return out; });
   }
   // scale to the benchmark: lump sums (lot, each, m² ...) take up the difference, so hourly rates stay realistic
   let scaled = '';
   if (target) {
-    const sum = (f) => costs.filter(f).reduce((a, c) => a + c.qty * c.rate, 0);
+    const sum = (f) => costs.filter(f).reduce((a, c) => a + (LABU.test(c.unit) ? c.crew || 1 : 1) * c.qty * c.rate, 0);
     const isH = (c) => /^(h|hr|hrs|hours?)$/i.test(c.unit);
     let lots = costs.filter((c) => !isH(c)), need = target - known - sum(isH);
     if (!lots.length || need <= sum((c) => !isH(c)) * 0.05) {   // no lump sums to scale (or labour alone overshoots): add a package line to the biggest task
       const big = list.slice().sort((a, b) => b.dur - a.dur)[0], c = costs.find((x) => x.id === big.id);
-      if (c && !lots.length) { c.unit = 'lot'; c.rate = r2(c.qty * c.rate); c.qty = 1; c.basis = 'package incl. labour (' + c.basis + ')'; lots = [c]; need = target - known - sum(isH); }
+      if (c && !lots.length) { c.unit = 'lot'; c.rate = r2((c.crew || 1) * c.qty * c.rate); c.qty = 1; c.crew = 1; c.basis = 'package incl. labour (' + c.basis + ')'; lots = [c]; need = target - known - sum(isH); }
     }
     const lotSum = sum((c) => !isH(c));
     if (lotSum > 0 && need > 0) {

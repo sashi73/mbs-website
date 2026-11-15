@@ -60,13 +60,14 @@ export function linesFromPlan(plan, { mode = 'tasks', margin = 0 } = {}) {
   return costed.map((t) => {
     const subs = (t.subs || []).map((s) => s.name).filter(Boolean);
     if ((t.mats || []).length || Number(t.bomx) > 0) {   // v56: a task with materials is one line at its total (labour + materials, v93: all its BOM lines)
-      const own = r2(t.qty) * r2(t.rate) > 0 ? `${r2(t.qty)} ${t.unit || ''} labour, `.replace(' ,', ',') : '';
+      const own = r2(t.qty) * r2(t.rate) > 0 ? `${PLAN.crewOf(t) > 1 ? PLAN.crewOf(t) + ' x ' : ''}${r2(t.qty)} ${t.unit || ''} labour, `.replace(' ,', ',') : '';
       const mat = matsTxt(t);
       if (plan.bom && plan.bom.milestone === t.id) return { desc: (`Materials (Bill of Materials, ${bomL.length} item${bomL.length === 1 ? '' : 's'}): ` + mat).slice(0, 400), qty: 1, price: r2(PLAN.taskCost(t) * k), gst: true, tid: t.id, mats: true, bom: true };   // v99
       return { desc: (t.name + ' (' + own + 'materials: ' + mat + ')' + (subs.length ? ': ' + subs.join(', ') : '')).slice(0, 400), qty: 1, price: r2(PLAN.taskCost(t) * k), gst: true, tid: t.id, mats: true };
     }
     const unit = t.unit && !/^lot$/i.test(t.unit) ? ` (${r2(t.qty)} ${t.unit})` : '';
-    return { desc: (t.name + unit + (subs.length ? ': ' + subs.join(', ') : '')).slice(0, 400), qty: r2(t.qty), price: r2(r2(t.rate) * k), gst: true, tid: t.id };
+    const cr = PLAN.crewOf(t);
+    return { desc: (t.name + (cr > 1 ? ` (${cr} people x ${r2(t.qty)} ${t.unit} each)` : unit) + (subs.length ? ': ' + subs.join(', ') : '')).slice(0, 400), qty: r2(r2(t.qty) * cr), price: r2(r2(t.rate) * k), gst: true, tid: t.id };
   }).concat(looseLine);
 }
 // v87: the quote is the source of truth for what was agreed: when a quote made from the plan is saved, each line's quantity and

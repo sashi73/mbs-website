@@ -465,10 +465,11 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   // ---- 🔐 the sign-in log: who signed in, by password or Google, from which IP and place, on what device ----
   {
     const geo = Buffer.from(JSON.stringify({ city: 'Sydney', country: { code: 'AU', name: 'Australia' }, subdivision: { code: 'NSW', name: 'New South Wales' } })).toString('base64');
-    await p.request.post(`${BASE}/.netlify/functions/admin`, { data: { action: 'login', username: 'sashi73', password: 'sashi98' }, headers: { 'X-MBS-Admin': '1', 'x-nf-geo': geo, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36' } });
+    const lr = await p.request.post(`${BASE}/.netlify/functions/admin`, { data: { action: 'login', username: 'sashi73', password: 'sashi98' }, headers: { 'X-MBS-Admin': '1', 'x-nf-geo': geo, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36' } });
     await p.request.post(`${BASE}/.netlify/functions/admin`, { data: { action: 'login', username: 'mallory@example.com', password: 'guess' }, headers: { 'X-MBS-Admin': '1', 'x-nf-geo': geo, 'X-Forwarded-For': '198.51.100.9' } });
-    await sleep(800);
-    const sl = (await (await api('visitorList')).json()).signins || [], good = sl.find((x) => x.ok && x.city === 'Sydney'), badS = sl.find((x) => !x.ok && x.email === 'mallory@example.com');
+    await sleep(800); if (!lr.ok()) console.log('SIGNDBG', lr.status(), (await lr.text()).slice(0, 200));
+    let sl = []; for (let i = 0; i < 12; i++) { sl = (await (await api('visitorList')).json()).signins || []; if (sl.some((x) => x.ok && x.city === 'Sydney') && sl.some((x) => !x.ok && x.email === 'mallory@example.com')) break; await sleep(500); }
+    const sl0 = sl, good = sl.find((x) => x.ok && x.city === 'Sydney'), badS = sl.find((x) => !x.ok && x.email === 'mallory@example.com');
     ok('Sign-ins', 'every sign-in is logged with name, email, IP, place and device; failed tries too', good && good.email && good.name && good.ip && good.country === 'Australia' && /Chrome on Windows/.test(good.device) && badS && /Wrong/.test(badS.note), JSON.stringify([good, badS]));
     await p.goto(`${BASE}/admin/#visitors`); await p.reload(); await p.waitForSelector('#siCard', { timeout: 10000 }).catch(() => {});
     const st = await p.textContent('#siCard').catch(() => '');
@@ -502,7 +503,25 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     const pv = await p.evaluate(() => { const F = document.querySelector('#champNew'); return [F.name.value, F.client.value, (document.querySelector('.cn-res') || {}).textContent || (document.querySelector('#cnDocOut') || {}).textContent]; });
     const last = (global.INGEST || []).slice(-1)[0] || {};
     ok('New project', 'Word (.docx) and PowerPoint (.pptx, slides and speaker notes) are read too; a short document goes in whole; the kind of document (requirements, feasibility study, RFP) is recognised', wv[0] === 'Library Digitisation Project' && /Grace Liu/.test(wv[1]) && /Parramatta/.test(wv[2]) && /Read as Requirements document/.test(wv[3]) && pv[0] === 'Fleet EV Transition' && pv[1] === 'Acme Logistics' && /2 slides/.test(pv[2]) && last.whole === true, JSON.stringify([wv, pv, last]));
-    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
+    // 👥 Gantt resources: the list has People and the Stakeholder register's names; a new person's name typed there joins the register (trades do not)
+    {
+      const rc2 = (await (await api('planNewProject', { name: 'Resource list check', client: 'Northside Health', program: 'Digital health' })).json()).core;
+      await api('planSave', { core: rc2, plan: { name: 'Resource list check', start: new Date().toISOString().slice(0, 10), phases: [{ id: 'ph1', name: 'Work' }], tasks: [{ id: 't1', phase: 'ph1', name: 'Kick-off', dur: 2, pred: [], res: [], qty: 16, unit: 'h', rate: 500, pct: 0, status: 'todo', subs: [{ id: 'k1', name: 'Agenda', owner: '', off: 0, dur: 1, status: 'todo' }] }], stakeholders: [{ id: 'sA', name: 'Dr Amelia Hart', role: 'Sponsor', raci: 'A' }, { id: 'sB', name: '', role: 'Steering committee', raci: 'I' }] } });
+      await p.goto(`${BASE}/admin/#plan/${rc2}/schedule`); await p.reload(); await p.waitForSelector('#planBody', { timeout: 10000 }).catch(() => {});
+      await p.click('[data-cols="c"]').catch(() => {}); await sleep(500);
+      const opts = await p.$$eval('#resList option', (o) => o.map((x) => x.value));
+      const ri = '#planBody tr[data-tid="t1"] [data-radd]';
+      await p.fill(ri, 'Nadia Karim'); await p.press(ri, 'Enter'); await sleep(300); await p.fill(ri, 'Plumber'); await p.press(ri, 'Enter'); await sleep(300);
+      await p.fill('#planBody [data-sk="owner"]', 'Tom Walsh').catch(() => {}); await p.press('#planBody [data-sk="owner"]', 'Tab').catch(() => {}); await sleep(2500);
+      const pg = (await (await api('planGet', { core: rc2 })).json()).plan, nm = (pg.stakeholders || []).map((x) => x.name + ':' + x.raci);
+      ok('Gantt', 'resources: the list has the Stakeholder register\'s names; a new person typed there (or as a sub-task owner) joins the register as R, a trade does not', opts.includes('Dr Amelia Hart') && !opts.includes('Steering committee') && nm.includes('Nadia Karim:R') && nm.includes('Tom Walsh:R') && !nm.some((x) => /Plumber/.test(x)) && (pg.tasks[0].res || []).join() === 'Nadia Karim,Plumber', JSON.stringify([opts.slice(0, 6), nm, pg.tasks[0].res]));
+      const c2 = await p.textContent('#planBody tr[data-tid="t1"] .crewx').catch(() => ''), crew2 = await p.inputValue('#planBody tr[data-tid="t1"] [data-k=crew]').catch(() => '');
+      await p.fill('#planBody tr[data-tid="t1"] [data-k=crew]', '4'); await p.press('#planBody tr[data-tid="t1"] [data-k=crew]', 'Tab'); await sleep(2500);
+      const c4 = await p.textContent('#planBody tr[data-tid="t1"] .crewx').catch(() => ''), pg4 = (await (await api('planGet', { core: rc2 })).json()).plan, t4 = pg4.tasks[0], bac = (await (await api('planGet', { core: rc2 })).json()).plan;
+      ok('Gantt', 'labour costs people × hours each × rate: the people come from the Resources column (2 here), or are typed (4 × 16 h × $500 = $32,000)', crew2 === '2' && /2 × 16 h × \$500/.test(c2) && /4 × 16 h × \$500/.test(c4) && t4.crew === 4 && t4.crewSet === true, JSON.stringify([crew2, c2, c4, t4.crew, t4.crewSet]));
+      await api('planProjectDelete', { core: rc2 });
+    }
+    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins|Gantt/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
   }
   // ---- 🌐 language audit: with the console in Malay, every page and every project tab must show no English ----
   {
@@ -1001,12 +1020,13 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     { await p.goto(`${BASE}/admin/#users`); await p.waitForSelector('#usNew', { timeout: 8000 }).catch(() => {});
       const head = await p.textContent('#view, main').catch(() => '');
       ok('Users', 'Users & access: super user, project managers, contractors, project personnel, Google; no sub-contractor logins', /super user/i.test(head) && /Project manager/.test(head) && /Contractor/.test(head) && /Project personnel/.test(head) && /Google/.test(head) && !/Sub-contractor login/.test(head), head.slice(0, 200));
-      await p.click('#usNew').catch(() => {}); await p.waitForSelector('#nuF', { timeout: 5000 }).catch(() => {});
+      await p.waitForLoadState('networkidle').catch(() => {}); await sleep(800);
+      await p.click('#usNew').catch(() => {}); await p.waitForSelector('#nuF', { timeout: 5000 }).catch(() => {}); await sleep(500);
       await p.fill('#nuF [name=email]', 'aisha.contractor@example.com'); await p.fill('#nuF [name=name]', 'Aisha Rahman');
       await p.check('#nuF [name=role][value="Contractor"]').catch(() => {});
       await p.fill('#nuF [name=pw]', 'Welcome2026x'); await p.fill('#nuF [name=pw2]', 'Welcome2026x');
       await p.click('#nuF [type=submit]').catch(() => {}); await p.waitForSelector('#cnGo', { timeout: 5000 }).catch(() => {});
-      const conf = await p.textContent('#modal').catch(() => ''); const before = ((await (await api('userList')).json()).users || []).filter((u) => u.username === 'aisha.contractor@example.com').length;
+      const conf = await p.textContent('#modal').catch(() => ''); if (!/Confirm and create/.test(conf)) console.log('USRDBG', JSON.stringify(await p.evaluate(() => [[...document.querySelectorAll('.toast,#toast,[class*=toast]')].map((x) => x.textContent).join('|'), document.querySelector('#nuF [name=email]') && document.querySelector('#nuF [name=email]').value, (document.querySelector('#nuF [name=role]:checked') || {}).value, document.querySelector('#nuF [name=pw]') && document.querySelector('#nuF [name=pw]').value.length]))); const before = ((await (await api('userList')).json()).users || []).filter((u) => u.username === 'aisha.contractor@example.com').length;
       ok('Users', 'step 2 asks to confirm (email, role, password hidden) before anything is made', /Confirm and create/.test(conf) && /aisha.contractor@example.com/.test(conf) && !/Welcome2026x/.test(conf) && before === 0, conf.slice(0, 200) + ' before=' + before);
       await p.click('#cnGo').catch(() => {}); await p.waitForSelector('#pmSave', { timeout: 8000 }).catch(() => {});
       await p.check(`#pmProjs input[value="${cc}"]`).catch(() => {});

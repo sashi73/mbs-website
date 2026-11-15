@@ -500,3 +500,8 @@ input.pp-auto,select.pp-auto,textarea.pp-auto{background:#FFFBEB!important;borde
 .cn-brief pre{white-space:pre-wrap;font:12.5px/1.5 inherit;max-height:320px;overflow:auto;background:#FAF8F2;border-radius:10px;padding:10px 12px;margin:6px 0 0}
 .champ-form input.auto[data-auto=doc],.champ-form textarea.auto[data-auto=doc]{background:#FFFBEB;border-color:#E8C76A}
 .cn-from{background:#F5F0FF;border:1px solid #DDD6FE;border-radius:10px;padding:8px 12px;font-size:13px;margin:0 0 8px}
+/* 👷 people × hours for labour */
+.crewq{display:inline-flex;align-items:center;gap:3px;margin-right:3px}
+.crewq input{width:44px!important;text-align:center;font-weight:700;background:#F5F0FF;border-color:#DDD6FE}
+.crewq b{color:#8A8577;font-weight:600}
+.crewx{font-size:11px;white-space:nowrap}
