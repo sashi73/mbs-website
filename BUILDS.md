@@ -77,4 +77,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 66 | 1.0.66| 2026-11-15 14:47| GKH-Project-Champ| `b450cba` | Champ: 'Project Intelligence' is now 'Ask AI'; the Champ skill keeps Champ up to date; Champ answers from the left menu's data |
 | 67 | 1.0.67| 2026-11-15 15:55| GKH-Project-Champ| `615a2e5` | Champ: Product Backlog with Kanban (WIP limits) or Scrum (2 or 4 week sprints, goal, start/complete, retro charts) |
 | 68 | 1.0.68| 2026-11-15 16:22| GKH-Project-Champ| `61d186f` | Champ: designed reports (4 skins x colour schemes, live preview) and AI fill + Fibonacci points in the backlog |
-| 69 | 1.0.69 | 2026-11-15 17:02 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 69 | 1.0.69| 2026-11-15 17:02| GKH-Project-Champ| `7a83c4c` | Champ: edit items and stories from sprint planning, sprint achievability check, plan the sprints with AI |
+| 70 | 1.0.70 | 2026-11-15 18:07 | GKH-Project-Champ | _this commit_ | _see git log_ |

@@ -81,6 +81,12 @@ async function registerBuild() {
   } catch (e) { buildSeen = false; console.log('build registry: ' + e.message); }
 }
 
+// 🔐 the sign-in log (Visitors > Sign-ins): who, how, from which address and place, on what device
+function signLog(req, context, e) {
+  const g = VIS.geoOf(context, req);
+  const p = VIS.logSignIn({ ...e, ip: A.clientIp(req), ...g, device: VIS.device(req.headers.get('user-agent')) }).catch((x) => console.log('sign-in log failed: ' + x.message));
+  return A.later ? A.later(p) : p;
+}
 export default async (req, context) => {
   const t0 = Date.now(), first = served++ === 0;
   const lg = String(req.headers.get('x-champ-lang') || '').slice(0, 5).toLowerCase();   // 🌐 the console language: the AI writes in it
@@ -153,6 +159,7 @@ async function handle(req, context) {
       const usr = owner ? null : await U.login(body.username, body.password, canIn);   // v86: a user from Users & access
       if (!owner && !usr) {
         const left = await A.noteFailure(ip);
+        await signLog(req, context, { ok: false, method: 'Password', user: body.username, email: /@/.test(String(body.username || '')) ? body.username : '', note: 'Wrong username or password' });
         return bad(left ? `Wrong username or password (${left} tr${left > 1 ? 'ies' : 'y'} left).` : 'Too many wrong attempts. Locked for 15 minutes.', 401);
       }
       if (had) await A.later(A.clearFailures(ip));
@@ -169,10 +176,12 @@ async function handle(req, context) {
       }
       if (usr) {
         await A.audit(usr.username, 'Logged in (' + usr.role + (pc ? ', project ' + pc : '') + ')');
+        await signLog(req, context, { ok: true, method: 'Password', user: usr.username, email: usr.email || (/@/.test(usr.username) ? usr.username : ''), name: usr.name, role: usr.role + (pc ? ', project ' + pc : '') });
         return out(200, { ok: true, user: usr.username, name: usr.name, mustChange: !!usr.mustChange, project: pc }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(usr.username, Date.now(), { uid: usr.id, v: usr.ver || 0, pc })) });
       }
       const user = A.ownerName();
       await A.audit(user, 'Logged in');
+      await signLog(req, context, { ok: true, method: 'Password', user, email: env('OWNER_EMAIL', 'ceo@gkhconsultancy.com'), name: env('OWNER_NAME', 'Sashi Kumar Sivam'), role: 'Super user' });
       return out(200, { ok: true, user }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(user)) });
     }
     if (action === 'logout') return out(200, { ok: true }, { 'Set-Cookie': A.clearCookie(req) });
@@ -182,12 +191,13 @@ async function handle(req, context) {
       const ip = A.clientIp(req), { wait } = await A.loginCheck(ip);
       if (wait) return bad(`Too many attempts. Try again in ${wait} minute${wait > 1 ? 's' : ''}.`, 429);
       const g = await googleVerify(body.credential);
-      if (g.error) { await A.noteFailure(ip); return bad(g.error, g.code || 401); }
+      if (g.error) { await A.noteFailure(ip); await signLog(req, context, { ok: false, method: 'Google', note: g.error }); return bad(g.error, g.code || 401); }
       const u = await U.googleUser(g.email, g.name, 'Google sign-in');
       if (!u) return bad('Google sign-in failed. Try again.', 401);
       if (u.clash) return bad('This email already has a staff login: sign in with your username and password.', 409);
       if (u.disabled) return bad('Your Google sign-in has been switched off. Ask GKH.', 403);
       await A.audit(u.username, 'Signed in with Google (view only)');
+      await signLog(req, context, { ok: true, method: 'Google', user: u.username, email: g.email, name: u.name || g.name, role: 'Google (view only)' });
       return out(200, { ok: true, user: u.username, name: u.name }, { 'Set-Cookie': A.sessionCookie(req, A.makeSession(u.username, Date.now(), { uid: u.id, v: u.ver || 0 })) });
     }
 
@@ -305,7 +315,13 @@ async function handle(req, context) {
       case 'visitorList': {
         if (ctx.scope) return bad('Sub-contractor logins cannot see visitors.', 403);
         if (!ctx.owner && !(ctx.mods && ctx.mods.crm)) return bad('You need access to Jobs & customers to see visitors.', 403);
-        return out(200, { list: await VIS.list(), email: !!env('RESEND_API_KEY'), counter: VIS.counterSummary(await VIS.counter()) });
+        return out(200, { list: await VIS.list(), email: !!env('RESEND_API_KEY'), counter: VIS.counterSummary(await VIS.counter()), signins: ctx.owner ? await VIS.signIns() : null });
+      }
+      case 'signInClear': {   // only the super user sees and clears the sign-in log
+        if (!ctx.owner) return bad('Only the super user can see the sign-in log.', 403);
+        const ids = (Array.isArray(body.ids) ? body.ids : []).map((x) => clean(String(x || ''), 40)).slice(0, 2000);
+        if (!ids.length) return bad('Pick the sign-ins to delete.');
+        return out(200, { ok: true, removed: await VIS.signInsClear(ids) });
       }
       case 'visitorDelete': {
         if (ctx.scope) return bad('Sub-contractor logins cannot delete visitors.', 403);

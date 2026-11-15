@@ -153,3 +153,32 @@ export function counterSummary(c) {
     week: sum(7, 'u'), weekVisits: sum(7, 'v'), month: sum(30, 'u'), pages: Object.entries(c.pages || {}).sort((a, b) => b[1] - a[1]).slice(0, 8),
     last14: Array.from({ length: 14 }, (_, i) => { const d = sydDay(Date.now() - (13 - i) * 864e5); return [d, (days[d] || {}).u || 0, (days[d] || {}).v || 0]; }) };
 }
+
+// ---------- 🔐 the sign-in log: who signed in to the console (or tried to), from where ----------
+// Kept under 'champ-signins' as { list: [{ id, at, ok, method, user, email, name, role, ip, city, region, country, cc, tz, device }] }, newest first, at most 2000.
+const SKEY = 'champ-signins', SMAX = 2000;
+const s1 = (v, n) => String(v == null ? '' : v).replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
+export function device(ua) {   // "Chrome on Windows", "Safari on iPhone"
+  ua = String(ua || '');
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /CrOS/.test(ua) ? 'Chromebook' : /Linux/.test(ua) ? 'Linux' : '';
+  const br = /Edg\//.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : /HeadlessChrome|Playwright/.test(ua) ? 'Automated browser' : '';
+  return [br, os].filter(Boolean).join(' on ') || 'Unknown device';
+}
+export function geoOf(context, req) {   // Netlify's geo for the address, or nothing (local runs)
+  const g = (context && context.geo) || {}, h = (k) => (req && req.headers ? req.headers.get(k) || '' : '');
+  let city = g.city || '', region = (g.subdivision && (g.subdivision.name || g.subdivision.code)) || '', country = (g.country && (g.country.name || g.country.code)) || '', cc = (g.country && g.country.code) || '';
+  if (!city && !country) { try { const x = JSON.parse(Buffer.from(h('x-nf-geo'), 'base64').toString('utf8') || '{}'); city = x.city || ''; region = (x.subdivision && (x.subdivision.name || x.subdivision.code)) || ''; country = (x.country && (x.country.name || x.country.code)) || ''; cc = (x.country && x.country.code) || ''; } catch {} }
+  return { city: s1(city, 80), region: s1(region, 80), country: s1(country, 80), cc: s1(cc, 4), tz: s1(g.timezone || '', 60) };
+}
+export async function logSignIn(e) {
+  const rec = { id: 'si' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: new Date().toISOString(), ok: !!e.ok, method: s1(e.method, 30), user: s1(e.user, 160), email: s1(e.email, 160).toLowerCase(), name: s1(e.name, 100), role: s1(e.role, 60),
+    ip: s1(e.ip, 60), city: s1(e.city, 80), region: s1(e.region, 80), country: s1(e.country, 80), cc: s1(e.cc, 4), tz: s1(e.tz, 60), device: s1(e.device, 60), note: s1(e.note, 120) };
+  await kv.update(SKEY, (cur) => { cur.list = cur.list || []; cur.list.unshift(rec); if (cur.list.length > SMAX) cur.list.length = SMAX; return cur; }, { list: [] });
+  return rec;
+}
+export async function signIns() { return ((await kv.get(SKEY).catch(() => null)) || { list: [] }).list; }
+export async function signInsClear(ids) {
+  const set = new Set((Array.isArray(ids) ? ids : []).map(String)); let n = 0;
+  await kv.update(SKEY, (cur) => { const b = (cur.list || []).length; cur.list = (cur.list || []).filter((x) => set.size && !set.has(x.id)); n = b - cur.list.length; return cur; }, { list: [] });
+  return n;
+}

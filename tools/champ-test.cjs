@@ -443,6 +443,18 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     if (process.env.RPT_ONLY) { for (const x of results) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
     await api('planProjectDelete', { core: rc });
   }
+  // ---- 🔐 the sign-in log: who signed in, by password or Google, from which IP and place, on what device ----
+  {
+    const geo = Buffer.from(JSON.stringify({ city: 'Sydney', country: { code: 'AU', name: 'Australia' }, subdivision: { code: 'NSW', name: 'New South Wales' } })).toString('base64');
+    await p.request.post(`${BASE}/.netlify/functions/admin`, { data: { action: 'login', username: 'sashi73', password: 'sashi98' }, headers: { 'X-MBS-Admin': '1', 'x-nf-geo': geo, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36' } });
+    await p.request.post(`${BASE}/.netlify/functions/admin`, { data: { action: 'login', username: 'mallory@example.com', password: 'guess' }, headers: { 'X-MBS-Admin': '1', 'x-nf-geo': geo, 'X-Forwarded-For': '198.51.100.9' } });
+    await sleep(800);
+    const sl = (await (await api('visitorList')).json()).signins || [], good = sl.find((x) => x.ok && x.city === 'Sydney'), badS = sl.find((x) => !x.ok && x.email === 'mallory@example.com');
+    ok('Sign-ins', 'every sign-in is logged with name, email, IP, place and device; failed tries too', good && good.email && good.name && good.ip && good.country === 'Australia' && /Chrome on Windows/.test(good.device) && badS && /Wrong/.test(badS.note), JSON.stringify([good, badS]));
+    await p.goto(`${BASE}/admin/#visitors`); await p.reload(); await p.waitForSelector('#siCard', { timeout: 10000 }).catch(() => {});
+    const st = await p.textContent('#siCard').catch(() => '');
+    ok('Sign-ins', 'Visitors shows the sign-in log to the super user (who, email, how, IP, location)', /Sydney, New South Wales, Australia/.test(st) && /mallory@example\.com/.test(st) && /Password/.test(st), st.slice(0, 200));
+  }
   // ---- 🌐 language audit: with the console in Malay, every page and every project tab must show no English ----
   {
     const ap = (await (await api('planNewProject', { name: 'Audit web app', client: 'Acme', program: 'Digital health' })).json()).core;

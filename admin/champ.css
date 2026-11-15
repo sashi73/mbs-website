@@ -479,3 +479,6 @@ input.pp-auto,select.pp-auto,textarea.pp-auto{background:#FFFBEB!important;borde
 .ag-ail{margin:4px 0 0;padding-left:20px;font-size:13px}.ag-ail li{margin:2px 0}
 .ag-aix{margin-top:10px;border-radius:10px;background:#FFF7ED;border:1px solid #FED7AA;padding:8px 12px;font-size:13px}.ag-aix ul{margin:4px 0 0;padding-left:18px}
 .ag-aia{margin:10px 0 0;font-size:13px}
+/* 🔐 sign-in log */
+.si-tbl td{vertical-align:top}.si-tbl tr.si-bad td{background:#FEF2F2}
+.si-tbl code{font-size:12px;background:#F4F1E8;padding:1px 5px;border-radius:5px}

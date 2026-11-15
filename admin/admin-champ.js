@@ -352,7 +352,21 @@
         '<div style="display:flex;gap:4px;align-items:flex-end;height:90px;padding:0 2px" aria-label="Visits, last 14 days">' + (c.last14 || []).map(function (x) {
           return '<div title="' + esc(x[0]) + ': ' + x[1] + ' new visitors, ' + x[2] + ' visits" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%"><small class="muted" style="font-size:10px">' + (x[2] || '') + '</small><div style="width:100%;border-radius:4px 4px 0 0;background:#C9A227;height:' + Math.max(2, Math.round(70 * x[2] / mx)) + 'px"></div><small class="muted" style="font-size:9.5px">' + esc(x[0].slice(8)) + '</small></div>'; }).join('') + '</div>' +
         ((c.pages || []).length ? '<p class="muted" style="font-size:12.5px;margin:10px 2px 0">Most visited: ' + c.pages.map(function (p) { return esc(p[0]) + ' (' + n(p[1]) + ')'; }).join(' · ') + '</p>' : '') + '</div>';
-      el.innerHTML = traffic + tiles + (d.email ? '' : '<div class="card" style="border-left:4px solid #c9a227"><b>Welcome packages are not emailed automatically yet.</b> <span class="muted">Add RESEND_API_KEY (and FROM_EMAIL from a verified domain) in Netlify; until then, the people marked “Wants it” are waiting for you to send one.</span></div>') +
+      var SI = d.signins, signCard = '';
+      if (SI) {
+        var dayAgo = Date.now() - 864e5, mo = Date.now() - 30 * 864e5, okL = SI.filter(function (x) { return x.ok; }), ppl = {};
+        okL.forEach(function (x) { if (Date.parse(x.at) > mo) ppl[x.email || x.user] = 1; });
+        signCard = '<div class="card" id="siCard"><div class="card-h"><h2>🔐 Sign-ins to the console</h2><span class="sp"></span>' +
+          '<input id="siQ" type="search" placeholder="Find a name, email, IP or place…" value="' + esc(VS.sq || '') + '" style="max-width:260px">' +
+          '<label class="qchk" style="font-size:12.5px"><input type="checkbox" id="siFail"' + (VS.sf ? ' checked' : '') + '> Failed only</label>' +
+          '<button class="btn btn-sm" id="siCsv">⬇ CSV</button><button class="btn btn-sm" id="siClr"' + (SI.length ? '' : ' disabled') + '>🗑 Clear</button></div>' +
+          '<div class="cs-tiles" style="margin:0 0 12px"><div class="cs-tile cs-green"><span>Sign-ins today</span><b>' + okL.filter(function (x) { return Date.parse(x.at) > dayAgo; }).length + '</b><small>last 24 hours</small></div>' +
+          '<div class="cs-tile"><span>People</span><b>' + Object.keys(ppl).length + '</b><small>signed in, last 30 days</small></div>' +
+          '<div class="cs-tile"><span>Google sign-ins</span><b>' + okL.filter(function (x) { return x.method === 'Google'; }).length + '</b><small>view only</small></div>' +
+          '<div class="cs-tile' + (SI.some(function (x) { return !x.ok && Date.parse(x.at) > Date.now() - 7 * 864e5; }) ? ' cs-red' : '') + '"><span>Failed attempts</span><b>' + SI.filter(function (x) { return !x.ok && Date.parse(x.at) > Date.now() - 7 * 864e5; }).length + '</b><small>last 7 days</small></div></div>' +
+          '<div id="siBody"></div><p class="muted" style="font-size:12px;margin:10px 2px 0">Every sign-in (password or Google) and every failed try, with the address it came from, the place Netlify puts that address in, and the browser. Only you (the super user) see this. Places are approximate (by IP address).</p></div>';
+      }
+      el.innerHTML = traffic + signCard + tiles + (d.email ? '' : '<div class="card" style="border-left:4px solid #c9a227"><b>Welcome packages are not emailed automatically yet.</b> <span class="muted">Add RESEND_API_KEY (and FROM_EMAIL from a verified domain) in Netlify; until then, the people marked “Wants it” are waiting for you to send one.</span></div>') +
         '<div class="card"><div class="card-h"><h2>👋 Visitors &amp; potential customers</h2><span class="sp"></span>' +
         '<input id="vsQ" type="search" placeholder="Find a name, email, phone, language or country…" value="' + esc(VS.q) + '" style="max-width:300px">' +
         '<button class="btn btn-sm" id="vsCsv">⬇ CSV</button>' + (canDel ? '<button class="btn btn-sm" id="vsDel" disabled>🗑 Delete</button>' : '') + '<button class="btn btn-sm" id="vsRef">↻</button></div>' +
@@ -397,6 +411,34 @@
           api('visitorDelete', { ids: ids }).then(function (r) { toast((r.removed || 0) + ' deleted'); VS.sel = {}; visitors(); }).catch(fail);
         });
       };
+      if (SI) {
+        var place = function (x) { return [x.city, x.region, x.country].filter(Boolean).join(', '); };
+        var sRows = function () { var q = (VS.sq || '').trim().toLowerCase(); return SI.filter(function (x) { return (!VS.sf || !x.ok) && (!q || [x.name, x.email, x.user, x.ip, place(x), x.device, x.method, x.role].join(' ').toLowerCase().indexOf(q) >= 0); }); };
+        var sDraw = function () {
+          var r = sRows(), b = el.querySelector('#siBody');
+          if (!r.length) { b.innerHTML = '<div class="empty">' + (SI.length ? 'No sign-in matches that.' : 'No sign-ins recorded yet. The next time anyone signs in, they appear here.') + '</div>'; return; }
+          b.innerHTML = '<div class="table-wrap" style="max-height:420px;overflow:auto"><table class="si-tbl"><thead><tr><th>When</th><th>Who</th><th>Email</th><th>How</th><th>IP address</th><th>Location</th><th class="hide-sm">Device</th></tr></thead><tbody>' +
+            r.slice(0, 500).map(function (x) {
+              return '<tr' + (x.ok ? '' : ' class="si-bad"') + '><td class="nowrap">' + esc(when(x.at)) + '</td><td><b>' + esc(x.name || x.user || '–') + '</b>' + (x.role ? '<br><small class="muted">' + esc(x.role) + '</small>' : '') + (x.ok ? '' : '<br><span class="pflag pf-red">✕ ' + esc(x.note || 'Failed') + '</span>') + '</td>' +
+                '<td>' + (x.email ? '<a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a>' : '<span class="muted">' + esc(x.user || '–') + '</span>') + '</td>' +
+                '<td>' + (x.method === 'Google' ? '🟢 Google' : '🔑 Password') + '</td><td class="nowrap"><code>' + esc(x.ip || '–') + '</code></td>' +
+                '<td>' + (place(x) ? esc(place(x)) : '<span class="muted">Unknown</span>') + '</td><td class="hide-sm">' + esc(x.device || '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+        };
+        el.querySelector('#siQ').oninput = function () { VS.sq = this.value; sDraw(); };
+        el.querySelector('#siFail').onchange = function () { VS.sf = this.checked; sDraw(); };
+        el.querySelector('#siCsv').onclick = function () {
+          var cols = ['at', 'ok', 'method', 'name', 'email', 'user', 'role', 'ip', 'city', 'region', 'country', 'device', 'note'];
+          var q = function (x) { x = x == null ? '' : String(x); if (/^[=+\-@]/.test(x)) x = "'" + x; return '"' + x.replace(/"/g, '""') + '"'; };
+          var csv = cols.join(',') + '\n' + sRows().map(function (x) { return cols.map(function (c) { return q(x[c]); }).join(','); }).join('\n');
+          var a2 = document.createElement('a'); a2.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })); a2.download = 'champ-sign-ins-' + new Date().toISOString().slice(0, 10) + '.csv'; a2.click();
+        };
+        el.querySelector('#siClr').onclick = function () {
+          var ids = sRows().map(function (x) { return x.id; }); if (!ids.length) return;
+          M.confirmBox('Clear ' + ids.length + ' sign-in' + (ids.length === 1 ? '' : 's') + '?', 'The ones shown (with the search and filter) are removed from the log. <b>This can\'t be undone.</b>', '🗑 Clear', true).then(function (ok2) {
+            if (ok2) api('signInClear', { ids: ids }).then(function (r2) { toast((r2.removed || 0) + ' cleared'); visitors(); }).catch(fail); });
+        };
+        sDraw();
+      }
       draw(); selCount();
     }).catch(fail);
   }
