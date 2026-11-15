@@ -8,6 +8,7 @@ import * as kv from './kv.mjs';
 import * as P from './plan.mjs';
 import { env } from './shared.mjs';
 import { TRADES } from './subbies.mjs';
+import { llmJson } from './ai.mjs';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const str = (s, max = 300) => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
@@ -306,6 +307,28 @@ async function cvPut(p, body, by) {
   return { cv: q.cv };
 }
 async function cvGet(p) { if (!p || !p.cv) return { error: 'No resume on file.', code: 404 }; const f = await kv.getFile('ppl-cv:' + p.id); if (!f) return { error: 'No resume on file.', code: 404 }; const buf = f.buf; return { name: p.cv.name, type: p.cv.type, data: buf.toString('base64') }; }
+// ✨ a resume (its text, read from the PDF or Word file in the browser) → the person's details, ready to check and save
+async function cvParse(text, hint) {
+  const t = String(text || '').replace(/\s+\n/g, '\n').slice(0, 24000);
+  if (t.replace(/\s/g, '').length < 80) return { error: 'There is hardly any text in this file (a scanned image?). Upload a PDF or Word file with real text.' };
+  const sys = 'You read a resume (CV) and fill in a person record for a project-management console. Use ONLY what the resume says: never invent. Leave anything not in it empty. ' +
+    'group: "Construction" for building / trades / site work (carpenter, electrician, plumber, site supervisor, foreman, builder ...), otherwise "Technical & general". ' +
+    'role: for Technical & general one of "Project manager","Project director","Contractor","Project personnel" (a freelancer / own business is Contractor; director / head of / VP of projects is Project director; a project or program manager is Project manager; otherwise Project personnel); for Construction their trade role (e.g. "Site supervisor", "Electrician"). ' +
+    'trade (Construction only): one key of ' + TRADES.map((x) => x[0]).join(', ') + ' or "". type (Construction only): "Contractor" if they run their own business, else "Employee". ' +
+    'education: degrees and diplomas (qual, inst, year). quals: other qualifications and training courses (name, year). certs: professional certifications with issuer, number and expiry (YYYY-MM-DD) when given (e.g. PMP, PRINCE2, AWS, Scrum, ITIL). ' +
+    'permits (Construction): licences and permits with number, issuer, expiry. tickets (Construction): white card / working at heights / EWP / forklift / first aid / driver licence numbers and expiry when given, keys whiteCard, heights, ewp, forklift, firstAid, driver, licence. ' +
+    'rate: an hourly rate if the resume states one (number), else 0. hours: hours a week if stated. availability: if stated. suburb: city or suburb of their address. business and abn only if they run a business. ' +
+    'summary: 2-3 sentences on their experience for the project manager. Dates as YYYY-MM-DD; a year alone as "2019". ' +
+    'JSON only: {"name":"","email":"","phone":"","suburb":"","linkedin":"","group":"","role":"","type":"","trade":"","business":"","abn":"","rate":0,"hours":0,"availability":"","education":[],"quals":[],"certs":[],"permits":[],"tickets":{},"summary":""}';
+  const r = await llmJson([{ role: 'system', content: sys }, { role: 'user', content: JSON.stringify({ file: str(hint, 120), resume: t }) }], { maxTokens: 2500 }).catch((e) => ({ error: e.message }));
+  if (!r || r.error || !r.data) return { error: (r && r.error) || 'The AI could not read this resume. Please try again.' };
+  const d = r.data, s = (v, n) => str(v, n), arr = (a) => (Array.isArray(a) ? a : []);
+  const tk = {}; for (const [k, v] of Object.entries(d.tickets && typeof d.tickets === 'object' ? d.tickets : {})) if (/^(whiteCard|heights|ewp|forklift|firstAid|driver|licence|confined)$/.test(k) && v && typeof v === 'object') tk[k] = { number: s(v.number, 60), class: s(v.class, 30), expiry: ymd(v.expiry) };
+  return { person: { name: s(d.name, 100), email: s(d.email, 160), phone: s(d.phone, 40), suburb: s(d.suburb, 80), linkedin: s(d.linkedin, 200), group: GROUPS.includes(d.group) ? d.group : 'Technical & general',
+    role: s(d.role, 60), type: d.type === 'Contractor' ? 'Contractor' : 'Employee', trade: TRADES.some((x) => x[0] === d.trade) ? d.trade : '', business: s(d.business, 120), abn: s(d.abn, 20).replace(/[^\d ]/g, ''),
+    costRate: Math.max(0, Math.min(10000, Number(d.rate) || 0)) || '', hours: Math.max(0, Math.min(80, Number(d.hours) || 0)) || '', availability: s(d.availability, 120),
+    education: listOf(d.education, 12, eduOf), quals: listOf(d.quals, 20, qualOf), certs: listOf(d.certs, 30, certOf), permits: listOf(d.permits, 30, permitOf), tickets: tk }, summary: s(d.summary, 600) };
+}
 export async function selfMake(u, by) {   // a new login: their People record, ready for them to fill in (the PM makes the login)
   if (!u || !u.email || (await mine(u.email))) return null;
   const role = TECH_ROLES.includes(u.role) ? u.role : 'Project personnel';
@@ -315,8 +338,13 @@ export async function selfMake(u, by) {   // a new login: their People record, r
 export async function pplPost(action, body, { who, by, audit, unlogin, ctx }) {
   const log = (t) => (audit ? audit(who, t) : null);
   const pm = !ctx || ctx.owner;   // only the project manager (super user) adds or changes other people
-  if (['pplSave', 'pplBulk', 'pplImport', 'pplDelete', 'pplCvUpload', 'pplSampleLoad', 'pplTestLoad'].includes(action) && !pm) return out(403, { error: 'Only the project manager (super user) can add or change people. Use My profile for your own details.' });
+  if (['pplSave', 'pplBulk', 'pplImport', 'pplDelete', 'pplCvUpload', 'pplCvParse', 'pplSampleLoad', 'pplTestLoad'].includes(action) && !pm) return out(403, { error: 'Only the project manager (super user) can add or change people. Use My profile for your own details.' });
   switch (action) {
+    case 'pplCvParse': case 'pplMeCvParse': {   // ✨ fill in from a resume (nothing is saved: the form shows it to check)
+      const r = await cvParse(body.text, body.name); if (r.error) return out(400, r);
+      await log(`Resume read for a profile (${action === 'pplMeCvParse' ? 'own' : 'people'}): ${r.person.name || '?'}`);
+      return out(200, r);
+    }
     case 'pplMe': {   // My profile
       const p = await mine(ctx && ctx.who); const L = await list();
       return out(200, { person: p, comp: p ? compliance(p) : null, assign: p ? (await assignments(p.id))[p.id] : null, groups: GROUPS, techRoles: TECH_ROLES, types: TYPES, employment: EMPLOYMENT, roles: ROLES, tickets: L.tickets, trades: L.trades, email: (ctx && ctx.who) || '', role: (ctx && ctx.role) || '' });

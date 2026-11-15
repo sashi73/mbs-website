@@ -34,6 +34,13 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       s2.setHeader('Content-Type', 'application/json');
       return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }], usage: { total_tokens: 4200 } }));
     }
+    if (j.response_format && /You read a resume/.test(sys)) {   // ✨ People: fill in from a resume
+      let u = {}; try { u = JSON.parse((j.messages.filter((m) => m.role === 'user').pop() || {}).content || '{}'); } catch (e) {} global.CV_TEXT = u.resume || '';
+      const seen = /Aisha Rahman/.test(u.resume || '') && /PMP/.test(u.resume || '');
+      const o = { name: seen ? 'Aisha Rahman' : 'NOT READ', email: 'aisha.rahman@example.com', phone: '0412 345 678', suburb: 'Parramatta', linkedin: 'linkedin.com/in/aisharahman', group: 'Technical & general', role: 'Project manager', rate: 120,
+        education: [{ qual: 'MBA', inst: 'Monash University', year: '2015' }], quals: [{ name: 'PRINCE2 Practitioner', year: '2018' }], certs: [{ name: 'PMP', issuer: 'PMI', number: '1234567', expiry: '2027-06-30' }], summary: 'Twelve years running IT projects.' };
+      s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }] }));
+    }
     if (j.response_format && /You are Champ, the guide/.test(sys)) {   // 🎙 Ask Champ in the dashboard
       let u = {}; try { u = JSON.parse((j.messages.filter((m) => m.role === 'user').pop() || {}).content || '{}'); } catch (e) {} global.GUIDE_CTX = u;
       const o = /late/i.test(u.question) ? { tour: 'critical', how: false, answer: 'To recover: crash the critical tasks (more crew or overtime, at extra cost) or fast-track them in parallel (more risk).' + (u.project ? ' Your plan finishes ' + u.project.finish + '.' : '') } : { tour: '', how: false, answer: 'A charter authorises the project.' };
@@ -874,6 +881,20 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       ok('People', 'the team calendar shows everyone day by day for 4 weeks', /Team calendar/.test(calTxt) && (await p.$$('.pc-t thead .pc-d')).length === 28 && /Priya Shah/.test(calTxt), calTxt.slice(0, 120));
       await p.goto(`${BASE}/admin/#me`); await sleep(1200); const meT = await p.textContent('#view, main').catch(() => '');
       ok('People', 'My profile opens for the super user too (with a pointer to People)', /My profile/.test(meT), meT.slice(0, 120)); }
+    // ✨ People: upload a resume (PDF) and the form fills itself in; Save keeps the resume on file
+    { const { PDFDocument, StandardFonts } = require('pdf-lib'); const doc = await PDFDocument.create(), pg = doc.addPage([595, 842]), font = await doc.embedFont(StandardFonts.Helvetica);
+      ['Aisha Rahman', 'Senior IT Project Manager', 'aisha.rahman@example.com  0412 345 678  Parramatta NSW', 'Education: MBA, Monash University, 2015', 'Certifications: PMP (PMI) 1234567, expires 30 June 2027; PRINCE2 Practitioner 2018',
+        'Experience: 12 years delivering ERP and cloud projects for hospitals and banks.', 'Rate: $120 per hour'].forEach((t, i) => pg.drawText(t, { x: 40, y: 790 - i * 22, size: 12, font }));
+      const pdf = Buffer.from(await doc.save());
+      await p.goto(`${BASE}/admin/#people`); await p.waitForSelector('#ppFromCv', { timeout: 8000 }).catch(() => {});
+      await p.click('#ppFromCv').catch(() => {}); await p.waitForSelector('#pfFill', { state: 'attached', timeout: 5000 }).catch(() => {});
+      await p.setInputFiles('#pfFill', { name: 'Aisha Rahman CV.pdf', mimeType: 'application/pdf', buffer: pdf }).catch(() => {});
+      await p.waitForSelector('.pp-cvmsg.ok, .pp-cvmsg.bad', { timeout: 20000 }).catch(() => {});
+      const f = await p.evaluate(() => { const v = (k) => (document.querySelector('#pfF [data-k="' + k + '"]') || {}).value; return { msg: (document.querySelector('.pp-cvmsg') || {}).textContent, name: v('name'), email: v('email'), rate: v('costRate'), role: v('roleT'), edu: document.querySelectorAll('#pfF [data-rep=education] .pp-rep-r').length, cert: (document.querySelector('#pfF [data-rep=certs] [data-rf=name]') || {}).value }; });
+      ok('People', '✨ upload a PDF resume: its text is read and the form fills in (name, email, role, rate, education, certifications)', f.name === 'Aisha Rahman' && f.email === 'aisha.rahman@example.com' && f.rate === '120' && f.role === 'Project manager' && f.edu >= 1 && f.cert === 'PMP' && /Senior IT Project Manager/.test(global.CV_TEXT || ''), JSON.stringify(f));
+      await p.click('#ppSave').catch(() => {}); await sleep(3000);
+      const ar = ((await (await api('pplList')).json()).people || []).find((x) => x.name === 'Aisha Rahman') || {}; const ag = ar.id ? (await (await api('pplGet', { id: ar.id })).json()).person : {};
+      ok('People', 'Save keeps the person and the resume on file', ag.cv && ag.cv.name === 'Aisha Rahman CV.pdf' && ag.certs[0].expiry === '2027-06-30' && ag.costRate === 120, JSON.stringify({ cv: ag.cv, certs: ag.certs }).slice(0, 200)); }
     // 🗂 picking a program on New project fills in what the program already knows
     { await api('planProgramSave', { name: 'ESG programme', manager: 'Sashi Kumar Sivam', sponsor: 'Board of Directors', client: 'National Airlines', email: 'esg@example.com', phone: '0400 555 111', site: 'Kuala Lumpur' });
       await p.goto(`${BASE}/admin/#projects/new`); await p.waitForSelector('#champNew [name=progPick] option[value="__new"]', { timeout: 8000 }).catch(() => {});

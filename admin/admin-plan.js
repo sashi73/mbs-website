@@ -5383,6 +5383,7 @@
     if (/\.(txt|md|csv|json|eml|html?|vtt|srt)$/.test(name) || /^text\//.test(f.type)) return f.text().then(function (t) { if (/\.html?$/.test(name)) { var d = document.createElement('div'); d.innerHTML = t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ''); t = d.textContent; } return { text: t, pages: 0 }; });
     return Promise.reject(new Error('“' + f.name + '” is not a PDF, Word (.docx) or text file.'));
   }
+  M.readDoc = piExtract;   // People: read a resume (PDF or Word) in the browser
   function piUpload(files) {
     var box = $('#piUp'), I = S.intel, core = S.core;
     var one = function (f) {

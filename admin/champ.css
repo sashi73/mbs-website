@@ -369,3 +369,9 @@ body.is-subbie [data-nav=programs],body.is-subbie [data-nav=deps],body.is-subbie
 /* 🌐 translate the project's own data (task names ...) into the console language */
 .tr-ban{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px;padding:10px 14px;border-radius:14px;background:linear-gradient(90deg,#FFF8E1,#FFFDF7);border:1px solid #F0D98A}
 .tr-ban>span{font-size:22px}.tr-ban>div{flex:1;min-width:240px;display:flex;flex-direction:column;gap:2px}.tr-ban small{color:#6B5313;font-size:12.5px}
+/* ✨ People: fill the form in from a resume */
+.pp-cvfill{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:6px 0 2px;padding:12px 14px;border-radius:14px;border:1px dashed #C9A227;background:linear-gradient(90deg,#FFF8E1,#FFFDF7)}
+.pp-cvfill>span{font-size:24px}.pp-cvfill>div{flex:1;min-width:220px;display:flex;flex-direction:column;gap:2px}.pp-cvfill small{color:#6B5313;font-size:12.5px;line-height:1.4}
+.pp-cvfill.busy{opacity:.85}.pp-cvfill.busy>span{animation:cgSpin 1.4s linear infinite}
+.pp-cvmsg{flex:1 1 100%;margin:4px 0 0;font-size:13px}.pp-cvmsg.ok{color:#166534}.pp-cvmsg.bad{color:#B91C1C}
+input.pp-auto,select.pp-auto,textarea.pp-auto{background:#FFFBEB!important;border-color:#E9C46A!important}.pp-rep-r.pp-auto{background:#FFF4CC;border-color:#E9C46A}

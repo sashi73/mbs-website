@@ -52,9 +52,10 @@
         '<span class="muted" style="font-size:13px">💻 ' + tech + ' technical &amp; general · 🏗 ' + (act.length - tech) + ' construction</span>' +
         '<span class="sp"></span>' + ((M.me || {}).test && can('edit') ? '<button class="btn btn-sm" id="ppSample" title="Test site only: 10 made-up employees and contractors to try things out with">🧪 Load 10 sample people</button>' : '') +
         '<button class="btn btn-sm" id="ppExp" type="button" title="Download People as CSV or Excel">⬇ Export</button>' + (can('edit') ? '<button class="btn btn-sm" id="ppImp" type="button" title="Update or add people from a CSV or Excel file">⬆ Import</button>' : '') +
-        (can('edit') ? '<button class="btn btn-gold" id="ppNew">＋ Person</button>' : '<span class="muted" style="font-size:12.5px">View only</span>') + '</div><div id="ppBody"></div>';
+        (can('edit') ? '<button class="btn" id="ppFromCv" title="Upload a PDF or Word resume: the details are filled in for you">✨ ＋ From a resume</button> <button class="btn btn-gold" id="ppNew">＋ Person</button>' : '<span class="muted" style="font-size:12.5px">View only</span>') + '</div><div id="ppBody"></div>';
     V().querySelectorAll('[data-ptab]').forEach(function (b) { b.onclick = function () { S.tab = b.getAttribute('data-ptab'); history.replaceState(null, '', { list: '#people', compliance: '#people/compliance', work: '#people/workload', cal: '#people/calendar' }[S.tab]); draw(); }; });
     var nb = $('#ppNew'); if (nb) nb.onclick = function () { edit(''); };
+    var fc = $('#ppFromCv'); if (fc) fc.onclick = function () { edit(''); var i = $('#pfFill'); if (i) i.click(); };
     $('#ppExp').onclick = function () { exportDialog(null); }; var ib = $('#ppImp'); if (ib) ib.onclick = importDialog;   // v90
     var sb = $('#ppSample'); if (sb) sb.onclick = function () {   // v88: test site only
       sb.disabled = true; api('pplSampleLoad').then(function (r) { toast(r.ids.length ? r.ids.length + ' sample people added' + (r.skipped ? ' (' + r.skipped + ' were already there)' : '') + '. Give them Guest logins in Users & access.' : 'The sample people are already there'); return load(); }).then(draw).catch(function (e) { sb.disabled = false; fail(e); });
@@ -243,6 +244,8 @@
     var cb = function (k, label, v) { return '<label class="sc-cb"><input type="checkbox" data-k="' + k + '"' + (v ? ' checked' : '') + '> ' + label + '</label>'; };
     var opt = '<small class="muted pp-opt">optional</small>';
     M.modal('<h2>' + esc(o.title) + '</h2>' + (self ? '<p class="muted" style="margin:-4px 0 8px">Your details and credentials, for the project manager and the team. Most of it is optional: fill in what applies to you.</p>' : '') +
+      '<div class="pp-cvfill" id="pfFillBox"><span>✨</span><div><b>Fill this in from a resume</b><small>Upload a PDF or Word resume: the name, contact details, role, credentials (education, qualifications, certifications' + (self ? '' : ', tickets, permits') + ') and any rate are filled in for you to check. The resume is kept on file when you save.</small></div>' +
+        '<label class="btn btn-gold pp-cvbtn">⬆ Choose the resume<input type="file" id="pfFill" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden></label></div>' +
       '<div class="form sc-form" id="pfF" style="margin-top:10px">' +
       '<div class="full"><b>Which projects do you work on?</b><div class="us-rpick">' + d.groups.map(function (g) { return '<label class="us-rcard"><input type="radio" name="pfGroup" value="' + esc(g) + '"' + (grp === g ? ' checked' : '') + '><span><b>' + GI[g][0] + ' ' + esc(g) + '</b><small>' + esc(GI[g][1]) + '</small></span></label>'; }).join('') + '</div></div>' +
       '<h3 class="full">Person</h3>' + f('name', 'Full name', p.name, 'e.g. Priya Shah') +
@@ -291,6 +294,43 @@
       ['education', 'quals', 'certs', 'permits'].forEach(function (k) { x[k] = repRead(box, k); });
       return x;
     };
+    // ✨ read the resume in the browser, the AI picks out the details, the form fills in (empty boxes only: what you typed stays)
+    var pend = { file: null }, fillIn = $('#pfFill');
+    var setv = function (el, v) { if (!el || v == null || v === '' || (el.value && el.value.trim())) return 0; el.value = v; el.classList.add('pp-auto'); return 1; };
+    var apply = function (d) {
+      var n = 0, g = d.group || 'Technical & general', gr = box.querySelector('[name=pfGroup][value="' + g + '"]'); if (gr && !o.id) { gr.checked = true; }
+      show();
+      if (!self && d.role) { if (g === 'Construction') n += setv(box.querySelector('[data-k=roleC]'), d.role); else { var rs = box.querySelector('[data-k=roleT]'); if (rs && !o.id && Array.prototype.some.call(rs.options, function (x) { return x.value === d.role; })) { rs.value = d.role; rs.classList.add('pp-auto'); n++; } } }
+      if (g === 'Construction' && d.type && !o.id) { var ty = box.querySelector('[name=ppType][value="' + d.type + '"]'); if (ty) ty.checked = true; }
+      show();
+      ['name', 'phone', 'suburb', 'linkedin', 'availability', 'hours', 'costRate', 'business', 'abn'].concat(self ? [] : ['email']).forEach(function (k) { n += setv(box.querySelector('[data-k=' + k + ']'), d[k]); });
+      var tr = box.querySelector('[data-k=trade]'); if (tr && d.trade && !tr.value) { tr.value = d.trade; tr.classList.add('pp-auto'); n++; }
+      Object.keys(d.tickets || {}).forEach(function (k) { ['number', 'class', 'expiry'].forEach(function (f) { n += setv(box.querySelector('[data-k="tk.' + k + '.' + f + '"]'), (d.tickets[k] || {})[f]); }); });
+      ['education', 'quals', 'certs', 'permits'].forEach(function (k) {
+        var el = box.querySelector('[data-rep="' + k + '"]'); if (!el || !(d[k] || []).length) return;
+        var have = repRead(box, k).map(function (x) { return JSON.stringify(x).toLowerCase(); }), add = d[k].filter(function (x) { return have.indexOf(JSON.stringify(x).toLowerCase()) < 0; });
+        if (!add.length) return; var tmp = document.createElement('div'); tmp.innerHTML = repRows(k, add);
+        Array.prototype.forEach.call(tmp.querySelectorAll('.pp-rep-r'), function (row) { row.classList.add('pp-auto'); el.insertBefore(row, el.querySelector('[data-radd]')); n++; });
+        repWire(el);
+      });
+      var nt = box.querySelector('[data-k=notes]'); if (nt && d.summary && !nt.value.trim()) { nt.value = 'From the resume: ' + d.summary; nt.classList.add('pp-auto'); }
+      return n;
+    };
+    fillIn.onchange = function () {
+      var file = fillIn.files[0]; fillIn.value = ''; if (!file) return;
+      if (!/\.(pdf|docx)$/i.test(file.name)) return toast(/\.doc$/i.test(file.name) ? 'Old Word .doc files can\'t be read: save it as .docx or PDF.' : 'Choose a PDF or Word (.docx) resume', true);
+      if (file.size > 3 * 1024 * 1024) return toast('The resume is over 3 MB', true);
+      var fb = $('#pfFillBox'), note = function (h, cls) { var x = fb.querySelector('.pp-cvmsg') || fb.appendChild(document.createElement('p')); x.className = 'pp-cvmsg ' + (cls || ''); x.innerHTML = h; };
+      fb.classList.add('busy'); note('📖 Reading “' + esc(file.name) + '”…');
+      (M.readDoc ? M.readDoc(file) : Promise.reject(new Error('The resume reader is not loaded'))).then(function (x) {
+        note('✨ Picking out the details…');
+        return api(self ? 'pplMeCvParse' : 'pplCvParse', { text: x.text, name: file.name });
+      }).then(function (r) {
+        fb.classList.remove('busy'); var n = apply(r.person || {}); pend.file = file;
+        note('✓ ' + n + ' detail' + (n === 1 ? '' : 's') + ' filled in from <b>' + esc(file.name) + '</b> (marked in gold). Check them, then press Save: the resume is kept on file too.', 'ok');
+        var sp = $('#pfCv span'); if (sp) sp.innerHTML = '📄 <b>' + esc(file.name) + '</b> <small class="muted">kept on file when you save</small>';
+      }).catch(function (e) { fb.classList.remove('busy'); note('⚠ ' + esc(e.message), 'bad'); });
+    };
     var cvIn = $('#pfCvIn'); cvIn.onchange = function () {
       var file = cvIn.files[0]; if (!file) return; if (file.size > 3 * 1024 * 1024) return toast('The resume is over 3 MB', true);
       if (!o.id && !self) return toast('Save the person first, then upload the resume', true);
@@ -303,7 +343,10 @@
     var cg = $('#pfCvGet'); if (cg) cg.onclick = function () { cvDownload(self ? null : o.id); };
     var nm = box.querySelector('[data-k=name]'), rn = document.querySelector('#modal .pp-ren');
     if (nm && rn) nm.oninput = function () { rn.hidden = nm.value.trim() === (p.name || ''); };
-    return { collect: collect, renamePlans: function () { return !!(rn && !rn.hidden && $('#ppRen').checked); }, get p() { return p; } };
+    return { collect: collect, renamePlans: function () { return !!(rn && !rn.hidden && $('#ppRen').checked); }, get p() { return p; },
+      // after Save: the resume they filled it in from goes on file
+      keepCv: function (id) { var f = pend.file; if (!f || (p.cv && p.cv.name === f.name)) return Promise.resolve();
+        return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { api(self ? 'pplMeCv' : 'pplCvUpload', { id: id, name: f.name, type: f.type || (/\.docx$/i.test(f.name) ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf'), data: String(rd.result).split(',')[1] }).then(res, function (e) { toast('Saved, but the resume could not be kept: ' + e.message, true); res(); }); }; rd.readAsDataURL(f); }); } };
   }
   function cvDownload(id) {
     api(id ? 'pplCvGet' : 'pplMeCvGet', id ? { id: id } : {}).then(function (r) {
@@ -327,6 +370,7 @@
       var F = personForm(p, S.data, { id: id, title: id ? p.name + ' · ' + id : 'New person' });
       $('#ppSave').onclick = function () {
         api('pplSave', { person: Object.assign({}, F.p, F.collect(), { id: id || '' }), renamePlans: F.renamePlans() }).then(function (r) {
+          return F.keepCv(r.person.id).then(function () { return r; }); }).then(function (r) {
           M.closeModal(); toast(r.same ? 'No changes' : 'Saved' + (r.plans ? ': name changed on ' + r.plans + ' project plan' + (r.plans === 1 ? '' : 's') : ''));
           return load().then(function () { if (location.hash.indexOf('#people/P-') === 0 || !id) location.hash = '#people/' + r.person.id; if (location.hash.indexOf('#people/P-') === 0) profile(r.person.id); else draw(); });
         }).catch(fail);
@@ -358,7 +402,7 @@
       var c = $('#meCv'); if (c) c.onclick = function () { cvDownload(null); };
       $('#meEdit').onclick = function () {
         var F = personForm(p || { group: 'Technical & general', name: me.name || '' }, r, { self: true, id: p ? p.id : '', email: r.email, role: r.role, title: '🙋 My profile' });
-        $('#ppSave').onclick = function () { api('pplMeSave', { person: Object.assign({}, F.p, F.collect()) }).then(function (x) { M.closeModal(); toast(x.same ? 'No changes' : 'Profile saved'); mePage(); }).catch(fail); };
+        $('#ppSave').onclick = function () { api('pplMeSave', { person: Object.assign({}, F.p, F.collect()) }).then(function (x) { return F.keepCv(x.person.id).then(function () { return x; }); }).then(function (x) { M.closeModal(); toast(x.same ? 'No changes' : 'Profile saved'); mePage(); }).catch(fail); };
       };
     }).catch(fail);
   }
