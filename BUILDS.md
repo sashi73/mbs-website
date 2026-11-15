@@ -74,4 +74,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 63 | 1.0.63| 2026-11-15 02:09| GKH-Project-Champ| `4ef9fb1` | Champ: switching languages leaves nothing behind; project data goes back to English exactly |
 | 64 | 1.0.64| 2026-11-15 13:48| GKH-Project-Champ| `41cc43b` | People: fill in a person from their resume (PDF or Word) |
 | 65 | 1.0.65| 2026-11-15 14:10| GKH-Project-Champ| `7ba0845` | Champ: the 'Schedule & Gantt' tab is now just 'Gantt' |
-| 66 | 1.0.66 | 2026-11-15 14:47 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 66 | 1.0.66| 2026-11-15 14:47| GKH-Project-Champ| `b450cba` | Champ: 'Project Intelligence' is now 'Ask AI'; the Champ skill keeps Champ up to date; Champ answers from the left menu's data |
+| 67 | 1.0.67 | 2026-11-15 15:55 | GKH-Project-Champ | _this commit_ | _see git log_ |

@@ -40,6 +40,7 @@ for (const m of guideJs.matchAll(/\{ id: '(\w+)', t: '([^']+)', k: '[^']*',(?: o
 // 5. renamed or removed (old name → what it is now): Champ must never say "I don't know" about an old name
 const RENAMED = [
   ['Schedule & Gantt (project tab)', 'Gantt'],
+  ['Board (project tab)', '📋 Backlog & Board: the Product Backlog first, then the Kanban board (WIP limits) or Scrum sprints (planning, start, complete, charts & retro)'],
   ['Project Intelligence (project tab)', 'Ask AI (the 🧠 Ask AI tab inside a project)'],
   ['Budget / Budgeting', 'Costing (💰 Costing tab; approve it with a signed budget)'],
   ['Quote and plan', 'Costing and the project charter / project plan documents'],

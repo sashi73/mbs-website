@@ -101,6 +101,8 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   const errors = [];
   p.on('pageerror', (e) => errors.push(p.url() + ' :: ' + e.message + ' @ ' + String(e.stack || '').split('\n').slice(1, 3).join(' | ')));
   const api = (action, data = {}, headers = { 'X-MBS-Admin': '1' }) => p.request.post(`${BASE}/.netlify/functions/admin`, { data: { action, ...data }, headers });
+  // a project run as Kanban with every task on the board (for the tests of the board itself)
+  const toKanban = async (core) => { const pl = (await (await api('planGet', { core })).json()).plan; if (!pl) return; pl.agile = { method: 'kanban', wip: { todo: 90, doing: 90, review: 90 }, cycle: 14, sprints: [] }; pl.tasks.forEach((t) => { if (t.dur > 0) t.ag = 'board'; }); const sr = await api('planSave', { core, plan: pl, rev: pl.rev }); if (!sr.ok) console.log('toKanban save', sr.status, (await sr.text()).slice(0, 200)); };
 
   // ---- public site ----
   const pages = [['index.html', 'Every project'], ['features.html', 'Everything a project'], ['agile.html', 'One plan'], ['industries.html', 'Built for teams'], ['contact.html', 'on your project'], ['privacy.html', 'Privacy'], ['login.html', 'Project Champ']];
@@ -449,7 +451,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
         const shot = async (name, url, act) => { await mp.goto(`${BASE}${url}`); await sleep(1800); if (act) { await act(mp).catch(() => {}); await sleep(1200); } await mp.screenshot({ path: `/tmp/shots/${tag}-${name}.png`, fullPage: false }); };
         await shot('home', '/index.html'); await shot('login', '/login.html');
         await shot('programs', '/admin/#programs'); await shot('summary', '/admin/#portfolio/summary'); await shot('pipeline', '/admin/#portfolio/board'); await shot('projects', '/admin/#projects');
-        await shot('overview', `/admin/#plan/${sc}/overview`); await shot('schedule', `/admin/#plan/${sc}/schedule`); await shot('board', `/admin/#plan/${sc}/board`); await shot('budget', `/admin/#plan/${sc}/budget`);
+        await shot('overview', `/admin/#plan/${sc}/overview`); await shot('schedule', `/admin/#plan/${sc}/schedule`); await toKanban(sc); await shot('board', `/admin/#plan/${sc}/board`); await shot('budget', `/admin/#plan/${sc}/budget`);
         await shot('risks', `/admin/#plan/${sc}/risks`); await shot('people', '/admin/#people'); await shot('users', '/admin/#users');
         await shot('menu', '/admin/#programs', async (q) => { const b = await q.$('#menuBtn, .menu-btn, #sideToggle, .burger, [aria-label*="menu" i]'); if (b) await b.click(); });
         await shot('askchamp', '/admin/#programs', async (q) => { await q.click('#cgBtn'); });
@@ -495,7 +497,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.waitForSelector('[data-plan]', { timeout: 8000 }).catch(() => {}); const vt = await p.textContent('#view'); ok('Project', 'Projects list shows the new project', vt.includes('Head office fit-out'), vt.slice(0, 300));
   await p.goto(`${BASE}/admin/#plan/${core}/gantt`); await sleep(2500);
   ok('Project', 'Gantt tab opens', /gantt/i.test(await p.content()));
-  await p.goto(`${BASE}/admin/#plan/${core}/board`); await sleep(2000);
+  await toKanban(core); await p.goto(`${BASE}/admin/#plan/${core}/board`); await p.reload(); await sleep(2000);
   ok('Project', 'Board tab opens', (await p.$$('.view [class*=board], .view [class*=kan]')).length > 0);
 
   // ---- portfolio: summary and pipeline board ----
@@ -825,13 +827,59 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       const firstId = t1[0] && t1[0].id; await p.hover(`tr[data-tid="${firstId}"]`).catch(() => {}); await p.click(`tr[data-tid="${firstId}"] [data-ins]`).catch(() => {}); await sleep(2500);
       const t2 = await nT();
       ok('Level 1', '＋ Task under the schedule adds a level-1 task at the end; ＋ on a task adds one straight below it', vis && t1.length === n0 + 1 && t2.length === n0 + 2 && t2[1].name === 'New task' && (t2[1].pred || [])[0] === firstId, `vis=${vis} ${n0}->${t1.length}->${t2.length} ${t2[1] && t2[1].name}`);
-      await p.goto(`${BASE}/admin/#plan/${cc}/board`); await p.waitForSelector('[data-kaddt="doing"]', { timeout: 8000 }).catch(() => {});
-      await sleep(1500); await p.click('[data-kaddt="doing"]').catch(() => {}); await p.waitForSelector('#ktF', { timeout: 5000 }).catch(() => {}); await sleep(600);
-      await p.fill('#ktF [name=name]', 'Venue booking').catch(() => {}); await p.fill('#ktF [name=dur]', '3').catch(() => {}); await p.fill('#ktF [name=qty]', '2').catch(() => {}); await p.fill('#ktF [name=unit]', 'lot').catch(() => {}); await p.fill('#ktF [name=rate]', '250').catch(() => {});
-      const cTxt = await p.textContent('#ktC').catch(() => '');
-      await p.click('#ktF [type=submit]').catch(() => {}); await sleep(2500);
-      const vb = (await nT()).find((t) => t.name === 'Venue booking') || {};
-      ok('Level 1', 'Kanban: ＋ Task in a column adds a level-1 task in that column with its costing (2 × $250 = $500)', /500/.test(cTxt) && vb.status === 'doing' && vb.qty === 2 && vb.rate === 250 && vb.unit === 'lot' && vb.dur === 3, cTxt + ' ' + JSON.stringify(vb).slice(0, 200)); }
+      // 📋 Product Backlog → Kanban: everything starts in the backlog; DOR; WIP limits; back to the backlog; Done is locked
+      await p.goto(`${BASE}/admin/#plan/${cc}/board`); await p.waitForSelector('.ag-choose', { timeout: 8000 }).catch(() => {});
+      const chooser = !!(await p.$('.ag-choose [data-agm=kanban]')); await p.click('[data-agm=kanban]').catch(() => {}); await p.waitForSelector('.ag-bl', { timeout: 8000 }).catch(() => {});
+      const blN = (await p.$$('.ag-row')).length, nWork = (await nT()).filter((t) => t.dur > 0 && !(t.pct >= 100)).length;
+      ok('Backlog', 'the Board asks Kanban or Scrum; then every Gantt task is in the Product Backlog (a tidy list)', chooser && blN === nWork && blN > 0, `${blN} of ${nWork}`);
+      await p.click('#agNew').catch(() => {}); await p.waitForSelector('#agF', { timeout: 5000 }).catch(() => {});
+      await p.fill('#agF [name=name]', 'Venue booking'); await p.fill('#agF [name=desc]', 'Book the hall for 120 guests; done when the deposit is paid'); await p.selectOption('#agF [name=pts]', '5'); await p.selectOption('#agF [name=prio]', 'High'); await p.fill('#agF [name=owner]', 'Priya Shah'); await p.fill('#agF [name=dur]', '3');
+      await p.click('#agF [type=submit]').catch(() => {}); await sleep(2000);
+      const vb = (await nT()).find((t) => t.name === 'Venue booking') || {}; const vRow = await p.textContent(`.ag-row[data-tid="${vb.id}"]`).catch(() => '');
+      const partial = await p.textContent('.ag-row:not(.ok) .dor').catch(() => '');
+      ok('Backlog', '＋ Item adds a Gantt task; description + points + urgency + owner = ✅ DOR ready (others show DOR partial or %)', vb.points === 5 && vb.priority === 'High' && vb.dur === 3 && /Venue booking/.test(vb.name) && /DOR ready/.test(vRow) && /DOR/.test(partial), JSON.stringify({ vb: [vb.points, vb.priority, vb.owner, vb.dur], vRow: vRow.slice(0, 80), partial }));
+      const snet0 = vb.snet || '';
+      await p.click(`.ag-row[data-tid="${vb.id}"] [data-agto=board]`).catch(() => {}); await sleep(1500);
+      const ids = (await nT()).filter((t) => t.dur > 0 && !t.ag && !(t.pct >= 100)).slice(0, 2).map((t) => t.id);
+      for (const id of ids) { await p.click(`.ag-row[data-tid="${id}"] [data-agto=board]`).catch(() => {}); await sleep(900); }
+      const T1 = await nT(); ok('Backlog', 'pulled items go onto the Kanban board (To do); the Gantt dates stay as they are', (T1.find((t) => t.id === vb.id) || {}).ag === 'board' && ids.every((id) => (T1.find((t) => t.id === id) || {}).ag === 'board') && ((T1.find((t) => t.id === vb.id) || {}).snet || '') === snet0);
+      await p.click('[data-agv=board]').catch(() => {}); await p.waitForSelector('.kanban.agile', { timeout: 8000 }).catch(() => {});
+      await p.fill('[data-wip=doing]', '1'); await p.press('[data-wip=doing]', 'Enter'); await p.click('body').catch(() => {}); await sleep(1500);
+      await p.click(`.kcard[data-tid="${vb.id}"] [data-step="1"]`).catch(() => {}); await sleep(1200);
+      await p.click(`.kcard[data-tid="${ids[0]}"] [data-step="1"]`).catch(() => {}); await sleep(1200);
+      const T2 = await nT(), wipTxt = await p.textContent('.kcol-doing .kwip').catch(() => '');
+      ok('Kanban', 'WIP limits: In progress set to 1, so a second card cannot go in (it stays in To do)', (T2.find((t) => t.id === vb.id) || {}).status === 'doing' && (T2.find((t) => t.id === ids[0]) || {}).status === 'todo' && /WIP 1/.test(wipTxt), wipTxt + ' ' + JSON.stringify(T2.filter((t) => t.ag).map((t) => [t.name, t.status])));
+      await p.click(`.kcard[data-tid="${ids[1]}"] [data-kback]`).catch(() => {}); await sleep(1200);
+      await p.click(`.kcard[data-tid="${vb.id}"] [data-tick]`).catch(() => {}); await sleep(1500);
+      const T3 = await nT(), vd = T3.find((t) => t.id === vb.id) || {};
+      ok('Kanban', '↩ Backlog sends a card back; a Done card is locked for good (no way back, done date kept)', !(T3.find((t) => t.id === ids[1]) || {}).ag && vd.status === 'done' && !!vd.doneAt && !(await p.$(`.kcard[data-tid="${vb.id}"] [data-kback]`)) && !!(await p.$(`.kcard[data-tid="${vb.id}"].klocked`)), JSON.stringify(vd).slice(0, 160));
+      await p.click('#agCharts').catch(() => {}); await sleep(2500);
+      ok('Kanban', '📈 Charts & retro: work per column, burn-up, throughput, team contribution and the most valuable member', (await p.$$('#modal canvas')).length === 4 && /Most valuable team member: Priya Shah/.test(await p.textContent('#modal').catch(() => '')), (await p.textContent('#modal').catch(() => '')).slice(0, 200));
+      await p.evaluate(() => { const x = document.querySelector('#modal [data-close]'); if (x) x.click(); });
+      // 🏃 Scrum: two sprint buckets, a goal, start, the board, complete (done locked, in-progress carried over, to do back to the backlog)
+      const sc2 = (await (await api('planNewProject', { name: 'Mobile app MVP', client: 'Acme', program: 'Digital health' })).json()).core;
+      await api('planSave', { core: sc2, plan: { name: 'Mobile app MVP', start: '2026-12-01', phases: [{ id: 'ph1', name: 'Build' }], tasks: [['Login screen', 3, 3], ['Profile page', 2, 2], ['Push notifications', 4, 5], ['Payments', 5, 8]].map((t, i) => ({ id: 'm' + i, phase: 'ph1', name: t[0], dur: t[1], points: t[2], priority: 'High', owner: i % 2 ? 'Sam Lee' : 'Aisha Rahman', desc: 'As a user I can ' + t[0].toLowerCase(), pred: [], qty: 0, rate: 0, pct: 0 })) } });
+      const mT = async () => ((await (await api('planGet', { core: sc2 })).json()).plan || {});
+      await p.goto(`${BASE}/admin/#plan/${sc2}/board`); await p.waitForSelector('.ag-choose', { timeout: 8000 }).catch(() => {}); await p.click('[data-agm=scrum][data-cyc="14"]').catch(() => {}); await sleep(1200);
+      await p.click('[data-agv=plan]').catch(() => {}); await p.waitForSelector('.ag-plan', { timeout: 8000 }).catch(() => {});
+      const buckets = await p.$$eval('.ag-sp .ag-sph b', (L) => L.map((x) => x.textContent));
+      for (const id of ['m0', 'm1', 'm2']) { await p.click(`.ag-pb [data-tid="${id}"] [data-agto="S1"]`).catch(() => {}); await sleep(900); }
+      await p.click(`.ag-pb [data-tid="m3"] [data-agto="S2"]`).catch(() => {}); await sleep(900);
+      await p.fill('[data-sp="S1"] [data-spf=goal]', 'Users can sign in and see their profile'); await p.press('[data-sp="S1"] [data-spf=goal]', 'Tab'); await sleep(800);
+      await p.click('[data-agstart="S1"]').catch(() => {}); await p.waitForSelector('#okBtn', { timeout: 5000 }).catch(() => {}); await p.click('#okBtn').catch(() => {}); await sleep(2000);
+      const P1 = await mT(), s1 = (P1.agile.sprints || []).find((s) => s.id === 'S1') || {};
+      ok('Scrum', 'Sprint planning: two buckets (Sprint 1, Sprint 2); ▶ Start sprint with a goal locks in 10 points; the Gantt dates stay as planned', buckets.join() === 'Sprint 1,Sprint 2' && s1.status === 'active' && s1.committed === 10 && P1.tasks.find((t) => t.id === 'm3').ag === 'S2' && P1.tasks.every((t) => !t.snet), JSON.stringify({ buckets, s1 }));
+      const band = await p.textContent('.ag-band').catch(() => ''); const noBack = !(await p.$('[data-kback]'));
+      ok('Scrum', 'the sprint board shows the sprint, its days left and goal; once started nothing goes back to the backlog', /Sprint 1/.test(band) && /left/.test(band) && /sign in/.test(band) && noBack, band.slice(0, 120));
+      await p.click('.kcard[data-tid="m0"] [data-tick]').catch(() => {}); await sleep(1200); await p.click('.kcard[data-tid="m1"] [data-step="1"]').catch(() => {}); await sleep(1200);
+      await p.click('.ag-band [data-agclose]').catch(() => {}); await p.waitForSelector('#agCF', { timeout: 5000 }).catch(() => {});
+      await p.check('#agCF [name=met][value=partly]').catch(() => {}); await p.click('#agCF [type=submit]').catch(() => {}); await sleep(2000);
+      const P2 = await mT(), A2 = P2.agile, c1 = A2.sprints.find((s) => s.id === 'S1'), tk = (id) => P2.tasks.find((t) => t.id === id) || {};
+      ok('Scrum', 'Complete sprint: goal met? recorded; Done stays (locked), In progress carries to Sprint 2 in its column, To do goes back to the backlog', c1.status === 'closed' && c1.done === 3 && c1.goalMet === 'partly' && tk('m0').ag === 'S1' && tk('m0').status === 'done' && tk('m1').ag === 'S2' && tk('m1').status === 'doing' && !tk('m2').ag, JSON.stringify({ c1, t: P2.tasks.map((t) => [t.id, t.ag, t.status]) }));
+      await p.click('#agCharts').catch(() => {}); await sleep(2500);
+      ok('Scrum', '📈 Charts & retro: burn-down, burn-up, velocity (committed vs done) and team contribution', (await p.$$('#modal canvas')).length === 4 && /velocity/.test(await p.textContent('#modal').catch(() => '')) && /3 pts/.test(await p.textContent('#modal .ag-sum').catch(() => '')), (await p.textContent('#modal .ag-sum').catch(() => '')));
+      await p.evaluate(() => { const x = document.querySelector('#modal [data-close]'); if (x) x.click(); });
+      await api('planProjectDelete', { core: sc2 }); }
     // 🔐 Users & access: the super user makes a login (email + password), confirms, then sets permissions
     { await p.goto(`${BASE}/admin/#users`); await p.waitForSelector('#usNew', { timeout: 8000 }).catch(() => {});
       const head = await p.textContent('#view, main').catch(() => '');
@@ -934,7 +982,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       ok('Phone', 'one tap sets a task\'s progress on the phone (saved)', tk.pct === 50, JSON.stringify(tk).slice(0, 120));
       await mp.click('#mpsGantt').catch(() => {}); await sleep(800); const gantt = !!(await mp.$('table.gt')); await mp.click('#mpsList').catch(() => {}); await sleep(500);
       ok('Phone', 'the Gantt chart is one tap away, and back to the list', gantt && !!(await mp.$('.mps-c')));
-      await mp.goto(`${BASE}/admin/#plan/${plc.core}/board`); await sleep(1500);
+      await toKanban(plc.core); await mp.goto(`${BASE}/admin/#plan/${plc.core}/board`); await mp.reload(); await sleep(1500);
       const kb = await mp.evaluate(() => { const k = document.querySelector('.kanban'); return k ? { flex: getComputedStyle(k).display, over: k.scrollWidth > k.clientWidth } : null; });
       ok('Phone', 'the Board swipes column by column', kb && kb.flex === 'flex' && kb.over, JSON.stringify(kb));
       await mp.click('#mNav [data-m=champ]').catch(() => {}); await sleep(1200);
@@ -1007,7 +1055,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     const dbt = await p.textContent('#planBody').catch(() => '');
     ok('Costing', 'deleting the BOM takes it out of the costing and removes its milestone', !dp.bom && !(dp.tasks || []).some((t) => /Bill of Materials/.test(t.name) || t.bomx) && !/from the signed-off BOM/.test(dbt) && !(await p.$('.bd-bom, .bd-bomst')), JSON.stringify([!!dp.bom, (dp.tasks || []).filter((t) => /Bill/.test(t.name)).length, (dp.tasks || []).filter((t) => t.bomx).length, /from the signed-off BOM/.test(dbt), await p.$$eval('.bd-bom, .bd-bomst', (x) => x.map((e) => e.className + ':' + e.textContent.slice(0, 80))).catch(() => [])]));
     // a sticky note moves where it is dragged
-    await p.goto(`${BASE}/admin/#plan/${cc}/board`); await sleep(1500); await p.hover('.kcard').catch(() => {}); await p.click('.kstk-add', { timeout: 5000 }).catch(() => {}); await p.waitForSelector('#stkPop .stk-h', { timeout: 5000 }).catch(() => {});
+    await toKanban(cc); await p.goto(`${BASE}/admin/#plan/${cc}/board`); await p.reload(); await sleep(1500); await p.hover('.kcard').catch(() => {}); await p.click('.kstk-add', { timeout: 5000 }).catch(() => {}); await p.waitForSelector('#stkPop .stk-h', { timeout: 5000 }).catch(() => {});
     const bx = await p.$eval('#stkPop .stk-h', (e) => { const r = e.getBoundingClientRect(); return [r.left + 60, r.top + 10]; }).catch(() => [0, 0]);
     await p.mouse.move(bx[0], bx[1]); await p.mouse.down(); await p.mouse.move(bx[0] + 220, bx[1] + 140, { steps: 8 }); await p.mouse.up(); await sleep(300);
     const moved = await p.$eval('#stkPop', (e) => [parseInt(e.style.left, 10), parseInt(e.style.top, 10)]).catch(() => [0, 0]);
@@ -1125,7 +1173,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   let snp = (await (await api('planGet', { core: sn })).json()).plan || { tasks: [] }, sk = (snp.tasks.find((t) => (t.stickies || []).length) || {}).stickies || [];
   ok('Sticky notes', 'a note added on the Gantt (schedule) is saved with its colour and author', sk.length === 1 && sk[0].c === 'R' && /chase today/.test(sk[0].text) && !!sk[0].by, JSON.stringify(sk));
   ok('Sticky notes', 'the Gantt bar shows a red note pin', !!(await p.$('.gstk.stk-R')) && !!(await p.$('.stkb.stk-R')));
-  await p.keyboard.press('Escape'); await p.goto(`${BASE}/admin/#plan/${sn}/board`); await sleep(1500); await p.waitForSelector('.kstk', { timeout: 8000 }).catch(() => {});
+  await p.keyboard.press('Escape'); await toKanban(sn); await p.goto(`${BASE}/admin/#plan/${sn}/board`); await p.reload(); await sleep(1500); await p.waitForSelector('.kstk', { timeout: 8000 }).catch(() => {});
   ok('Sticky notes', 'the Kanban card shows the note as a red sticky (Urgent)', /Urgent/.test(await p.textContent('.kstk.stk-R').catch(() => '')) && /chase today/.test(await p.textContent('.kstk.stk-R').catch(() => '')));
   { await p.click('#kbFull').catch(() => {}); await p.waitForSelector('.kfull-svg', { timeout: 5000 }).catch(() => {});
     const kf = await p.evaluate(() => { const s = document.querySelector('.kfull-svg'); const r = s && s.getBoundingClientRect(); return s ? { cards: s.querySelectorAll('.kf-card').length, cols: (s.textContent.match(/To do|In progress|In review|Done/g) || []).length, fits: r.bottom <= window.innerHeight + 2, top: Math.round(r.top), bottom: Math.round(r.bottom), h: window.innerHeight, mh: s.style.maxHeight, sy: window.scrollY, board: !!document.querySelector('.kanban:not([hidden])') } : null; });

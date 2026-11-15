@@ -375,3 +375,49 @@ body.is-subbie [data-nav=programs],body.is-subbie [data-nav=deps],body.is-subbie
 .pp-cvfill.busy{opacity:.85}.pp-cvfill.busy>span{animation:cgSpin 1.4s linear infinite}
 .pp-cvmsg{flex:1 1 100%;margin:4px 0 0;font-size:13px}.pp-cvmsg.ok{color:#166534}.pp-cvmsg.bad{color:#B91C1C}
 input.pp-auto,select.pp-auto,textarea.pp-auto{background:#FFFBEB!important;border-color:#E9C46A!important}.pp-rep-r.pp-auto{background:#FFF4CC;border-color:#E9C46A}
+/* 📋 Product Backlog → Kanban or Scrum */
+.ag-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px}.ag-m{font:800 12px/1 'Manrope',system-ui,sans-serif;padding:6px 10px;border-radius:99px;background:#1F1D18;color:#F5D77A}
+.ag-tabs{margin:0!important}
+.ag-choose h2{margin:0 0 6px}.ag-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:14px}
+.ag-card{display:flex;flex-direction:column;gap:6px;align-items:flex-start;text-align:left;border:1px solid #E7E1D2;border-radius:16px;padding:18px;background:#FFFCF2;cursor:pointer;font:inherit;color:inherit}
+.ag-card>span{font-size:30px}.ag-card b{font-size:18px}.ag-card small{color:#5B5547;font-size:13px;line-height:1.45}.ag-card:hover{border-color:#C9A227;box-shadow:0 6px 18px rgba(201,162,39,.2)}
+.ag-scrum{cursor:default}.ag-cyc{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.ag-list{display:flex;flex-direction:column;gap:6px}
+.ag-row{display:flex;gap:12px;align-items:center;border:1px solid #E7E1D2;border-left:4px solid #D6CFBD;border-radius:12px;padding:9px 12px;background:#fff}
+.ag-row.ok{border-left-color:#16A34A}.ag-n{color:#8A6D1E;font-weight:800;font-size:12px;min-width:30px}
+.ag-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.ag-name{cursor:pointer;font-size:14.5px}.ag-name:hover{text-decoration:underline}
+.ag-main small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-meta{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font-size:12px;color:#5B5547;margin-top:2px}
+.ag-act{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.dor{display:inline-block;font:800 11px/1 'Manrope',system-ui,sans-serif;padding:4px 8px;border-radius:99px;white-space:nowrap}
+.dor-ok{background:#DCFCE7;color:#166534;border:1px solid #86EFAC}.dor-part{background:#FEF3C7;color:#92400E;border:1px solid #FCD34D}.dor-no{background:#F1EEE6;color:#6B665A;border:1px solid #E7E1D2}
+.ag-plan{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
+.ag-pb h3{margin:0 0 8px;display:flex;gap:8px;align-items:baseline}
+.ag-sp{border:1px solid #E7E1D2;border-radius:16px;background:#FFFDF7;padding:12px;display:flex;flex-direction:column;gap:8px}
+.ag-sp.live{border-width:2px}.ag-sp.ag-g{border-color:#16A34A}.ag-sp.ag-a{border-color:#D97706;background:#FFFBEB}.ag-sp.ag-r{border-color:#DC2626;background:#FEF2F2}
+.ag-sph{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.ag-sph b{font-size:15px}.ag-sph span{font-size:12px;color:#6B665A}
+.ag-left{font-weight:800;color:#1F1D18!important;background:#F5D77A;border-radius:99px;padding:2px 8px}
+.ag-goal{display:flex;flex-direction:column;gap:6px}.ag-goal label{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:700}
+.ag-spm{display:flex;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.ag-spl{display:flex;flex-direction:column;gap:5px;max-height:420px;overflow:auto}
+.ag-si{display:flex;gap:6px;align-items:center;border:1px solid #EFE7D2;border-radius:10px;background:#fff;padding:6px 8px;font-size:12.5px}
+.ag-sn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;font-weight:600}
+.ag-gd{font-size:11px;color:#6B665A;white-space:nowrap}.ag-gd.off{color:#B91C1C;font-weight:700}
+.ag-st{font-size:11px;font-weight:700;padding:2px 6px;border-radius:6px;background:#F1EEE6}.ag-st.st-done{background:#DCFCE7;color:#166534}.ag-st.st-doing{background:#DBEAFE;color:#1E40AF}.ag-st.st-review{background:#FEF3C7;color:#92400E}
+.ag-spb{display:flex;gap:6px;flex-wrap:wrap}
+.ag-band{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 10px;padding:10px 14px;border-radius:14px;border:2px solid #16A34A;background:#F0FDF4}
+.ag-band>div:first-child{flex:1;min-width:220px;font-size:13.5px}.ag-band span{color:#3F3A2E}
+.ag-band.ag-a{border-color:#D97706;background:#FFFBEB}.ag-band.ag-r{border-color:#DC2626;background:#FEF2F2}
+.ag-bt{flex:0 0 160px;height:8px;border-radius:99px;background:#E7E1D2;overflow:hidden}.ag-bt i{display:block;height:100%;background:linear-gradient(90deg,#16A34A,#D97706,#DC2626)}
+.kwip{margin-left:6px;font:700 11px/1 'Manrope',system-ui,sans-serif;color:#6B665A;display:inline-flex;align-items:center;gap:2px}.kwip input{width:38px;padding:2px 4px;font-size:11px;min-height:0}
+.kwip.full{color:#B91C1C}.kwip.full input{border-color:#FCA5A5;background:#FEF2F2}
+.kanban.agile .kaddt,.kanban.agile .kdel,.kanban.agile .kdel-s{display:none!important}
+.kback{border:1px dashed #C9A227;background:#FFFCF2;border-radius:8px;font:700 11.5px/1 'Manrope',system-ui,sans-serif;padding:5px 8px;cursor:pointer;margin:4px 0;color:#6B5313}.kback:hover{background:#FFF4CC}
+.klock{display:inline-block;font:700 11px/1 'Manrope',system-ui,sans-serif;color:#166534;margin:4px 0}.kcard.klocked{opacity:.85}
+.ag-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:8px 0}
+.ag-sum>div{border:1px solid #E7E1D2;border-radius:12px;padding:10px;background:#FFFCF2;display:flex;flex-direction:column}.ag-sum b{font-size:20px}.ag-sum small{color:#6B665A;font-size:11.5px}
+.ag-mvp{margin:4px 0 10px;padding:10px 14px;border-radius:12px;background:linear-gradient(90deg,#FFF4CC,#FFFCF2);border:1px solid #F0D98A;font-size:14px}
+.ag-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}.ag-charts>div{border:1px solid #E7E1D2;border-radius:12px;padding:10px;height:260px;display:flex;flex-direction:column}
+.ag-charts h3{margin:0 0 6px;font-size:13px}.ag-charts canvas{flex:1;min-height:0}
+.ag-met{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}.ag-met label{display:flex;gap:6px;align-items:center;font-weight:600}
+@media (max-width:900px){.ag-plan{grid-template-columns:1fr}.ag-row{flex-wrap:wrap}.ag-act{width:100%;justify-content:flex-start}}

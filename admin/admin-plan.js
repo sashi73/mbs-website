@@ -504,7 +504,7 @@
   var STATUS = [['todo', 'To do', 0], ['doing', 'In progress', 33], ['review', 'In review / QA', 67], ['done', 'Done', 100]];
   var stPct = { todo: 0, doing: 33, review: 67, done: 100 }, stName = { todo: 'To do', doing: 'In progress', review: 'In review / QA', done: 'Done' };
   function statusFromPct(n) { return n >= 100 ? 'done' : n <= 0 ? 'todo' : n >= 67 ? 'review' : 'doing'; }
-  function setStatus(t, k) { (t.subs || []).forEach(function (x) { x.status = k; x.pct = SUBP[k]; if ((x.steps || []).length) { if (k === 'done' || k === 'todo') x.steps.forEach(function (q) { q.done = k === 'done'; }); x.pct = stepPct(x); x.status = x.steps.every(function (q) { return q.done; }) ? 'done' : subStatus(x.pct); } }); t.status = k; t.pct = stPct[k]; if ((t.subs || []).some(function (x) { return (x.steps || []).length; })) derive(t); }
+  function setStatus(t, k) { agStatus(t, k); (t.subs || []).forEach(function (x) { x.status = k; x.pct = SUBP[k]; if ((x.steps || []).length) { if (k === 'done' || k === 'todo') x.steps.forEach(function (q) { q.done = k === 'done'; }); x.pct = stepPct(x); x.status = x.steps.every(function (q) { return q.done; }) ? 'done' : subStatus(x.pct); } }); t.status = k; t.pct = stPct[k]; if ((t.subs || []).some(function (x) { return (x.steps || []).length; })) derive(t); }
   // v85: dated steps inside a story: off / dur in working days from the story's start; ticked done or not; they drive the story's %
   function stepPct(x) { var L = x.steps || [], w = L.reduce(function (a, q) { return a + q.dur; }, 0) || 1; return Math.round(L.reduce(function (a, q) { return a + (q.done ? q.dur : 0); }, 0) / w * 100); }
   function fitSteps(x) {
@@ -1339,7 +1339,7 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Gantt'], ['budget', '💰 Costing'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Ask AI']]);
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Gantt'], ['budget', '💰 Costing'], ['critical', '⚡ Critical path'], ['board', '📋 Backlog & Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Ask AI']]);
     var MODS = S.mods || {}; tabs = tabs.filter(function (t) { return MODS[t[0]] !== false; });   // GKH Project Champ: optional modules switched off
     if (MODS[S.tab] === false) S.tab = 'overview';
     var sub = !!(M.me && M.me.scope), hide = sub ? ' style="display:none"' : '';   // v91: a sub-contractor signed in to this project
@@ -1404,7 +1404,7 @@
         p.baseline = { at: Date.now(), finish: R.finish, BAC: R.BAC, tasks: tasks }; saveNow('baseline set'); toast('Baseline set'); render();
       });
     };
-    ({ overview: overview, schedule: function (R2) { return phone() && !S.phoneGantt ? phoneSchedule(R2) : scheduleTab(R2); }, budget: budgetTab, critical: criticalTab, board: board, bom: bomTab, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, change: changeTab, intel: intelTab }[S.tab] || scheduleTab)(R);
+    ({ overview: overview, schedule: function (R2) { return phone() && !S.phoneGantt ? phoneSchedule(R2) : scheduleTab(R2); }, budget: budgetTab, critical: criticalTab, board: agileView, bom: bomTab, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, change: changeTab, intel: intelTab }[S.tab] || scheduleTab)(R);
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
@@ -2692,14 +2692,264 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { var pop = document.getElementById('stkPop'); if (pop) pop.remove(); } });
     window.addEventListener('hashchange', function () { var pop = document.getElementById('stkPop'); if (pop && !/^#plan\//.test(location.hash)) pop.remove(); });
   }
+  /* ---------- 📋 Product Backlog → Kanban or Scrum ----------
+     Every Gantt task starts in the Product Backlog (a ranked list). The project uses ONE method, picked here:
+     Kanban: the PM pulls items onto the board; WIP limits per column (To do, In progress, In review); an item can go back
+       to the backlog any time until it is Done, then it is locked for good.
+     Scrum: 2- or 4-week sprints; two buckets (Sprint 1, Sprint 2) filled from the backlog; a sprint goal and objective;
+       ▶ Start sprint locks what is in it; ■ Complete sprint asks if the goal was met: To do goes back to the backlog,
+       In progress / In review carry over to the next sprint in the same column, Done is locked.
+     Definition of Ready: description, story points, urgency, owner. All four: ✅ DOR ready; some: DOR partial; else DOR %.
+     Editing and deleting happen in the backlog (it is the Gantt task itself, so the Gantt follows); the board moves cards.
+     📈 Retro: burn-down, burn-up, velocity, throughput, cycle time, team contribution and the most valuable member. */
+  function agileOf(p) { return p.agile && (p.agile.method === 'kanban' || p.agile.method === 'scrum') ? p.agile : null; }
+  function agItem(t) { return t.dur > 0; }   // milestones are not backlog items
+  function agDone(t) { return t.status === 'done' || t.pct >= 100; }
+  function dorOf(t) {
+    var c = [['Description', !!String(t.desc || '').trim()], ['Story points', themePts(t) > 0], ['Urgency', !!t.priority || (t.subs || []).some(function (x) { return x.priority; })], ['Owner', !!ownerOf(t)]];
+    var n = c.filter(function (x) { return x[1]; }).length;
+    return { n: n, pct: n * 25, ready: n === 4, partial: n >= 2 && n < 4, miss: c.filter(function (x) { return !x[1]; }).map(function (x) { return x[0]; }) };
+  }
+  function dorTag(t) {
+    var d = dorOf(t), tip = d.ready ? 'Definition of Ready: description, story points, urgency and owner all set' : 'Still needed: ' + d.miss.join(', ');
+    return '<span class="dor ' + (d.ready ? 'dor-ok' : d.partial ? 'dor-part' : 'dor-no') + '" title="' + esc(tip) + '">' + (d.ready ? '✅ DOR ready' : d.partial ? '◑ DOR partial · ' + d.pct + '%' : 'DOR ' + d.pct + '%') + '</span>';
+  }
+  function agSprint(A, id) { return (A.sprints || []).filter(function (x) { return x.id === id; })[0]; }
+  function agActive(A) { return (A.sprints || []).filter(function (x) { return x.status === 'active'; })[0]; }
+  function agOpen(A) { return (A.sprints || []).filter(function (x) { return x.status !== 'closed'; }).sort(function (a, b) { return a.n - b.n; }); }
+  function agWhere(t, A) { if (!t.ag) return agDone(t) ? 'done' : 'backlog'; if (t.ag === 'board') return 'board'; var s = agSprint(A, t.ag); return s ? 'sprint' : 'backlog'; }
+  function agLocked(t, A) { if (agDone(t) && t.ag) return true; var s = t.ag && t.ag !== 'board' ? agSprint(A, t.ag) : null; return !!(s && s.status !== 'planned'); }
+  function agMonday(d) { var x = toD(d); while (x.getUTCDay() !== 1) x = new Date(x.getTime() + 864e5); return toS(x); }
+  function agDates(A) {   // planned sprints follow on from the active (or last closed) one, each A.cycle days long
+    var list = (A.sprints || []).slice().sort(function (a, b) { return a.n - b.n; }), last = null;
+    list.forEach(function (s) {
+      if (s.status === 'planned') { s.start = last ? addDays(last.end, 1) : agMonday(today()); s.end = addDays(s.start, A.cycle - 1); }
+      last = s;
+    });
+  }
+  function agEnsure(A) {   // always two sprints that are not closed: the buckets Sprint n and Sprint n+1
+    A.sprints = A.sprints || []; var open = agOpen(A), top = A.sprints.reduce(function (m, s) { return Math.max(m, s.n); }, 0);
+    while (open.length < 2) { top++; var s = { id: 'S' + top, n: top, goal: '', objective: '', start: '', end: '', status: 'planned', goalMet: '', committed: 0, done: 0, items: [] }; A.sprints.push(s); open.push(s); }
+    agDates(A);
+  }
+  function agSetDates(t, s) {}   // the Gantt dates are the base: a sprint never moves them (only a change to the Gantt does)
+  function agFit(t, s) { return !s || !s.start || !t.es ? '' : t.ef < s.start ? 'before' : t.es > s.end ? 'after' : t.ef > s.end ? 'over' : ''; }
+  function workDays(a, b) { var n = 0, d = toD(a), e = toD(b); while (d <= e) { if (wk(d)) n++; d = new Date(d.getTime() + 864e5); } return n; }
+  function agPull(t, to) {   // backlog → board / sprint, and back
+    var p = S.plan, A = agileOf(p); if (!A) return false;
+    if (to === 'backlog') { if (agLocked(t, A)) { toast(agDone(t) ? 'Done items are locked for good' : 'The sprint has started: its items stay in it until it is completed', true); return false; }
+      var was = t.ag; delete t.ag; delete t.agIn; if (t.status !== 'todo') setStatus(t, 'todo'); var sp0 = agSprint(A, was); if (sp0) sp0.items = (sp0.items || []).filter(function (x) { return x !== t.id; }); return true; }
+    if (to === 'board') {
+      var inTodo = p.tasks.filter(function (x) { return x.ag === 'board' && x.status === 'todo'; }).length;
+      if (A.wip.todo && inTodo >= A.wip.todo) { toast('WIP limit: To do already holds ' + A.wip.todo + '. Finish or move something first, or raise the limit.', true); return false; }
+      t.ag = 'board'; t.agIn = today(); if (t.status !== 'todo' && !agDone(t)) setStatus(t, 'todo'); return true;
+    }
+    var s = agSprint(A, to); if (!s) return false;
+    if (s.status !== 'planned') { toast('Sprint ' + s.n + ' has started: add items to the next sprint instead', true); return false; }
+    var was2 = agSprint(A, t.ag); if (was2) was2.items = (was2.items || []).filter(function (x) { return x !== t.id; });
+    t.ag = s.id; t.agIn = today(); s.items = (s.items || []).filter(function (x) { return x !== t.id; }).concat([t.id]); agSetDates(t, s); return true;
+  }
+  function agWipOk(t, k) {   // Kanban: may this card go into column k?
+    var p = S.plan, A = agileOf(p); if (!A || A.method !== 'kanban' || k === 'done' || !A.wip[k] || t.status === k) return true;
+    var n = p.tasks.filter(function (x) { return x.ag === 'board' && x.status === k; }).length;
+    if (n >= A.wip[k]) { toast('WIP limit reached: ' + stName[k] + ' already holds ' + n + ' (limit ' + A.wip[k] + '). Finish something first, or raise the limit.', true); return false; }
+    return true;
+  }
+  function agStatus(t, k) { if (k === 'done' && !t.doneAt) t.doneAt = today(); if (k !== 'done') delete t.doneAt; }
+  function agileBar(A, view) {
+    var act = A.method === 'scrum' ? agActive(A) : null, inPlay = S.plan.tasks.some(function (t) { return t.ag; }) || (A.sprints || []).some(function (s) { return s.status !== 'planned'; });
+    var tabs = [['backlog', '📋 Product Backlog']].concat(A.method === 'kanban' ? [['board', '▦ Kanban board']] : [['plan', '🗓 Sprint planning'], ['board', '🏃 ' + (act ? 'Sprint ' + act.n + ' board' : 'Sprint board')]]);
+    return '<div class="ag-bar"><span class="ag-m">' + (A.method === 'kanban' ? '▦ Kanban' : '🏃 Scrum · ' + (A.cycle / 7) + '-week sprints') + '</span><div class="tabs ag-tabs">' + tabs.map(function (x) { return '<button type="button" class="tab' + (view === x[0] ? ' on' : '') + '" data-agv="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
+      '<span class="sp"></span><button type="button" class="btn btn-sm" id="agCharts">📈 Charts &amp; retro</button>' + (inPlay ? '' : '<button type="button" class="btn btn-sm" id="agSwitch" title="Possible until something is pulled from the backlog">⇄ Change method</button>') + '</div>';
+  }
+  function agileWire(B) {
+    B.querySelectorAll('[data-agv]').forEach(function (b) { b.onclick = function () { S.agView = b.getAttribute('data-agv'); render(); }; });
+    var c = $('#agCharts'); if (c) c.onclick = agCharts;
+    var sw = $('#agSwitch'); if (sw) sw.onclick = function () { M.confirmBox('Change the method?', 'Nothing has been pulled from the backlog yet, so you can pick Kanban or Scrum again.', 'Change').then(function (ok) { if (ok) { delete S.plan.agile; dirty('agile method cleared'); render(); } }); };
+  }
+  function agileChoose() {
+    $('#planBody').innerHTML = '<div class="card ag-choose"><h2>How will this project run its work?</h2><p class="muted">Every task of the Gantt chart goes into the <b>📋 Product Backlog</b> first. From there you pull items onto a Kanban board, or plan them into sprints. Pick one method for this project (you can change it until the first item is pulled).</p>' +
+      '<div class="ag-cards"><button type="button" class="ag-card" data-agm="kanban"><span>▦</span><b>Kanban</b><small>A continuous flow: pull items when there is room. WIP limits per column (To do, In progress, In review) keep the team focused.</small></button>' +
+      '<div class="ag-card ag-scrum"><span>🏃</span><b>Scrum</b><small>Fixed sprints with a goal: plan Sprint 1 and Sprint 2 from the backlog, start the sprint, and review it at the end.</small><div class="ag-cyc"><button type="button" class="btn btn-gold" data-agm="scrum" data-cyc="14">2-week sprints</button><button type="button" class="btn btn-gold" data-agm="scrum" data-cyc="28">4-week sprints</button></div></div></div></div>';
+    $('#planBody').querySelectorAll('[data-agm]').forEach(function (b) { b.onclick = function () {
+      var m = b.getAttribute('data-agm'), p = S.plan;
+      p.agile = { method: m, wip: { todo: 8, doing: 3, review: 2 }, cycle: +(b.getAttribute('data-cyc') || 14), since: today(), sprints: [] };
+      if (m === 'scrum') agEnsure(p.agile);
+      p.tasks.forEach(function (t) { if (agDone(t) && agItem(t)) { t.ag = m === 'kanban' ? 'board' : undefined; t.doneAt = t.doneAt || t.ef || today(); } });
+      S.agView = 'backlog'; dirty('agile: ' + m); render();
+      toast('Every task is now in the Product Backlog. Refine it (✅ DOR ready), then ' + (m === 'kanban' ? 'pull items onto the board.' : 'plan Sprint 1 and Sprint 2.'));
+    }; });
+  }
+  function agileView() {
+    var p = S.plan, A = agileOf(p); if (!A) return agileChoose();
+    if (A.method === 'scrum') agEnsure(A);
+    var v = S.agView || (A.method === 'kanban' ? (p.tasks.some(function (t) { return agItem(t) && t.ag === 'board'; }) ? 'board' : 'backlog') : (agActive(A) ? 'board' : 'backlog'));   // opens on the board when work is on it if (A.method === 'kanban' && v === 'plan') v = 'board'; S.agView = v;
+    if (v === 'backlog') return agBacklog(A);
+    if (v === 'plan') return agPlan(A);
+    return board();   // the Kanban board, or the active sprint's board
+  }
+  // ---------- 📋 the Product Backlog ----------
+  function agBacklog(A) {
+    var p = S.plan, rows = ordered().filter(function (r) { return agItem(r.t) && agWhere(r.t, A) === 'backlog'; }), F = S.agF || (S.agF = { dor: '' });
+    if (F.dor) rows = rows.filter(function (r) { var d = dorOf(r.t); return F.dor === 'ready' ? d.ready : !d.ready; });
+    var all = p.tasks.filter(function (t) { return agItem(t) && agWhere(t, A) === 'backlog'; }), ready = all.filter(function (t) { return dorOf(t).ready; }).length, pts = all.reduce(function (a, t) { return a + themePts(t); }, 0);
+    var open = A.method === 'scrum' ? agOpen(A).filter(function (s) { return s.status === 'planned'; }).slice(0, 2) : [];
+    var elsewhere = p.tasks.filter(function (t) { return agItem(t) && agWhere(t, A) !== 'backlog'; }).length;
+    $('#planBody').innerHTML = agileBar(A, 'backlog') +
+      '<div class="card ag-bl"><div class="row" style="margin-bottom:8px;gap:8px"><h2 style="margin:0">📋 Product Backlog</h2><span class="muted" style="font-size:13px">' + pl(all.length, 'item') + ' · ' + pts + ' pts · ✅ ' + ready + ' ready' + (elsewhere ? ' · ' + elsewhere + ' on the ' + (A.method === 'kanban' ? 'board' : 'sprints') : '') + '</span><span class="sp"></span>' +
+        '<select id="agDor" style="width:auto"><option value="">All items</option><option value="ready"' + (F.dor === 'ready' ? ' selected' : '') + '>✅ DOR ready</option><option value="not"' + (F.dor === 'not' ? ' selected' : '') + '>Needs refining</option></select>' +
+        '<button type="button" class="btn btn-gold" id="agNew">＋ Item</button></div>' +
+        '<p class="muted" style="margin:0 0 10px;font-size:12.5px">Refine each item here: a description, story points, urgency and an owner make it ✅ DOR ready. Editing or deleting an item changes the Gantt chart too. ' + (A.method === 'kanban' ? 'Then pull it onto the board (To do).' : 'Then plan it into a sprint.') + '</p>' +
+        (rows.length ? '<div class="ag-list">' + rows.map(function (r) {
+          var t = r.t, d = dorOf(t), subs = t.subs || [];
+          return '<div class="ag-row' + (d.ready ? ' ok' : '') + '" data-tid="' + esc(t.id) + '"><span class="ag-n">#' + r.n + '</span><div class="ag-main"><b class="ag-name" data-agedit>' + esc(t.name.replace(/^[✓◆\s]+/, '')) + '</b>' +
+            '<small class="muted">' + (t.desc ? esc(String(t.desc).slice(0, 140)) : '<i>No description yet</i>') + '</small>' +
+            '<div class="ag-meta">' + dorTag(t) + '<span>' + (themePts(t) ? themePts(t) + ' pts' : '– pts') + '</span><span>' + (t.priority ? '⚑ ' + esc(t.priority) : '⚑ –') + '</span><span>👤 ' + esc(ownerOf(t) || '–') + '</span><span>' + pl(t.dur, 'day') + '</span>' + (subs.length ? '<span>' + pl(subs.length, 'story', 'stories') + '</span>' : '') + '</div></div>' +
+            '<div class="ag-act"><button type="button" class="btn btn-sm" data-agedit title="Edit (the Gantt follows)">✏</button><button type="button" class="btn btn-sm" data-agdel title="Delete (from the Gantt too)">🗑</button>' +
+            (A.method === 'kanban' ? '<button type="button" class="btn btn-sm btn-gold" data-agto="board">→ Board</button>' : open.map(function (s) { return '<button type="button" class="btn btn-sm btn-gold" data-agto="' + s.id + '">→ Sprint ' + s.n + '</button>'; }).join('')) + '</div></div>';
+        }).join('') + '</div>' : '<div class="empty">' + (all.length ? 'Nothing matches the filter.' : 'The backlog is empty: everything is on the ' + (A.method === 'kanban' ? 'board' : 'sprints') + '. Add an item with ＋ Item.') + '</div>') + '</div>';
+    var B = $('#planBody'); agileWire(B);
+    var find = function (el) { var id = el.closest('[data-tid]').getAttribute('data-tid'); return p.tasks.filter(function (t) { return t.id === id; })[0]; };
+    $('#agDor').onchange = function () { F.dor = this.value; agBacklog(A); };
+    $('#agNew').onclick = function () { agEdit(null); };
+    B.querySelectorAll('[data-agedit]').forEach(function (b) { b.onclick = function () { agEdit(find(b)); }; });
+    B.querySelectorAll('[data-agdel]').forEach(function (b) { b.onclick = function () { taskDelete(find(b)); }; });
+    B.querySelectorAll('[data-agto]').forEach(function (b) { b.onclick = function () { var t = find(b), to = b.getAttribute('data-agto'); if (agPull(t, to)) { dirty(t.name + ' → ' + (to === 'board' ? 'board' : 'Sprint ' + agSprint(A, to).n)); render(); } }; });
+  }
+  function agEdit(t) {   // edit (or add) a backlog item: it is the Gantt task itself
+    var p = S.plan, isNew = !t, subs = t ? (t.subs || []) : [], owners = [];
+    (p.stakeholders || []).forEach(function (x) { var n = x.name || x.role; if (n && owners.indexOf(n) < 0) owners.push(n); });
+    p.tasks.forEach(function (x) { var n = ownerOf(x); if (n && owners.indexOf(n) < 0) owners.push(n); });
+    t = t || { name: '', desc: '', dur: 1, points: 0, priority: '', owner: '' };
+    M.modal('<h2>' + (isNew ? '＋ Backlog item' : '✏ ' + esc(t.name)) + '</h2><p class="muted" style="margin:-4px 0 10px">' + (isNew ? 'It is added to the Gantt chart too (at the end).' : 'Changes here change the Gantt chart too.') + ' Description, points, urgency and owner make it ✅ DOR ready.</p>' +
+      '<form class="form" id="agF"><label class="full">Item (task)<input name="name" required maxlength="160" value="' + esc(t.name) + '" placeholder="e.g. Venue booking"></label>' +
+      '<label class="full">Description<textarea name="desc" rows="3" maxlength="300" placeholder="What is it, and when is it done?">' + esc(t.desc || '') + '</textarea></label>' +
+      (subs.length ? '<label>Story points<input value="' + themePts(t) + ' (from its ' + subs.length + ' stories)" disabled></label>' : '<label>Story points<select name="pts"><option value="0">–</option>' + PTS.map(function (n) { return '<option' + (+t.points === n ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select></label>') +
+      '<label>Urgency<select name="prio"><option value="">–</option>' + PRIO.map(function (x) { return '<option' + (t.priority === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label>' +
+      '<label>Owner (main person)<input name="owner" list="agOwn" maxlength="80" value="' + esc(ownerOf(t)) + '"><datalist id="agOwn">' + owners.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist></label>' +
+      '<label>Days<input name="dur" type="number" min="1" max="365" value="' + (t.dur || 1) + '"></label>' +
+      '<div class="full actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" type="submit">' + (isNew ? 'Add to the backlog' : 'Save') + '</button></div></form>');
+    var F = $('#agF'); setTimeout(function () { F.name.focus(); }, 30);
+    F.onsubmit = function (e) {
+      e.preventDefault(); var x = isNew ? null : t;
+      if (isNew) { var last = p.tasks[p.tasks.length - 1]; x = { id: 't' + Date.now().toString(36), phase: (last && last.phase) || 'ph1', name: '', dur: 1, res: [], lead: '', resource: '', qty: 0, unit: '', rate: 0, actual: 0, pct: 0, status: 'todo', pred: last ? [last.id] : [], snet: '', notes: '' }; p.tasks.push(x); }
+      x.name = F.name.value.trim().slice(0, 160) || 'New item'; x.desc = F.desc.value.trim().slice(0, 300); if (F.pts) x.points = +F.pts.value || 0; x.priority = F.prio.value;
+      var on = F.owner.value.trim(), sh = (p.stakeholders || []).filter(function (s) { return (s.name || s.role) === on; })[0]; x.owner = sh ? sh.id : on;
+      x.dur = Math.max(1, Math.min(365, +F.dur.value || 1));
+      M.closeModal(); dirty((isNew ? 'backlog item added: ' : 'backlog item changed: ') + x.name); render();
+    };
+  }
+  // ---------- 🗓 Scrum: plan Sprint n and Sprint n+1 from the backlog ----------
+  function agPlan(A) {
+    var p = S.plan, back = ordered().filter(function (r) { return agItem(r.t) && agWhere(r.t, A) === 'backlog'; }), two = agOpen(A).slice(0, 2), act = agActive(A);
+    var closed = (A.sprints || []).filter(function (s) { return s.status === 'closed'; }), vel = closed.length ? Math.round(closed.slice(-3).reduce(function (a, s) { return a + s.done; }, 0) / Math.min(3, closed.length)) : 0;
+    var itemsOf = function (s) { return ordered().filter(function (r) { return r.t.ag === s.id; }); };
+    var bucket = function (s) {
+      var L = itemsOf(s), pts = L.reduce(function (a, r) { return a + themePts(r.t); }, 0), live = s.status === 'active', left = live ? Math.round((toD(s.end) - toD(today())) / 864e5) + 1 : null;
+      var tone = live ? (left <= 1 ? 'r' : left <= 3 ? 'a' : 'g') : '';
+      return '<div class="ag-sp' + (live ? ' live ag-' + tone : '') + '" data-sp="' + s.id + '"><div class="ag-sph"><b>' + (live ? '🏃 ' : '') + 'Sprint ' + s.n + '</b><span>' + esc(pretty(s.start)) + ' – ' + esc(prettyY(s.end)) + '</span>' + (live ? '<span class="ag-left">' + (left > 0 ? pl(left, 'day') + ' left' : 'due today') + '</span>' : '') + '</div>' +
+        '<div class="ag-goal"><label>🎯 Sprint goal<input data-spf="goal" maxlength="300" value="' + esc(s.goal) + '" placeholder="One sentence: what this sprint achieves"' + (live ? ' disabled' : '') + '></label><label>Objective<textarea data-spf="objective" rows="2" maxlength="600" placeholder="How we will know"' + (live ? ' disabled' : '') + '>' + esc(s.objective) + '</textarea></label></div>' +
+        '<div class="ag-spm"><span>' + pl(L.length, 'item') + ' · <b>' + pts + ' pts</b></span>' + (vel ? '<span class="muted" title="Average of the last sprints">velocity ~' + vel + ' pts</span>' : '') + (vel && pts > vel * 1.2 ? '<span class="bad">over the usual velocity</span>' : '') + '</div>' +
+        '<div class="ag-spl">' + (L.length ? L.map(function (r) { var t = r.t; return '<div class="ag-si" data-tid="' + esc(t.id) + '"><span class="ag-n">#' + r.n + '</span><span class="ag-sn">' + esc(t.name.replace(/^[✓◆\s]+/, '')) + '</span>' + dorTag(t) + '<span class="ag-gd' + (agFit(t, s) ? ' off' : '') + '" title="' + esc(agFit(t, s) ? ({ before: 'The Gantt has it finishing before this sprint starts', after: 'The Gantt has it starting after this sprint ends', over: 'The Gantt has it running past the end of this sprint' })[agFit(t, s)] : 'Gantt dates (the base: a sprint never moves them)') + '">' + esc(pretty(t.es) + (t.ef !== t.es ? '–' + pretty(t.ef) : '')) + '</span><span class="muted">' + (themePts(t) || '–') + '</span>' + (live ? '<span class="ag-st st-' + t.status + '">' + esc(stName[t.status]) + '</span>' : '<button type="button" class="btn btn-sm" data-agback title="Back to the backlog">↩</button>') + '</div>'; }).join('') : '<div class="kempty">Pull items in from the backlog (→ Sprint ' + s.n + ')</div>') + '</div>' +
+        (live ? '<div class="ag-spb"><button type="button" class="btn btn-sm" data-agv="board">Open the sprint board</button><button type="button" class="btn btn-sm btn-gold" data-agclose="' + s.id + '">■ Complete sprint</button></div>'
+          : !act && s === agOpen(A)[0] ? '<div class="ag-spb"><button type="button" class="btn btn-gold" data-agstart="' + s.id + '">▶ Start sprint</button></div>' : '<div class="ag-spb muted" style="font-size:12px">Starts after Sprint ' + (s.n - 1) + '</div>') + '</div>';
+    };
+    $('#planBody').innerHTML = agileBar(A, 'plan') + '<div class="ag-plan"><div class="card ag-pb"><h3>📋 Product Backlog <small class="muted">' + pl(back.length, 'item') + '</small></h3><div class="ag-spl">' + (back.length ? back.map(function (r) { var t = r.t; return '<div class="ag-si" data-tid="' + esc(t.id) + '"><span class="ag-n">#' + r.n + '</span><span class="ag-sn" data-agedit>' + esc(t.name.replace(/^[✓◆\s]+/, '')) + '</span>' + dorTag(t) + '<span class="muted">' + (themePts(t) || '–') + '</span>' + two.filter(function (s) { return s.status === 'planned'; }).map(function (s) { return '<button type="button" class="btn btn-sm" data-agto="' + s.id + '">→ S' + s.n + '</button>'; }).join('') + '</div>'; }).join('') : '<div class="kempty">The backlog is empty</div>') + '</div></div>' +
+      two.map(bucket).join('') + '</div>' + (closed.length ? '<p class="muted" style="margin:8px 0 0;font-size:12.5px">Done: ' + closed.map(function (s) { return 'Sprint ' + s.n + ' (' + s.done + '/' + s.committed + ' pts' + (s.goalMet ? ', goal ' + ({ yes: 'met ✓', partly: 'partly met', no: 'not met' })[s.goalMet] : '') + ')'; }).join(' · ') + '</p>' : '');
+    var B = $('#planBody'); agileWire(B);
+    var find = function (el) { var id = el.closest('[data-tid]').getAttribute('data-tid'); return p.tasks.filter(function (t) { return t.id === id; })[0]; };
+    B.querySelectorAll('[data-agto]').forEach(function (b) { b.onclick = function () { var t = find(b); if (agPull(t, b.getAttribute('data-agto'))) { dirty(t.name + ' → sprint'); render(); } }; });
+    B.querySelectorAll('[data-agback]').forEach(function (b) { b.onclick = function () { var t = find(b); if (agPull(t, 'backlog')) { dirty(t.name + ' → backlog'); render(); } }; });
+    B.querySelectorAll('[data-agedit]').forEach(function (b) { b.onclick = function () { agEdit(find(b)); }; });
+    B.querySelectorAll('[data-spf]').forEach(function (el) { el.onchange = function () { var s = agSprint(A, el.closest('[data-sp]').getAttribute('data-sp')); s[el.getAttribute('data-spf')] = el.value.trim(); dirty('sprint ' + s.n + ' ' + el.getAttribute('data-spf')); }; });
+    B.querySelectorAll('[data-agstart]').forEach(function (b) { b.onclick = function () { agStart(A, agSprint(A, b.getAttribute('data-agstart'))); }; });
+    B.querySelectorAll('[data-agclose]').forEach(function (b) { b.onclick = function () { agClose(A, agSprint(A, b.getAttribute('data-agclose'))); }; });
+  }
+  function agStart(A, s) {
+    var p = S.plan, L = p.tasks.filter(function (t) { return t.ag === s.id; }), notReady = L.filter(function (t) { return !dorOf(t).ready; }).length, pts = L.reduce(function (a, t) { return a + themePts(t); }, 0);
+    if (!L.length) return toast('Put some items into Sprint ' + s.n + ' first', true);
+    if (!String(s.goal || '').trim()) return toast('Write the sprint goal first (🎯 Sprint goal)', true);
+    M.confirmBox('▶ Start Sprint ' + s.n + '?', pl(L.length, 'item') + ', ' + pts + ' story points, ' + (A.cycle / 7) + ' weeks from today (' + pretty(today()) + ' – ' + prettyY(addDays(today(), A.cycle - 1)) + ').<br>🎯 ' + esc(s.goal) + (notReady ? '<br><b>' + pl(notReady, 'item') + ' not ✅ DOR ready.</b>' : '') + '<br>Once it starts, its items cannot go back to the backlog until the sprint is completed.', 'Start sprint').then(function (ok) {
+      if (!ok) return;
+      s.status = 'active'; s.start = today(); s.end = addDays(s.start, A.cycle - 1); s.startedAt = today(); s.committed = pts; s.items = L.map(function (t) { return t.id; });
+      L.forEach(function (t) { agSetDates(t, s); if (!agDone(t) && !t.status) setStatus(t, 'todo'); });
+      agEnsure(A); agDates(A); S.agView = 'board'; dirty('Sprint ' + s.n + ' started'); render(); toast('Sprint ' + s.n + ' started: ' + pts + ' points. Good luck!');
+    });
+  }
+  function agClose(A, s) {
+    var p = S.plan, L = p.tasks.filter(function (t) { return t.ag === s.id; }), done = L.filter(agDone), todo = L.filter(function (t) { return !agDone(t) && t.status === 'todo'; }), mid = L.filter(function (t) { return !agDone(t) && t.status !== 'todo'; });
+    var dp = done.reduce(function (a, t) { return a + themePts(t); }, 0);
+    M.modal('<h2>■ Complete Sprint ' + s.n + '</h2><p>🎯 <b>' + esc(s.goal || 'No goal written') + '</b>' + (s.objective ? '<br><small class="muted">' + esc(s.objective) + '</small>' : '') + '</p>' +
+      '<div class="ag-sum"><div><b>' + dp + '/' + s.committed + '</b><small>points done</small></div><div><b>' + done.length + '</b><small>done (locked)</small></div><div><b>' + mid.length + '</b><small>to the next sprint</small></div><div><b>' + todo.length + '</b><small>back to the backlog</small></div></div>' +
+      '<form class="form" id="agCF"><div class="full"><b>Was the sprint goal met?</b><div class="ag-met">' + [['yes', '✅ Yes'], ['partly', '◑ Partly'], ['no', '✖ No']].map(function (x) { return '<label><input type="radio" name="met" value="' + x[0] + '"' + (x[0] === (dp >= s.committed ? 'yes' : dp ? 'partly' : 'no') ? ' checked' : '') + '> ' + x[1] + '</label>'; }).join('') + '</div></div>' +
+      '<label class="full">Review notes (for the retro)<textarea name="rev" rows="3" maxlength="600" placeholder="What went well, what to change"></textarea></label>' +
+      '<div class="full actions"><button class="btn" data-close type="button">Not yet</button><button class="btn btn-gold" type="submit">Complete sprint</button></div></form>');
+    $('#agCF').onsubmit = function (e) {
+      e.preventDefault(); var f = e.target;
+      s.status = 'closed'; s.closedAt = today(); s.done = dp; s.goalMet = (f.querySelector('[name=met]:checked') || {}).value || ''; s.review = f.rev.value.trim();
+      agEnsure(A); var next = agOpen(A).filter(function (x) { return x.status === 'planned'; })[0];
+      todo.forEach(function (t) { delete t.ag; delete t.agIn; });
+      mid.forEach(function (t) { t.ag = next.id; next.items = (next.items || []).concat([t.id]); agSetDates(t, next); });   // same column, next sprint
+      agDates(A); M.closeModal(); S.agView = 'plan'; dirty('Sprint ' + s.n + ' completed'); render();
+      toast('Sprint ' + s.n + ' completed: ' + dp + ' of ' + s.committed + ' points. ' + (mid.length ? pl(mid.length, 'item') + ' carried to Sprint ' + next.n + '. ' : '') + (todo.length ? pl(todo.length, 'item') + ' back in the backlog.' : ''));
+    };
+  }
+  // ---------- 📈 charts for the retro ----------
+  function agCharts() {
+    var p = S.plan, A = agileOf(p); if (!A) return;
+    var items = p.tasks.filter(function (t) { return agItem(t) && t.ag; }), doneI = items.filter(function (t) { return agDone(t); });
+    var who = {}; doneI.forEach(function (t) { var o = ownerOf(t) || 'No owner'; who[o] = who[o] || { pts: 0, n: 0 }; who[o].pts += themePts(t); who[o].n++; (t.subs || []).forEach(function () {}); });
+    var team = Object.keys(who).map(function (k) { return [k, who[k].pts, who[k].n]; }).sort(function (a, b) { return b[1] - a[1] || b[2] - a[2]; }), mvp = team.filter(function (x) { return x[0] !== 'No owner'; })[0];
+    var cyc = doneI.filter(function (t) { return t.agIn && t.doneAt; }).map(function (t) { return Math.max(0, Math.round((toD(t.doneAt) - toD(t.agIn)) / 864e5)); }), avgCyc = cyc.length ? Math.round(cyc.reduce(function (a, b) { return a + b; }, 0) / cyc.length * 10) / 10 : null;
+    var closed = (A.sprints || []).filter(function (s) { return s.status === 'closed'; }), act = agActive(A);
+    var vel = closed.length ? Math.round(closed.reduce(function (a, s) { return a + s.done; }, 0) / closed.length) : 0, rel = closed.length ? Math.round(closed.reduce(function (a, s) { return a + s.done; }, 0) / Math.max(1, closed.reduce(function (a, s) { return a + s.committed; }, 0)) * 100) : null;
+    var tot = p.tasks.filter(agItem).reduce(function (a, t) { return a + themePts(t); }, 0), donePts = p.tasks.filter(function (t) { return agItem(t) && agDone(t); }).reduce(function (a, t) { return a + themePts(t); }, 0);
+    var weeks = function () { var since = A.since || today(), L = [], d = agMonday(addDays(since, -6)); while (d <= today()) { L.push(d); d = addDays(d, 7); } return L.slice(-16); }();
+    var kpi = function (v, l) { return '<div><b>' + v + '</b><small>' + l + '</small></div>'; };
+    M.modal('<h2>📈 ' + (A.method === 'scrum' ? 'Sprint' : 'Kanban') + ' charts &amp; retro</h2><div class="ag-sum">' +
+      (A.method === 'scrum' ? kpi(vel ? vel + ' pts' : '–', 'velocity (per sprint)') + kpi(rel != null ? rel + '%' : '–', 'commitment kept') + kpi(closed.length, 'sprints done') : kpi(weeks.length ? Math.round(donePts / Math.max(1, weeks.length) * 10) / 10 + ' pts' : '–', 'velocity (per week)') + kpi(avgCyc != null ? avgCyc + ' d' : '–', 'cycle time (pull → done)') + kpi(doneI.length, 'items done')) +
+      kpi(donePts + '/' + tot, 'points done') + '</div>' +
+      (mvp ? '<div class="ag-mvp">🏆 <b>Most valuable team member: ' + esc(mvp[0]) + '</b> · ' + mvp[1] + ' points over ' + pl(mvp[2], 'item') + ' done</div>' : '') +
+      '<div class="ag-charts"><div><h3>' + (A.method === 'scrum' ? '🔥 Burn-down' + (act ? ' · Sprint ' + act.n : closed.length ? ' · Sprint ' + closed[closed.length - 1].n : '') : '🌊 Work in each column now') + '</h3><canvas id="agC1"></canvas></div>' +
+        '<div><h3>📈 Burn-up (project)</h3><canvas id="agC2"></canvas></div><div><h3>' + (A.method === 'scrum' ? '⚡ Velocity: committed vs done' : '⚡ Throughput per week') + '</h3><canvas id="agC3"></canvas></div><div><h3>👥 Team contribution (points done)</h3><canvas id="agC4"></canvas></div></div>' +
+      '<p class="muted" style="font-size:12px;margin:8px 0 0">For the retro: what helped, what slowed us down, what we change next. Points come from the backlog items (a task with stories adds up its stories).</p><div class="actions"><button class="btn btn-gold" data-close type="button">Close</button></div>');
+    $('#modal .modal-card').classList.add('sc-wide');
+    piLoad('vendor/chart.umd.min.js?v=451', function () { return !!window.Chart; }).then(function () {
+      var C = window.Chart, gold = '#C9A227', ink = '#1F1D18', green = '#16A34A', o = { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } } };
+      if (A.method === 'scrum') {
+        var s = act || closed[closed.length - 1];
+        if (s) { var days = [], d = s.start; while (d <= s.end) { days.push(d); d = addDays(d, 1); } var L = p.tasks.filter(function (t) { return (s.items || []).indexOf(t.id) >= 0 || t.ag === s.id; }), com = s.committed || L.reduce(function (a, t) { return a + themePts(t); }, 0);
+          new C($('#agC1'), { type: 'line', data: { labels: days.map(pretty), datasets: [{ label: 'Ideal', data: days.map(function (x, i) { return Math.round(com * (1 - i / Math.max(1, days.length - 1)) * 10) / 10; }), borderColor: '#9CA3AF', borderDash: [5, 4], pointRadius: 0 },
+            { label: 'Remaining', data: days.map(function (x) { return x > today() ? null : com - L.filter(function (t) { return t.doneAt && t.doneAt <= x; }).reduce(function (a, t) { return a + themePts(t); }, 0); }), borderColor: '#DC2626', backgroundColor: 'rgba(220,38,38,.1)', fill: true, tension: .2 }] }, options: o }); }
+        new C($('#agC3'), { type: 'bar', data: { labels: closed.map(function (s) { return 'Sprint ' + s.n; }), datasets: [{ label: 'Committed', data: closed.map(function (s) { return s.committed; }), backgroundColor: '#E7E1D2' }, { label: 'Done', data: closed.map(function (s) { return s.done; }), backgroundColor: gold }] }, options: o });
+      } else {
+        new C($('#agC1'), { type: 'bar', data: { labels: STATUS.map(function (c) { return c[1]; }), datasets: [{ label: 'Items', data: STATUS.map(function (c) { return p.tasks.filter(function (t) { return t.ag === 'board' && t.status === c[0]; }).length; }), backgroundColor: [ink, '#3B82F6', '#D97706', green] },
+          { label: 'WIP limit', type: 'line', data: STATUS.map(function (c) { return A.wip[c[0]] || null; }), borderColor: '#DC2626', pointRadius: 4, showLine: false }] }, options: o });
+        new C($('#agC3'), { type: 'bar', data: { labels: weeks.map(pretty), datasets: [{ label: 'Points done', data: weeks.map(function (w) { var e = addDays(w, 6); return doneI.filter(function (t) { return t.doneAt >= w && t.doneAt <= e; }).reduce(function (a, t) { return a + themePts(t); }, 0); }), backgroundColor: gold },
+          { label: 'Items done', data: weeks.map(function (w) { var e = addDays(w, 6); return doneI.filter(function (t) { return t.doneAt >= w && t.doneAt <= e; }).length; }), backgroundColor: ink }] }, options: o });
+      }
+      new C($('#agC2'), { type: 'line', data: { labels: weeks.map(pretty), datasets: [{ label: 'Total scope (pts)', data: weeks.map(function () { return tot; }), borderColor: '#9CA3AF', borderDash: [5, 4], pointRadius: 0 },
+        { label: 'Done (pts)', data: weeks.map(function (w) { var e = addDays(w, 6); return p.tasks.filter(function (t) { return agItem(t) && agDone(t) && (t.doneAt || t.ef || '') <= e; }).reduce(function (a, t) { return a + themePts(t); }, 0); }), borderColor: green, backgroundColor: 'rgba(22,163,74,.12)', fill: true, tension: .2 }] }, options: o });
+      new C($('#agC4'), { type: 'bar', data: { labels: team.map(function (x) { return x[0]; }), datasets: [{ label: 'Points done', data: team.map(function (x) { return x[1]; }), backgroundColor: team.map(function (x, i) { return i === 0 && x[0] !== 'No owner' ? gold : '#CFC6AE'; }) }] }, options: Object.assign({}, o, { indexAxis: 'y' }) });
+    }).catch(fail);
+  }
+  function agBand(A, s) {   // the running sprint across the top of its board: dates, days left (green → amber → red), the goal
+    if (!A || A.method !== 'scrum' || !s) return '';
+    var left = Math.round((toD(s.end) - toD(today())) / 864e5) + 1, len = A.cycle, gone = Math.min(100, Math.max(0, Math.round((len - left) / len * 100))), tone = left <= 1 ? 'r' : left <= 3 ? 'a' : 'g';
+    return '<div class="ag-band ag-' + tone + '"><div><b>🏃 Sprint ' + s.n + '</b> · ' + esc(pretty(s.start)) + ' – ' + esc(prettyY(s.end)) + ' · <b>' + (left > 0 ? pl(left, 'day') + ' left' : left === 0 ? 'ends today' : 'overdue by ' + pl(-left, 'day')) + '</b><br><span>🎯 ' + esc(s.goal || 'No goal written') + '</span></div>' +
+      '<div class="ag-bt"><i style="width:' + gone + '%"></i></div><button type="button" class="btn btn-sm btn-gold" data-agclose="' + s.id + '">■ Complete sprint</button></div>';
+  }
+  function kWip(A, k, n) { return A && A.method === 'kanban' && k !== 'done' ? '<span class="kwip' + (A.wip[k] && n >= A.wip[k] ? ' full' : '') + '" title="WIP limit: the most items this column may hold">WIP ' + n + '/<input data-wip="' + k + '" type="number" min="1" max="99" value="' + (A.wip[k] || '') + '"></span>' : ''; }
   function board() {
-    var p = S.plan, t0 = today(), F = bfState();
+    var p = S.plan, t0 = today(), F = bfState(), A = agileOf(p), act = A && A.method === 'scrum' ? agActive(A) : null;
+    if (A && A.method === 'scrum' && !act) { $('#planBody').innerHTML = agileBar(A, 'board') + '<div class="card"><div class="empty">No sprint is running. Plan it in <b>🗓 Sprint planning</b> (goal, objective, items) and press <b>▶ Start sprint</b>.</div></div>'; agileWire($('#planBody')); return; }
     var owners = []; p.tasks.forEach(function (t) { [ownerOf(t)].concat((t.subs || []).map(function (x) { return x.owner; })).forEach(function (n) { if (n && owners.indexOf(n) < 0) owners.push(n); }); });
     (p.stakeholders || []).forEach(function (x) { var n = x.name || x.role; if (n && owners.indexOf(n) < 0) owners.push(n); });
     var filt = !!(F.owner || F.prio);
     var storyOk = function (x) { if (F.owner && (F.owner === '-' ? x.owner : x.owner !== F.owner)) return false; if (F.prio && (F.prio === '-' ? x.priority : x.priority !== F.prio)) return false; return true; };
     var themeOk = function (t) { if (F.owner && (F.owner === '-' ? ownerOf(t) : ownerOf(t) !== F.owner)) return false; if (F.prio && (F.prio === '-' ? t.priority : t.priority !== F.prio)) return false; return true; };
     var rows = ordered().filter(function (r) {
+      if (A && !(A.method === 'kanban' ? r.t.ag === 'board' : r.t.ag === act.id)) return false;   // the board holds what was pulled from the backlog
       var t = r.t; if (F.q && (t.name + ' ' + (t.desc || '') + ' ' + (t.subs || []).map(function (x) { return x.name + ' ' + x.owner + ' ' + (x.desc || ''); }).join(' ') + ' ' + ownerOf(t)).toLowerCase().indexOf(F.q.toLowerCase()) < 0) return false;
       return !filt || ((t.subs || []).length ? t.subs.some(storyOk) : themeOk(t));
     });
@@ -2716,9 +2966,9 @@
       '<label>Sort <select id="kbSort">' + opt('plan', 'Plan order', F.sort) + opt('prio', 'Priority', F.sort) + opt('points', 'Points', F.sort) + opt('due', 'Due date', F.sort) + '</select></label>' +
       '<span class="sp"></span><span class="krag-sum" title="Themes on track / due within 3 days / late"><i class="kd kd-g"></i>' + ragN.g + ' <i class="kd kd-a"></i>' + ragN.a + ' <i class="kd kd-r"></i>' + ragN.r + '</span>' +
       '<span class="kpts" title="Story points done of the points on the board">' + doneP + ' of ' + totP + ' points done' + (totP ? ' (' + Math.round(doneP / totP * 100) + '%)' : '') + '</span></div>';
-    $('#planBody').innerHTML = bar + '<div class="kanban">' + STATUS.map(function (c) {
+    $('#planBody').innerHTML = (A ? agileBar(A, 'board') + agBand(A, act) : '') + bar + '<div class="kanban' + (A ? ' agile' : '') + '">' + STATUS.map(function (c) {
       var list = rows.filter(function (r) { return r.t.status === c[0]; }).sort(sorter), pts = list.reduce(function (a, r) { return a + themePts(r.t); }, 0);
-      return '<div class="kcol kcol-' + c[0] + '" data-col="' + c[0] + '"><h3><span>' + c[1] + '</span><span class="kcount">' + pl(list.length, 'theme') + (pts ? ' · ' + pts + ' pts' : '') + '</span><button type="button" class="kaddt" data-kaddt="' + c[0] + '" title="Add a level-1 task (theme) here, with its costing">＋ Task</button></h3><div class="kcards">' + list.map(function (r) {
+      return '<div class="kcol kcol-' + c[0] + '" data-col="' + c[0] + '"><h3><span>' + c[1] + '</span><span class="kcount">' + pl(list.length, 'theme') + (pts ? ' · ' + pts + ' pts' : '') + '</span>' + kWip(A, c[0], list.length) + '<button type="button" class="kaddt" data-kaddt="' + c[0] + '" title="Add a level-1 task (theme) here, with its costing">＋ Task</button></h3><div class="kcards">' + list.map(function (r) {
         var t = r.t, rg = kRag(t.es, t.ef, t.pct >= 100, t0), subs = t.subs || [], tp = themePts(t), sdone = subs.filter(function (x) { return x.status === 'done'; }).length;
         var shown = filt ? subs.filter(storyOk) : subs;
         return '<div class="kcard kr-' + rg.c + '" draggable="true" data-tid="' + esc(t.id) + '">' +
@@ -2733,14 +2983,20 @@
             (filt && shown.length < subs.length ? '<div class="kmore">' + (subs.length - shown.length) + ' more ' + (subs.length - shown.length === 1 ? 'story' : 'stories') + ' hidden by the filter</div>' : '') + '</div>'
             : kCtl('t:' + t.id, ownerOf(t), t.priority, t.points)) +
           (t.dur > 0 ? '<div class="kaddrow" data-addrow></div><button type="button" class="kadd" data-kadd>＋ story</button>' : '') +
+          (A && !agLocked(t, A) ? '<button type="button" class="kback" data-kback title="Back to the Product Backlog">↩ Backlog</button>' : A && agDone(t) ? '<span class="klock" title="Done: locked for good">🔒 Done, locked</span>' : '') +
           '<div class="kfoot"><div class="pbar st-' + t.status + '"><span style="width:' + t.pct + '%"></span></div>' + (subs.length ? '<span class="muted">' + sdone + '/' + subs.length + '</span>' : '<span class="muted">' + t.pct + '%</span>') +
             (c[0] !== 'todo' ? '<button class="btn btn-sm" data-step="-1" title="Back one column">←</button>' : '') + (c[0] !== 'done' ? '<button class="btn btn-sm" data-step="1" title="Next column">→</button>' : '') + '<button type="button" class="btn btn-sm kdel" data-kdel title="Delete this ' + (subs.length ? 'theme and its ' + subs.length + (subs.length === 1 ? ' story' : ' stories') : t.dur === 0 ? 'milestone' : 'task') + '" aria-label="Delete">🗑</button></div></div>';
       }).join('') + (list.length ? '' : '<div class="kempty">' + (rows.length < p.tasks.length ? 'Nothing matches the filter' : 'Drop a theme here') + '</div>') + '</div></div>';
     }).join('') + '</div><p class="muted" style="margin:8px 0 0;font-size:12px">Each card is a theme (a task) with its user stories (sub-tasks). The theme\'s points add up its stories. 🟩 on track · 🟨 due within 3 days · 🟥 past its due date. Drag a card to another column as the work moves on; the Gantt chart follows.</p>';
     var B = $('#planBody'), find = function (id) { return p.tasks.filter(function (t) { return t.id === id; })[0]; };
-    var move = function (t, k) { if (!t || t.status === k) return; setStatus(t, k); dirty(stName[k] + ': ' + t.name); render(); };
+    var move = function (t, k) { if (!t || t.status === k) return; if (A && t.ag && agDone(t)) { toast('Done items are locked for good', true); render(); return; } if (A && !agWipOk(t, k)) { render(); return; } setStatus(t, k); dirty(stName[k] + ': ' + t.name); render(); };
     B.querySelectorAll('[data-kdel]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); taskDelete(find(b.closest('.kcard').getAttribute('data-tid'))); }; });
     B.querySelectorAll('[data-kdels]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); var t = find(b.closest('.kcard').getAttribute('data-tid')), id = b.closest('.kst').getAttribute('data-sid'); subDelete(t, t && (t.subs || []).filter(function (x) { return x.id === id; })[0]); }; });
+    if (A) { agileWire(B);
+      B.querySelectorAll('[data-kback]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); var t = find(b.closest('.kcard').getAttribute('data-tid')); if (agPull(t, 'backlog')) { dirty(t.name + ' → backlog'); render(); } }; });
+      B.querySelectorAll('[data-wip]').forEach(function (i) { i.onclick = function (e) { e.stopPropagation(); }; i.onchange = function () { A.wip[i.getAttribute('data-wip')] = Math.max(1, Math.min(99, +i.value || 1)); dirty('WIP limit ' + i.getAttribute('data-wip')); render(); }; });
+      B.querySelectorAll('[data-agclose]').forEach(function (b) { b.onclick = function () { agClose(A, agSprint(A, b.getAttribute('data-agclose'))); }; });
+      B.querySelectorAll('.kcard').forEach(function (c) { var t = find(c.getAttribute('data-tid')); if (t && agDone(t)) { c.setAttribute('draggable', 'false'); c.classList.add('klocked'); var cb = c.querySelector('[data-tick]'); if (cb) cb.disabled = true; } }); }
     var keep = function () { var cs = Array.prototype.map.call(B.querySelectorAll('.kcards'), function (k) { return k.scrollTop; }); board(); B.querySelectorAll('.kcards').forEach(function (k, i) { k.scrollTop = cs[i] || 0; }); };
     kFit(); setTimeout(kFit, 80); setTimeout(kFit, 700); if (!S.kFitOn) { S.kFitOn = true; window.addEventListener('resize', function () { if (S.tab === 'board') kFit(); }); }
     $('#kbQ').oninput = function () { F.q = this.value; var pos = this.selectionStart; board(); var q = $('#kbQ'); q.focus(); try { q.setSelectionRange(pos, pos); } catch (e) {} };

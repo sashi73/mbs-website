@@ -158,6 +158,8 @@ function clean(p, core) {
     item: str(t.item, 12), ...people(t), status: STAT.includes(t.status) ? t.status : statusOf(int(t.pct, 0, 100, 0)), qty: r2(t.qty), unit: str(t.unit, 20), rate: r2(t.rate), actual: r2(t.actual), pct: int(t.pct, 0, 100, 0), notes: str(t.notes, 1000),
     // v64: the Board: owner (a stakeholder), priority and story points
     desc: str(t.desc, 300), owner: str(t.owner, 80),
+    // the Product Backlog (Kanban or Scrum): where the item is ('', 'board' or a sprint id), when it was pulled in and when it was done
+    ag: /^(board|S\d{1,3})$/.test(String(t.ag || '')) ? t.ag : undefined, agIn: ymdOk(t.agIn) || undefined, doneAt: ymdOk(t.doneAt) || undefined,
     stickies: (Array.isArray(t.stickies) ? t.stickies : []).slice(-40).map((n) => (n && typeof n === 'object' && str(n.text, 1500) ? { id: str(n.id, 20).replace(/[^\w-]/g, '') || 'n' + Math.random().toString(36).slice(2, 8), c: ['R', 'A', 'G'].includes(n.c) ? n.c : 'G', text: str(n.text, 1500), by: str(n.by, 80), at: Number(n.at) || Date.now(), done: !!n.done, doneBy: str(n.doneBy, 80), editedAt: Number(n.editedAt) || 0, editedBy: str(n.editedBy, 80) } : null)).filter(Boolean),
     // v78: an indicative (AI benchmark) cost not yet reviewed by the consultant, and how it was worked out
     est: !!t.est, basis: str(t.basis, 200), priority: ['High', 'Medium', 'Low'].includes(t.priority) ? t.priority : '', points: int(t.points, 0, 100, 0)
@@ -205,6 +207,14 @@ function clean(p, core) {
     dataLang: /^[a-z]{2}$/.test(p.dataLang || '') ? p.dataLang : undefined,
     dataSrcLang: /^[a-z]{2}$/.test(p.dataSrcLang || '') ? p.dataSrcLang : undefined,   // the language the data was first written in
     dataMap: p.dataMap && typeof p.dataMap === 'object' && p.dataLang ? Object.fromEntries(Object.entries(p.dataMap).filter(([k, v]) => typeof v === 'string').slice(0, 3000).map(([k, v]) => [String(k).slice(0, 3000), v.slice(0, 3000)])) : undefined,   // translated text → the original   // the language the project data (task names ...) is written in
+    agile: (() => {   // Kanban or Scrum: WIP limits, the sprint cycle and the sprints (goal, objective, dates, result)
+      const a = p.agile; if (!a || typeof a !== 'object' || !['kanban', 'scrum'].includes(a.method)) return undefined;
+      const w = a.wip || {}, n = (v, d) => Math.max(0, Math.min(99, Math.round(Number(v)))) || d;
+      return { method: a.method, wip: { todo: n(w.todo, 8), doing: n(w.doing, 3), review: n(w.review, 2) }, cycle: Number(a.cycle) === 28 ? 28 : 14, since: ymdOk(a.since) || undefined,
+        sprints: (Array.isArray(a.sprints) ? a.sprints : []).slice(0, 200).map((x) => ({ id: /^S\d{1,3}$/.test(x.id) ? x.id : 'S' + int(x.n, 1, 999, 1), n: int(x.n, 1, 999, 1), goal: str(x.goal, 300), objective: str(x.objective, 600),
+          start: ymdOk(x.start), end: ymdOk(x.end), status: ['planned', 'active', 'closed'].includes(x.status) ? x.status : 'planned', goalMet: ['yes', 'partly', 'no'].includes(x.goalMet) ? x.goalMet : '', review: str(x.review, 600),
+          committed: int(x.committed, 0, 9999, 0), done: int(x.done, 0, 9999, 0), startedAt: ymdOk(x.startedAt) || undefined, closedAt: ymdOk(x.closedAt) || undefined, items: (Array.isArray(x.items) ? x.items : []).slice(0, 300).map((q) => str(q, 20)) })) };
+    })(),
     docTheme: (() => { const t = p.docTheme; if (typeof t === 'string') return /^[a-z]{2,12}$/.test(t) ? t : undefined; if (t && typeof t === 'object') { const h = (x) => (/^#[0-9a-fA-F]{6}$/.test(String(x || '')) ? String(x) : null); return h(t.ink) && h(t.accent) ? { ink: h(t.ink), accent: h(t.accent) } : undefined; } return undefined; })(),   // 🎨 document colour scheme
     budgetCfg: (() => { const b = p.budgetCfg && typeof p.budgetCfg === 'object' ? p.budgetCfg : null; if (!b) return undefined; const pc = (v, d) => (isNaN(Number(v)) ? d : Math.max(0, Math.min(100, Number(v))));   // 💰 Budget settings
       const cats = ['Labour', 'Materials', 'Subcontractors', 'Equipment', 'Travel and expenses', 'Other'], cat = {};

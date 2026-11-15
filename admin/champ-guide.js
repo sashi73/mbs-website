@@ -49,10 +49,10 @@
       { sel: tab('schedule'), say: 'Open ▤ Gantt.', click: 1 },
       { sel: '[data-addend], #addTask', say: '“＋ Task (level 1)” adds a task at the end; the ＋ next to a task adds one right below it. Fill in days, Qty and Unit $ for its cost.' }] },
     { id: 'note', t: 'Leave a sticky note on a task', k: 'sticky|note|remark|nota', steps: [OPEN,
-      { sel: tab('schedule'), say: 'Open ▤ Gantt (or the Board).', click: 1 },
+      { sel: tab('schedule'), say: 'Open ▤ Gantt (or the Kanban board).', click: 1 },
       { sel: '.stkb', say: 'Press 🗒 on a task. Write the note, pick red, amber or green, and press Enter to save.' }] },
     { id: 'board', t: 'See the whole Kanban board at once', k: 'kanban|board|full view|picture|papan', steps: [OPEN,
-      { sel: tab('board'), say: 'Open ▦ Board.', click: 1 },
+      { sel: tab('board'), say: 'Open 📋 Backlog & Board (on the Kanban board view).', click: 1 },
       { sel: '#kbFull', say: '“🖼 Full view” shows the whole board as one picture. You can save it as a PNG.', click: 1 }] },
     { id: 'budget', t: 'Work out and approve the costing', k: 'costing|budget|cost|approve budget|kos|bajet', steps: [OPEN,
       { sel: tab('budget'), say: 'Open 💰 Costing: labour from the tasks, materials from the signed-off BOM.', click: 1 },
@@ -73,6 +73,15 @@
       { go: '#me', sel: '#meEdit', say: 'Press “Edit my profile”: your rate per hour, education, qualifications, certifications and resume.', click: 1 }] },
     { id: 'calendar', t: 'See the team calendar and workload', k: 'calendar|workload|who is busy|kalendar', steps: [
       { go: '#people/calendar', sel: '.pc-t', say: 'The team calendar: who is on what, day by day. Workload is the next tab.' }] },
+    { id: 'backlog', t: 'Refine the Product Backlog (DOR ready)', k: 'backlog|product backlog|dor|definition of ready|refine|story points|grooming', steps: [OPEN,
+      { sel: tab('board'), say: 'Open 📋 Backlog & Board. The first time, pick Kanban or Scrum: every Gantt task goes into the Product Backlog.', click: 1 },
+      { sel: '#agNew, .ag-choose', say: 'Click an item (or ✏) to give it a description, story points, urgency and an owner: then it is ✅ DOR ready. ＋ Item adds one (to the Gantt too).' },
+      { sel: '[data-agto]', say: 'Pull a ready item onto the Kanban board (→ Board) or into a sprint (→ Sprint 1, → Sprint 2).' }] },
+    { id: 'sprint', t: 'Plan and start a sprint (Scrum)', k: 'sprint|scrum|start sprint|sprint goal|velocity|burn-down|burndown|retro', steps: [OPEN,
+      { sel: tab('board'), say: 'Open 📋 Backlog & Board (a Scrum project).', click: 1 },
+      { sel: '[data-agv=plan]', say: '🗓 Sprint planning: Sprint 1 and Sprint 2 buckets next to the backlog.', click: 1 },
+      { sel: '[data-spf=goal]', say: 'Write the sprint goal and objective, and move items in with → S1.' },
+      { sel: '[data-agstart]', say: '▶ Start sprint. At the end, ■ Complete sprint asks if the goal was met; 📈 Charts & retro has the burn-down, velocity and the most valuable team member.' }] },
     { id: 'deps', t: 'Link projects and see their dependencies', k: 'dependency|dependencies|link projects|depends on|cross-program|swimlane', steps: [
       { go: '#deps', sel: '#dbBoard', say: 'Portfolio > Dependency board: programs as swimlanes, projects as bars, arrows for the links. Red means the plans clash.' },
       { sel: '#dbAdd', say: '“🔗 Link projects”: pick the project that must come first, the one that waits for it, the type (finish to start …) and any lag.' }] },
@@ -207,8 +216,8 @@
     p.hidden = false; greet(false);
   }
   // ☰ the menu: everything Champ can show you, in groups (tap ☰, or say / type "menu")
-  var MENU = [['📂 Portfolio', ['programs', 'deps', 'summary', 'pipeline']], ['📁 In a project', ['charter', 'plandoc', 'bom', 'task', 'note', 'board', 'budget', 'risk', 'critical', 'change', 'intel']], ['🚀 Getting started', ['project', 'profile', 'language']], ['👥 Team and access', ['user', 'people', 'calendar']]];
-  var IC = { programs: '🗂', deps: '🔗', summary: '📊', pipeline: '▦', charter: '📜', plandoc: '📘', bom: '🧱', task: '＋', note: '🗒', board: '🖼', budget: '💰', risk: '⚠', critical: '⚡', change: '🔁', intel: '🧠', project: '📅', profile: '🙋', language: '🌐', user: '🔐', people: '👥', calendar: '📆' };
+  var MENU = [['📂 Portfolio', ['programs', 'deps', 'summary', 'pipeline']], ['📁 In a project', ['backlog', 'sprint', 'charter', 'plandoc', 'bom', 'task', 'note', 'board', 'budget', 'risk', 'critical', 'change', 'intel']], ['🚀 Getting started', ['project', 'profile', 'language']], ['👥 Team and access', ['user', 'people', 'calendar']]];
+  var IC = { backlog: '📋', sprint: '🏃', programs: '🗂', deps: '🔗', summary: '📊', pipeline: '▦', charter: '📜', plandoc: '📘', bom: '🧱', task: '＋', note: '🗒', board: '🖼', budget: '💰', risk: '⚠', critical: '⚡', change: '🔁', intel: '🧠', project: '📅', profile: '🙋', language: '🌐', user: '🔐', people: '👥', calendar: '📆' };
   function chipsFill(p) {
     var ids = [].concat.apply([], MENU.map(function (g) { return g[1]; })), tt = ids.map(function (id) { return T.filter(function (x) { return x.id === id; })[0].t; });
     tr(tt.concat(MENU.map(function (g) { return g[0]; }), ['Tap 🎙 and ask, or say “menu”.', 'Ask me anything…', 'Everything I can show you'])).then(function (L) {
