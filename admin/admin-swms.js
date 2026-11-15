@@ -1,6 +1,6 @@
 /* MBS Console v57: 🦺 Safe Work Method Statement (SWMS) editor. Opens at #swms/<job>, like a quote: every part can be
    changed, it saves as you type, and downloads as Word (.docx) or PDF, or prints. The SWMS is written by the AI from the
-   project plan (Project plan > SWMS tab, or ask Project Intelligence "generate a SWMS for this project"). */
+   project plan (Project plan > SWMS tab, or ask Ask AI "generate a SWMS for this project"). */
 (function () {
   'use strict';
   var M = window.MBS; if (!M) return;

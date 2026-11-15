@@ -64,8 +64,8 @@
       { sel: tab('critical'), say: 'Open ⚡ Critical path: the chain of tasks that sets the finish date.', click: 1 }] },
     { id: 'change', t: 'Raise a change request', k: 'change request|change control|change|perubahan', steps: [OPEN,
       { sel: tab('change'), say: 'Open 🔁 Change control to raise and approve changes (every decision is kept as a record).', click: 1 }] },
-    { id: 'intel', t: 'Ask Project Intelligence about a project', k: 'project intelligence|ask ai|question about project|analyse', steps: [OPEN,
-      { sel: tab('intel'), say: 'Open 🧠 Project Intelligence.', click: 1 },
+    { id: 'intel', t: 'Ask AI about a project', k: 'ask ai about|ask the ai|question about project|analyse', steps: [OPEN,
+      { sel: tab('intel'), say: 'Open 🧠 Ask AI.', click: 1 },
       { sel: '#piQ', say: 'Type your question about the project and press Ask.' }] },
     { id: 'people', t: 'Add a person to the team', k: 'add person|people|team member|staff|contractor|kakitangan', owner: 1, steps: [
       { go: '#people', sel: '#ppNew', say: 'In People press “＋ Person”: group, role, rate per hour, credentials.', click: 1 }] },
@@ -73,6 +73,15 @@
       { go: '#me', sel: '#meEdit', say: 'Press “Edit my profile”: your rate per hour, education, qualifications, certifications and resume.', click: 1 }] },
     { id: 'calendar', t: 'See the team calendar and workload', k: 'calendar|workload|who is busy|kalendar', steps: [
       { go: '#people/calendar', sel: '.pc-t', say: 'The team calendar: who is on what, day by day. Workload is the next tab.' }] },
+    { id: 'deps', t: 'Link projects and see their dependencies', k: 'dependency|dependencies|link projects|depends on|cross-program|swimlane', steps: [
+      { go: '#deps', sel: '#dbBoard', say: 'Portfolio > Dependency board: programs as swimlanes, projects as bars, arrows for the links. Red means the plans clash.' },
+      { sel: '#dbAdd', say: '“🔗 Link projects”: pick the project that must come first, the one that waits for it, the type (finish to start …) and any lag.' }] },
+    { id: 'programs', t: 'Create a program and put projects in it', k: 'program|programme|new program|move project', steps: [
+      { go: '#programs', sel: '#pgNew', say: 'Portfolio > Programs: “＋ New program” (manager, sponsor, client, email, phone). Open a program to add or move projects into it.' }] },
+    { id: 'summary', t: 'See the portfolio summary', k: 'portfolio summary|summary|health|on track|at risk', steps: [
+      { go: '#portfolio/summary', sel: '#view .card', say: 'Portfolio > Summary: every project on track, watch or at risk, with budget, SPI, CPI, late tasks and high risks, worst first.' }] },
+    { id: 'pipeline', t: 'Move a project through the PMBOK phases', k: 'pipeline|phase|initiation|closing|pmbok', steps: [
+      { go: '#portfolio/board', sel: '#view .card, #view', say: 'Portfolio > Pipeline board: Initiation, Planning, Execution, Monitoring & Evaluation, Closing. Drag a card to set its phase.' }] },
     { id: 'language', t: 'Change the language of the console', k: 'language|bahasa|மொழி|translate', steps: [
       { sel: '#champLangBtn', say: 'Press the language button and pick a language: the whole console changes.' }] }];
 
@@ -198,8 +207,8 @@
     p.hidden = false; greet(false);
   }
   // ☰ the menu: everything Champ can show you, in groups (tap ☰, or say / type "menu")
-  var MENU = [['📁 In a project', ['charter', 'plandoc', 'bom', 'task', 'note', 'board', 'budget', 'risk', 'critical', 'change', 'intel']], ['🚀 Getting started', ['project', 'profile', 'language']], ['👥 Team and access', ['user', 'people', 'calendar']]];
-  var IC = { charter: '📜', plandoc: '📘', bom: '🧱', task: '＋', note: '🗒', board: '🖼', budget: '💰', risk: '⚠', critical: '⚡', change: '🔁', intel: '🧠', project: '📅', profile: '🙋', language: '🌐', user: '🔐', people: '👥', calendar: '📆' };
+  var MENU = [['📂 Portfolio', ['programs', 'deps', 'summary', 'pipeline']], ['📁 In a project', ['charter', 'plandoc', 'bom', 'task', 'note', 'board', 'budget', 'risk', 'critical', 'change', 'intel']], ['🚀 Getting started', ['project', 'profile', 'language']], ['👥 Team and access', ['user', 'people', 'calendar']]];
+  var IC = { programs: '🗂', deps: '🔗', summary: '📊', pipeline: '▦', charter: '📜', plandoc: '📘', bom: '🧱', task: '＋', note: '🗒', board: '🖼', budget: '💰', risk: '⚠', critical: '⚡', change: '🔁', intel: '🧠', project: '📅', profile: '🙋', language: '🌐', user: '🔐', people: '👥', calendar: '📆' };
   function chipsFill(p) {
     var ids = [].concat.apply([], MENU.map(function (g) { return g[1]; })), tt = ids.map(function (id) { return T.filter(function (x) { return x.id === id; })[0].t; });
     tr(tt.concat(MENU.map(function (g) { return g[0]; }), ['Tap 🎙 and ask, or say “menu”.', 'Ask me anything…', 'Everything I can show you'])).then(function (L) {

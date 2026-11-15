@@ -1339,7 +1339,7 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Gantt'], ['budget', '💰 Costing'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Project Intelligence']]);
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Gantt'], ['budget', '💰 Costing'], ['critical', '⚡ Critical path'], ['board', '▦ Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Ask AI']]);
     var MODS = S.mods || {}; tabs = tabs.filter(function (t) { return MODS[t[0]] !== false; });   // GKH Project Champ: optional modules switched off
     if (MODS[S.tab] === false) S.tab = 'overview';
     var sub = !!(M.me && M.me.scope), hide = sub ? ' style="display:none"' : '';   // v91: a sub-contractor signed in to this project
@@ -3407,7 +3407,7 @@
       (p.issues || []).filter(function (x) { return x.status !== 'Resolved' && x.title; }).length ? { t: 'table', title: 'Open issues', head: ['Issue', 'Priority', 'Owner', 'Due'], rows: (p.issues || []).filter(function (x) { return x.status !== 'Resolved' && x.title; }).map(function (x) { return [x.title, { t: x.priority, rag: x.priority === 'Critical' ? 'R' : x.priority === 'High' ? 'A' : undefined }, x.owner || '', fd(x.due)]; }), widths: [4, 1, 1.6, 1.4] } : null], '', 'Risk register, heat map and open issues'));
     X.push(ch('Quality management', 'Quality', [T(S2.quality_management || 'Each deliverable is checked against its acceptance criteria before it is handed over.'), (S2.quality_checks || []).length ? { t: 'table', title: 'Quality checks', head: ['Deliverable', 'Standard', 'How it is checked'], rows: S2.quality_checks.map(function (r) { return [{ t: r.deliverable, b: true }, r.standard, r.check]; }), widths: [1.6, 2.4, 2.6], noTr: nl } : null], '', 'Standards and checks'));
     X.push(ch('Change control', 'Change', [T(S2.change_control || 'Every change to scope, time or cost is raised as a change request, assessed for its impact, approved and signed, and kept on record.'),
-      { t: 'cards', cols: 3, items: [{ title: '1. Raise', text: 'From a meeting, Project Intelligence or by hand.', dark: true }, { title: '2. Assess', text: 'Scope, time, cost, quality, risks, issues, stakeholders.' }, { title: '3. Decide and sign', text: 'Approve, reject or defer; the signed PDF is kept on record.' }] },
+      { t: 'cards', cols: 3, items: [{ title: '1. Raise', text: 'From a meeting, Ask AI or by hand.', dark: true }, { title: '2. Assess', text: 'Scope, time, cost, quality, risks, issues, stakeholders.' }, { title: '3. Decide and sign', text: 'Approve, reject or defer; the signed PDF is kept on record.' }] },
       { t: 'table', title: 'Change register', head: ['CR', 'Change', 'Status', 'Decision', 'Effect'], rows: crs.map(function (x) { var e = x.effect || {}; return ['CR-' + ('00' + x.num).slice(-3), x.title, x.status, x.decision ? x.decision.outcome + ' by ' + x.decision.by + (x.decision.role ? ' (' + x.decision.role + ')' : '') : 'Open', e.f1 ? 'Finish ' + fd(e.f1) + (e.b1 ? ', budget ' + money(e.b1) : '') : '']; }), widths: [0.8, 3, 1.1, 2.4, 2], empty: 'No change requests yet.' }], '', 'How changes are approved'));
     X.push(ch('Procurement and contracts', 'Contracts', [T(S2.procurement || 'Goods and services are bought through the organisation\'s procurement process, with contracts recorded against the project.'),
       (p.contracts || []).length ? { t: 'table', title: 'Contracts', head: ['Type', 'With', 'Value', 'Status'], rows: (p.contracts || []).map(function (x) { return [x.type || '', x.type === 'Customer' ? F.sponsor : x.party || '', x.value ? money(x.value) : '', x.status || '']; }), widths: [1.2, 2.6, 1.2, 1.2] } : null], '', 'Buying and contracts'));
@@ -3449,7 +3449,7 @@
       '<b style="font-size:13px;display:block;margin:10px 0 4px">Include</b><div class="ch-opts">' + CH_OPT.map(function (x) { return '<label class="qchk' + (x[0] === 'contacts' ? ' ch-sub' : '') + '"><input type="checkbox" data-cho="' + x[0] + '"' + (o[x[0]] ? ' checked' : '') + '> ' + esc(x[1]) + '</label>'; }).join('') + '</div>' +
       '<p class="muted" style="font-size:12px;margin:8px 0 0">Always included: project at a glance, objective, scope in and out, deliverables, acceptance criteria, assumptions, and the approval and sign-off block.</p>' +
       '<div class="row" style="gap:6px;margin-top:12px"><button class="btn" id="chPrev" type="button">👁 Preview</button><button class="btn btn-gold" id="chPdf" type="button">⬇ PDF</button><button class="btn" id="chDocx" type="button">⬇ Word (to edit)</button><span class="muted" id="chMsg" style="font-size:12.5px"></span></div>' +
-      '<div class="ch-signed"><b>📎 Signed copy</b> <span class="muted" style="font-size:12.5px">Upload the signed charter (PDF or Word) to keep it with the project; 🧠 Project Intelligence can read it.</span><label class="btn btn-sm" style="margin-left:auto">⬆ Upload signed charter<input type="file" id="chUp" hidden accept=".pdf,.docx"></label></div>' +
+      '<div class="ch-signed"><b>📎 Signed copy</b> <span class="muted" style="font-size:12.5px">Upload the signed charter (PDF or Word) to keep it with the project; 🧠 Ask AI can read it.</span><label class="btn btn-sm" style="margin-left:auto">⬆ Upload signed charter<input type="file" id="chUp" hidden accept=".pdf,.docx"></label></div>' +
       '<div class="actions" style="justify-content:flex-end"><button class="btn" data-close type="button">Close</button></div>');
     var label = function () { var e = document.querySelector('.ch-ver'); if (e) e.textContent = 'v' + (c.docVersion || '1.0') + ' · ' + (c.docStatus || 'Draft'); };
     var keep = function () { var nv = $('#chV').value.trim() || '1.0', ns = $('#chS').value; if (nv !== c.docVersion || ns !== c.docStatus) { c.docVersion = nv; c.docStatus = ns; dirty('charter version ' + nv + ' ' + ns); } label();
@@ -3641,7 +3641,7 @@
 
   /* ---------- v53: 📜 Contracts (plain uploader) ---------- */
   // One line per contract: the type, who it is with, and the signed contract (Word or PDF). The details are read by
-  // 🧠 Project Intelligence, so ask there ("What are the payment terms in the plumbing sub-contract?").
+  // 🧠 Ask AI, so ask there ("What are the payment terms in the plumbing sub-contract?").
   var CT_TYPES = [['Customer', '🏠', 'Customer contract'], ['Sub-contractor', '👷', 'Sub-contractor'], ['Supply', '📦', 'Supply'], ['Consultant', '📐', 'Consultant']];
   function contractsTab() {
     var p = S.plan; p.contracts = p.contracts || [];
@@ -3660,10 +3660,10 @@
       return '<tr data-ctid="' + esc(c.id) + '"><td class="nowrap">' + T[1] + ' ' + esc(T[2]) + '</td><td><b>' + esc(c.party) + '</b></td>' +
         '<td>' + (d ? esc(d.name) + '<br><small class="muted">' + (d.pages ? pl(d.pages, 'page') + ' · ' : '') + (d.words || 0).toLocaleString('en-AU') + ' words</small>' : '<span class="muted">document missing</span>') + '</td>' +
         '<td class="nowrap">' + dmy(new Date((c.at || Date.now()) + 10 * 3600e3).toISOString().slice(0, 10)) + '</td>' +
-        '<td class="nowrap">' + (d ? '<button class="btn btn-sm" data-ctdl title="Download">⬇</button> <button class="btn btn-sm btn-ai" data-ctask title="Ask Project Intelligence about this contract">🧠 Ask</button> ' : '') + '<button class="btn btn-sm" data-ctdel title="Delete">✕</button></td></tr>';
+        '<td class="nowrap">' + (d ? '<button class="btn btn-sm" data-ctdl title="Download">⬇</button> <button class="btn btn-sm btn-ai" data-ctask title="Ask AI about this contract">🧠 Ask</button> ' : '') + '<button class="btn btn-sm" data-ctdel title="Delete">✕</button></td></tr>';
     };
     $('#planBody').innerHTML = '<div class="card"><div class="card-h"><h2>📜 Contracts</h2></div>' +
-      '<p class="muted" style="margin:-4px 0 12px">Upload the signed contracts for this job (Word or PDF). Ask <b>🧠 Project Intelligence</b> about what is in them: price, payment stages, dates, variations, defects period and more.</p>' +
+      '<p class="muted" style="margin:-4px 0 12px">Upload the signed contracts for this job (Word or PDF). Ask <b>🧠 Ask AI</b> about what is in them: price, payment stages, dates, variations, defects period and more.</p>' +
       '<div class="ct-add"><select id="ctType">' + CT_TYPES.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === ty ? ' selected' : '') + '>' + x[1] + ' ' + x[2] + '</option>'; }).join('') + '</select>' + who +
         '<label class="btn btn-gold" for="ctFile" id="ctUpBtn">⬆ Upload contract (Word or PDF)</label><input type="file" id="ctFile" hidden accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></div><div id="ctMsg"></div>' +
       (p.contracts.length ? '<div class="table-wrap"><table class="ct-list"><thead><tr><th>Type</th><th>With</th><th>Contract</th><th>Uploaded</th><th></th></tr></thead><tbody>' + p.contracts.map(row).join('') + '</tbody></table></div>'
@@ -3713,7 +3713,7 @@
       var when = function (ms) { return ms ? new Date(ms).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Australia/Sydney' }) : ''; };
       var high = w ? w.steps.filter(function (s) { return /High|Extreme/.test(s.risk); }).length : 0;
       B.innerHTML = '<div class="card sw-card"><div class="card-h"><h2>🦺 Safe Work Method Statement (SWMS)</h2><span class="sp"></span>' + (w ? '<span class="sw-status-chip sw-' + w.status.toLowerCase() + '">' + w.status + ' · version ' + w.version + '</span>' : '') + '</div>' +
-        '<p class="muted" style="margin:-4px 0 12px">Needed before high-risk construction work starts (WHS Regulation 2017 NSW, Part 6.3). The AI writes it from this plan: the high-risk work involved, every job step with its hazards, risk and control measures, PPE, plant, licences, emergency arrangements and a sign-on sheet. Then open it to check and change anything, and download it as Word or PDF. You can also ask 🧠 Project Intelligence: “Generate a SWMS for this project”.</p>' +
+        '<p class="muted" style="margin:-4px 0 12px">Needed before high-risk construction work starts (WHS Regulation 2017 NSW, Part 6.3). The AI writes it from this plan: the high-risk work involved, every job step with its hazards, risk and control measures, PPE, plant, licences, emergency arrangements and a sign-on sheet. Then open it to check and change anything, and download it as Word or PDF. You can also ask 🧠 Ask AI: “Generate a SWMS for this project”.</p>' +
         (w ? '<div class="sw-sum"><div><b>' + w.steps.length + '</b><span>job steps</span></div><div><b>' + high + '</b><span>high or extreme before controls</span></div><div><b>' + w.hrcw.length + '</b><span>high-risk work categories</span></div><div><b>' + w.signon.filter(function (s) { return s.name; }).length + '</b><span>workers signed on</span></div></div>' +
             (w.hrcw.length ? '<div class="sw-hr">' + w.hrcw.map(function (k) { return '<span class="sw-chip">⚠ ' + esc(H[k] || k) + '</span>'; }).join('') + '</div>' : '') +
             '<p class="muted" style="font-size:12.5px">' + (w.edited ? 'Last changed ' + when(w.updated) : 'Written by the AI ' + when(w.generated) + ': not checked yet') + '</p>' +
@@ -3781,7 +3781,7 @@
     }).join('');
     var logH = '<div class="card cm-log"><div class="card-h"><h2>🗒 Meeting log</h2><span class="sp"></span><span class="muted">' + pl(log.length, 'meeting') + (log.filter(function (m) { return m.doc; }).length ? ' · ' + pl(log.filter(function (m) { return m.doc; }).length, 'transcript') : '') + '</span></div>' +
       (log.length ? '<div class="table-wrap"><table class="pi-tbl cm-tbl"><thead><tr><th>When</th><th>Meeting</th><th>Platform</th><th>Who</th><th>Status</th><th>Transcript</th><th>AI: impact on the plan</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-        '<p class="muted" style="font-size:12px;margin:8px 0 0">Meetings set up here or by 🧠 Project Intelligence are logged automatically. You can also ask Project Intelligence: “Analyse my meeting on ' + dmy(log[0].date) + ', summarise the outcome and the impact on the project”.</p>'
+        '<p class="muted" style="font-size:12px;margin:8px 0 0">Meetings set up here or by 🧠 Ask AI are logged automatically. You can also ask Ask AI: “Analyse my meeting on ' + dmy(log[0].date) + ', summarise the outcome and the impact on the project”.</p>'
         : '<div class="empty">No meetings yet. Set one up above.</div>') + '</div>';
     B.innerHTML = '<div class="cm-wrap">' + form + logH + '<div id="cmView"></div></div>';
     commsWire(B, L);
@@ -3922,7 +3922,7 @@
     impactWire(box, a, m, function () { commsTab(); });
   }
 
-  // the impact block, used on the Comms tab and in Project Intelligence answers
+  // the impact block, used on the Comms tab and in Ask AI answers
   function impactHtml(a, m, cr) {
     var p = S.plan, num = {}; p.tasks.forEach(function (t, i) { num[t.id] = i + 1; });
     var applied = !cr && m && m.applied && m.analysed && m.applied >= m.analysed, crLock = cr && CR_DONE[cr.status], hasPk = cr && cr.picks && Object.keys(cr.picks).length;
@@ -4005,8 +4005,8 @@
     var send = box.querySelector('[data-imcr]'); if (send) send.onclick = function () {
       var picks = impactPicks(box); if (!Object.keys(picks).length) return toast('Tick the changes to send', true);
       var items = JSON.parse(JSON.stringify(a)); delete items.report; delete items.tokens; delete items.today;
-      var c = crNew({ title: m ? 'Changes from the meeting: ' + m.title : 'Changes suggested by Project Intelligence', desc: a.outcome || (a.summary || []).join('\n'), reason: (a.decisions || []).map(function (x) { return '- ' + x; }).join('\n'),
-        source: m ? 'meeting' : 'intel', srcRef: m ? m.id : '', srcTitle: m ? m.title + ' (' + dmy(m.date) + ')' : 'Project Intelligence answer', items: items, picks: picks });
+      var c = crNew({ title: m ? 'Changes from the meeting: ' + m.title : 'Changes suggested by Ask AI', desc: a.outcome || (a.summary || []).join('\n'), reason: (a.decisions || []).map(function (x) { return '- ' + x; }).join('\n'),
+        source: m ? 'meeting' : 'intel', srcRef: m ? m.id : '', srcTitle: m ? m.title + ' (' + dmy(m.date) + ')' : 'Ask AI answer', items: items, picks: picks });
       if (m) { var mm = (S.plan.meetings || []).filter(function (x) { return x.id === m.id; })[0]; if (mm) mm.cr = c.id; }
       if (ccOff()) { crCommitNow(c); return; }
       dirty(crNo(c) + ' raised'); S.crView = c.id; toast(crNo(c) + ' raised in change control: review it, then approve and sign to add it to the plan');
@@ -4093,11 +4093,11 @@
   function p0finishBy(R) { return S.plan.finishBy && R.finish && R.finish > S.plan.finishBy; }
 
   /* ---------- v82: 🔁 Change control: every proposed change is a change request (CR); reviewed, approved and signed by the PM / PD (or the
-     change control board) before it goes into the plan and the registers. Changes from meetings and Project Intelligence come here first. ---------- */
+     change control board) before it goes into the plan and the registers. Changes from meetings and Ask AI come here first. ---------- */
   var CR_DONE = { Approved: 1, Implemented: 1, Rejected: 1, Deferred: 1 };
   var CR_CLS = { Proposed: 'cr-p', 'Under review': 'cr-r', 'CCB meeting': 'cr-m', Approved: 'cr-a', Implemented: 'cr-i', Rejected: 'cr-x', Deferred: 'cr-d' };
   var CR_ROLES = ['Project manager', 'Project director', 'Sponsor (customer)', 'Change control board (chair)'];
-  var CR_SRC = { manual: '✍ Raised by hand', meeting: '📞 From a meeting', intel: '🧠 From Project Intelligence', fit: '✨ Fit to finish-by (applied directly)' };
+  var CR_SRC = { manual: '✍ Raised by hand', meeting: '📞 From a meeting', intel: '🧠 From Ask AI', fit: '✨ Fit to finish-by (applied directly)' };
   function crNo(c) { return 'CR-' + ('00' + c.num).slice(-3); }
   function crNew(o) {
     var p = S.plan; p.changes = p.changes || [];
@@ -4108,7 +4108,7 @@
   }
   function crLog(c, what) { c.log = (c.log || []).concat([{ at: Date.now(), what: what }]).slice(-40); }
   // every decision is kept for good: the signed change request as a PDF plus a database record (who decided, when, the effect),
-  // so the team can open it any time, query it (change_records) and Project Intelligence can read it
+  // so the team can open it any time, query it (change_records) and Ask AI can read it
   function crRecord(c, quiet) {
     if (!c || !c.decision || !M.report || !M.report.pdf) return Promise.resolve(null);
     S.crBusy = S.crBusy || {}; var bk = c.id + '@' + c.decision.at; if (S.crBusy[bk]) return S.crBusy[bk];   // already being kept
@@ -4653,7 +4653,7 @@
     var p = S.plan; p.changes = p.changes || []; var L = p.changes.slice().sort(function (a, b) { return b.num - a.num; }), B = $('#planBody');
     var open = L.filter(function (c) { return !CR_DONE[c.status]; }), cnt = {}; L.forEach(function (c) { cnt[c.status] = (cnt[c.status] || 0) + 1; });
     var cur = S.crView ? p.changes.filter(function (c) { return c.id === S.crView; })[0] : null;
-    var steps = [['📝', 'Raised', 'From a meeting, Project Intelligence or by hand'], ['🔍', 'Impact assessed', 'Scope, time, cost, quality, risks, issues, stakeholders'], ['👥', 'Reviewed', 'At a change control meeting where needed'],
+    var steps = [['📝', 'Raised', 'From a meeting, Ask AI or by hand'], ['🔍', 'Impact assessed', 'Scope, time, cost, quality, risks, issues, stakeholders'], ['👥', 'Reviewed', 'At a change control meeting where needed'],
       ['✍', 'Approved and signed', 'By the project manager or project director (or the board)'], ['✅', 'Added to the plan', 'Schedule, scope, risk, issue and stakeholder registers']];
     B.innerHTML = '<div class="card"><div class="card-h"><h2>🔁 Change control</h2><span class="sp"></span><button class="btn btn-sm" id="crMeet" type="button"' + (open.length ? '' : ' disabled') + ' title="Call a change control meeting to review the open change requests">📞 Call a change control meeting</button>' +
         '<button class="btn btn-sm" id="crReg" type="button"' + (L.length ? '' : ' disabled') + ' title="The change register as a PDF or Word document">📄 Change register</button><button class="btn btn-sm btn-gold" id="crAdd" type="button">＋ New change request</button></div>' +
@@ -4665,7 +4665,7 @@
           '<td class="nowrap ' + (d.days > 0 ? 'bad' : '') + '">' + (d.days ? (d.days > 0 ? '+' : '') + d.days + ' d' : '–') + (d.est && d.days ? '*' : '') + '</td><td class="nowrap num ' + (d.cost > 0 ? 'bad' : '') + '">' + (d.cost ? (d.cost > 0 ? '+' : '−') + money(Math.abs(d.cost)) : '–') + (d.est && d.cost ? '*' : '') + '</td>' +
           '<td>' + esc(c.priority) + '</td><td><span class="cr-st ' + CR_CLS[c.status] + '">' + esc(c.status) + '</span>' + (c.ccb && !CR_DONE[c.status] ? '<br><small class="muted">meeting ' + esc(dmy(c.ccb)) + '</small>' : '') + '</td>' +
           '<td>' + (c.decision ? esc(c.decision.outcome) + ' by ' + esc(c.decision.by) + '<br><small class="muted">' + esc(c.decision.role) + ', ' + esc(dmy(new Date(c.decision.at).toISOString().slice(0, 10))) + '</small>' : '<span class="muted">Waiting</span>') + '</td></tr>'; }).join('') + '</tbody></table></div>'
-        : '<div class="empty">No change requests yet. Changes from meetings (📞 Comms) and Project Intelligence come here when you press <b>➜ Send to change control</b>, or raise one with <b>＋ New change request</b>.</div>') + '</div>' +
+        : '<div class="empty">No change requests yet. Changes from meetings (📞 Comms) and Ask AI come here when you press <b>➜ Send to change control</b>, or raise one with <b>＋ New change request</b>.</div>') + '</div>' +
       (cur ? crCard(cur) : '');
     B.querySelectorAll('tr[data-crid]').forEach(function (tr) { tr.onclick = function () { S.crView = S.crView === tr.getAttribute('data-crid') ? '' : tr.getAttribute('data-crid'); changeTab(); var k = $('#crCard'); if (k) k.scrollIntoView({ block: 'start', behavior: 'smooth' }); }; });
     $('#crAdd').onclick = crAddDialog; $('#crMeet').onclick = function () { crMeetDialog(); }; $('#crReg').onclick = function () { crDocDialog(null); };
@@ -4679,7 +4679,7 @@
       var el = $('#crRecs'); if (!el || S.core !== core) return;
       var L = R.list.slice().sort(function (a, b) { return b.at - a.at; });
       el.innerHTML = '<div class="card-h"><h2>📁 Decision records (' + L.length + ')</h2></div>' +
-        '<p class="muted" style="margin:-4px 0 10px">Every approval, rejection or deferral is kept in the database with its signed PDF and who decided. Open them here, query them in Ask (table <code>change_records</code>), and Project Intelligence reads them.</p>' +
+        '<p class="muted" style="margin:-4px 0 10px">Every approval, rejection or deferral is kept in the database with its signed PDF and who decided. Open them here, query them in Ask (table <code>change_records</code>), and Ask AI reads them.</p>' +
         (L.length ? '<div class="table-wrap"><table class="rt"><thead><tr><th>CR</th><th>Change</th><th>Decision</th><th>By</th><th>Date</th><th>Effect</th><th></th></tr></thead><tbody>' + L.map(function (r) {
           return '<tr><td class="nowrap"><b>' + esc(r.cr) + '</b></td><td>' + esc(r.title) + (r.direct ? '<br><small class="muted">Applied directly (no board review)</small>' : '') + '</td><td>' + esc(r.outcome) + '</td>' +
             '<td>' + esc(r.by) + '<br><small class="muted">' + esc(r.role) + (r.sig ? ' · signed' : '') + '</small></td><td class="nowrap">' + esc(new Date(r.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })) + '</td>' +
@@ -4862,7 +4862,7 @@
       sections: [{ kind: 'kv', title: '1. Summary', rows: [['Project', p.name], ['Change requests', String(L.length)]].concat(Object.keys(CR_CLS).filter(function (k) { return cnt[k]; }).map(function (k) { return [k, String(cnt[k])]; })) },
         { kind: 'table', title: '2. Change requests', head: ['CR', 'Change', 'Raised', 'Time', 'Cost', 'Status', 'Decision'], wordCols: [1, 5, 2, 1, 2, 2, 3], cols: { 0: { cellWidth: 16 }, 2: { cellWidth: 20 }, 3: { cellWidth: 14 }, 4: { cellWidth: 22 }, 5: { cellWidth: 22 } },
           rows: L.map(function (c) { var d = crDelta(c); return [{ t: crNo(c), b: true }, c.title, dmy(new Date(c.raisedAt).toISOString().slice(0, 10)), d.days ? (d.days > 0 ? '+' : '') + d.days + ' d' : '–', d.cost ? (d.cost > 0 ? '+' : '−') + money(Math.abs(d.cost)) : '–', { t: c.status, rag: RS[c.status] }, c.decision ? c.decision.by + ', ' + c.decision.role + ', ' + dmy(new Date(c.decision.at).toISOString().slice(0, 10)) : 'Waiting']; }) },
-        { kind: 'text', title: '3. How changes are controlled', text: '- Every proposed change is raised as a change request, from a meeting, Project Intelligence or by hand.\n- Its impact on scope, time, cost, quality, risks, issues and stakeholders is assessed.\n- It is reviewed, at a change control meeting where needed.\n- It is approved and signed (or rejected or deferred) by the project manager or project director.\n- Only then are the changes added to the plan and registers.' }] };
+        { kind: 'text', title: '3. How changes are controlled', text: '- Every proposed change is raised as a change request, from a meeting, Ask AI or by hand.\n- Its impact on scope, time, cost, quality, risks, issues and stakeholders is assessed.\n- It is reviewed, at a change control meeting where needed.\n- It is approved and signed (or rejected or deferred) by the project manager or project director.\n- Only then are the changes added to the plan and registers.' }] };
   }
 
   /* ---------- v62: 📊 Reports: customer, team and all stakeholders; weekly or ad hoc; RAG; Gantt; Word/PDF; email; log ---------- */
@@ -5133,7 +5133,7 @@
       .then(function (x) { if (x.status >= 400) throw new Error('Could not start the AI (' + x.status + ')'); return poll(); }).catch(function (e) { end(); fail(e); });
   }
 
-  /* ---------- v52: 🧠 Project Intelligence ---------- */
+  /* ---------- v52: 🧠 Ask AI ---------- */
   // Ask anything about this project. The AI answers from the plan and the documents uploaded here (contract, specs ...),
   // can suggest risks and a stakeholder register, and set up a team meeting (Google Calendar invite with Google Meet, .ics).
   var PI_EX = ['Work out the critical and non-critical risks for this project', 'What would a stakeholder register look like for this project?',
@@ -5184,7 +5184,7 @@
     var s = piUtc(m.date, m.start), e = new Date(s.getTime() + m.minutes * 60000);
     var teams = 'https://teams.microsoft.com/l/meeting/new?subject=' + encodeURIComponent(m.title) + '&startTime=' + encodeURIComponent(s.toISOString()) + '&endTime=' + encodeURIComponent(e.toISOString()) +
       '&content=' + encodeURIComponent(details.slice(0, 900)) + (emails.length ? '&attendees=' + encodeURIComponent(emails.join(',')) : '');
-    var ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MBS Console//Project Intelligence//EN', 'METHOD:' + (off ? 'CANCEL' : 'REQUEST'), 'BEGIN:VEVENT', 'UID:' + (m.id || ('m' + Date.now())) + '@mbs-console', 'DTSTAMP:' + piStamp(new Date()),
+    var ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//MBS Console//Ask AI//EN', 'METHOD:' + (off ? 'CANCEL' : 'REQUEST'), 'BEGIN:VEVENT', 'UID:' + (m.id || ('m' + Date.now())) + '@mbs-console', 'DTSTAMP:' + piStamp(new Date()),
       'SEQUENCE:' + ((m.was || []).length + (off ? 1 : 0)), 'DTSTART:' + piStamp(s), 'DTEND:' + piStamp(e), 'SUMMARY:' + ((off ? 'Cancelled: ' : '') + m.title).replace(/[,;]/g, '\\$&'), 'LOCATION:' + (m.link || pn), 'DESCRIPTION:' + details.replace(/[,;]/g, '\\$&').replace(/\n/g, '\\n')]
       .concat(off ? ['STATUS:CANCELLED'] : [])
       .concat(who.filter(function (x) { return /@/.test(x.email || ''); }).map(function (x) { return 'ATTENDEE;CN=' + (x.name || x.email).replace(/[,;:"]/g, ' ') + ';ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:' + x.email; }))
@@ -5198,12 +5198,12 @@
   function intelTab() {
     var B = $('#planBody'); if (!B) return;   // the answer came back after leaving the project
     if (!S.intel || S.intel.core !== S.core) {
-      B.innerHTML = '<div class="empty">Loading Project Intelligence…</div>';
+      B.innerHTML = '<div class="empty">Loading Ask AI…</div>';
       api('intelGet', { core: S.core }).then(function (d) { S.intel = { core: S.core, docs: d.docs, log: d.log, open: {} }; if (S.tab === 'intel') intelTab(); }).catch(fail);
       return;
     }
     var I = S.intel, p = S.plan;
-    B.innerHTML = '<div class="pi-wrap"><div class="pi-main"><div class="card"><div class="card-h"><h2>🧠 Project Intelligence</h2><span class="sp"></span>' + (I.log.length > 1 ? '<button class="btn btn-sm" id="piFold" title="Fold or open all the answers">' + (I.log.every(function (e, k) { return piFolded(k); }) ? '▾ Open all' : '▸ Fold all') + '</button>' : '') + (I.log.length > 3 ? '<button class="btn btn-sm" id="piKeep" title="Keep only the 3 newest answers">🧹 Keep newest 3</button>' : '') + (I.log.length ? '<button class="btn btn-sm" id="piClear" title="Clear every question and answer">🗑 Clear all (' + I.log.length + ')</button>' : '') + '</div>' +
+    B.innerHTML = '<div class="pi-wrap"><div class="pi-main"><div class="card"><div class="card-h"><h2>🧠 Ask AI</h2><span class="sp"></span>' + (I.log.length > 1 ? '<button class="btn btn-sm" id="piFold" title="Fold or open all the answers">' + (I.log.every(function (e, k) { return piFolded(k); }) ? '▾ Open all' : '▸ Fold all') + '</button>' : '') + (I.log.length > 3 ? '<button class="btn btn-sm" id="piKeep" title="Keep only the 3 newest answers">🧹 Keep newest 3</button>' : '') + (I.log.length ? '<button class="btn btn-sm" id="piClear" title="Clear every question and answer">🗑 Clear all (' + I.log.length + ')</button>' : '') + '</div>' +
         '<p class="muted" style="margin:-4px 0 10px">Ask anything about this project. The AI reads the plan (tasks, dates, critical path, costs, risks, issues, stakeholders) and the documents on the right, and can add risks and stakeholders or set up a Google Meet.</p>' +
         '<div class="pi-ask"><textarea id="piQ" rows="2" placeholder="e.g. Work out the critical and non-critical risks for this project">' + esc(S.piDraft || '') + '</textarea><button class="btn btn-gold" id="piGo"' + (S.piBusy ? ' disabled' : '') + '>' + (S.piBusy ? 'Thinking…' : 'Ask') + '</button></div>' +
         '<div class="pi-ex">' + PI_EX.map(function (x) { return '<button class="pi-chip" data-piex="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') + '</div>' +
@@ -5246,7 +5246,7 @@
   function piCrSend(e, kind, title, desc, impact, parts) {
     var imp = {}; AREA_N.forEach(function (x) { imp[x[0]] = impact[x[0]] || { level: 'None', text: '' }; });
     var items = Object.assign({ meeting: null, outcome: title, summary: [], decisions: [], actions: [], impact: imp, task_changes: [], new_tasks: [], scope_changes: [], risks: [], issues: [], stakeholders: [], quality: [], follow_ups: [] }, parts);
-    var c = crNew({ title: title, desc: desc, reason: 'Suggested by Project Intelligence in answer to: “' + String(e.q || '').slice(0, 300) + '”', source: 'intel', srcRef: piCrRef(e, kind), srcTitle: 'Project Intelligence answer', items: items, picks: {} });
+    var c = crNew({ title: title, desc: desc, reason: 'Suggested by Ask AI in answer to: “' + String(e.q || '').slice(0, 300) + '”', source: 'intel', srcRef: piCrRef(e, kind), srcTitle: 'Ask AI answer', items: items, picks: {} });
     if (ccOff()) { crCommitNow(c); return; }
     dirty(crNo(c) + ' raised'); S.crView = c.id; toast(crNo(c) + ' raised in change control: approve and sign it to add them to the register');
     location.hash = '#plan/' + S.core + '/change';
@@ -5309,14 +5309,14 @@
         var list = Array.prototype.map.call(box.querySelectorAll('[data-rk]:checked:not(:disabled)'), function (c) { return r.risks[+c.getAttribute('data-rk')]; });
         if (!list.length) return toast('Tick the risks to send', true);
         var crit = list.filter(function (x) { return x.critical; }).length;
-        piCrSend(e, 'r', 'Risks suggested by Project Intelligence: ' + pl(list.length, 'risk'), list.map(function (x) { return '- ' + x.title + (x.critical ? ' (critical path)' : '') + ': P' + x.p + ' × I' + x.i + ' = ' + x.p * x.i; }).join('\n'),
+        piCrSend(e, 'r', 'Risks suggested by Ask AI: ' + pl(list.length, 'risk'), list.map(function (x) { return '- ' + x.title + (x.critical ? ' (critical path)' : '') + ': P' + x.p + ' × I' + x.i + ' = ' + x.p * x.i; }).join('\n'),
           { risk: { level: crit ? 'High' : list.some(function (x) { return x.p * x.i >= 12; }) ? 'Medium' : 'Low', text: pl(list.length, 'new risk') + ' for the Risk register' + (crit ? ', ' + crit + ' on the critical path (they can delay the finish date)' : '') + '.' } },
           { risks: list.map(function (x) { return { title: x.title, cause: x.cause || '', p: x.p, i: x.i, response: x.response, action: x.action || '', owner: x.owner || '', critical: !!x.critical }; }) });
       };
       var as = box.querySelector('[data-addsk]'); if (as) as.onclick = function () {
         var list = Array.prototype.map.call(box.querySelectorAll('[data-sk]:checked:not(:disabled)'), function (c) { return r.stakeholders[+c.getAttribute('data-sk')]; });
         if (!list.length) return toast('Tick the stakeholders to send', true);
-        piCrSend(e, 'k', 'Stakeholders suggested by Project Intelligence: ' + pl(list.length, 'stakeholder'), list.map(function (x) { return '- ' + x.name + ', ' + x.role + ' (' + x.raci + ')'; }).join('\n'),
+        piCrSend(e, 'k', 'Stakeholders suggested by Ask AI: ' + pl(list.length, 'stakeholder'), list.map(function (x) { return '- ' + x.name + ', ' + x.role + ' (' + x.raci + ')'; }).join('\n'),
           { stakeholders: { level: list.some(function (x) { return x.raci === 'A'; }) ? 'Medium' : 'Low', text: pl(list.length, 'stakeholder') + ' to add to the Stakeholder register' + (list.some(function (x) { return x.raci === 'A'; }) ? ', including someone Accountable (check there is only one)' : '') + '.' } },
           { stakeholders: list.map(function (x) { return { name: x.name, role: x.role || '', raci: x.raci || 'I' }; }) });
       };
@@ -5329,7 +5329,7 @@
           var picks = impactPicks(rpb); if (!Object.keys(picks).length) return toast('Tick the changes to send', true);
           var a = JSON.parse(JSON.stringify(st.rp.a)), d = st.rp;
           var c = crNew({ title: a.outcome, desc: 'Finish ' + dmy(d.R0.finish) + ' → ' + dmy(d.R1.finish) + '; budget ' + money(d.R0.BAC) + ' → ' + money(d.R1.BAC) + '.' + (a.summary.length ? '\n' + a.summary.join('\n') : '') + '\nOnce approved and signed, the new schedule and budget become the baseline.',
-            reason: 'Suggested by Project Intelligence in answer to: “' + String(e.q || '').slice(0, 300) + '”', source: 'intel', srcRef: piCrRef(e, 'p'), srcTitle: 'Project Intelligence answer', items: a, picks: picks, priority: 'High',
+            reason: 'Suggested by Ask AI in answer to: “' + String(e.q || '').slice(0, 300) + '”', source: 'intel', srcRef: piCrRef(e, 'p'), srcTitle: 'Ask AI answer', items: a, picks: picks, priority: 'High',
             estDays: d.R1.finish && d.R0.finish ? (d.R1.finish > d.R0.finish ? workBetween(d.R0.finish, d.R1.finish) - 1 : -(workBetween(d.R1.finish, d.R0.finish) - 1)) : 0, estCost: Math.round((d.R1.BAC - d.R0.BAC) * 100) / 100 });
           if (ccOff()) { crCommitNow(c); return; }
           dirty(crNo(c) + ' raised'); S.crView = c.id; toast(crNo(c) + ' raised: approve and sign it to redraw the Gantt chart and re-baseline the budget');
@@ -5356,7 +5356,7 @@
       if (Date.now() - t0 > 180000) { done(); return toast('The AI took too long. Try again, or ask a shorter question.', true); }
       return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return api('planAiStatus', { id: id }); }).then(function (d) {
         if (d.status === 'done') { S.intel.log.push({ at: Date.now(), by: '', q: q, r: d.intel }); S.intel.log = S.intel.log.slice(-30);
-          if (d.intel && d.intel.impact && S.core === core) { var mm = (S.plan.meetings || []).filter(function (x) { return x.id === d.intel.impact.meeting.id; })[0]; if (mm) { mm.analysed = Date.now(); mm.applied = 0; if (S.comms && S.comms.core === core) S.comms.an[mm.id] = d.intel.impact; dirty('meeting analysed by Project Intelligence'); } }
+          if (d.intel && d.intel.impact && S.core === core) { var mm = (S.plan.meetings || []).filter(function (x) { return x.id === d.intel.impact.meeting.id; })[0]; if (mm) { mm.analysed = Date.now(); mm.applied = 0; if (S.comms && S.comms.core === core) S.comms.an[mm.id] = d.intel.impact; dirty('meeting analysed by Ask AI'); } }
           done(); return; }
         if (d.status === 'error') { done(); toast(d.error || 'The AI could not answer', true); return; }
         return poll();

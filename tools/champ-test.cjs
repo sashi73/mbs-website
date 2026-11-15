@@ -43,10 +43,16 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     }
     if (j.response_format && /You are Champ, the guide/.test(sys)) {   // 🎙 Ask Champ in the dashboard
       let u = {}; try { u = JSON.parse((j.messages.filter((m) => m.role === 'user').pop() || {}).content || '{}'); } catch (e) {} global.GUIDE_CTX = u;
+      if (/dependenc/i.test(u.question || '')) { const D = ((u.portfolio || {}).dependencies || []).filter((x) => !u.open_project_core || x.from_core === u.open_project_core || x.to_core === u.open_project_core);
+        const o3 = { tour: 'deps', how: false, answer: D.length ? D.map((x) => x.from + ' → ' + x.to + ' (' + x.type + ', ' + x.status + ')').join('; ') : 'No dependencies recorded.' };
+        s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o3) } }] })); }
+      if (/Project Intelligence|Schedule & Gantt/i.test(u.question || '')) { const m = /Project Intelligence \(project tab\) → ([^\n]+)/.exec(sys), g = /Schedule & Gantt \(project tab\) → ([^\n]+)/.exec(sys);
+        const o2 = { tour: '', how: false, answer: m && g ? 'Project Intelligence is now ' + m[1] + ', and Schedule & Gantt is now ' + g[1] + '.' : 'I do not know.' };
+        s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o2) } }] })); }
       const o = /late/i.test(u.question) ? { tour: 'critical', how: false, answer: 'To recover: crash the critical tasks (more crew or overtime, at extra cost) or fast-track them in parallel (more risk).' + (u.project ? ' Your plan finishes ' + u.project.finish + '.' : '') } : { tour: '', how: false, answer: 'A charter authorises the project.' };
       s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }] }));
     }
-    if (j.response_format && /Project Intelligence/.test(sys)) {
+    if (j.response_format && /project intelligence assistant/i.test(sys)) {
       global.INTEL_Q = JSON.parse(j.messages[1].content).question; global.INTEL_CTX = JSON.parse(j.messages[1].content);
       s2.setHeader('Content-Type', 'application/json');
       return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ answer: '## Re-plan\nStretch the work and add review gates.', replan: null,
@@ -972,6 +978,20 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       await p.fill('#cgQ', 'My project is running late, what can I do about it?'); await p.press('#cgQ', 'Enter'); await sleep(2500);
       const an = await p.evaluate(() => (document.getElementById('cgLog') || {}).textContent || ''), tourOn = await p.evaluate(() => !!document.querySelector('#cgLayer.on'));
       ok('Guide', '“my project is running late”: a PM answer (crashing, fast-tracking) using this project\'s facts, with a Show me button (no tour forced)', /crash/i.test(an) && /fast-track/i.test(an) && global.GUIDE_CTX && global.GUIDE_CTX.project && global.GUIDE_CTX.project.finish && /Show me/.test(an) && !tourOn, an.slice(-260)); await p.evaluate(() => { const pn = document.getElementById('cgPanel'); if (pn) pn.hidden = true; }); }
+    { await p.evaluate(() => { const pn = document.getElementById('cgPanel'); if (pn) pn.hidden = false; });
+      await p.fill('#cgQ', 'Where did Project Intelligence and Schedule & Gantt go?'); await p.press('#cgQ', 'Enter'); await sleep(2500);
+      const an2 = await p.evaluate(() => (document.getElementById('cgLog') || {}).textContent || '');
+      const kb = await import(require('path').join(process.cwd(), 'netlify/lib/champ-kb.mjs')); const sysW = kb.SYSTEM('English', 'console');
+      ok('Champ skill', 'Champ knows the console as it is now: asked about old names it answers “now Ask AI … now Gantt” (the skill is built from the code)', /now Ask AI/.test(an2) && /now Gantt/.test(an2) && /Project Intelligence \(project tab\) → Ask AI/.test(sysW) && /tabs are now: Overview, Gantt,/.test(sysW) && !/Planned, not yet available/.test(sysW), an2.slice(-200));
+    { const A = (await (await api('planNewProject', { name: 'Data centre fit-out', client: 'Acme', program: 'Digital health' })).json()).core, Bc = (await (await api('planNewProject', { name: 'Cloud cut-over', client: 'Acme', program: 'Cloud projects' })).json()).core;
+      await api('planDepSave', { from: A, to: Bc, type: 'FS', lag: 2, note: 'racks first' });
+      await p.goto(`${BASE}/admin/#plan/${Bc}/overview`); await sleep(1500); await p.evaluate(() => { const pn = document.getElementById('cgPanel'); if (!pn || pn.hidden) document.getElementById('cgBtn').click(); }); await sleep(600);
+      await p.fill('#cgQ', 'What are the dependencies for this project?'); await p.press('#cgQ', 'Enter'); await sleep(3000);
+      const an3 = await p.evaluate(() => (document.getElementById('cgLog') || {}).textContent || '');
+      ok('Champ skill', 'Champ answers from the left menu\'s data: “what are the dependencies for this project?” names the linked projects', /Data centre fit-out → Cloud cut-over \(FS/.test(an3) && /Show me/.test(an3), an3.slice(-200));
+      await p.evaluate(() => { const pn = document.getElementById('cgPanel'); if (pn) pn.hidden = true; });
+      await api('planProjectDelete', { core: A }); await api('planProjectDelete', { core: Bc }); }
+      await p.evaluate(() => { const pn = document.getElementById('cgPanel'); if (pn) pn.hidden = true; }); }
     ok('BOM', 'one BOM per project: Draft with AI and Templates are off until the BOM is deleted (no appending)', await p.goto(`${BASE}/admin/#plan/${cc}/bom`).then(() => p.waitForSelector('#bomOpen, #bomAi', { timeout: 8000 })).then(async () => { await p.click('#bomOpen').catch(() => {}); await p.fill('#boF [name=why]', 'Add a line').catch(() => {}); await p.click('#boF [type=submit]').catch(() => {}); await sleep(1200); return (await p.isDisabled('#bomAi').catch(() => false)) && (await p.isDisabled('#bomTpl').catch(() => false)); }).catch(() => false));
     await p.goto(`${BASE}/admin/#plan/${cc}/budget`); await p.waitForSelector('.bd-tiles', { timeout: 8000 }).catch(() => {});
     ok('Costing', 'reopened, the BOM is out of the costing until it is signed off again', /waiting for sign-off/.test(await p.textContent('.bd-bomst').catch(() => '')) && !(await p.$('[data-gobom]')));

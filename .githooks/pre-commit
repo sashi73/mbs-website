@@ -1,3 +1,5 @@
 #!/bin/sh
 # GKH Project Champ: give every commit the next build number and record it in BUILDS.md
 node "$(git rev-parse --show-toplevel)/tools/build-bump.mjs" || exit 1
+# the Champ skill: what Champ (the chatbots) knows about the console, regenerated from the code so renames reach it at once
+node "$(git rev-parse --show-toplevel)/tools/gen-champ-skill.mjs" || exit 1

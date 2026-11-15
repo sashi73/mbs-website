@@ -19,7 +19,7 @@ const out = (status, body) => new Response(JSON.stringify(body), { status, heade
 // ---------- modules and access levels ----------
 export const MODS = [
   ['crm', 'Jobs & customers', 'Dashboard, jobs, customers, new jobs and reminders'],
-  ['projects', 'Projects', 'Plans, Gantt chart, Board, scope, stakeholders, risks, comms, reports, SWMS, change control, Project Intelligence'],
+  ['projects', 'Projects', 'Plans, Gantt chart, Board, scope, stakeholders, risks, comms, reports, SWMS, change control, Ask AI'],
   ['accounts', 'Accounts', 'Quotes, invoices, expenses, accounting and BAS'],
   ['subbies', 'Sub-contractors', 'Subbies, their licences and insurance'],
   ['people', 'People', 'Employees and contractors, tickets, rates and workload'],
@@ -84,7 +84,7 @@ export function allows(ctx, action) {
   const name = (MODS.find((m) => m[0] === n.mod) || [])[1] || n.mod;
   return { ok: false, mod: n.mod, error: have ? `You have view-only access to ${name}. Ask an administrator for edit access.` : `You don't have access to ${name}. Ask an administrator.` };
 }
-// the AI background jobs: Project Intelligence questions need view, everything else (plans, costs, charter ...) edit
+// the AI background jobs: Ask AI questions need view, everything else (plans, costs, charter ...) edit
 export function allowsBg(ctx, mode) {
   if (!ctx) return false; if (ctx.owner) return true;
   const lv = LV[(ctx.mods || {}).projects] || 0;

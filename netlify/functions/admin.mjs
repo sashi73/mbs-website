@@ -362,7 +362,22 @@ async function handle(req, context) {
       case 'guideAsk': {   // 🎙 Ask Champ (dashboard): which on-screen guide answers the question, and a short answer in the console's language
         const q = clean(body.q, 300), tours = (Array.isArray(body.tours) ? body.tours : []).slice(0, 40).map((t) => ({ id: clean(t.id, 20), t: clean(t.t, 80) })).filter((t) => t.id);
         if (!q) return bad('Ask a question');
-        const { llmJson } = await import('../lib/ai.mjs');
+        const { llmJson } = await import('../lib/ai.mjs'), { SKILL } = await import('../lib/champ-skill.mjs');   // the Champ skill: the console as it is now
+        // the left menu's data, so "what are the dependencies for this project?", "which programs are late?", "who is on the team?" get real answers
+        let portfolio = null;
+        try {
+          const can = (m) => ctx.owner || ['view', 'edit'].includes((ctx.mods || {})[m]);
+          if (can('projects')) {
+            const rr = await planPost('planProgramList', { today: new Date(Date.now() + 11 * 3600000).toISOString().slice(0, 10) }, { who, by, audit: null }); const d = rr && typeof rr.json === 'function' ? await rr.json() : JSON.parse((rr && rr.body) || '{}');
+            const inScope = (c) => !ctx.scope || ctx.scope.includes(c), nm = {}; (d.cards || []).forEach((c) => { nm[c.core] = c.name; });
+            portfolio = {
+              programs: (d.programs || []).map((g) => ({ name: g.name, manager: g.manager || '', sponsor: g.sponsor || '', status: g.status || '', client: g.client || '' })).slice(0, 40),
+              projects: (d.cards || []).filter((c) => inScope(c.core)).slice(0, 80).map((c) => ({ core: c.core, ref: c.ref, name: c.name, program: c.program, client: c.client || '', health: c.health, phase: c.phase, pct: c.pct, start: c.start, finish: c.finish, finish_by: c.finishBy || '', forecast: c.forecast, SPI: c.SPI, CPI: c.CPI, budget: c.BAC, spent: c.AC, late_tasks: c.late, high_risks: c.highRisks })),
+              dependencies: (d.deps || []).filter((x) => inScope(x.from) || inScope(x.to)).slice(0, 120).map((x) => ({ from: nm[x.from] || x.from, from_core: x.from, to: nm[x.to] || x.to, to_core: x.to, type: x.type, lag_days: x.lag || 0, status: x.status || '', why: x.why || '', note: x.note || '', cross_program: !!x.cross })),
+            };
+          }
+          if (can('people')) { const L = await PPL.list(); portfolio = portfolio || {}; portfolio.people = (L.people || []).filter((x) => !x.archived).slice(0, 80).map((x) => ({ name: x.name, group: x.group, role: x.role, rate: x.costRate || 0, status: x.status, problems: (x.comp || {}).problems || [] })); }
+        } catch (e) { console.error('Ask Champ portfolio context: ' + e.message); }
         let project = null;   // asked from inside a project: its facts, so "my project is running late" gets an answer about this project
         const core = clean(body.core, 40);
         if (core && (!ctx.scope || ctx.scope.includes(core))) { try { const PL = await import('../lib/plan.mjs'); const pl = await getPlan(core);
@@ -371,12 +386,13 @@ async function handle(req, context) {
               open_risks: (pl.risks || []).filter((x) => x.status !== 'Closed').length, open_issues: (pl.issues || []).filter((x) => x.status !== 'Closed').length }; } } catch (e) { project = null; } }
         const r0 = await llmJson([{ role: 'system', content: 'You are Champ, the guide inside the GKH Project Champ project-management console. People ask how to do things in the console. ' +
           'If they ask HOW TO DO something in the console, pick the ONE guide from the list that shows them (its id), set how true, and say in 1-2 friendly sentences what you will show them. ' +
+          'If they ask about what is in the console (their programs, projects, the dependencies between projects, the portfolio summary, the pipeline, the team), answer from the portfolio data given (and the open project, "this project" = the project facts): name the projects, the links (from → to, type, lag, status) and the numbers; set how false; say where to see it (e.g. Portfolio > Dependency board). If something is not in the data, say it is not recorded yet. ' +
           'If they ask a project question (e.g. "my project is running late, what can I do?", over budget, too many risks, a stakeholder problem), set how false and answer it like a seasoned PMP: ' +
           'name the right techniques (late: crashing with more crew or overtime at extra cost, fast-tracking critical tasks in parallel with more risk, re-sequencing, cutting or deferring scope with the sponsor, a change request, re-baselining; ' +
           'over budget: EVM, CPI and EAC, value engineering, scope trade-offs, contingency), use the project facts given (finish vs finish_by, SPI, CPI, late tasks) when there are any, and you may add the guide id that helps act on it (e.g. critical). ' +
           'If no guide fits, tour is "" and you answer the question yourself: project management questions (PMBOK, PRINCE2, Agile, Scrum, risks, critical path, EVM, stakeholders, change control, budgets, charters, lessons learned ...) ' +
-          'get a clear, practical answer in up to 5 short sentences, like an experienced project manager would give. Warm, plain words, no markdown. Do not invent screens or buttons of the console. ' +
-          'JSON only: {"tour":"id or empty","how":true|false,"answer":"..."}' }, { role: 'user', content: JSON.stringify({ question: q, on_page: clean(body.page, 60), project, guides: tours }) }], { maxTokens: 900 }).catch(() => null), r = r0 && r0.data;
+          'get a clear, practical answer in up to 5 short sentences, like an experienced project manager would give. Warm, plain words, no markdown. Do not invent screens or buttons of the console: the console map below is the truth. If they use an old name (see RENAMED), tell them the new name and where it is. ' +
+          'JSON only: {"tour":"id or empty","how":true|false,"answer":"..."}' }, { role: 'user', content: JSON.stringify({ question: q, on_page: clean(body.page, 60), project, open_project_core: core || '', portfolio, guides: tours }) }].map((m, i) => (i === 0 ? { ...m, content: m.content + '\n\n' + SKILL } : m)), { maxTokens: 1200 }).catch(() => null), r = r0 && r0.data;
         const tour = r && tours.some((t) => t.id === r.tour) ? r.tour : '';
         return out(200, { tour, how: !!(r && r.how), answer: clean(r && r.answer, 1500) });
       }

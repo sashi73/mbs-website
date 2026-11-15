@@ -1,6 +1,8 @@
 // GKH Project Champ: what the "Champ" assistant knows. Product facts here must match what is actually built.
 // Used by netlify/functions/chat.mjs. Keep it factual: no prices, no promises of features that don't exist.
 
+import { SKILL_SHORT } from './champ-skill.mjs';   // the console as it is now (generated from the code on every commit)
+
 export const LANGS = {
   auto: 'the same language the user writes in',
   en: 'English', ms: 'Bahasa Melayu', id: 'Bahasa Indonesia', ta: 'Tamil (தமிழ்)', zh: 'Simplified Chinese (简体中文)',
@@ -16,11 +18,11 @@ export const PRODUCT = `
 - Portfolio > Summary: projects on track/watch/at risk, budget, earned, spent, SPI, CPI, late tasks, high risks, a "By program" table, health worst first. Portfolio > Pipeline board: columns for the PMBOK phases Initiation, Planning, Execution, Monitoring & Evaluation, Closing; phase set automatically from the plan, or drag a card (⇄ menu).
 - Two levels: Programs (the top level: manager, sponsor, objective, status) each hold their projects; every project belongs to one program. Portfolio > Programs shows each program's roll-up (health, % complete, budget, SPI, CPI, forecast finish). Portfolio > Dependency board: programs as swimlanes on one timeline, projects as bars, arrows for links between projects (finish to start, start to start, finish to finish, with lag); each link is checked against both plans: OK, At risk (a slipping predecessor) or Clash.
 - Projects > New project: describe it, then pick a project type template, start blank, or "Ask AI to build it" (tasks, durations, dependencies, costs, scope, risks). Optional finish-by date, weekend working.
-- Plan tabs: Overview (PMBOK set-up checklist, KPIs, earned value BAC/PV/EV/AC/SPI/CPI/EAC), Schedule & Gantt (WBS, milestones, dependencies, resources and costs, baseline, Excel export), Critical path (with float), Board (Kanban linked to the Gantt), Stakeholders (RACI), Scope and charter sign-off, Risks and Issues, Change control, Contracts, Comms plan, Reports (AI status reports as PDF or Word), Project Intelligence (questions about that project). Optional modules BOM (bill of materials) and SWMS (safe work method statements), switched on or off with ⚙ Modules. Delete a project from the board, list or plan.
+- Plan tabs: Overview (PMBOK set-up checklist, KPIs, earned value BAC/PV/EV/AC/SPI/CPI/EAC), Gantt (WBS, milestones, dependencies, resources and costs, baseline, Excel export), Critical path (with float), Board (Kanban linked to the Gantt), Stakeholders (RACI), Scope and charter sign-off, Risks and Issues, Change control, Contracts, Comms plan, Reports (AI status reports as PDF or Word), Project Intelligence (questions about that project). Optional modules BOM (bill of materials) and SWMS (safe work method statements), switched on or off with ⚙ Modules. Delete a project from the board, list or plan.
 - Reports > Ask AI: plain-English questions over all projects, programs and the portfolio, answered with a table, chart, summary and recommendations; save as PDF. Reports & data: templates, wizard, SQL.
 - Look: 🌐 language (19 languages, AI-translated), light/dark, 🎨 skins (Black & Gold, White, GKH Navy, Emerald, Slate & Copper), density and width.
 - AI outputs (costs, durations, reports) are indicative and must be reviewed by the project manager.
-- Planned, not yet available: uploading project documents for Project Intelligence (kept in Google Drive).
+- Inside each project, 🧠 Ask AI (it used to be called Project Intelligence) answers questions about that project from its plan and the documents you upload to it (Word, PDF, text), and can suggest risks, stakeholders and changes that go through change control.
 `;
 
 export const SYSTEM = (lang, where) => `You are Champ, the assistant for GKH Project Champ, an AI-powered project management product by Global Knowledge House (GKH).
@@ -35,4 +37,5 @@ How to talk:
 - End every reply with [[lang:xx]], the ISO 639-1 code of your reply's language (it is removed before the user sees it).
 ${where === 'console' ? '- The user is in the Project Champ console: say where to click, using the menu names.' : '- The user is on the website: to try it, point them to Book a demo (Contact page) or Login.'}
 Product facts:
-${PRODUCT}`;
+${PRODUCT}
+${SKILL_SHORT}`;

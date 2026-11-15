@@ -11,7 +11,7 @@
   var api = M.api, esc = M.esc, toast = M.toast, fail = M.fail, $ = M.$;
   var V = function () { return M.view(); };
   var S = { data: null, plans: [] };
-  var MODS = [['projects', 'Projects', 'Programs, projects, plans, Gantt, Board, costing, risks, change control, Project Intelligence'], ['people', 'People', 'The team register, credentials, calendar and workload (only the project manager adds people)'], ['crm', 'Enquiries & visitors', 'Enquiries and website visitors'],
+  var MODS = [['projects', 'Projects', 'Programs, projects, plans, Gantt, Board, costing, risks, change control, Ask AI'], ['people', 'People', 'The team register, credentials, calendar and workload (only the project manager adds people)'], ['crm', 'Enquiries & visitors', 'Enquiries and website visitors'],
     ['data', 'Ask AI & data', 'Ask AI, SQL wizard and reports, activity log'], ['users', 'Users & access', 'This page (only the super user can change it)']];
   var KIND = {
     'Project director': { ic: '🎯', cls: 'pm', about: 'Runs projects: every project and module; can look at People and Users & access. Only the project manager (super user) changes access.' },

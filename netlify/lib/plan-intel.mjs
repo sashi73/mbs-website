@@ -1,4 +1,4 @@
-// v52: 🧠 Project Intelligence. Ask anything about one project: the AI (DeepSeek) answers from the whole plan (tasks, dates,
+// v52: 🧠 Ask AI. Ask anything about one project: the AI (DeepSeek) answers from the whole plan (tasks, dates,
 // critical path, costs, risks, issues, stakeholders, meetings) and from documents uploaded to the project (contract,
 // specifications, quotes, letters). It can also suggest risks for the register, a stakeholder register, and set up a
 // team meeting (the console turns that into a Google Calendar invite with Google Meet, and an .ics file).
@@ -180,7 +180,7 @@ async function programContext(job, today, sc) {
     latest_finish: ends[ends.length - 1] || '', projects, dependencies: links };
 }
 
-const SYSTEM = 'You are "Project Intelligence" for GKH Project Champ, a project management platform used by project teams in construction, facilities, IT, ESG and business change. ' +
+const SYSTEM = 'You are "Ask AI", the project intelligence assistant of GKH Project Champ, a project management platform used by project teams in construction, facilities, IT, ESG and business change. ' +
   'You are an experienced construction project manager (PMBOK, PRINCE2) and you know NSW building contracts (Home Building Act 1989, HIA and Master Builders contracts, AS 4000/AS 4902), WHS and the NCC. ' +
   'Answer the question about THIS project using the project data and the document extracts given. Rules: ' +
   '0) The project belongs to a program (field "program": its key such as PG-002, name, and every project in it with dates, progress, SPI/CPI, budget, risks, and the dependencies between them). For questions about the program, the other projects, comparing projects or cross-project dependencies, answer from "program" and name projects by name and ref; never say the other projects are not provided when "program" lists them. ' +
@@ -293,7 +293,7 @@ export async function intelPost(action, body, { who, by, audit }) {
     }
     case 'intelUpload': {
       const r = await upload(core, body, by); if (r.error) return out(400, r);
-      if (audit) await audit(who, `Project ${core}: document uploaded for Project Intelligence: ${r.doc.name}`);
+      if (audit) await audit(who, `Project ${core}: document uploaded for Ask AI: ${r.doc.name}`);
       return out(200, r);
     }
     case 'intelCrRecord': {
@@ -308,7 +308,7 @@ export async function intelPost(action, body, { who, by, audit }) {
       if (!f) return out(404, { error: 'The PDF for that record was not found' });
       return out(200, { name: f.metadata.name || key + '.pdf', type: 'application/pdf', file: f.buf.toString('base64') });
     }
-    case 'intelDocDelete': { await remove(core, str(body.id, 20)); if (audit) await audit(who, `Project ${core}: document deleted from Project Intelligence`); return out(200, { ok: true }); }
+    case 'intelDocDelete': { await remove(core, str(body.id, 20)); if (audit) await audit(who, `Project ${core}: document deleted from Ask AI`); return out(200, { ok: true }); }
     case 'intelDocFile': {
       const id = str(body.id, 20), f = await kv.getFile(`pdocfile:${core}:${id}`);
       if (f) return out(200, { name: f.metadata.name || 'document', type: f.metadata.type || 'application/octet-stream', file: f.buf.toString('base64') });
