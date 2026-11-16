@@ -92,4 +92,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 81 | 1.0.81| 2026-11-16 18:18| GKH-Project-Champ| `24e2fb5` | Build 79: R2 storage for original files (KB, Ask AI, new-project documents, charters, contracts, transcripts), Excel reading; costing fix (n |
 | 82 | 1.0.82| 2026-11-16 18:18| GKH-Project-Champ| `f3c60bb` | Builds 81-82: Champ's project watch. Red/amber/green health rules, Champ's brief first in a project (background AI), coloured Ask Champ butt |
 | 83 | 1.0.83| 2026-11-16 18:27| GKH-Project-Champ| `8d5f816` | Champ: in a project, Champ's view is the hello (no second greeting) |
-| 84 | 1.0.84 | 2026-11-16 18:49 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 84 | 1.0.84| 2026-11-16 18:49| GKH-Project-Champ| `4b828d6` | Stakeholders: remove the Add a subbie picker |
+| 85 | 1.0.85 | 2026-11-16 20:00 | GKH-Project-Champ | _this commit_ | _see git log_ |

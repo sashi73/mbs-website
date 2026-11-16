@@ -36,7 +36,7 @@ export default async (req, context) => {
   if (!text) return json(400, { error: 'Nothing to read.' });
   const region = env('AZURE_SPEECH_REGION', 'australiaeast');
   const base = env('AZURE_SPEECH_BASE', `https://${region}.tts.speech.microsoft.com`);
-  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${v[0]}"><voice name="${v[1]}"><prosody rate="${xml(env('VOICE_RATE', '+5%'))}">${xml(text)}</prosody></voice></speak>`;
+  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${v[0]}"><voice name="${v[1]}"><prosody rate="${xml(body?.clear ? env('VOICE_RATE_CLEAR', '-2%') : env('VOICE_RATE', '+5%'))}" volume="${xml(body?.clear ? env('VOICE_VOLUME_CLEAR', 'loud') : 'default')}">${xml(text)}</prosody></voice></speak>`;
   try {
     const r = await fetch(`${base}/cognitiveservices/v1`, { method: 'POST', headers: { 'Ocp-Apim-Subscription-Key': key, 'Content-Type': 'application/ssml+xml', 'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3', 'User-Agent': 'GKH-Project-Champ' }, body: ssml });
     if (!r.ok) {

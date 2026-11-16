@@ -558,3 +558,10 @@ input.pp-auto,select.pp-auto,textarea.pp-auto{background:#FFFBEB!important;borde
 .wt-ch{font-size:11px;font-weight:800;margin-left:6px;border-radius:99px;padding:0 6px}.wt-ch.down{background:#FEE4E2;color:#B42318}.wt-ch.up{background:#DCFAE6;color:#067647}
 .wt-ok{margin-top:8px}.wt-ok summary{cursor:pointer;font-size:12.5px;font-weight:700;color:#067647}
 @media (max-width:800px){.wt-r{grid-template-columns:12px 1fr}.wt-why,.wt-k{grid-column:2;text-align:left}}
+/* 🔗 dependency arrows on the Gantt chart, and the AI's dependency review */
+#gRight{position:relative}
+svg.glinks{position:absolute;pointer-events:none;z-index:2;overflow:visible}
+svg.glinks path{fill:none;stroke:#5B6B8C;stroke-width:1.4;opacity:.8}svg.glinks marker path{fill:#5B6B8C;stroke:none}
+.dp-sum{background:#F6F3EA;border-radius:10px;padding:8px 12px;font-size:13px;margin:0 0 10px}
+.dp-fin{font-size:13px;margin:0 0 8px}.dp-good{color:#067647;font-weight:800}.dp-bad{color:#B42318;font-weight:800}
+.dp-tbl td,.dp-tbl th{font-size:12.5px;vertical-align:top}.dp-tbl td:nth-child(5){white-space:nowrap}

@@ -22,6 +22,11 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   // a fake DeepSeek: says back which language and page the assistant was told to use
   const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
     const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
+    if (/senior project scheduler \(PMBOK precedence/.test(sys)) {   // 🔗 the dependencies: 2 and 3 can run side by side, 4 needs both
+      const u = JSON.parse(j.messages[1].content); global.DEPS_USER = u;
+      const o = { links: [{ n: 1, after: [], why: 'Starts the project' }, { n: 2, after: [1], why: 'Needs the design' }, { n: 3, after: [1], why: 'Needs the design, not the build' }, { n: 4, after: [2, 3], why: 'Needs the build and the content' }, { n: 4, after: [4], why: 'loop' }], summary: 'Build and content can run in parallel after the design.' };
+      s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }], usage: { total_tokens: 700 } }));
+    }
     if (/project-monitoring agent/.test(sys)) {   // 🩺 Champ's brief on a project
       const u = JSON.parse(j.messages[1].content); global.WATCH_CALLS = (global.WATCH_CALLS || 0) + 1; global.WATCH_USER = u; global.WATCH_SYS = sys;
       const lt = (u.numbers.late_tasks[0] || {}).name || 'the late work';
@@ -116,7 +121,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     if (/speechtotext/.test(q.url) && global.STT_SLOW) return setTimeout(() => { try { s3.end('{}'); } catch (e) {} }, 9500);
     if (/speechtotext/.test(q.url)) { global.STT_DEF = (/name="definition"\r?\n\r?\n([^\r\n]+)/.exec(b) || [])[1] || ''; global.STT_KEY = q.headers['ocp-apim-subscription-key'];
       s3.setHeader('Content-Type', 'application/json'); return s3.end(JSON.stringify({ combinedPhrases: [{ text: 'எனது திட்டங்கள் எப்படி உள்ளன?' }], phrases: [{ locale: 'ta-IN', durationMilliseconds: 1800, text: 'எனது திட்டங்கள் எப்படி உள்ளன?' }] })); }
-    global.LAST_SSML = b; global.AZ_KEY = q.headers['ocp-apim-subscription-key']; s3.setHeader('Content-Type', 'audio/mpeg'); s3.end(Buffer.from('ID3fakeaudio')); }); }).listen(0);
+    global.LAST_SSML = b; global.ALL_SSML = (global.ALL_SSML || []).concat(b).slice(-40); global.AZ_KEY = q.headers['ocp-apim-subscription-key']; s3.setHeader('Content-Type', 'audio/mpeg'); s3.end(Buffer.from('ID3fakeaudio')); }); }).listen(0);
   // ☁️ a stand-in for Cloudflare R2 (S3 API): signed PUT/GET/HEAD/DELETE and list-type=2, with CORS for the browser
   global.R2S = new Map(); global.R2_UNSIGNED = 0;
   const r2srv = http.createServer((q, s4) => { const ch = []; q.on('data', (d) => ch.push(d)); q.on('end', () => {
@@ -635,6 +640,11 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       const c2 = await (await api('planWatchGet', { core: rc })).json();
       await p.click('[data-cgbr]'); await sleep(800); await p.waitForSelector('.cgp-brief.cgb-ai', { timeout: 30000 }).catch(() => {}); await sleep(500);
       ok('Champ watch', 'the brief is kept until the numbers change (no second AI call); ↻ Look again asks Champ afresh', c2.cached === true && global.WATCH_CALLS === 2, JSON.stringify([c2.cached, global.WATCH_CALLS]));
+      const ssml = (global.ALL_SSML || []).slice(-12).join(' '); await p.click('.cgp-x').catch(() => {}); const cleared = await p.$eval('#cgLog', (l) => l.children.length).catch(() => -1);
+      let ttsN2 = 0; const onT = (rq) => { if (/functions\/tts/.test(rq.url())) ttsN2++; }; p.on('request', onT);
+      await p.click('#cgBtn'); await p.waitForSelector('.cgp-brief.cgb-ai', { timeout: 15000 }).catch(() => {}); await sleep(1500); p.off('request', onT);
+      const again = await p.$$eval('#cgLog .cgp-brief', (x) => x.length).catch(() => 0);
+      ok('Champ watch', '🔊 Champ reads the whole brief out, loud and clear (headline, summary, "If this were my project, I would:" 1, 2, 3 with their summaries, Keep an eye on) once; closing Champ clears it; opening again shows the brief quietly', /Heads up: Watch red/.test(ssml) && /Work is behind and costing more than planned\./.test(ssml) && /If this were my project, I would:/.test(ssml) && /1\. Crash the critical path\. Add a second team to Design workshops\./.test(ssml) && /3\. Escalate the critical issue\. Take it to the steering committee this week\./.test(ssml) && /Keep an eye on: Contractor rates\./.test(ssml) && /volume="loud"/.test(ssml) && cleared === 0 && again === 1 && ttsN2 === 0, JSON.stringify([ssml.slice(0, 260), cleared, again, ttsN2]));
       await p.click('.cgp-x').catch(() => {});
       await p.goto(`${BASE}/admin/#plan/${gc}/overview`); await p.waitForSelector('#cgBtn.cg-green', { timeout: 10000 }).catch(() => {});
       const gb = await p.$eval('#cgBtn', (x) => x.className + '|' + x.textContent).catch(() => '');
@@ -664,6 +674,27 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       const cron = AL.cronOk(rq('not-the-key'), ['2026-11-16']) === false && AL.cronOk(rq(''), ['2026-11-16']) === false && AL.cronOk(rq(good), ['2026-11-16']) === true && AL.cronOk(rq(good), ['2026-11-17']) === false ? 403 : 0;
       ok('Champ watch', 'the Summary has the watch too; the morning run only works with the site\'s own signature', /Champ's watch/.test(sw) && /Watch red/.test(sw) && cron === 403, JSON.stringify([sw.slice(0, 120), cron]));
       await api('planProjectDelete', { core: rc }); await api('planProjectDelete', { core: gc });
+    }
+    // 🔗 the AI works out the dependencies; the PM reviews them (and the new finish), applies them, sees the arrows, can undo
+    {
+      const dc = (await (await api('planNewProject', { name: 'Deps check', client: 'Internal', program: 'Digital health' })).json()).core;
+      await api('planSave', { core: dc, plan: { name: 'Website', start: new Date().toISOString().slice(0, 10), phases: [{ id: 'ph1', name: 'Work' }], tasks: [
+        { id: 'a', phase: 'ph1', name: 'Design', dur: 5, pred: [], res: [], pct: 0, status: 'todo' }, { id: 'b', phase: 'ph1', name: 'Build', dur: 10, pred: ['a'], res: [], pct: 0, status: 'todo' },
+        { id: 'c', phase: 'ph1', name: 'Write content', dur: 8, pred: ['b'], res: [], pct: 0, status: 'todo' }, { id: 'd', phase: 'ph1', name: 'Launch', dur: 2, pred: ['c'], res: [], pct: 0, status: 'todo' }] } });
+      await p.goto(`${BASE}/admin/#plan/${dc}/schedule`); await p.reload(); await p.waitForSelector('#depAi', { timeout: 10000 }).catch(() => {});
+      await p.click('#depAi', { timeout: 8000 }).catch(async (e) => { await p.screenshot({ path: '/tmp/deps-fail.png' }); console.log('depAi: ' + e.message.split('\n').slice(0, 6).join(' | ')); }); await p.waitForSelector('#dpGo', { timeout: 30000 }).catch(() => {});
+      const fin = await p.textContent('#dpFin').catch(() => ''), rowsT = await p.$$eval('.dp-tbl tbody tr', (r) => r.map((x) => x.textContent));
+      await p.click('#dpGo').catch(() => {}); await sleep(2500);
+      const pl = (await (await api('planGet', { core: dc })).json()).plan, by = Object.fromEntries(pl.tasks.map((t) => [t.id, t.pred.join(',')]));
+      const und = !!(await p.$('#depUndo'));
+      if (!(await p.$('[data-links].on'))) await p.click('[data-links]', { timeout: 8000 }).catch((e) => console.log('links: ' + e.message.split('\n').slice(0, 6).join(' | '))); await sleep(800);
+      const arrows = await p.$$eval('#gRight svg.glinks path[d]', (x) => x.length).catch(() => 0);
+      ok('Gantt', '🔗 Work out dependencies: the AI\'s links are shown with the reasons and the new finish (sooner, work in parallel), applied only when the PM says so; no loops; arrows on the Gantt', /days sooner/.test(fin) && rowsT.length === 2 && rowsT.some((x) => /Write content/.test(x) && /Needs the design, not the build/.test(x)) && by.c === 'a' && by.d.split(',').sort().join() === 'b,c' && und && arrows >= 4 && (global.DEPS_USER.tasks || []).length === 4, JSON.stringify([fin, rowsT, by, und, arrows]));
+      await p.click('#depUndo').catch(() => {}); await sleep(2500);
+      const pl2 = (await (await api('planGet', { core: dc })).json()).plan;
+      ok('Gantt', '↶ Undo links puts the dependencies back as they were', pl2.tasks.find((t) => t.id === 'c').pred.join() === 'b' && pl2.tasks.find((t) => t.id === 'd').pred.join() === 'c', JSON.stringify(pl2.tasks.map((t) => t.pred)));
+      await p.click('[data-links]').catch(() => {});
+      await api('planProjectDelete', { core: dc });
     }
     // 🌳 WBS: the Gantt's rightmost button turns the plan into a Work Breakdown Structure (read only), saved as PNG or JPEG
     {

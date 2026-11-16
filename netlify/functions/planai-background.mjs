@@ -73,6 +73,12 @@ async function run(req) {
       if (!r.error) await A.audit(session.u, `AI wrote the project management plan for ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
       return ok();
     }
+    if (body.mode === 'deps') {   // 🔗 the AI works out the dependencies (After #) of the plan, for the project manager to review
+      const D = await import('../lib/deps.mjs'), r = await D.work({ core: String(body.core || '').slice(0, 40) }, `Admin (${session.u})`);
+      await kv.set('aiplan:' + id, { deps: r.error ? null : r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
+      if (!r.error) await A.audit(session.u, `AI worked out the dependencies of ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
+      return ok();
+    }
     if (body.mode === 'watchAll') {   // 🩺 "Run the watch now" (Programs or Summary)
       const W = await import('../lib/watch.mjs'), r = await W.sweep({ ai: true, lang: String(body.lang || 'en').slice(0, 5) });
       await kv.set('watch:run', { at: Date.now(), by: session.u, briefs: r.briefs, counts: r.counts, alerts: (r.alerts || []).length }).catch(() => {});

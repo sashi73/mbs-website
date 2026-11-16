@@ -101,14 +101,31 @@
   var SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
   function unlock() { if (V.el) return; try { V.el = new Audio(); V.el.setAttribute('playsinline', ''); V.el.src = SILENT; var pr = V.el.play(); if (pr && pr.catch) pr.catch(function () {}); } catch (e) { V.el = null; } }
   document.addEventListener('pointerdown', function (e) { if (e.target.closest && e.target.closest('#cgPanel, #cgBtn, #mNav, .cg-tip')) unlock(); }, true);
-  function speak(text) {
-    hush(); if (!V.on || !text) return; var n = V.n, el = $('#cgVoice');
-    fetch('/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: String(text).slice(0, 1500), lang: lang() }) })
-      .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(j.error || 'Champ’s voice is not available right now.'); }); return r.blob(); })
-      .then(function (bl) { if (n !== V.n) return; var a = V.el || new Audio(); a.src = URL.createObjectURL(bl); V.audio = a; if (el) el.classList.add('talk'); a.onended = function () { if (el) el.classList.remove('talk'); }; return a.play(); })
-      .catch(function (e) { if (el) el.classList.remove('talk'); if (window.console) console.warn('Champ voice:', e && e.message);
-        // the browser blocked sound until you tap something: say so once; anything else stays quiet (the words are on the screen)
-        if (n === V.n && !V.warned && e && (e.name === 'NotAllowedError' || /interact|NotAllowed|user gesture/i.test(e.message || ''))) { V.warned = true; tr(['Tap 🔊 so I can speak.']).then(function (x) { say('bot', '🔇 ' + x[0]); }); } });
+  // Champ reads in short parts, one after the other (the next part is fetched while one plays), so a long brief starts
+  // quickly, is never cut short and keeps a steady, clear voice. clear: a little slower and louder (the project brief).
+  function parts(text) {
+    var out = [], cur = ''; String(text).replace(/\s+/g, ' ').trim().replace(/([^0-9][.!?…])\s+/g, '$1\n').split('\n').forEach(function (sn) {
+      while (sn.length > 380) { var cut = sn.lastIndexOf(', ', 380); cut = cut > 120 ? cut + 1 : 380; if (cur) { out.push(cur); cur = ''; } out.push(sn.slice(0, cut).trim()); sn = sn.slice(cut).trim(); }
+      if ((cur + ' ' + sn).trim().length > 380) { if (cur) out.push(cur); cur = sn; } else cur = (cur + ' ' + sn).trim(); });
+    if (cur) out.push(cur); return out.slice(0, 30);
+  }
+  function speak(text, clear) {
+    hush(); if (!V.on || !text) return; var n = V.n, el = $('#cgVoice'), list = parts(text), got = [];
+    var get = function (i) { if (got[i]) return got[i]; return (got[i] = fetch('/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: list[i], lang: lang(), clear: !!clear }) })
+      .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(j.error || 'Champ’s voice is not available right now.'); }); return r.blob(); })); };
+    var done = function () { if (el) el.classList.remove('talk'); };
+    var play = function (i) {
+      if (n !== V.n || i >= list.length) return done();
+      return get(i).then(function (bl) {
+        if (n !== V.n) return; if (i + 1 < list.length) get(i + 1).catch(function () {});   // the next part, while this one plays
+        var a = V.el || new Audio(); a.volume = 1; a.src = URL.createObjectURL(bl); V.audio = a; if (el) el.classList.add('talk');
+        a.onended = function () { if (n === V.n) play(i + 1); else done(); };
+        var pr = a.play(); return pr && pr.catch ? pr.catch(function (e) { if (e && e.name === 'NotAllowedError') throw e; return play(i + 1); }) : pr;   // a part that will not play: go on to the next
+      });
+    };
+    var first = play(0); if (first && first.catch) first.catch(function (e) { done(); if (window.console) console.warn('Champ voice:', e && e.message);
+      // the browser blocked sound until you tap something: say so once; anything else stays quiet (the words are on the screen)
+      if (n === V.n && !V.warned && e && (e.name === 'NotAllowedError' || /interact|NotAllowed|user gesture/i.test(e.message || ''))) { V.warned = true; tr(['Tap 🔊 so I can speak.']).then(function (x) { say('bot', '🔇 ' + x[0]); }); } });
   }
   function voiceBtn() { var b = $('#cgVoice'); if (b) { b.textContent = V.on ? '🔊' : '🔇'; b.title = V.on ? 'Champ speaks: tap to mute' : 'Muted: tap so Champ speaks'; } }
 
@@ -254,6 +271,21 @@
     api('watchBoard', { lang: lang() }).then(function (d) { draw(d); }).catch(function () { host.innerHTML = ''; });
   };
   // the brief: a card in the conversation
+  // 🔊 Champ reads a project's brief out once; opening it again shows it quietly (🔊 Read it to me plays it again), until the brief changes
+  function saidOnce(r) {
+    var k = (W.core || planHash()) + '|' + r.rag + '|' + String((r.brief || {}).headline || '').slice(0, 80), S0 = {};
+    try { S0 = JSON.parse(sessionStorage.getItem('cgSaid') || '{}'); } catch (e) {}
+    if (S0[k]) return false; S0[k] = 1; try { sessionStorage.setItem('cgSaid', JSON.stringify(S0)); } catch (e) {} return true;
+  }
+  // 🔊 what Champ reads out: the headline, why, and what it would do (the titles, in order)
+  function briefTalk(r) {   // the headline, the summary, then "If this were my project, I would:" with each step (its title and short summary), then "Keep an eye on"
+    var b = r.brief || {}, end = function (x) { x = String(x || '').trim(); return x && !/[.!?]$/.test(x) ? x + '.' : x; };
+    var t = [end(b.headline), end(b.summary)], A = (b.actions || []).filter(function (a) { return a && a.title; });
+    if (A.length) { t.push(r.rag === 'green' ? 'Keep doing this:' : 'If this were my project, I would:'); A.forEach(function (a, i) { t.push((i + 1) + '. ' + end(a.title) + (a.detail ? ' ' + end(a.detail) : '')); }); }
+    var Wt = (b.watch || []).filter(Boolean); if (Wt.length) t.push('Keep an eye on: ' + Wt.map(function (x) { return String(x).replace(/[.!?]$/, ''); }).join('; ') + '.');
+    return t.filter(Boolean).join(' ');
+  }
+
   function briefCard(r, thinking) {
     var L = $('#cgLog'); if (!L) return; var b = r.brief || {}, d = document.createElement('div'); d.className = 'cgp-m cgp-bot cgp-brief cg-' + r.rag;
     d.innerHTML = '<div class="cgb-h"><b>' + esc(RAGTXT[r.rag] || '') + '</b><small>' + esc(r.name || '') + '</small></div>' +
@@ -262,14 +294,15 @@
       ((b.actions || []).length ? '<p class="cgb-t">' + (r.rag === 'green' ? 'Keep doing' : 'If this were my project, I would:') + '</p><ol class="cgb-a">' + b.actions.map(function (a) { return '<li><b>' + esc(a.title) + '</b>' + (a.detail ? '<br><span>' + esc(a.detail) + '</span>' : '') + '</li>'; }).join('') + '</ol>' : '') +
       ((b.watch || []).length ? '<p class="cgb-t">Keep an eye on</p><ul class="cgb-w">' + b.watch.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
       (b.note ? '<p class="cgb-n">📚 ' + esc(b.note) + '</p>' : '') +
-      '<div class="cgb-go"><button type="button" data-cgbt="critical">⚡ Critical path</button><button type="button" data-cgbt="risks">⚠ Risks</button><button type="button" data-cgbt="budget">💰 Costing</button><button type="button" data-cgbr title="Champ looks again now">↻ Look again</button></div>' +
+      '<div class="cgb-go"><button type="button" data-cgbt="critical">⚡ Critical path</button><button type="button" data-cgbt="risks">⚠ Risks</button><button type="button" data-cgbt="budget">💰 Costing</button><button type="button" data-cgread title="Champ reads this out">🔊 Read it to me</button><button type="button" data-cgbr title="Champ looks again now">↻ Look again</button></div>' +
       (thinking ? '<p class="cgb-think">💭 Champ is working out what it would do…</p>' : '') +
       '<small class="cgb-at">' + (b.ai ? 'Champ\'s view' : 'From the health rules') + ' · ' + esc(new Date(r.at || Date.now()).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })) + '</small>';
     L.appendChild(d); d.scrollIntoView({ block: 'start' });
     d.querySelectorAll('[data-cgbt]').forEach(function (x) { x.onclick = function () { location.hash = '#plan/' + W.core + '/' + x.getAttribute('data-cgbt'); }; });
     var rb = d.querySelector('[data-cgbr]'); if (rb) rb.onclick = function () { d.remove(); watchBrief(true); };
     if (thinking) return d; if (b.ai) d.classList.add('cgb-ai');
-    var talk = (b.headline || '') + ((b.actions || [])[0] && r.rag !== 'green' ? ' First, ' + b.actions[0].title.replace(/\.$/, '') + '.' : ''); lastBot = talk; speak(talk);
+    var talk = briefTalk(r); lastBot = talk; if (saidOnce(r)) speak(talk, true);
+    var rd = d.querySelector('[data-cgread]'); if (rd) rd.onclick = function () { V.on = true; try { localStorage.setItem('cgVoice', 'on'); } catch (e) {} voiceBtn(); speak(talk, true); };
     return d;
   }
   function watchBrief(refresh) {
@@ -285,7 +318,7 @@
       var n = 0; (function poll() { setTimeout(function () {
         api('planAiStatus', { id: id }).then(function (st) {
           if (st.status === 'done' && st.watch) { if (card && card.parentNode) card.remove(); W.rag = st.watch.rag; watchBtn(); briefCard(st.watch); return; }
-          if (st.status === 'error' || ++n > 45) { if (card) { var th = card.querySelector('.cgb-think'); if (th) th.remove(); } return; }
+          if (st.status === 'error' || ++n > 45) { if (card) { var th = card.querySelector('.cgb-think'); if (th) th.remove(); } lastBot = briefTalk(r); if (saidOnce(r)) speak(lastBot, true); return; }
           poll();
         }).catch(function () { if (++n <= 45) poll(); });
       }, n < 4 ? 1500 : 2500); })();
@@ -334,10 +367,11 @@
   // the hello: once a session (and again in a new language)
   var GREET = 'Hello, I’m Champ! 👋 Think of me as your co-pilot in Project Champ. Ask me how to do anything, like making a charter, a BOM or a new user, and I’ll show you exactly where to click, step by step. I can also answer your project management questions, like what to do when a project runs late. Tap 🎙 and just ask, or say “menu” to see everything I can show you.';
   function greet(again) {
-    var k = 'cgHello'; try { if (!again && sessionStorage.getItem(k) === lang()) return; sessionStorage.setItem(k, lang()); } catch (e) {}
+    var k = 'cgHello'; try { if (!again && sessionStorage.getItem(k) === lang()) { var L0 = $('#cgLog'); if (L0 && !L0.children.length) reply('Hi again! What can I help with?', true); return; } sessionStorage.setItem(k, lang()); } catch (e) {}
     var L = $('#cgLog'); if (L && again) L.innerHTML = ''; reply(GREET);
   }
-  function closePanel() { var p = $('#cgPanel'); if (p) p.hidden = true; }
+  // closing Champ clears the conversation: it opens clean next time (in a project, with its view of the project again)
+  function closePanel() { var p = $('#cgPanel'); if (!p) return; p.hidden = true; hush(); var L = $('#cgLog'); if (L) L.innerHTML = ''; var m = $('#cgMenu'); if (m) m.hidden = true; W.told = {}; lastBot = ''; }
   function say(who, text) { var L = $('#cgLog'); if (!L) return; var d = document.createElement('div'); d.className = 'cgp-m cgp-' + who; d.textContent = text; L.appendChild(d); L.scrollTop = L.scrollHeight; return d; }
   var lastBot = '';
   function reply(text, quiet) { var p = $('#cgPanel'); if (!p || p.hidden) { if (p) p.hidden = false; else openPanel(); } tr([text]).then(function (x) { say('bot', x[0]); lastBot = x[0]; if (!quiet) speak(x[0]); }); }

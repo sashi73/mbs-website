@@ -1477,6 +1477,59 @@
       '<div class="s">' + esc(s) + '</div></div>';
   }
   function mini(k, v, s, c) { return '<div class="card kpi rag-card rag-b-' + (c || 'grey') + '"><div class="k">' + esc(k) + ' <span class="dot dot-' + (c || 'grey') + '"></span></div><div class="v" style="font-size:20px">' + esc(v) + '</div><div class="s">' + esc(s) + '</div></div>'; }
+  // 🔗 dependency arrows on the Gantt chart: from the end of each "After #" task to the start of the task that waits for it
+  try { S.links = localStorage.getItem('champLinks') === '1'; } catch (e) {}
+  function drawLinks() {
+    var R = $('#gRight'); if (!R || !S.links) return; var old = R.querySelector('svg.glinks'); if (old) old.remove();
+    var tb = R.querySelector('table'); if (!tb) return; var box = tb.getBoundingClientRect(), pos = {};
+    R.querySelectorAll('tr[data-gtid]').forEach(function (tr) { var b = tr.querySelector('.gbar, .gmile'); if (!b) return; var r = b.getBoundingClientRect();
+      pos[tr.getAttribute('data-gtid')] = { l: r.left - box.left, r: r.right - box.left, y: r.top - box.top + r.height / 2 }; });
+    var path = '', ids = {}; S.plan.tasks.forEach(function (t) { ids[t.id] = t; });
+    S.plan.tasks.forEach(function (t) { var to = pos[t.id]; if (!to || (t.fixed && t.snet)) return; (t.pred || []).forEach(function (pid) { var fr = pos[pid]; if (!fr) return;
+      var x1 = fr.r + 2, y1 = fr.y, x2 = to.l - 2, y2 = to.y, mx = Math.max(x1 + 8, x2 - 8);
+      path += '<path d="M' + x1 + ' ' + y1 + ' H' + mx + ' V' + y2 + ' H' + x2 + '" marker-end="url(#gArr)"/>'; }); });
+    if (!path) return;
+    var svg = '<svg class="glinks" width="' + box.width + '" height="' + box.height + '" style="left:' + (tb.offsetLeft) + 'px;top:' + (tb.offsetTop) + 'px"><defs><marker id="gArr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z"/></marker></defs>' + path + '</svg>';
+    R.insertAdjacentHTML('beforeend', svg);
+  }
+  window.addEventListener('resize', function () { if (S.links && S.tab === 'schedule') drawLinks(); });
+  // 🔗 the AI works out the dependencies; the project manager sees every change, and the effect on the finish, before applying
+  function depsDialog() {
+    var core = S.core, p = S.plan, id = 'deps' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), n = 0;
+    M.modal('<h2>🔗 Work out the dependencies</h2><p class="muted" style="margin:-4px 0 10px">The AI reads every task and works out what must finish before each one can start (<b>After #</b>), letting independent work run in parallel. You see every change and what it does to the finish date before anything changes.</p><div id="dpBody"><p class="cr-wait">✨ Working out the dependencies…</p></div>');
+    fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' }, body: JSON.stringify({ id: id, mode: 'deps', core: core }) })
+      .then(function (r) { if (r.status === 401 || r.status === 403) throw new Error('Your session has ended, or you can view this project only.'); poll(); }).catch(function (e) { M.closeModal(); fail(e); });
+    function poll() { setTimeout(function () { api('planAiStatus', { id: id }).then(function (st) {
+      if (!$('#dpBody') || S.core !== core) return;
+      if (st.status === 'done' && st.deps) return show(st.deps);
+      if (st.status === 'error' || ++n > 80) { $('#dpBody').innerHTML = '<p class="cr-wait" style="color:#B42318">' + esc(st.error || 'The AI took too long. Try again.') + '</p>'; return; }
+      poll(); }).catch(function () { if (++n <= 80) poll(); }); }, n < 3 ? 1500 : 2500); }
+    function show(D) {
+      var num = {}; ordered().forEach(function (r) { num[r.t.id] = r.n; });
+      var nums = function (a) { return (a || []).map(function (x) { return num[x]; }).filter(Boolean).sort(function (a2, b2) { return a2 - b2; }); };
+      var same = function (a, b) { return nums(a).join() === nums(b).join(); };
+      var rows = D.links.filter(function (l) { return num[l.id]; }).sort(function (a, b) { return num[a.id] - num[b.id]; });
+      var ch = rows.filter(function (l) { return !same(l.now, l.after); });
+      var finishWith = function (pick) { var c = JSON.parse(JSON.stringify(p)); c.tasks.forEach(function (t) { var l = pick[t.id]; if (l) t.pred = l.slice(); }); schedule(c); return c.tasks.reduce(function (m, t) { return t.ef > m ? t.ef : m; }, ''); };
+      var cur = p.tasks.reduce(function (m, t) { return t.ef > m ? t.ef : m; }, '');
+      $('#dpBody').innerHTML = (D.summary ? '<p class="dp-sum">' + esc(D.summary) + '</p>' : '') +
+        (ch.length ? '<div class="dp-fin" id="dpFin"></div><div class="table-wrap" style="max-height:52vh"><table class="rt dp-tbl"><thead><tr><th><input type="checkbox" id="dpAll" checked title="All"></th><th>#</th><th>Task</th><th>After # now</th><th>Suggested</th><th>Why</th></tr></thead><tbody>' +
+          ch.map(function (l) { return '<tr><td><input type="checkbox" data-dp="' + esc(l.id) + '"' + (l.fixed ? '' : ' checked') + '></td><td>' + num[l.id] + '</td><td>' + esc(l.name) + (l.fixed ? ' <small class="muted">(start set by hand)</small>' : '') + '</td><td>' + (nums(l.now).join(', ') || '–') + '</td><td><b>' + (nums(l.after).join(', ') || 'start') + '</b></td><td><small>' + esc(l.why) + '</small></td></tr>'; }).join('') + '</tbody></table></div>'
+          : '<p class="dp-sum">✓ The links already make sense: nothing to change.</p>') +
+        '<div class="actions"><button class="btn" data-close type="button">Cancel</button>' + (ch.length ? '<button class="btn btn-gold" type="button" id="dpGo">🔗 Apply the selected links</button>' : '') + '</div>';
+      var by = {}; ch.forEach(function (l) { by[l.id] = l; });
+      var pick = function () { var o = {}; $('#dpBody').querySelectorAll('[data-dp]:checked').forEach(function (c) { o[c.getAttribute('data-dp')] = by[c.getAttribute('data-dp')].after; }); return o; };
+      var fin = function () { var el = $('#dpFin'); if (!el) return; var k = pick(), f = finishWith(k), d = f && cur ? Math.round((Date.parse(f) - Date.parse(cur)) / 864e5) : 0;
+        el.innerHTML = Object.keys(k).length + ' of ' + ch.length + ' links selected · finish <b>' + esc(dmy(cur)) + '</b> → <b>' + esc(dmy(f)) + '</b>' + (d < 0 ? ' <span class="dp-good">' + (-d) + ' days sooner (more work in parallel)</span>' : d > 0 ? ' <span class="dp-bad">' + d + ' days later (work that has to wait)</span>' : ' (no change)'); };
+      $('#dpBody').querySelectorAll('[data-dp]').forEach(function (c) { c.onchange = fin; });
+      var all = $('#dpAll'); if (all) all.onchange = function () { var on = this.checked; $('#dpBody').querySelectorAll('[data-dp]').forEach(function (c) { c.checked = on; }); fin(); };
+      fin();
+      var go = $('#dpGo'); if (go) go.onclick = function () { var k = pick(), ids = Object.keys(k); if (!ids.length) return toast('Tick the links to apply', true);
+        var u = { core: core, pred: {} }; p.tasks.forEach(function (t) { u.pred[t.id] = (t.pred || []).slice(); }); S.depUndo = u;
+        p.tasks.forEach(function (t) { if (k[t.id]) { t.pred = k[t.id].slice(); if (t.fixed && t.snet) { t.fixed = false; t.snet = ''; } } });
+        M.closeModal(); dirty('dependencies worked out (' + ids.length + ' links changed)'); render(); toast('🔗 ' + ids.length + ' link' + (ids.length === 1 ? '' : 's') + ' applied. ↶ Undo links puts them back.'); };
+    }
+  }
   function ordered() {   // tasks in order, with their row numbers (like Microsoft Project's ID column)
     return S.plan.tasks.map(function (t, i) { return { t: t, n: i + 1 }; });
   }
@@ -1823,7 +1876,7 @@
       if (t.dur === 0) return b + '<span class="gmile' + (t.pct >= 100 ? ' done' : '') + '" style="left:' + (left + dayW / 2 - 7) + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' · ' + stName[t.status]) + '"></span>' + lab;
       return b + '<span class="gbar st-' + t.status + ' pb-' + pband(t.pct) + (late ? ' late' : '') + '" style="left:' + left + 'px;width:' + w + 'px" title="' + esc(t.name + ' · ' + pretty(t.es) + ' – ' + pretty(t.ef) + ' · ' + stName[t.status] + ' ' + t.pct + '%') + '"><span class="gfill" style="width:' + t.pct + '%"></span></span>' + lab;
     };
-    var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px">' + (phone() ? '<button class="btn btn-sm" id="mpsList" type="button">📋 List</button>' : '') + '<button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button><button class="btn btn-sm est-ai" id="estAi" type="button" title="AI fills in indicative costs from Australian and international benchmarks: a reference only, to review and change">✨ Indicative costs</button>' +
+    var html = '<div class="card" style="padding:12px"><div class="row" style="margin-bottom:10px">' + (phone() ? '<button class="btn btn-sm" id="mpsList" type="button">📋 List</button>' : '') + '<button class="btn btn-sm btn-gold" id="addTask">＋ Task</button><button class="btn btn-sm" id="addMile">◆ Milestone</button><button class="btn btn-sm est-ai" id="estAi" type="button" title="AI fills in indicative costs from Australian and international benchmarks: a reference only, to review and change">✨ Indicative costs</button><button class="btn btn-sm" id="depAi" type="button" title="The AI works out which tasks must finish before each one starts (After #), with parallel work where it can. You review the links before anything changes.">🔗 Work out dependencies</button>' + (S.depUndo && S.depUndo.core === S.core ? '<button class="btn btn-sm" id="depUndo" type="button" title="Put the links back as they were before">↶ Undo links</button>' : '') +
       '<div class="qgate' + (p.emergency ? ' emerg' : p.gate && p.gate.accepted ? ' ok' : '') + '"><div class="qrow"><input type="checkbox" id="pEmerg" hidden>' +
         '<label class="qchk" title="' + (p.emergency ? 'Emergency jobs already work Saturday and Sunday' : 'Tick if the crew can work Saturday and Sunday on this job: the schedule then counts every day and finishes sooner') + '"><input type="checkbox" id="pWeek"' + (p.emergency || p.weekends ? ' checked' : '') + (p.emergency ? ' disabled' : '') + '> 📅 Weekends (Sat, Sun) allowed</label>' +
         '<select id="pCool" hidden><option value="0" selected>0</option></select></div><div>' + gateText(p) + '</div></div>' +
@@ -1835,7 +1888,7 @@
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The date the customer needs it finished. If the plan finishes later, ✨ Fit to finish-by asks the AI how to bring it in.">Finish by<input type="date" id="pFinishBy" value="' + esc(p.finishBy || '') + '" min="' + esc(p.workStart && p.workStart > p.start ? p.workStart : nextWork(p.start)) + '" style="width:auto"></label>' +
       '</div><div class="pviews">' +
       '<div class="tabs" style="margin:0" title="Which columns to show"><button class="tab' + (S.cols === 's' ? ' on' : '') + '" data-cols="s">📅 Dates</button><button class="tab' + (S.cols === 'c' ? ' on' : '') + '" data-cols="c">$ Costs</button><button class="tab' + (S.cols === 'a' ? ' on' : '') + '" data-cols="a">All columns</button></div>' +
-      '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button></div>' +
+      '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button><button class="tab' + (S.links ? ' on' : '') + '" data-links title="Show the dependency arrows between the bars">🔗 Links</button></div>' +
       '<div class="tabs pv-wbs" style="margin:0"><button class="tab" data-wbs title="See the plan as a Work Breakdown Structure (read only), and save it as a picture">🌳 WBS</button></div></div></div>' +
       '<div class="gsplit" id="gSplit"><div class="gpane gleft" id="gLeft"' + (S.split ? ' style="flex:0 0 ' + S.split + 'px;max-width:none"' : '') + '><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task <button type="button" class="gfz-chip" id="gFreezeBtn" title="Freeze columns (like Excel) and column widths">❄ ' + esc(gfzName()) + '</button></th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th title="Labour: people × hours (or days) each. Materials: quantity">People × Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th></tr></thead><tbody>';
     var G = '';   // rows of the Gantt pane (kept the same height as the grid rows)
@@ -1907,6 +1960,10 @@
     B.querySelectorAll('[data-cols]').forEach(function (b) { b.onclick = function () { S.cols = b.getAttribute('data-cols'); try { localStorage.setItem('mbsPlanCols', S.cols); } catch (e) {} render(); }; });
     B.querySelectorAll('[data-zoom]').forEach(function (b) { b.onclick = function () { S.zoom = b.getAttribute('data-zoom'); render(); }; });
     B.querySelectorAll('[data-wbs]').forEach(function (b) { b.onclick = function () { S.wbs = true; render(); }; });
+    B.querySelectorAll('[data-links]').forEach(function (b) { b.onclick = function () { S.links = !S.links; try { localStorage.setItem('champLinks', S.links ? '1' : ''); } catch (e) {} render(); }; });
+    if ($('#depAi')) $('#depAi').onclick = depsDialog;
+    if ($('#depUndo')) $('#depUndo').onclick = function () { var u = S.depUndo; if (!u || u.core !== S.core) return; S.plan.tasks.forEach(function (t) { if (u.pred[t.id]) t.pred = u.pred[t.id].slice(); }); S.depUndo = null; dirty('dependencies put back'); render(); toast('↶ The links are back as they were'); };
+    if (S.links) setTimeout(drawLinks, 60);
     $('#pStart').onchange = function () { if (this.value && p.finishBy && this.value > p.finishBy) { toast('The project can\'t start after your Finish by date (' + dmy(p.finishBy) + '). Move Finish by later first, or clear it.', true); render(); return; } if (this.value) { var f0 = rollup(p, today()).finish; p.start = this.value; dirty(); render(); afterDates(f0, 'the project start changed'); } };
     $('#pWork').onchange = function () { setWorkStart(this.value); };
     $('#pFinishBy').onchange = function () { var first = p.workStart && p.workStart > p.start ? p.workStart : p.start; if (this.value && this.value < first) { toast('Finish by can\'t be before the ' + (first === p.start ? 'project starts' : 'work starts') + ' (' + dmy(first) + ').', true); render(); return; } p.finishBy = this.value || ''; S.fitUndo = null; dirty('finish by ' + (p.finishBy || 'cleared')); render(); afterDates('', 'Finish by changed'); };
