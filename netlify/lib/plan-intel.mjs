@@ -43,21 +43,22 @@ async function crSave(job, body, who) {
 
 // ---------- documents ----------
 async function docList(core) { return ((await kv.get('pdocs:' + core)) || { docs: [] }).docs; }
-export async function upload(core, f, by) {
+export async function upload(core, f, by) {   // the text for Ask AI; the original file in R2 (r2Key, sent there by the browser) or, without R2, here up to 3.5 MB
   const job = await J.find(core); if (!job) return { error: 'Job not found' };
   const name = str(f.name, 160).replace(/[\\/]/g, '-') || 'document.txt', text = String(f.text || '').replace(/\u0000/g, '').slice(0, MAX_TEXT);
   if (!text.trim()) return { error: 'No text could be read from "' + name + '". If it is a scanned PDF (a picture of the pages), save it as a text PDF or Word file first.' };
   const docs = await docList(job.core);
   if (docs.length >= MAX_DOCS) return { error: `A project can hold ${MAX_DOCS} documents. Delete one first.` };
   const id = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-  let hasFile = false;
-  if (f.file) {
+  let hasFile = false, r2 = '';
+  if (f.r2Key) { const R2 = await import('./r2.mjs'); if (R2.ready() && R2.keyOk(String(f.r2Key), `projects/${job.core}/`)) { r2 = String(f.r2Key); hasFile = true; } }
+  if (!hasFile && f.file) {
     const buf = Buffer.from(String(f.file), 'base64');
     if (buf.length && buf.length <= MAX_FILE) { await kv.putFile(`pdocfile:${job.core}:${id}`, buf, { name, type: str(f.type, 100) }); hasFile = true; }
   }
   await kv.set(`pdoctext:${job.core}:${id}`, { text });
   const d = { id, name, type: str(f.type, 100), size: Math.max(0, Number(f.size) || 0), pages: Math.max(0, Math.round(Number(f.pages) || 0)), chars: text.length, words: text.split(/\s+/).filter(Boolean).length,
-    kind: str(f.kind, 40) || guessKind(name, text), at: Date.now(), by: str(by, 60), hasFile, contractId: str(f.contractId, 30) };
+    kind: str(f.kind, 40) || guessKind(name, text), at: Date.now(), by: str(by, 60), hasFile, r2: r2 || undefined, contractId: str(f.contractId, 30) };
   await kv.update('pdocs:' + job.core, (x) => { x.docs = (x.docs || []).concat([d]); return x; }, () => ({ docs: [] }));
   return { doc: d, truncated: String(f.text || '').length > MAX_TEXT };
 }
@@ -68,6 +69,7 @@ function guessKind(name, text) {
     : /certificate|compliance/.test(s) ? 'Certificate' : /minutes|meeting/.test(s) ? 'Meeting notes' : /email|from:|subject:/.test(s) ? 'Correspondence' : 'Document';
 }
 export async function remove(core, id) {
+  const d = (await docList(core)).find((x) => x.id === id); if (d && d.r2) { const R2 = await import('./r2.mjs'); await R2.del(d.r2); }
   await kv.update('pdocs:' + core, (x) => { x.docs = (x.docs || []).filter((d) => d.id !== id); return x; }, () => ({ docs: [] }));
   await Promise.all([kv.del(`pdoctext:${core}:${id}`), kv.del(`pdocfile:${core}:${id}`)].map((p) => p.catch(() => {})));
   return { ok: true };
@@ -313,6 +315,11 @@ export async function intelPost(action, body, { who, by, audit }) {
     case 'intelDocPutFile': {   // 📄 the original file of a document whose text came in first (a project started from a document)
       const id = str(body.id, 20), buf = Buffer.from(String(body.file || ''), 'base64');
       const d = (await docList(core)).find((x) => x.id === id); if (!d) return out(404, { error: 'Document not found' });
+      if (body.r2Key) {   // ☁️ already in R2: just note where
+        const R2 = await import('./r2.mjs'); if (!R2.ready() || !R2.keyOk(String(body.r2Key), `projects/${core}/`)) return out(400, { error: 'That file is not in this project\'s storage.' });
+        await kv.update('pdocs:' + core, (x) => { (x.docs || []).forEach((y) => { if (y.id === id) { y.hasFile = true; y.r2 = String(body.r2Key); y.size = Math.max(0, Number(body.size) || 0) || y.size; y.type = str(body.type, 100) || y.type; } }); return x; }, () => ({ docs: [] }));
+        return out(200, { ok: true });
+      }
       if (!buf.length || buf.length > MAX_FILE) return out(400, { error: 'The file is too big to keep (3.5 MB at most); its text is kept.' });
       await kv.putFile(`pdocfile:${core}:${id}`, buf, { name: d.name, type: str(body.type, 100) });
       await kv.update('pdocs:' + core, (x) => { (x.docs || []).forEach((y) => { if (y.id === id) { y.hasFile = true; y.size = buf.length; y.type = str(body.type, 100) || y.type; } }); return x; }, () => ({ docs: [] }));
@@ -320,7 +327,9 @@ export async function intelPost(action, body, { who, by, audit }) {
     }
     case 'intelDocDelete': { await remove(core, str(body.id, 20)); if (audit) await audit(who, `Project ${core}: document deleted from Ask AI`); return out(200, { ok: true }); }
     case 'intelDocFile': {
-      const id = str(body.id, 20), f = await kv.getFile(`pdocfile:${core}:${id}`);
+      const id = str(body.id, 20), dd = (await docList(core)).find((d) => d.id === id);
+      if (dd && dd.r2) { const R2 = await import('./r2.mjs'); const url = R2.presign('GET', dd.r2, { expires: 600, download: dd.name }); if (url) return out(200, { name: dd.name, url }); }   // ☁️ straight from R2
+      const f = await kv.getFile(`pdocfile:${core}:${id}`);
       if (f) return out(200, { name: f.metadata.name || 'document', type: f.metadata.type || 'application/octet-stream', file: f.buf.toString('base64') });
       const t = await kv.get(`pdoctext:${core}:${id}`); if (!t) return out(404, { error: 'Document not found' });
       return out(200, { name: ((await docList(core)).find((d) => d.id === id) || {}).name + '.txt', type: 'text/plain', file: Buffer.from(t.text).toString('base64') });

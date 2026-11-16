@@ -88,7 +88,7 @@
   function showApp(user) {
     $('#login').hidden = true;
     api('me').then(function (me) {
-      applyAccess(me); $('#app').hidden = false;
+      window.MBS.me = me; applyAccess(me); $('#app').hidden = false;
       if (me.mustChange && window.MBS.users) { view.innerHTML = '<div class="empty">Set your own password to carry on.</div>'; window.MBS.users.changePassword(true); return; }
       if (me.scope) { var h = location.hash.slice(1), pc = (h.match(/^plan\/([^/]+)/) || [])[1]; if (!(/^(portfolio|me)/.test(h) || (pc && me.scope.indexOf(pc) >= 0))) { location.hash = '#' + firstPage(); return; } }   // v91: their project only
       var vmod = VIEWMOD[(location.hash.slice(1) || 'programs').split('/')[0]];   // v108: null = any signed-in user (My leave)

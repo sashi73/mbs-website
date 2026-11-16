@@ -23,6 +23,7 @@ import { subPost } from '../lib/subbies.mjs';
 import { intelPost, upload as intelUpload } from '../lib/plan-intel.mjs';
 import * as DOCI from '../lib/docingest.mjs';
 import * as KB from '../lib/kb.mjs';
+import * as R2 from '../lib/r2.mjs';
 import { swmsPost } from '../lib/swms.mjs';
 import { commsPost } from '../lib/comms.mjs';
 import { reportPost } from '../lib/reports.mjs';
@@ -222,7 +223,7 @@ async function handle(req, context) {
     }
 
     switch (action) {
-      case 'me': return out(200, { build: { label: `${BUILD.version}.${BUILD.build}`, build: BUILD.build, commit: (BUILD.commit || '').slice(0, 7) }, test: PPL.isTest(), user: who, name: ctx.name, expires: session.exp, owner: ctx.owner, role: ctx.role, mods: ctx.mods, mustChange: !!ctx.mustChange, personId: ctx.personId || '', kind: ctx.kind || '', scope: ctx.scope || null, subId: ctx.subId || '', modules: U.MODS.map((m) => ({ key: m[0], name: m[1] })) });
+      case 'me': return out(200, { build: { label: `${BUILD.version}.${BUILD.build}`, build: BUILD.build, commit: (BUILD.commit || '').slice(0, 7) }, test: PPL.isTest(), user: who, name: ctx.name, expires: session.exp, owner: ctx.owner, r2: R2.ready(), role: ctx.role, mods: ctx.mods, mustChange: !!ctx.mustChange, personId: ctx.personId || '', kind: ctx.kind || '', scope: ctx.scope || null, subId: ctx.subId || '', modules: U.MODS.map((m) => ({ key: m[0], name: m[1] })) });
 
       // ---------- CRM ----------
       case 'dashboard': {
@@ -439,10 +440,38 @@ async function handle(req, context) {
         await A.audit(who, `${J.refFor(job)}: project created (${pname})`);
         return out(200, { core, ref: J.refFor(job), docId });
       }
+      // ---------- ☁️ R2: signed links so the browser sends files straight to Cloudflare R2 (the keys stay here) ----------
+      case 'kbR2Upload': case 'planR2Upload': {
+        if (!R2.ready()) return out(200, { r2: false });
+        const kb = action === 'kbR2Upload'; if (kb && !ctx.owner) return bad('Only the super user manages the knowledge base.', 403);
+        const core = clean(body.core, 40); if (!kb && !(await J.find(core))) return bad('Project not found', 404);
+        const size = Math.max(0, Number(body.size) || 0); if (size > R2.MAX_UPLOAD) return bad('That file is over 300 MB.');
+        const key = R2.newKey(kb ? 'kb' : 'project', core, clean(body.name, 160));
+        return out(200, { r2: true, key, url: R2.presign('PUT', key, { expires: 900 }) });
+      }
+      case 'kbR2Put': case 'planR2Put': {   // the same, through the server (small files), when the browser cannot reach R2 (no CORS rule yet)
+        if (!R2.ready()) return bad('R2 is not set up', 400);
+        const kb = action === 'kbR2Put'; if (kb && !ctx.owner) return bad('Only the super user manages the knowledge base.', 403);
+        const core = clean(body.core, 40), key = String(body.key || '');
+        if (!R2.keyOk(key, kb ? 'kb/' : `projects/${core}/`)) return bad('Not a storage key for this', 400);
+        const buf = Buffer.from(String(body.file || ''), 'base64'); if (!buf.length || buf.length > 4.5 * 1024 * 1024) return bad('Too big to send this way: add the CORS rule to the R2 bucket.');
+        await R2.put(key, buf, clean(body.type, 100)); return out(200, { ok: true, key });
+      }
+      case 'kbFile': {
+        if (!ctx.owner) return bad('Only the super user manages the knowledge base.', 403);
+        const d = (await KB.list()).find((x) => x.id === clean(body.id, 30)); if (!d || !d.r2) return bad('The original file is not kept for this one.', 404);
+        return out(200, { url: R2.presign('GET', d.r2, { expires: 600, download: d.name }), name: d.name });
+      }
+      case 'r2Status': {
+        if (!ctx.owner) return bad('Only the super user sees storage.', 403);
+        if (!R2.ready()) return out(200, { ready: false });
+        try { const [all, kbu] = await Promise.all([R2.usage(''), R2.usage('kb/')]); return out(200, { ready: true, bucket: R2.cfg().bucket, ...all, kb: kbu }); }
+        catch (e) { return out(200, { ready: true, error: e.message }); }
+      }
       case 'kbList': { if (!ctx.owner) return bad('Only the super user manages the knowledge base.', 403); return out(200, { docs: await KB.list(), credit: KB.DEFAULT_CREDIT }); }
       case 'kbAdd': {
         if (!ctx.owner) return bad('Only the super user manages the knowledge base.', 403);
-        const r = await KB.add({ name: body.name, title: body.title, credit: body.credit, pages: body.pages, text: body.text }, who); if (r.error) return bad(r.error);
+        const r = await KB.add({ name: body.name, title: body.title, credit: body.credit, pages: body.pages, text: body.text, r2Key: body.r2Key, size: body.size, type: body.type }, who); if (r.error) return bad(r.error);
         await A.audit(who, `Knowledge base: added "${r.doc.title}" (${r.doc.pages} pages/slides, ${r.doc.chunks} chunks)`);
         return out(200, r);
       }

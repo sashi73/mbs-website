@@ -607,8 +607,8 @@
     if (!can) { V().innerHTML = '<div class="card noaccess"><h2>🔒 View only</h2><p class="muted">Your login can look at projects but not start new ones.</p></div>'; return; }
     V().innerHTML = '<div class="card champ-new"><div class="card-h"><h2>＋ New project</h2><a class="btn btn-sm" href="#projects">← All projects</a></div>' +
       '<p class="muted">Give the project a name and a client. Next you pick a template (or a blank plan, or ✨ AI) and Project Champ builds the schedule, Gantt chart, Board, budget, risks and reports.</p>' +
-      '<div class="cn-doc" id="cnDoc"><div class="cn-dh"><span class="cn-ic">📄</span><div><b>Start from a document</b> <small class="muted">(optional)</small><p class="muted">Usually a <b>requirements document</b>, a <b>feasibility study</b> or <b>part of an RFP</b> (or a brief, business case or deck): Word, PowerPoint or PDF, 100+ pages is fine. The AI reads all of it (retrieval over vectors of every part, up to 80,000 tokens), fills in the project below and plans it from the document. No document? Just type the details.</p></div>' +
-        '<label class="btn btn-gold cn-pick">Choose a file<input type="file" id="cnFile" accept=".pdf,.docx,.pptx,.txt,.md" hidden></label></div><div id="cnDocOut"></div></div>' +
+      '<div class="cn-doc" id="cnDoc"><div class="cn-dh"><span class="cn-ic">📄</span><div><b>Start from a document</b> <small class="muted">(optional)</small><p class="muted">Usually a <b>requirements document</b>, a <b>feasibility study</b> or <b>part of an RFP</b> (or a brief, business case or deck): Word, PowerPoint, Excel or PDF, 100+ pages is fine. The AI reads all of it (retrieval over vectors of every part, up to 80,000 tokens), fills in the project below and plans it from the document. No document? Just type the details.</p></div>' +
+        '<label class="btn btn-gold cn-pick">Choose a file<input type="file" id="cnFile" accept=".pdf,.docx,.pptx,.xlsx,.txt,.md" hidden></label></div><div id="cnDocOut"></div></div>' +
       '<form id="champNew" class="champ-form">' +
       '<div class="champ-2"><label>Program <small class="muted">(every project belongs to one)</small><select name="progPick" required><option value="">Loading programs…</option></select></label>' +
       '<label class="champ-newprog" hidden>New program name<input name="program" maxlength="80" placeholder="e.g. Hospital redevelopment"></label></div>' +
@@ -697,9 +697,8 @@
         .then(function (r) {
           toast('Project ' + r.ref + ' created' + (r.docId ? ': the document is in its Ask AI' : ''));
           var go = function () { if (r.docId) { try { sessionStorage.setItem('champAutoPlan', r.core); } catch (e3) {} } location.hash = '#plan/' + r.core; };
-          if (!r.docId || !CN.file || CN.file.size > 3.5 * 1024 * 1024) return go();
-          return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).replace(/^data:[^,]*,/, '')); }; rd.readAsDataURL(CN.file); })
-            .then(function (b64) { return api('intelDocPutFile', { core: r.core, id: r.docId, file: b64, type: CN.file.type }); }).catch(function () {}).then(go);
+          if (!r.docId || !CN.file) return go();
+          return storeFile(CN.file, 'project', r.core).then(function (ff) { if (!ff.file && !ff.r2Key) return; return api('intelDocPutFile', { core: r.core, id: r.docId, file: ff.file || '', r2Key: ff.r2Key || '', size: CN.file.size, type: CN.file.type }); }).catch(function () {}).then(go);
         })
         .catch(function (err) { fail(err); b.disabled = false; b.textContent = 'Create project and plan it →'; });
     };
@@ -3656,10 +3655,10 @@
     BCATS.forEach(function (k) { byCat[k] = 0; });
     var spread = function (t, c) { if (!t.es || !t.ef) return; var d0 = Date.parse(t.es), d1 = Date.parse(t.ef), days = Math.max(1, Math.round((d1 - d0) / 864e5) + 1), per = c / days; for (var i = 0; i < days; i++) { var m = new Date(d0 + i * 864e5).toISOString().slice(0, 7); months[m] = (months[m] || 0) + per; } };
     var bomSum = 0, add = function (x, c, k, ph, bom) { byCat[k] += c; base += c; tasks.push({ n: x.n, t: x.t, c: c, cat: k, ph: ph, bom: !!bom }); spread(x.t, c); };
-    phaseGroups().forEach(function (g) { var sum = 0; g.rows.forEach(function (x) { var lab = Math.round((Number(x.t.qty) || 0) * (Number(x.t.rate) || 0) * 100) / 100, mat = Math.round((cost(x.t) - lab) * 100) / 100;
+    phaseGroups().forEach(function (g) { var sum = 0; g.rows.forEach(function (x) { var lab = Math.round(crewOf(x.t) * (Number(x.t.qty) || 0) * (Number(x.t.rate) || 0) * 100) / 100, mat = Math.round((cost(x.t) - lab) * 100) / 100;
         if (lab) { add(x, lab, catOf(p, x.t), g.name); sum += lab; } if (mat > 0.004) { add(x, mat, 'Materials', 'Bill of Materials', true); bomSum += mat; } });
       if (sum) byPh.push({ name: g.name, v: sum }); });
-    var msLab = 0; ordered().forEach(function (x) { if (x.t.dur !== 0) return; var lab = Math.round((Number(x.t.qty) || 0) * (Number(x.t.rate) || 0) * 100) / 100, mat = Math.round((cost(x.t) - lab) * 100) / 100;   // the 🧱 BOM milestone carries the materials
+    var msLab = 0; ordered().forEach(function (x) { if (x.t.dur !== 0) return; var lab = Math.round(crewOf(x.t) * (Number(x.t.qty) || 0) * (Number(x.t.rate) || 0) * 100) / 100, mat = Math.round((cost(x.t) - lab) * 100) / 100;   // the 🧱 BOM milestone carries the materials
       if (lab > 0.004) { add(x, lab, catOf(p, x.t), 'Milestones'); msLab += lab; } if (mat > 0.004) { add(x, mat, 'Materials', 'Bill of Materials', true); bomSum += mat; } });
     if (msLab) byPh.push({ name: 'Milestones', v: Math.round(msLab * 100) / 100 });
     if (p.bomLoose > 0) { add({ n: '', t: { name: 'BOM lines not linked to a task', id: '' } }, Number(p.bomLoose), 'Materials', 'Bill of Materials', true); bomSum += Number(p.bomLoose); }
@@ -3669,6 +3668,20 @@
       months: mk.map(function (m) { return { m: m, v: r2_(months[m]) }; }), approved: (p.charter || {}).budget || 0, bom: r2_(bomSum) };
   }
   var mon = function (m) { var loc = { en: 'en-AU', zh: 'zh-CN', tl: 'fil-PH', ms: 'ms-MY', km: 'km-KH' }[typeof DOCL === 'string' ? DOCL : 'en'] || DOCL; try { return new Date(m + '-01T00:00:00Z').toLocaleDateString(loc, { month: 'short', year: '2-digit', timeZone: 'UTC' }); } catch (e) { return m; } };
+  // ↶ Undo for costing changes only (quantities, rates, people, categories, cleared costs, the % settings): up to 20 steps, per project, this visit
+  function bdUndo() { if (!S.bdU || S.bdU.core !== S.core) S.bdU = { core: S.core, list: [] }; return S.bdU.list; }
+  function bdSnap(label) {
+    var p = S.plan, cfg = bCfg(p), keep = {}; ['cont', 'res', 'margin', 'gst'].forEach(function (k) { keep[k] = cfg[k]; });
+    var L = bdUndo(); L.push({ label: label, cfg: keep, cat: JSON.parse(JSON.stringify(cfg.cat || {})), tasks: p.tasks.map(function (t) { return { id: t.id, qty: t.qty, rate: t.rate, crew: t.crew, crewSet: t.crewSet, cost: t.cost }; }) });
+    if (L.length > 20) L.shift();
+  }
+  function bdUndoLast() {
+    var L = bdUndo(), u = L.pop(); if (!u) return; var p = S.plan, cfg = bCfg(p), byId = {};
+    p.tasks.forEach(function (t) { byId[t.id] = t; });
+    u.tasks.forEach(function (o) { var t = byId[o.id]; if (!t) return; ['qty', 'rate', 'crew', 'crewSet', 'cost'].forEach(function (k) { if (o[k] === undefined) delete t[k]; else t[k] = o[k]; }); });
+    Object.keys(u.cfg).forEach(function (k) { cfg[k] = u.cfg[k]; }); cfg.cat = u.cat;
+    dirty('undo: ' + u.label); budgetTab(); toast('↶ Undone: ' + u.label);
+  }
   function budgetTab() {
     DOCL = 'en';
     var p = S.plan, B = $('#planBody'), K = budgetCalc(p), b = K.cfg, ro = !!(M.me && M.me.scope && (M.me.mods || {}).projects !== 'edit');
@@ -3681,7 +3694,7 @@
     var tile = function (v, l, cls) { return '<div class="bd-t ' + (cls || '') + '"><b>' + v + '</b><small>' + l + '</small></div>'; };
     var diff = K.approved ? Math.round((K.approved - K.total) * 100) / 100 : 0;
     B.innerHTML = '<div class="card bd"><div class="card-h"><h2>💰 Costing</h2><span class="sp"></span>' +
-      '<button class="btn btn-sm" id="bdCsv" type="button">⬇ Costing (CSV)</button><button class="btn btn-sm btn-gold" id="bdSet" type="button"' + (ro ? ' disabled' : '') + '>✍ Approve the budget</button></div>' +
+      (ro ? '' : '<button class="btn btn-sm" id="bdUndo" type="button"' + (bdUndo().length ? ' title="Undo: ' + esc(bdUndo()[bdUndo().length - 1].label) + '"' : ' disabled title="Nothing to undo"') + '>↶ Undo' + (bdUndo().length ? ' (' + bdUndo().length + ')' : '') + '</button>') + '<button class="btn btn-sm" id="bdCsv" type="button">⬇ Costing (CSV)</button><button class="btn btn-sm btn-gold" id="bdSet" type="button"' + (ro ? ' disabled' : '') + '>✍ Approve the budget</button></div>' +
       '<p class="muted" style="margin:-4px 0 12px">Work out the costing from the plan: every task\'s cost (quantity × rate) and the signed-off Bill of Materials, by phase and by category, plus contingency for known risks and a management reserve for the unknown. Change a quantity, rate or category below and the totals follow.</p>' +
       '<div class="bd-tiles">' + tile(money(K.base), 'Base cost (BAC)', 'dark') + tile(money(K.cont), 'Contingency ' + b.cont + '%') + tile(money(K.res), 'Management reserve ' + b.res + '%') + tile(money(K.total), 'Total budget', 'gold') +
         tile(money(K.price), b.margin ? 'Client price (+' + b.margin + '% margin)' : 'Client price') + tile(money(K.inc), 'Including GST ' + b.gst + '%') + '</div>' +
@@ -3697,15 +3710,18 @@
       '<h3>Cost breakdown</h3><div class="table-wrap"><table class="rt bd-tbl"><thead><tr><th>#</th><th>Task</th><th>Phase</th><th>Category</th><th class="num">People × Qty</th><th>Unit</th><th class="num">Rate</th><th class="num">Cost</th></tr></thead><tbody>' +
       K.tasks.map(function (x) { if (x.bom) return '<tr class="bd-bom" data-gobom title="Open the BOM to change it, then sign it off again to put it back in the costing"><td>' + x.n + '</td><td>🧱 ' + esc(String(x.t.name).replace(/^[🧱\s]+/, '')) + '</td><td><small>Bill of Materials</small></td><td>Materials</td><td class="num" colspan="3"><small class="muted">from the signed-off BOM · <u>edit in the BOM</u></small></td><td class="num"><b>' + money(x.c) + '</b></td></tr>';
         return '<tr><td>' + x.n + '</td><td>' + esc(x.t.name) + '</td><td><small>' + esc(x.ph) + '</small></td><td><select data-bcat="' + esc(x.t.id) + '"' + (ro ? ' disabled' : '') + '>' + BCATS.map(function (k) { return '<option' + (k === x.cat ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></td>' +
-        '<td class="num nowrap">' + (isLab(x.t) ? '<small class="muted" title="People (set on the Gantt: Resources, or People × Qty)">' + crewOf(x.t) + ' ×</small> ' : '') + '<input type="number" step="any" min="0" data-bq="' + esc(x.t.id) + '" value="' + (x.t.qty || 0) + '"' + (ro ? ' disabled' : '') + '></td><td>' + esc(x.t.unit || '') + '</td><td class="num"><input type="number" step="any" min="0" data-br="' + esc(x.t.id) + '" value="' + (x.t.rate || 0) + '"' + (ro ? ' disabled' : '') + '></td><td class="num"><b>' + money(x.c) + '</b></td></tr>'; }).join('') +
+        '<td class="num nowrap">' + (isLab(x.t) ? '<input type="number" class="bd-ppl" min="1" max="500" step="1" data-bp="' + esc(x.t.id) + '" value="' + crewOf(x.t) + '" title="People (also set on the Gantt: Resources, or People × Qty)"' + (ro ? ' disabled' : '') + '><small class="muted"> ×</small> ' : '') + '<input type="number" step="any" min="0" data-bq="' + esc(x.t.id) + '" value="' + (x.t.qty || 0) + '"' + (ro ? ' disabled' : '') + '></td><td>' + esc(x.t.unit || '') + '</td><td class="num"><input type="number" step="any" min="0" data-br="' + esc(x.t.id) + '" value="' + (x.t.rate || 0) + '"' + (ro ? ' disabled' : '') + '></td><td class="num"><b>' + money(x.c) + '</b>' + (ro ? '' : ' <button class="bd-x" type="button" data-bz="' + esc(x.t.id) + '" title="Clear this cost (quantity and rate to 0). The task stays on the Gantt; ↶ Undo brings the cost back.">✕</button>') + '</td></tr>'; }).join('') +
       '</tbody><tfoot><tr><td colspan="7">Base cost (BAC)</td><td class="num"><b>' + money(K.base) + '</b></td></tr><tr><td colspan="7">Contingency (' + b.cont + '%)</td><td class="num">' + money(K.cont) + '</td></tr><tr><td colspan="7">Management reserve (' + b.res + '%)</td><td class="num">' + money(K.res) + '</td></tr><tr class="bd-tot"><td colspan="7">Total budget</td><td class="num"><b>' + money(K.total) + '</b></td></tr></tfoot></table></div>' +
       (K.tasks.length ? '' : '<div class="empty">No task has a cost yet. Give tasks a quantity and a rate on the Schedule tab (Costs view), or here once they have one.</div>') + '</div>';
     B.querySelectorAll('[data-gobom]').forEach(function (r) { r.onclick = function () { location.hash = '#plan/' + S.core + '/bom'; if (bomLocked()) setTimeout(function () { toast('The BOM is signed off: 🔓 Reopen it to edit, then ✍ sign it off again to put it back in the costing'); }, 300); }; });
     if (miss.length && !S.bdTr) { S.bdTr = true; window.ChampI18n.strings(miss, cl).then(function () { S.bdTr = false; if (S.tab === 'budget' && $('.bd-tiles')) budgetTab(); }, function () { S.bdTr = false; }); }
     var byId = {}; p.tasks.forEach(function (t) { byId[t.id] = t; });
-    B.querySelectorAll('[data-bcfg]').forEach(function (i) { i.onchange = function () { var v = Math.max(0, Math.min(100, +this.value || 0)); bCfg(p)[this.getAttribute('data-bcfg')] = v; dirty('budget ' + this.getAttribute('data-bcfg') + ' ' + v + '%'); setTimeout(budgetTab, 0); }; });
-    B.querySelectorAll('[data-bcat]').forEach(function (s0) { s0.onchange = function () { bCfg(p).cat[this.getAttribute('data-bcat')] = this.value; dirty('budget category'); setTimeout(budgetTab, 0); }; });
-    B.querySelectorAll('[data-bq],[data-br]').forEach(function (i) { i.onchange = function () { var t = byId[this.getAttribute('data-bq') || this.getAttribute('data-br')]; if (!t) return; if (this.hasAttribute('data-bq')) t.qty = Math.max(0, +this.value || 0); else t.rate = Math.max(0, +this.value || 0); derive && derive(t); dirty('budget: ' + t.name); setTimeout(render, 0); }; });
+    B.querySelectorAll('[data-bcfg]').forEach(function (i) { i.onchange = function () { bdSnap(this.getAttribute('data-bcfg') === 'cont' ? 'contingency %' : this.getAttribute('data-bcfg') === 'res' ? 'management reserve %' : this.getAttribute('data-bcfg') + ' %'); var v = Math.max(0, Math.min(100, +this.value || 0)); bCfg(p)[this.getAttribute('data-bcfg')] = v; dirty('budget ' + this.getAttribute('data-bcfg') + ' ' + v + '%'); setTimeout(budgetTab, 0); }; });
+    B.querySelectorAll('[data-bcat]').forEach(function (s0) { s0.onchange = function () { bdSnap('category of “' + ((byId[this.getAttribute('data-bcat')] || {}).name || '') + '”'); bCfg(p).cat[this.getAttribute('data-bcat')] = this.value; dirty('budget category'); setTimeout(budgetTab, 0); }; });
+    B.querySelectorAll('[data-bq],[data-br]').forEach(function (i) { i.onchange = function () { var t = byId[this.getAttribute('data-bq') || this.getAttribute('data-br')]; if (!t) return; bdSnap((this.hasAttribute('data-bq') ? 'quantity' : 'rate') + ' of “' + t.name + '”'); if (this.hasAttribute('data-bq')) t.qty = Math.max(0, +this.value || 0); else t.rate = Math.max(0, +this.value || 0); derive && derive(t); dirty('budget: ' + t.name); setTimeout(render, 0); }; });
+    B.querySelectorAll('[data-bp]').forEach(function (i) { i.onchange = function () { var t = byId[this.getAttribute('data-bp')]; if (!t) return; bdSnap('people on “' + t.name + '”'); t.crew = Math.max(1, Math.min(500, Math.round(+this.value || 1))); t.crewSet = true; dirty('people on ' + t.name + ': ' + t.crew); setTimeout(budgetTab, 0); }; });
+    B.querySelectorAll('[data-bz]').forEach(function (b0) { b0.onclick = function () { var t = byId[b0.getAttribute('data-bz')]; if (!t) return; bdSnap('cleared the cost of “' + t.name + '”'); t.qty = 0; t.rate = 0; dirty('cost cleared: ' + t.name + ' (the task stays on the Gantt)'); budgetTab(); toast('Cost cleared for “' + t.name + '”. The task stays on the Gantt. ↶ Undo brings it back.'); }; });
+    if ($('#bdUndo')) $('#bdUndo').onclick = bdUndoLast;
     $('#bdSet').onclick = function () { var c = p.charter = p.charter || {}, old = c.budget || 0;
       M.modal('<h2>✍ Approve the budget</h2><p class="muted" style="margin:-4px 0 10px">The approved budget becomes <b>' + money(K.total) + '</b> (base ' + money(K.base) + ' + contingency ' + money(K.cont) + ' + reserve ' + money(K.res) + ')' + (old ? ', replacing ' + money(old) : '') + '. It is the budget in the charter and the project plan, and the cost baseline progress is measured against.</p>' +
         '<form class="form" id="bdF"><label>Name<input name="by" required maxlength="80" value="' + esc((p.charter || {}).manager || bomMe()) + '"></label><label>Role<select name="role">' + CR_ROLES.map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></label>' +
@@ -4018,8 +4034,8 @@
     $('#chV').onchange = keep; $('#chS').onchange = keep;
     $('#chUp').onchange = function () { var f = this.files[0]; this.value = ''; if (!f) return; msg('Reading “' + f.name + '”…'); var core = S.core;
       piExtract(f).then(function (x) {
-        var send = function (b64) { return api('intelUpload', { core: core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text || ('Signed project charter ' + f.name), file: b64, kind: 'Project charter (signed)' }); };
-        return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).replace(/^data:[^,]*,/, '')); }; rd.readAsDataURL(f); }).then(send);
+        var send = function (ff) { return api('intelUpload', { core: core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text || ('Signed project charter ' + f.name), file: ff.file || '', r2Key: ff.r2Key || '', kind: 'Project charter (signed)' }); };
+        return storeFile(f, 'project', core).then(send);
       }).then(function (r) { if (S.intel && S.intel.core === core) S.intel.docs.push(r.doc); if (c.docStatus !== 'Approved') { c.docStatus = 'Approved'; $('#chS').value = 'Approved'; dirty('charter signed'); } label(); msg(''); toast('Signed charter kept with the project (status: Approved)'); })
         .catch(function (e) { msg(''); toast(e.message, true); }); };
   }
@@ -4223,9 +4239,7 @@
     $('#planBody').querySelectorAll('tr[data-ctid]').forEach(function (tr) {
       var c = p.contracts.filter(function (x) { return x.id === tr.getAttribute('data-ctid'); })[0], id = (c.docs || [])[0];
       var q = function (s) { return tr.querySelector(s); };
-      if (q('[data-ctdl]')) q('[data-ctdl]').onclick = function () { api('intelDocFile', { core: S.core, id: id }).then(function (r) {
-        var bin = atob(r.file), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-        var url = URL.createObjectURL(new Blob([u8], { type: r.type })), a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 5000); }).catch(fail); };
+      if (q('[data-ctdl]')) q('[data-ctdl]').onclick = function () { docDownload(S.core, id); };
       if (q('[data-ctask]')) q('[data-ctask]').onclick = function () { S.piDraft = 'Summarise the ' + (c.type === 'Customer' ? 'customer contract' : c.type.toLowerCase() + ' contract with ' + c.party) + ': price, payment stages, key dates, variations, defects period and anything we must watch.'; location.hash = '#plan/' + S.core + '/intel'; };
       q('[data-ctdel]').onclick = function () { M.confirmBox('Delete this contract?', 'The ' + c.type.toLowerCase() + ' contract with ' + c.party + ' and its document are removed from this job.', 'Delete').then(function (y) {
         if (!y) return; (id ? api('intelDocDelete', { core: S.core, id: id }) : Promise.resolve()).then(function () {
@@ -4242,9 +4256,8 @@
     var id = 'c' + Date.now().toString(36);
     piExtract(f).then(function (x) {
       if (!x.text || x.text.replace(/\[page \d+\]/g, '').trim().length < 20) throw new Error('No text found in “' + f.name + '”. If it is a scanned PDF, save it as a text PDF or Word file first.');
-      var send = function (b64) { return api('intelUpload', { core: S.core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text, file: b64, kind: 'Contract', contractId: id }); };
-      if (f.size > 3.5 * 1024 * 1024) return send('');
-      return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).replace(/^data:[^,]*,/, '')); }; rd.readAsDataURL(f); }).then(send);
+      var send = function (ff) { return api('intelUpload', { core: S.core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text, file: ff.file || '', r2Key: ff.r2Key || '', kind: 'Contract', contractId: id }); };
+      return storeFile(f, 'project', S.core).then(send);
     }).then(function (r) {
       S.intel.docs.push(r.doc);
       p.contracts.push({ id: id, type: ty, party: party, partyRef: ref, docs: [r.doc.id], at: Date.now() });
@@ -4395,9 +4408,7 @@
         });
       };
       var tx = q('[data-mtx]'); if (tx) tx.onchange = function () { var f = this.files[0]; this.value = ''; if (f) cmTranscript(m, f); };
-      var tdl = q('[data-mtdl]'); if (tdl) tdl.onclick = function () { api('intelDocFile', { core: S.core, id: m.doc }).then(function (r) {
-        var bin = atob(r.file), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-        var url = URL.createObjectURL(new Blob([u8], { type: r.type })), a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 5000); }).catch(fail); };
+      var tdl = q('[data-mtdl]'); if (tdl) tdl.onclick = function () { docDownload(S.core, m.doc); };
       var an = q('[data-man]'); if (an) an.onclick = function () { cmAnalyse(m); };
       var vw = q('[data-mview]'); if (vw) vw.onclick = function () { C.view = C.view === m.id ? '' : m.id; commsTab(); if (C.view) setTimeout(function () { var v = $('#cmView'); if (v) v.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); };
     });
@@ -4433,9 +4444,8 @@
     var core = S.core; toast('Reading “' + f.name + '”…');
     piExtract(f).then(function (x) {
       if (!x.text || x.text.replace(/\[page \d+\]/g, '').trim().length < 40) throw new Error('No text found in “' + f.name + '”. If it is a scanned PDF, save it as a text PDF or Word file first.');
-      var send = function (b64) { return api('intelUpload', { core: core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text, file: b64, kind: 'Meeting transcript' }); };
-      if (f.size > 3.5 * 1024 * 1024) return send('');
-      return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).replace(/^data:[^,]*,/, '')); }; rd.readAsDataURL(f); }).then(send);
+      var send = function (ff) { return api('intelUpload', { core: core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text, file: ff.file || '', r2Key: ff.r2Key || '', kind: 'Meeting transcript' }); };
+      return storeFile(f, 'project', core).then(send);
     }).then(function (r) {
       if (S.core !== core) return;
       if (S.intel && S.intel.core === core) S.intel.docs.push(r.doc); else S.intel = null;
@@ -4608,7 +4618,7 @@
     // the budget: spread the difference over the unfinished work
     var B1 = rp.budget > 0 ? rp.budget : 0, cur = best.R.BAC, gap = B1 ? Math.round((B1 - cur) * 100) / 100 : 0;
     if (gap) {
-      var pool = base.tasks.filter(function (t) { return (t.pct || 0) < 100; }), lab = function (t) { return Math.max(0, (Number(t.qty) || 0) * (Number(t.rate) || 0)); };
+      var pool = base.tasks.filter(function (t) { return (t.pct || 0) < 100; }), lab = function (t) { return Math.max(0, crewOf(t) * (Number(t.qty) || 0) * (Number(t.rate) || 0)); };
       var w = pool.map(function (t) { return lab(t) || (gap > 0 ? Math.max(1, t.dur) * 0.0001 : 0); }), W = w.reduce(function (x, y) { return x + y; }, 0);
       if (W > 0) {
         var left = gap, byChange = {}; a.task_changes.forEach(function (c) { byChange[c.id] = c; });
@@ -5765,7 +5775,7 @@
         '<div class="pi-ex">' + PI_EX.map(function (x) { return '<button class="pi-chip" data-piex="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') + '</div>' +
         '<div id="piLog">' + (S.piBusy ? '<div class="pi-a"><div class="pi-q">“' + esc(S.piBusy) + '”</div><p class="ask-think">Reading the plan' + (I.docs.length ? ' and ' + pl(I.docs.length, 'document') : '') + '… (this can take up to a minute)</p></div>' : '') +
           I.log.slice().reverse().map(function (e, k) { return piAnswer(e, I.log.length - 1 - k); }).join('') + (!I.log.length && !S.piBusy ? '<div class="empty">No questions yet. Try one of the examples above.</div>' : '') + '</div></div></div>' +
-      '<div class="pi-side"><div class="card"><div class="card-h"><h2>📎 Documents</h2><span class="sp"></span><label class="btn btn-sm btn-gold" for="piFile">＋ Upload</label><input type="file" id="piFile" multiple hidden accept=".pdf,.docx,.txt,.md,.csv,.html,.htm,.eml,.json,.vtt,.srt"></div>' +
+      '<div class="pi-side"><div class="card"><div class="card-h"><h2>📎 Documents</h2><span class="sp"></span><label class="btn btn-sm btn-gold" for="piFile">＋ Upload</label><input type="file" id="piFile" multiple hidden accept=".pdf,.docx,.txt,.md,.csv,.html,.htm,.eml,.json,.vtt,.srt,.xlsx"></div>' +
         '<p class="muted" style="font-size:12.5px;margin:-4px 0 8px">The contract, specification, quotes, variations, letters or meeting notes (PDF, Word .docx or text). The text is read here in your browser and kept with this project.</p>' +
         '<div id="piUp"></div>' + (I.docs.length ? '<ul class="pi-docs">' + I.docs.map(function (d) { return '<li data-did="' + esc(d.id) + '"><span class="pi-dk" title="' + esc(d.kind) + '">' + (PI_KIND[d.kind] || '📄') + '</span><div><b>' + esc(d.name) + '</b><br><small class="muted">' + esc(d.kind) + (d.pages ? ' · ' + pl(d.pages, 'page') : '') + ' · ' + (d.words || 0).toLocaleString('en-AU') + ' words · ' + dmy(new Date(d.at + 10 * 3600e3).toISOString().slice(0, 10)) + '</small></div><span class="sp"></span><button class="btn btn-sm" data-ddl title="Download">⬇</button><button class="btn btn-sm" data-ddel title="Delete">✕</button></li>'; }).join('') + '</ul>' : '<div class="empty" style="padding:12px">No documents yet. Upload the contract to ask about it.</div>') +
         '<p class="muted" style="font-size:12px;margin:10px 0 0">🔒 Before anything goes to the AI, the customer\'s name, phone numbers and emails are taken out, and stakeholders\' phone numbers and emails never leave MBS.</p></div>' +
@@ -5783,9 +5793,7 @@
     $('#piFile').onchange = function () { piUpload(Array.prototype.slice.call(this.files)); this.value = ''; };
     B.querySelectorAll('[data-ddel]').forEach(function (b) { b.onclick = function () { var id = b.closest('li').getAttribute('data-did'), d = I.docs.filter(function (x) { return x.id === id; })[0];
       M.confirmBox('Delete this document?', '“' + d.name + '” is removed from this project. Answers already given stay.', 'Delete').then(function (y) { if (!y) return; api('intelDocDelete', { core: S.core, id: id }).then(function () { I.docs = I.docs.filter(function (x) { return x.id !== id; }); intelTab(); toast('Document deleted'); }).catch(fail); }); }; });
-    B.querySelectorAll('[data-ddl]').forEach(function (b) { b.onclick = function () { api('intelDocFile', { core: S.core, id: b.closest('li').getAttribute('data-did') }).then(function (r) {
-      var bin = atob(r.file), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-      var url = URL.createObjectURL(new Blob([u8], { type: r.type })), a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 5000); }).catch(fail); }; });
+    B.querySelectorAll('[data-ddl]').forEach(function (b) { b.onclick = function () { docDownload(S.core, b.closest('li').getAttribute('data-did')); }; });
     B.querySelectorAll('[data-mics]').forEach(function (b) { b.onclick = function () { var m = p.meetings.filter(function (x) { return x.id === b.getAttribute('data-mics'); })[0]; piIcs(m); }; });
     B.querySelectorAll('[data-mdel]').forEach(function (b) { b.onclick = function () { p.meetings = p.meetings.filter(function (x) { return x.id !== b.getAttribute('data-mdel'); }); dirty(); intelTab(); }; });
     piWire(B);
@@ -5960,6 +5968,47 @@
     per = per || 3000; var out = [], n = 1, cur = 0; String(t || '').split(/\n{2,}/).forEach(function (p) { if (cur > per) { n++; cur = 0; out.push('[page ' + n + ']'); } out.push(p); cur += p.length; });
     return { text: '[page 1]\n' + out.join('\n\n'), pages: n };
   }
+  // ☁️ the original file: Cloudflare R2 when it is set up (the browser sends it straight there with a signed link),
+  // otherwise kept here up to 3.5 MB. Returns { r2Key } or { file: base64 } or {} (text only).
+  function storeFile(f, area, core) {
+    var small = f.size <= 3.5 * 1024 * 1024, kb = area === 'kb';
+    var b64 = function () { return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).replace(/^data:[^,]*,/, '')); }; rd.readAsDataURL(f); }); };
+    var local = function () { return small ? b64().then(function (x) { return { file: x }; }) : Promise.resolve({}); };
+    if (!(M.me || {}).r2) return local();
+    return api(kb ? 'kbR2Upload' : 'planR2Upload', { core: core || '', name: f.name, type: f.type, size: f.size }).then(function (u) {
+      if (!u || !u.r2) return local();
+      return fetch(u.url, { method: 'PUT', headers: { 'Content-Type': f.type || 'application/octet-stream' }, body: f }).then(function (r) { if (!r.ok) throw new Error('R2 ' + r.status); return { r2Key: u.key }; })
+        .catch(function () {   // the browser could not reach R2 (e.g. no CORS rule): small files go through the server instead
+          if (f.size > 4.5 * 1024 * 1024) { toast('The file could not go to R2 storage (check the bucket\'s CORS rule): its text is kept, the file is not.', true); return {}; }
+          return b64().then(function (x) { return api(kb ? 'kbR2Put' : 'planR2Put', { core: core || '', key: u.key, file: x, type: f.type }); }).then(function () { return { r2Key: u.key }; }, function () { return local(); });
+        });
+    }, function () { return local(); });
+  }
+  M.storeFile = storeFile;
+  // a document's original file: a signed R2 link, or the file sent from here
+  function docDownload(core, id) {
+    return api('intelDocFile', { core: core, id: id }).then(function (r) {
+      var a = document.createElement('a');
+      if (r.url) { a.href = r.url; a.rel = 'noopener'; }
+      else { var bin = atob(r.file), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); a.href = URL.createObjectURL(new Blob([u8], { type: r.type })); a.download = r.name; setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000); }
+      document.body.appendChild(a); a.click(); a.remove();
+    }).catch(fail);
+  }
+  // 📊 Excel (.xlsx): every sheet as a table of text, a "page" per sheet
+  function xlsxText(f) {
+    return piLoad('vendor/exceljs.min.js?v=440', function () { return !!window.ExcelJS; }).then(function () { return f.arrayBuffer(); }).then(function (buf) { var wb = new window.ExcelJS.Workbook(); return wb.xlsx.load(buf).then(function () { return wb; }); }).then(function (wb) {
+      var parts = [], n = 0;
+      wb.eachSheet(function (ws) {
+        n++; var rows = [];
+        ws.eachRow({ includeEmpty: false }, function (row) {
+          var cells = []; row.eachCell({ includeEmpty: true }, function (c) { var v = c.value; if (v && typeof v === 'object') v = v.result != null ? v.result : v.text != null ? v.text : v.richText ? v.richText.map(function (t) { return t.text; }).join('') : v instanceof Date ? v.toISOString().slice(0, 10) : v.hyperlink || ''; cells.push(String(v == null ? '' : v).replace(/\s+/g, ' ').trim()); });
+          while (cells.length && !cells[cells.length - 1]) cells.pop(); if (cells.some(Boolean)) rows.push(cells.join(' | '));
+        });
+        parts.push('[page ' + n + ']\nSheet: ' + ws.name + '\n' + rows.slice(0, 5000).join('\n'));
+      });
+      return { text: parts.join('\n\n'), pages: n };
+    });
+  }
   function piExtract(f, onProg) {
     var name = f.name.toLowerCase();
     if (/\.pdf$/.test(name)) return piLoad('vendor/pdf.min.js?v=3111', function () { return !!window.pdfjsLib; }).then(function () {
@@ -5973,10 +6022,12 @@
     });
     if (/\.docx$/.test(name)) return piLoad('vendor/mammoth.browser.min.js?v=180', function () { return !!window.mammoth; }).then(function () { return f.arrayBuffer(); }).then(function (buf) { return window.mammoth.extractRawText({ arrayBuffer: buf }); }).then(function (r) { return { text: r.value, pages: 0 }; });
     if (/\.pptx$/.test(name)) return pptxText(f);
+    if (/\.xlsx$/.test(name)) return xlsxText(f);
+    if (/\.xls$/.test(name)) return Promise.reject(new Error('Old Excel .xls files can\'t be read: open it in Excel and save as .xlsx.'));
     if (/\.(ppt|pps)$/.test(name)) return Promise.reject(new Error('Old PowerPoint .ppt files can\'t be read: open it in PowerPoint and save as .pptx or PDF.'));
     if (/\.doc$/.test(name)) return Promise.reject(new Error('Old Word .doc files can\'t be read: open it in Word and save as .docx or PDF.'));
     if (/\.(txt|md|csv|json|eml|html?|vtt|srt)$/.test(name) || /^text\//.test(f.type)) return f.text().then(function (t) { if (/\.html?$/.test(name)) { var d = document.createElement('div'); d.innerHTML = t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ''); t = d.textContent; } return { text: t, pages: 0 }; });
-    return Promise.reject(new Error('“' + f.name + '” is not a PDF, Word (.docx), PowerPoint (.pptx) or text file.'));
+    return Promise.reject(new Error('“' + f.name + '” is not a PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx) or text file.'));
   }
   M.readDoc = piExtract;   // People: read a resume (PDF or Word) in the browser
   function piUpload(files) {
@@ -5985,9 +6036,8 @@
       if (box) box.innerHTML = '<p class="ask-think" style="margin:0 0 8px">Reading “' + esc(f.name) + '”…</p>';
       return piExtract(f).then(function (x) {
         if (!x.text || x.text.replace(/\[page \d+\]/g, '').trim().length < 20) throw new Error('No text found in “' + f.name + '”. If it is a scanned PDF (pictures of pages), save it as a text PDF or Word file first.');
-        var send = function (b64) { return api('intelUpload', { core: core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text, file: b64 }); };
-        if (f.size > 3.5 * 1024 * 1024) return send('');
-        return new Promise(function (res) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result).replace(/^data:[^,]*,/, '')); }; rd.readAsDataURL(f); }).then(send);
+        var send = function (ff) { return api('intelUpload', { core: core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: x.text, file: ff.file || '', r2Key: ff.r2Key || '' }); };
+        return storeFile(f, 'project', core).then(send);
       }).then(function (r) { I.docs.push(r.doc); toast('Added “' + r.doc.name + '”' + (r.truncated ? ' (very long: the first 400,000 characters are kept)' : '')); })
         .catch(function (e) { toast(e.message, true); });
     };

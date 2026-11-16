@@ -29,14 +29,15 @@ export function kbChunks(t, size = 1400) {
   return out;
 }
 export async function list() { return ((await kv.get('kb:index').catch(() => null)) || { docs: [] }).docs || []; }
-export async function add({ name, title, credit, pages, text }, by) {
+export async function add({ name, title, credit, pages, text, r2Key, size, type }, by) {
   const t = String(text || '').replace(/\u0000/g, '').slice(0, MAX);
   if (t.replace(/\[(page|slide) \d+\]/g, '').trim().length < 200) return { error: 'There is too little text in this document. A scanned PDF or a deck of pictures has no text to read.' };
   const ch = kbChunks(t);
   const id = 'kb' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   await kv.set('kb:doc:' + id, { chunks: ch });
   const doc = { id, name: str(name, 160) || 'document', title: str(title, 160) || str(name, 160).replace(/\.(pptx|pdf|docx|txt|md)$/i, ''), credit: str(credit, 200) || DEFAULT_CREDIT,
-    pages: Math.max(0, Math.round(Number(pages) || 0)), chunks: ch.length, chars: t.length, on: true, at: Date.now(), by: str(by, 80) };
+    pages: Math.max(0, Math.round(Number(pages) || 0)), chunks: ch.length, chars: t.length, on: true, at: Date.now(), by: str(by, 80),
+    r2: r2Key && /^kb\//.test(String(r2Key)) && !String(r2Key).includes('..') ? String(r2Key).slice(0, 400) : undefined, size: Math.max(0, Number(size) || 0) || undefined, type: str(type, 100) || undefined };
   await kv.update('kb:index', (x) => { x.docs = (x.docs || []).concat([doc]); x.v = Date.now(); return x; }, () => ({ docs: [] }));
   cache = null;
   return { doc };
@@ -47,7 +48,7 @@ export async function change(id, f) {
   cache = null; return found ? { doc: found } : { error: 'Not found' };
 }
 export async function remove(id) {
-  let n = 0;
+  let n = 0; const d = (await list()).find((x) => x.id === id); if (d && d.r2) { const R2 = await import('./r2.mjs'); await R2.del(d.r2); }
   await kv.update('kb:index', (x) => { const b = (x.docs || []).length; x.docs = (x.docs || []).filter((d) => d.id !== id); n = b - x.docs.length; x.v = Date.now(); return x; }, () => ({ docs: [] }));
   if (n) await kv.del('kb:doc:' + id).catch(() => {});
   cache = null; return { removed: n };

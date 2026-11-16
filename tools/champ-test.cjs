@@ -110,9 +110,26 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     if (/speechtotext/.test(q.url)) { global.STT_DEF = (/name="definition"\r?\n\r?\n([^\r\n]+)/.exec(b) || [])[1] || ''; global.STT_KEY = q.headers['ocp-apim-subscription-key'];
       s3.setHeader('Content-Type', 'application/json'); return s3.end(JSON.stringify({ combinedPhrases: [{ text: 'எனது திட்டங்கள் எப்படி உள்ளன?' }], phrases: [{ locale: 'ta-IN', durationMilliseconds: 1800, text: 'எனது திட்டங்கள் எப்படி உள்ளன?' }] })); }
     global.LAST_SSML = b; global.AZ_KEY = q.headers['ocp-apim-subscription-key']; s3.setHeader('Content-Type', 'audio/mpeg'); s3.end(Buffer.from('ID3fakeaudio')); }); }).listen(0);
+  // ☁️ a stand-in for Cloudflare R2 (S3 API): signed PUT/GET/HEAD/DELETE and list-type=2, with CORS for the browser
+  global.R2S = new Map(); global.R2_UNSIGNED = 0;
+  const r2srv = http.createServer((q, s4) => { const ch = []; q.on('data', (d) => ch.push(d)); q.on('end', () => {
+    s4.setHeader('Access-Control-Allow-Origin', '*'); s4.setHeader('Access-Control-Allow-Methods', 'GET,PUT,HEAD'); s4.setHeader('Access-Control-Allow-Headers', '*'); s4.setHeader('Access-Control-Expose-Headers', 'ETag');
+    if (q.method === 'OPTIONS') { s4.statusCode = 204; return s4.end(); }
+    const u = new URL(q.url, 'http://x'), signed = u.searchParams.has('X-Amz-Signature') || /^AWS4-HMAC-SHA256 Credential=r2-test-id\//.test(q.headers.authorization || '');
+    if (!signed) { global.R2_UNSIGNED++; s4.statusCode = 403; return s4.end('<Error><Code>AccessDenied</Code></Error>'); }
+    const parts = decodeURIComponent(u.pathname).replace(/^\//, '').split('/'), bucket = parts.shift(), key = parts.join('/');
+    if (bucket !== 'gkh-test') { s4.statusCode = 404; return s4.end(); }
+    if (!key && q.method === 'GET') { const pre = u.searchParams.get('prefix') || ''; const xs = [...global.R2S].filter(([k]) => k.startsWith(pre));
+      s4.setHeader('Content-Type', 'application/xml'); return s4.end('<ListBucketResult>' + xs.map(([k, v]) => `<Contents><Key>${k}</Key><Size>${v.body.length}</Size></Contents>`).join('') + '<IsTruncated>false</IsTruncated></ListBucketResult>'); }
+    if (q.method === 'PUT') { global.R2S.set(key, { body: Buffer.concat(ch), type: q.headers['content-type'] || '' }); s4.setHeader('ETag', '"x"'); return s4.end(); }
+    if (q.method === 'DELETE') { global.R2S.delete(key); s4.statusCode = 204; return s4.end(); }
+    const o = global.R2S.get(key); if (!o) { s4.statusCode = 404; return s4.end(); }
+    s4.setHeader('Content-Type', o.type || 'application/octet-stream'); s4.setHeader('Content-Length', o.body.length);
+    const cd = u.searchParams.get('response-content-disposition'); if (cd) s4.setHeader('Content-Disposition', cd);
+    s4.end(q.method === 'HEAD' ? undefined : o.body); }); }).listen(0);
   await sleep(100);
   const env = { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', NETLIFY_BLOBS_CONTEXT: ctxB64, ADMIN_USERNAME: '', ADMIN_PASSWORD: '', ADMIN_SESSION_SECRET: '',
-    GOOGLE_CLIENT_ID: CLIENT, GOOGLE_TOKENINFO_URL: `http://127.0.0.1:${g.address().port}/tokeninfo`, LLM_API_KEY: 'test-key', CHAMP_I18N_LIMIT: '400', LIMIT_ADMIN: '5000/10', LLM_BASE_URL: `http://127.0.0.1:${llm.address().port}`, LLM_MODEL: 'deepseek-chat', TELEGRAM_BOT_TOKEN: '', AZURE_SPEECH_KEY: 'az-test', AZURE_SPEECH_BASE: `http://127.0.0.1:${az.address().port}`, AZURE_STT_ENDPOINT: `http://127.0.0.1:${az.address().port}`, RESEND_API_KEY: '', SITE_ENV: '' };
+    GOOGLE_CLIENT_ID: CLIENT, GOOGLE_TOKENINFO_URL: `http://127.0.0.1:${g.address().port}/tokeninfo`, LLM_API_KEY: 'test-key', CHAMP_I18N_LIMIT: '400', LIMIT_ADMIN: '5000/10', LLM_BASE_URL: `http://127.0.0.1:${llm.address().port}`, LLM_MODEL: 'deepseek-chat', TELEGRAM_BOT_TOKEN: '', AZURE_SPEECH_KEY: 'az-test', AZURE_SPEECH_BASE: `http://127.0.0.1:${az.address().port}`, AZURE_STT_ENDPOINT: `http://127.0.0.1:${az.address().port}`, RESEND_API_KEY: '', SITE_ENV: '', R2_ACCOUNT_ID: 'acct-test', R2_BUCKET: 'gkh-test', R2_ACCESS_KEY_ID: 'r2-test-id', R2_SECRET_ACCESS_KEY: 'r2-test-secret', R2_ENDPOINT: `http://127.0.0.1:${r2srv.address().port}` };
   const srv = spawn('node', ['local-server.mjs'], { cwd: SITE, env, stdio: ['ignore', 'pipe', 'pipe'] }); global.SRV = srv;
   let log = ''; srv.stdout.on('data', (d) => (log += d)); srv.stderr.on('data', (d) => (log += d));
   for (let i = 0; i < 60 && !/running/i.test(log); i++) await sleep(150);
@@ -521,6 +538,17 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       await p.fill('#planBody tr[data-tid="t1"] [data-k=crew]', '4'); await p.press('#planBody tr[data-tid="t1"] [data-k=crew]', 'Tab'); await sleep(2500);
       const c4 = await p.textContent('#planBody tr[data-tid="t1"] .crewx').catch(() => ''), pg4 = (await (await api('planGet', { core: rc2 })).json()).plan, t4 = pg4.tasks[0], bac = (await (await api('planGet', { core: rc2 })).json()).plan;
       ok('Gantt', 'labour costs people × hours each × rate: the people come from the Resources column (2 here), or are typed (4 × 16 h × $500 = $32,000)', crew2 === '2' && /2 × 16 h × \$500/.test(c2) && /4 × 16 h × \$500/.test(c4) && t4.crew === 4 && t4.crewSet === true, JSON.stringify([crew2, c2, c4, t4.crew, t4.crewSet]));
+      // 💰 Costing: 4 people is labour only (no phantom "Bill of Materials" line), people editable, ✕ clears a cost (the task stays), ↶ Undo
+      await p.goto(`${BASE}/admin/#plan/${rc2}/budget`); await p.reload(); await p.waitForSelector('.bd-tbl', { timeout: 10000 }).catch(() => {});
+      const boms = (await p.$$('.bd-tbl tr.bd-bom')).length, c1 = await p.$$eval('.bd-tbl tbody tr', (r) => r.map((x) => x.textContent).join('|'));
+      await p.fill('.bd-tbl [data-bp="t1"]', '3'); await p.press('.bd-tbl [data-bp="t1"]', 'Tab'); await sleep(800);
+      const c3 = await p.$$eval('.bd-tbl tbody tr', (r) => r.map((x) => x.textContent).join('|'));
+      await p.click('.bd-tbl [data-bz="t1"]'); await sleep(800);
+      const gone = !(await p.$('.bd-tbl [data-bz="t1"]')), undoLbl = await p.textContent('#bdUndo').catch(() => '');
+      await p.click('#bdUndo'); await sleep(800); const back3 = await p.$$eval('.bd-tbl tbody tr', (r) => r.map((x) => x.textContent).join('|'));
+      await p.click('#bdUndo'); await sleep(800); const back4 = await p.$$eval('.bd-tbl tbody tr', (r) => r.map((x) => x.textContent).join('|'));
+      await sleep(2500); const pz = (await (await api('planGet', { core: rc2 })).json()).plan;
+      ok('Costing', 'labour with 4 people is one line ($32,000), with no doubled "Bill of Materials" line; the people can be changed here (3 → $24,000); ✕ clears a cost but keeps the task; ↶ Undo steps back', boms === 0 && /\$32,000/.test(c1) && /\$24,000/.test(c3) && gone && /Undo \(2\)/.test(undoLbl) && /\$24,000/.test(back3) && /\$32,000/.test(back4) && pz.tasks.some((t) => t.id === 't1' && t.qty === 16 && t.crew === 4), JSON.stringify([boms, c1.slice(0, 200), c3.slice(0, 120), gone, undoLbl, back4.slice(0, 120)]));
       await api('planProjectDelete', { core: rc2 });
     }
     // 📚 the knowledge base: Sashi's class deck, read slide by slide, used by Ask Champ and Ask AI with the credit
@@ -543,6 +571,37 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       ok('Knowledge base', 'Ask AI in a project gets the class notes too, and lists them as a source', /Sashi Sivam's class notes: PM Masterclass, slide 2/.test(irs) && /COURSE NOTES/.test(global.INTEL_SYS || '') && (global.INTEL_CTX.course_notes || []).length > 0, fr + ' ' + irs.slice(0, 300));
       await api('planProjectDelete', { core: kc });
     }
+    // ☁️ R2: original files go straight from the browser to the bucket with a signed link; Blobs keeps only the text
+    {
+      const kbKeys = [...global.R2S.keys()].filter((k) => /^kb\/\d{4}\/\d{2}\/[^/]+-pm-masterclass\.pptx$/i.test(k));
+      const deck = fs.readFileSync(path.join(SITE, 'tools/test-data/pm-masterclass.pptx'));
+      const kbObj = kbKeys.length ? global.R2S.get(kbKeys[0]) : null;
+      await p.goto(`${BASE}/admin/#knowledge`); await p.reload(); await p.waitForSelector('[data-kbdl]', { timeout: 10000 }).catch(() => {});
+      await sleep(1200); const r2line = await p.textContent('#kbR2').catch(() => '');
+      const [kdl] = await Promise.all([p.waitForEvent('download', { timeout: 15000 }).catch(() => null), p.click('[data-kbdl]').catch(() => {})]);
+      let same = false; if (kdl) { await kdl.saveAs('/tmp/kb-orig.pptx'); same = fs.readFileSync('/tmp/kb-orig.pptx').equals(deck); }
+      ok('R2 storage', 'the knowledge-base deck is kept in R2 (kb/…), byte for byte, sent straight from the browser; "⬇ Original" downloads it; the page shows the bucket and its size', kbKeys.length === 1 && kbObj && kbObj.body.equals(deck) && same && /gkh-test/.test(r2line) && /\d+ files?/.test(r2line) && global.R2_UNSIGNED === 0, JSON.stringify([kbKeys, !!kbObj, same, r2line, global.R2_UNSIGNED]));
+      const rc = (await (await api('planNewProject', { name: 'R2 check', client: 'Internal', program: 'Digital health' })).json()).core;
+      await api('planSave', { core: rc, plan: { name: 'R2 check', start: new Date().toISOString().slice(0, 10), phases: [{ id: 'ph1', name: 'Work' }], tasks: [{ id: 't1', phase: 'ph1', name: 'Design', dur: 3, pred: [], res: [], pct: 0, status: 'todo' }] } });
+      await p.goto(`${BASE}/admin/#plan/${rc}/intel`); await p.reload(); await p.waitForSelector('#piFile', { state: 'attached', timeout: 10000 }).catch(() => {});
+      await p.setInputFiles('#piFile', path.join(SITE, 'tools/test-data/depot-requirements.xlsx'));
+      let pk = []; for (let i = 0; i < 40 && !pk.length; i++) { await sleep(500); pk = [...global.R2S.keys()].filter((k) => k.startsWith('projects/' + rc + '/')); }
+      await sleep(1500);
+      const ig = await (await api('intelGet', { core: rc })).json(), doc = (ig.docs || [])[0] || {};
+      const df = await (await api('intelDocFile', { core: rc, id: doc.id })).json();
+      const xl = fs.readFileSync(path.join(SITE, 'tools/test-data/depot-requirements.xlsx'));
+      const got = df.url ? Buffer.from(await (await fetch(df.url)).arrayBuffer()) : Buffer.alloc(0);
+      const txt = JSON.stringify(doc);
+      ok('R2 storage', 'an Excel file in Ask AI: its sheets are read as text (requirements and budget), the file goes to R2 under the project, and downloads through a signed link', pk.length === 1 && global.R2S.get(pk[0]).body.equals(xl) && got.equals(xl) && /^http:\/\/127\.0\.0\.1:\d+\/gkh-test\/projects\//.test(df.url || '') && /X-Amz-Signature=/.test(df.url || '') && doc.hasFile && (doc.pages === 2 || /2 (sheets|pages)/.test(txt)), JSON.stringify([pk, (df.url || '').slice(0, 90), got.length, xl.length, doc.pages, doc.hasFile]));
+      await api('intelDocDelete', { core: rc, id: doc.id }).catch(() => {});
+      await sleep(500); const gone = ![...global.R2S.keys()].some((k) => k.startsWith('projects/' + rc + '/'));
+      const bad = await (await api('intelUpload', { core: rc, name: 'x.txt', type: 'text/plain', size: 3, text: 'hello world, a small file', r2Key: 'kb/2026/01/zzz-steal.pptx' })).json();
+      const ig2 = await (await api('intelGet', { core: rc })).json(), d2 = (ig2.docs || []).find((x) => x.name === 'x.txt') || {};
+      ok('R2 storage', 'removing a document removes its file from R2; a key outside the project is refused (no file attached)', gone && !d2.hasFile, JSON.stringify([gone, d2, bad && bad.error]));
+      const st = await (await api('r2Status')).json();
+      ok('R2 storage', 'storage status for the super user: bucket, file count and size', st.ready && st.bucket === 'gkh-test' && st.objects >= 1 && st.bytes >= deck.length && st.kb && st.kb.objects === 1, JSON.stringify(st));
+      await api('planProjectDelete', { core: rc });
+    }
     // 🌳 WBS: the Gantt's rightmost button turns the plan into a Work Breakdown Structure (read only), saved as PNG or JPEG
     {
       const wc = (await (await api('planNewProject', { name: 'WBS check', client: 'Internal', program: 'Digital health' })).json()).core;
@@ -564,7 +623,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       if (process.env.DOC_ONLY) await p.screenshot({ path: '/tmp/wbsview.png', fullPage: false });
       await api('planProjectDelete', { core: wc });
     }
-    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins|Gantt|Knowledge/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
+    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins|Gantt|Knowledge|R2|Costing/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
   }
   // ---- 🌐 language audit: with the console in Malay, every page and every project tab must show no English ----
   {
