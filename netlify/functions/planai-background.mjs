@@ -26,6 +26,13 @@ async function run(req) {
   try {
     if (req.method !== 'POST' || req.headers.get('x-mbs-admin') !== '1') return new Response('', { status: 403 });
     await A.ensureSecret();
+    if (req.headers.get('x-champ-cron')) {   // 🩺 the morning watch (from champ-watch): every project checked, Champ's view of the ones that need it
+      const { sydToday } = await import('../lib/ai.mjs'), t = sydToday(), y = new Date(Date.parse(t) - 864e5).toISOString().slice(0, 10);
+      if (!A.cronOk(req, [t, y])) return new Response('', { status: 403 });
+      const W = await import('../lib/watch.mjs'), r = await W.sweep({ ai: true });
+      await kv.set('watch:run', { at: Date.now(), by: 'schedule', briefs: r.briefs, counts: r.counts, alerts: (r.alerts || []).length }).catch(() => {});
+      return ok();
+    }
     const session = A.readSession(req);
     if (!session) return new Response('', { status: 401 });
     const ctx = await U.context(session, '', (pid, u) => (u && u.kind === 'email' ? true : u && u.kind === 'google' ? !!String(process.env.GOOGLE_CLIENT_ID || '').trim() : u && u.kind === 'subbie' ? SUB.canLogin(u.subId) : PPL.canLogin(pid)));   // v86: Users & access
@@ -64,6 +71,19 @@ async function run(req) {
       const r = await PLANDOC.write({ core: body.core, budgetFacts: body.budget, lang: String(body.lang || '').slice(0, 5) }, `Admin (${session.u})`);
       await kv.set('aiplan:' + id, { plandoc: r.error ? null : r, error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
       if (!r.error) await A.audit(session.u, `AI wrote the project management plan for ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
+      return ok();
+    }
+    if (body.mode === 'watchAll') {   // 🩺 "Run the watch now" (Programs or Summary)
+      const W = await import('../lib/watch.mjs'), r = await W.sweep({ ai: true, lang: String(body.lang || 'en').slice(0, 5) });
+      await kv.set('watch:run', { at: Date.now(), by: session.u, briefs: r.briefs, counts: r.counts, alerts: (r.alerts || []).length }).catch(() => {});
+      await kv.set('aiplan:' + id, { board: { counts: r.counts, briefs: r.briefs }, status: 'done', at: Date.now() });
+      return ok();
+    }
+    if (body.mode === 'watch') {   // 🩺 Champ's brief on a project (what is wrong, why, what it would do), kept until the numbers change
+      const W = await import('../lib/watch.mjs'), { get: getPlan } = await import('../lib/plan.mjs'), pl = await getPlan(String(body.core || '').slice(0, 40));
+      if (!pl) { await kv.set('aiplan:' + id, { error: 'Project not found', status: 'error', at: Date.now() }); return ok(); }
+      const r = await W.brief(String(body.core), pl, { refresh: true, ai: true, name: pl.name || '', lang: String(body.lang || 'en').slice(0, 5) });
+      await kv.set('aiplan:' + id, { watch: { rag: r.rag, word: r.word, reasons: r.reasons, n: r.n, brief: r.brief, at: r.at, name: pl.name || '' }, status: 'done', at: Date.now() });
       return ok();
     }
     if (body.mode === 'intel') {   // v52: 🧠 Project Intelligence question

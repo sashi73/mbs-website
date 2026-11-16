@@ -523,3 +523,38 @@ input.pp-auto,select.pp-auto,textarea.pp-auto{background:#FFFBEB!important;borde
 .bd-tbl input.bd-ppl{width:52px;padding-left:4px;padding-right:4px}
 .bd-x{border:0;background:none;color:#B4A98A;cursor:pointer;font-size:13px;padding:0 0 0 6px;line-height:1}.bd-x:hover{color:#B42318}
 #bdUndo:not([disabled]){border-color:#C9A227;color:#7A5C00}
+/* 🩺 Champ's project watch: the button and panel take the project's health colour */
+#cgBtn.cg-red{background:#B42318;border-color:#FDA29B;color:#fff;animation:cgRed 2.2s ease-in-out infinite}
+#cgBtn.cg-amber{background:#B54708;border-color:#FEC84B;color:#fff}
+#cgBtn.cg-green{background:#067647;border-color:#75E0A7;color:#fff}
+#cgBtn.cg-grey{background:#475467;border-color:#D0D5DD;color:#fff}
+@keyframes cgRed{0%,100%{box-shadow:0 10px 26px rgba(0,0,0,.28),0 0 0 0 rgba(180,35,24,.55)}50%{box-shadow:0 10px 26px rgba(0,0,0,.28),0 0 0 10px rgba(180,35,24,0)}}
+#cgPanel.cg-red{border-top:5px solid #B42318}#cgPanel.cg-amber{border-top:5px solid #F79009}#cgPanel.cg-green{border-top:5px solid #17B26A}
+.cgp-brief{max-width:100%;background:#fff;border-width:1px 1px 1px 5px;border-style:solid;padding:10px 12px;line-height:1.45}
+.cgp-brief.cg-red{border-color:#FDA29B #FDA29B #FDA29B #B42318;background:#FFFBFA}.cgp-brief.cg-amber{border-color:#FEDF89 #FEDF89 #FEDF89 #F79009;background:#FFFCF5}.cgp-brief.cg-green{border-color:#ABEFC6 #ABEFC6 #ABEFC6 #17B26A;background:#F6FEF9}
+.cgb-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.cgb-h small{color:#6B665A;font-size:11.5px;text-align:right}
+.cgp-brief.cg-red .cgb-h b{color:#B42318}.cgp-brief.cg-amber .cgb-h b{color:#B54708}.cgp-brief.cg-green .cgb-h b{color:#067647}
+.cgp-brief p{margin:6px 0}.cgb-l{font-weight:800;font-size:13.5px}.cgb-t{font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#6B665A;margin-top:8px!important}
+.cgb-why,.cgb-a,.cgb-w{margin:4px 0;padding-left:18px;font-size:12.5px}.cgb-a li{margin:4px 0}.cgb-a span{color:#3F3A2E}
+.cgb-why li.cgb-red::marker{color:#B42318}.cgb-why li.cgb-amber::marker{color:#F79009}
+.cgb-n{font-size:12px;color:#8A6D1E;background:#FFF8E1;border-radius:8px;padding:5px 8px}
+.cgb-go{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}.cgb-go button{border:1px solid #E7E1D2;background:#FFFCF2;border-radius:99px;padding:4px 9px;font:600 11.5px/1.2 'Manrope',system-ui,sans-serif;cursor:pointer}.cgb-go button:hover{border-color:#C9A227}
+.cgb-at{display:block;margin-top:6px;color:#8A8576;font-size:11px}
+#cgPanel .cgp-log{max-height:min(420px,calc(100vh - 260px))}
+.cgb-think{font-size:12px;color:#6B665A;font-style:italic;animation:cgThink 1.4s ease-in-out infinite}@keyframes cgThink{50%{opacity:.45}}
+.cgb-go{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.cgb-go button{border:1px solid #E4DCC5;background:#fff;border-radius:99px;padding:3px 10px;font:700 11.5px/1.6 inherit;cursor:pointer}.cgb-go button:hover{border-color:#C9A227}
+.cgb-at{display:block;color:#8F8878;font-size:11px;margin-top:6px}
+/* 🩺 Champ's watch across every project (Programs and Summary) */
+.wt{margin:0 0 14px;padding:12px 14px}.wt-h{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.wt-h>b{font-size:15px}.wt-h .sp{flex:1}
+.wt-c{display:flex;gap:6px;flex-wrap:wrap}.wt-chip{font-size:12px;font-weight:800;border-radius:99px;padding:2px 9px}.wt-chip.red{background:#FEE4E2;color:#B42318}.wt-chip.amber{background:#FEF0C7;color:#B54708}.wt-chip.green{background:#DCFAE6;color:#067647}
+.wt-msg{margin:8px 0 0;font-size:12.5px;color:#067647}
+.wt-al{display:flex;flex-direction:column;gap:3px;margin:8px 0 0;font-size:12.5px;background:#FFFBFA;border:1px solid #FECDCA;border-radius:8px;padding:6px 10px}
+.wt-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.wt-r{display:grid;grid-template-columns:12px minmax(160px,1.1fr) 2fr auto;gap:10px;align-items:center;text-decoration:none;color:inherit;border:1px solid #EEE7D3;border-left-width:4px;border-radius:10px;padding:8px 10px;background:#fff}
+.wt-r:hover{border-color:#C9A227}.wt-r.wt-red{border-left-color:#B42318;background:#FFFBFA}.wt-r.wt-amber{border-left-color:#F79009;background:#FFFCF5}.wt-r.wt-green{border-left-color:#17B26A}.wt-r.wt-grey{border-left-color:#98A2B3}
+.wt-d{width:10px;height:10px;border-radius:50%;background:#98A2B3}.wt-red .wt-d{background:#B42318;box-shadow:0 0 0 0 rgba(180,35,24,.5);animation:wtPulse 2s infinite}.wt-amber .wt-d{background:#F79009}.wt-green .wt-d{background:#17B26A}
+@keyframes wtPulse{70%{box-shadow:0 0 0 7px rgba(180,35,24,0)}100%{box-shadow:0 0 0 0 rgba(180,35,24,0)}}
+.wt-n b{display:inline;font-size:13.5px}.wt-n small{display:block;color:#6B665A;font-size:11.5px}.wt-why{font-size:12.5px;color:#3F3A2E}.wt-k{font-size:11.5px;color:#6B665A;text-align:right;white-space:nowrap}
+.wt-ch{font-size:11px;font-weight:800;margin-left:6px;border-radius:99px;padding:0 6px}.wt-ch.down{background:#FEE4E2;color:#B42318}.wt-ch.up{background:#DCFAE6;color:#067647}
+.wt-ok{margin-top:8px}.wt-ok summary{cursor:pointer;font-size:12.5px;font-weight:700;color:#067647}
+@media (max-width:800px){.wt-r{grid-template-columns:12px 1fr}.wt-why,.wt-k{grid-column:2;text-align:left}}

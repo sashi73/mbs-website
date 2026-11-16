@@ -65,6 +65,7 @@
         tile('Total budget', money(BAC), 'earned ' + money(EV) + ' · spent ' + money(AC)) +
         tile('Portfolio SPI', spi == null ? '–' : spi.toFixed(2), 'schedule', 'ev-' + evC(spi)) + tile('Portfolio CPI', cpi == null ? '–' : cpi.toFixed(2), 'cost', 'ev-' + evC(cpi)) +
         tile('Dependencies', D.deps.length, probs.length ? '<a href="#deps">' + probs.length + ' need attention →</a>' : 'all clear', probs.length ? 'cs-amber' : '') + '</div>' +
+        '<div id="pgWatch"></div>' +
         '<div class="pbtool"><input id="pgQ" type="search" placeholder="Find a program or project…" value="' + esc(Q.q) + '"><span class="sp"></span>' +
         (canEdit() ? '<button class="btn btn-sm btn-gold" id="pgNew">＋ New program</button>' : '') + '<a class="btn btn-sm" href="#deps">🔗 Dependency board</a></div>' +
         '<div class="pg-grid" id="pgGrid"></div>';
@@ -75,6 +76,7 @@
         el.querySelector('#pgGrid').innerHTML = list.length ? list.map(progCard).join('') : '<div class="empty">No program matches that.</div>';
         el.querySelectorAll('[data-pg]').forEach(function (c) { c.onclick = function (e) { if (e.target.closest('a')) return; location.hash = '#programs/' + c.getAttribute('data-pg'); }; });
       };
+      if (M.watchPanel) M.watchPanel(el.querySelector('#pgWatch'));
       el.querySelector('#pgQ').oninput = function () { Q.q = this.value; draw(); };
       var nb = el.querySelector('#pgNew'); if (nb) nb.onclick = function () { editProgram(null); };
       draw();

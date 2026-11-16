@@ -27,6 +27,7 @@
   // health: red / amber / green from schedule, cost, late tasks and high risks
   function health(c) {
     if (!c.hasPlan) return 'grey';
+    if (c.rag) return c.rag;   // 🩺 the same rules as Champ's watch
     if ((c.SPI != null && c.SPI < 0.9) || (c.CPI != null && c.CPI < 0.9) || c.late >= 3 || c.highRisks >= 3) return 'red';
     if ((c.SPI != null && c.SPI < 1) || (c.CPI != null && c.CPI < 1) || c.late > 0 || c.highRisks > 0) return 'amber';
     return 'green';
@@ -197,7 +198,7 @@
     var tiles = tile('Projects', n, H.grey ? H.grey + ' waiting for a plan' : 'all planned') +
       tile('On track', H.green, 'SPI and CPI 1.00+, nothing late', 'cs-green') +
       tile('Watch', H.amber, 'slipping a little or open risks', 'cs-amber') +
-      tile('At risk', H.red, 'SPI or CPI under 0.90, or 3+ late', 'cs-red') +
+      tile('At risk', H.red, 'act now: see Champ\'s watch below', 'cs-red') +
       tile('Total budget', money(BAC), 'earned ' + money(EV) + ' · spent ' + money(AC)) +
       tile('Portfolio SPI', spi == null ? '–' : spi.toFixed(2), 'schedule: work done ÷ planned', 'ev-' + evC(spi)) +
       tile('Portfolio CPI', cpi == null ? '–' : cpi.toFixed(2), 'cost: value of work ÷ cost', 'ev-' + evC(cpi)) +
@@ -230,13 +231,14 @@
       '<div class="table-wrap"><table><thead><tr><th>Program</th><th>Projects</th><th>Budget</th><th class="hide-sm">Earned</th><th class="hide-sm">Spent</th><th>SPI</th><th>CPI</th><th>Late tasks</th><th>At risk</th></tr></thead><tbody>' + progRows + '</tbody></table></div>' +
       (progs[''] ? '<p class="muted cs-note">' + progs[''].length + ' project' + (progs[''].length === 1 ? '' : 's') + ' not in a program.</p>' : '')
       : '<p class="muted">No programs yet. See <a href="#programs">🗂 Programs</a>.</p>') + '</div>';
-    host.innerHTML = '<div class="cs-tiles">' + tiles + '</div>' +
+    host.innerHTML = '<div class="cs-tiles">' + tiles + '</div><div id="csWatch"></div>' +
       '<div class="cs-grid"><div class="card"><div class="card-h"><h2>Projects by PMBOK phase</h2></div>' + funnel +
       '<p class="muted cs-note">Initiation: no plan yet · Planning: planned, not started · Execution: under way · Monitoring &amp; Evaluation: 80%+ done · Closing: all done. Move a card on the Pipeline board to change it by hand.</p></div>' +
       '<div class="card"><div class="card-h"><h2>Health</h2></div><div class="cs-health">' +
       ['green', 'amber', 'red', 'grey'].map(function (k) { return '<div><span class="cs-rag cs-' + k + '"></span><b>' + H[k] + '</b><small>' + HN[k] + '</small></div>'; }).join('') +
       '</div><div class="cs-stack">' + ['green', 'amber', 'red', 'grey'].map(function (k) { return H[k] ? '<span class="cs-' + k + '" style="flex:' + H[k] + '" title="' + HN[k] + ': ' + H[k] + '"></span>' : ''; }).join('') + '</div></div></div>' +
       progCard + '<div class="card"><div class="card-h"><h2>Every project, worst first</h2>' + (canDel && n ? '<span class="sp"></span><button class="btn btn-sm btn-danger" id="csDel" disabled>🗑 Delete selected</button>' : '') + '</div>' + (n ? '<div class="table-wrap"><table><thead><tr>' + (canDel ? '<th class="cs-pick"><input type="checkbox" id="csAll" aria-label="Select all"></th>' : '') + '<th></th><th>Project</th><th>Phase</th><th>Progress</th><th class="hide-sm">Finish</th><th>SPI</th><th>CPI</th><th class="hide-sm">Budget</th><th class="hide-sm">Late</th><th class="hide-sm">Risks</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">No projects yet. <a class="btn btn-gold btn-sm" href="#projects/new">＋ New project</a></div>') + '</div>';
+    if (M.watchPanel) { var inSum = {}; cards.forEach(function (c) { inSum[c.core] = 1; }); M.watchPanel(host.querySelector('#csWatch'), function (x) { return inSum[x.core]; }); }
     host.querySelectorAll('[data-plan]').forEach(function (tr) { tr.onclick = function (e) { if (e.target.closest('.cs-pick')) return; location.hash = '#plan/' + tr.getAttribute('data-plan'); }; });
     var picks = function () { return [].slice.call(host.querySelectorAll('[data-pick]:checked')).map(function (x) { return cards.filter(function (c) { return c.core === x.getAttribute('data-pick'); })[0]; }); };
     var syncDel = function () { var b = host.querySelector('#csDel'), n2 = picks().length; if (b) { b.disabled = !n2; b.textContent = n2 ? '🗑 Delete ' + n2 + ' selected' : '🗑 Delete selected'; } };

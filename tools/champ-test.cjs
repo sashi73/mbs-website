@@ -22,6 +22,13 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   // a fake DeepSeek: says back which language and page the assistant was told to use
   const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
     const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
+    if (/project-monitoring agent/.test(sys)) {   // 🩺 Champ's brief on a project
+      const u = JSON.parse(j.messages[1].content); global.WATCH_CALLS = (global.WATCH_CALLS || 0) + 1; global.WATCH_USER = u; global.WATCH_SYS = sys;
+      const lt = (u.numbers.late_tasks[0] || {}).name || 'the late work';
+      const o = u.health === 'green' ? { headline: 'On track. Keep an eye on it.', summary: 'Schedule and cost are on plan.', actions: [{ title: 'Keep progress up to date weekly', detail: 'Update % complete and actual costs every Friday.' }], watch: ['Supplier lead times'], class_note: '' }
+        : { headline: `Heads up: ${u.project} is ${u.numbers.slip_days} days late and running at CPI ${u.numbers.CPI}.`, summary: 'Work is behind and costing more than planned.', actions: [{ title: 'Crash the critical path', detail: `Add a second team to ${lt}.` }, { title: 'Raise a change request and re-baseline', detail: 'Agree the new finish with the sponsor.' }, { title: 'Escalate the critical issue', detail: 'Take it to the steering committee this week.' }], watch: ['Contractor rates'], class_note: '' };
+      s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }], usage: { total_tokens: 900 } }));
+    }
     if (/project document analyst/.test(sys)) {   // 📄 a project from a document: answers only from what the retrieval gave it
       const u = JSON.parse(j.messages[1].content), x = u.extracts || '', m = (re) => ((x.match(re) || [])[1] || '').trim();
       global.INGEST = (global.INGEST || []).concat([{ len: x.length, whole: u.given_whole, given: u.chunks_given, total: u.chunks_total, p87: /\[p\. 87\]/.test(x), p64: /\[p\. 64\]/.test(x), p1: /\[p\. 1\]/.test(x), doc: u.document }]);
@@ -602,6 +609,62 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       ok('R2 storage', 'storage status for the super user: bucket, file count and size', st.ready && st.bucket === 'gkh-test' && st.objects >= 1 && st.bytes >= deck.length && st.kb && st.kb.objects === 1, JSON.stringify(st));
       await api('planProjectDelete', { core: rc });
     }
+    // 🩺 Champ's project watch: red / amber / green from fixed rules; Champ's button takes the colour; opening Champ in a project gives the brief first
+    {
+      const d0 = (n) => new Date(Date.now() + 11 * 3600000 + n * 864e5).toISOString().slice(0, 10);
+      const mk = async (name, red) => { const c = (await (await api('planNewProject', { name, client: 'Watch Co', program: 'Watch program' })).json()).core;
+        const tasks = red ? [{ id: 't1', phase: 'ph1', name: 'Design workshops', dur: 20, pred: [], res: [], pct: 50, status: 'doing', qty: 150, unit: 'h', rate: 200, actual: 25000 },
+          { id: 't2', phase: 'ph1', name: 'Build', dur: 30, pred: ['t1'], res: [], pct: 0, status: 'todo', qty: 240, unit: 'h', rate: 200 }]
+          : [{ id: 't1', phase: 'ph1', name: 'Design workshops', dur: 20, pred: [], res: [], pct: 0, status: 'todo', qty: 150, unit: 'h', rate: 200 }];
+        await api('planSave', { core: c, plan: { name, start: red ? d0(-40) : d0(10), phases: [{ id: 'ph1', name: 'Work' }], tasks, charter: { budget: red ? 60000 : 40000 },
+          baseline: red ? { at: Date.now() - 50 * 864e5, finish: d0(-20), BAC: 78000, tasks: {} } : null,
+          issues: red ? [{ id: 'i1', title: 'Vendor adapter late', priority: 'Critical', status: 'Open', owner: 'Raj' }] : [] } });
+        return c; };
+      const rc = await mk('Watch red', true), gc = await mk('Watch green', false);
+      const q1 = await (await api('planWatchGet', { core: rc, quick: true })).json(), q2 = await (await api('planWatchGet', { core: gc, quick: true })).json();
+      ok('Champ watch', 'the health rules: a late, over-budget project with a critical issue is red (with the reasons); a project not started yet is green', q1.rag === 'red' && q1.reasons.some((x) => /Behind schedule/.test(x.text)) && q1.reasons.some((x) => /Over budget: CPI/.test(x.text)) && q1.reasons.some((x) => /past the baseline/.test(x.text)) && q1.reasons.some((x) => /critical issue/.test(x.text)) && q2.rag === 'green', JSON.stringify([q1.rag, q1.reasons.map((x) => x.text), q2.rag]));
+      await p.goto(`${BASE}/admin/#plan/${rc}/overview`); await p.reload(); await p.evaluate(() => { try { sessionStorage.clear(); } catch (e) {} });
+      await p.waitForSelector('#cgBtn.cg-red', { timeout: 10000 }).catch(() => {});
+      const bt = await p.textContent('#cgBtn').catch(() => '');
+      global.WATCH_CALLS = 0; await p.click('#cgBtn'); await p.waitForSelector('.cgp-brief', { timeout: 15000 }).catch(() => {});
+      const quickCard = await p.textContent('.cgp-brief').catch(() => ''); await p.waitForSelector('.cgp-brief.cgb-ai', { timeout: 30000 }).catch(() => {});
+      const br = await p.textContent('.cgp-brief').catch(() => ''), first = await p.$eval('#cgLog', (l) => l.firstElementChild && l.firstElementChild.className).catch(() => '');
+      const pc = await p.$eval('#cgPanel', (x) => x.className).catch(() => '');
+      ok('Champ watch', 'Champ shows the rules\' view at once (with the reasons) while it works out its own view in the background', /Behind schedule/.test(quickCard) && /working out what it would do/.test(quickCard), quickCard.slice(0, 200));
+      ok('Champ watch', 'in a red project the Ask Champ button turns red ("Champ: act now"); opening Champ, the first thing it says is the brief: what is wrong, why, and what it would do', /act now/i.test(bt) && /cgp-brief cg-red/.test(first) && /cg-red/.test(pc) && /Act now/.test(br) && /Heads up: Watch red is \d+ days late/.test(br) && /Crash the critical path/.test(br) && /Design workshops/.test(br) && /Vendor adapter late/.test(br) && global.WATCH_CALLS === 1 && /RED/.test(global.WATCH_SYS || ''), JSON.stringify([bt, first, pc, br.slice(0, 300), global.WATCH_CALLS]));
+      const c2 = await (await api('planWatchGet', { core: rc })).json();
+      await p.click('[data-cgbr]'); await sleep(800); await p.waitForSelector('.cgp-brief.cgb-ai', { timeout: 30000 }).catch(() => {}); await sleep(500);
+      ok('Champ watch', 'the brief is kept until the numbers change (no second AI call); ↻ Look again asks Champ afresh', c2.cached === true && global.WATCH_CALLS === 2, JSON.stringify([c2.cached, global.WATCH_CALLS]));
+      await p.click('.cgp-x').catch(() => {});
+      await p.goto(`${BASE}/admin/#plan/${gc}/overview`); await p.waitForSelector('#cgBtn.cg-green', { timeout: 10000 }).catch(() => {});
+      const gb = await p.$eval('#cgBtn', (x) => x.className + '|' + x.textContent).catch(() => '');
+      await p.goto(`${BASE}/admin/#programs`); await sleep(1200); const nb = await p.$eval('#cgBtn', (x) => x.className + '|' + x.textContent).catch(() => '');
+      ok('Champ watch', 'a green project turns the button green; outside a project it is the usual Ask Champ', /cg-green/.test(gb) && /on track/i.test(gb) && !/cg-(red|amber|green)/.test(nb) && /Ask Champ/.test(nb), JSON.stringify([gb, nb]));
+      const pgw = (await (await api('planGet', { core: rc })).json()).plan; await api('planSave', { core: rc, rev: pgw.rev, plan: Object.assign(pgw, { charter: { budget: 60000, manager: 'Priya Raman' }, stakeholders: [{ id: 's1', name: 'Priya Raman', role: 'Project manager', raci: 'R' }, { id: 's2', name: 'Helen Carter', role: 'Project sponsor', raci: 'A' }] }) });
+      await api('guideAsk', { q: 'Who is the project manager and who are the stakeholders?', core: rc, tours: [] }); const gx = (global.GUIDE_CTX || {}).project || {};
+      ok('Champ watch', 'Ask Champ in a project gets the whole project: manager, sponsor, stakeholders, tasks, risks, issues and its health (so it answers instead of pointing at a tab)', gx.project_manager === 'Priya Raman' && (gx.stakeholders || []).some((x) => x.name === 'Helen Carter' && x.role === 'Project sponsor') && (gx.tasks || []).some((t) => t.n === 'Design workshops' && t.pct === 50) && (gx.issues || []).some((x) => /Vendor adapter/.test(x.title)) && gx.health === 'red' , JSON.stringify([gx.project_manager, gx.stakeholders, (gx.tasks || []).slice(0, 2), gx.issues, gx.health]).slice(0, 700));
+      // Build 2: the watch across every project (Programs and Summary), what got worse, Champ's review, the morning run is signed
+      const wb1 = await (await api('watchBoard', { refresh: true })).json();
+      const it = (b, c) => (b.items || []).find((x) => x.core === c) || {};
+      const pg2 = (await (await api('planGet', { core: gc })).json()).plan;
+      await api('planSave', { core: gc, rev: pg2.rev, plan: Object.assign(pg2, { issues: [{ id: 'i9', title: 'Key supplier went into administration', priority: 'Critical', status: 'Open', owner: 'Sam' }] }) });
+      const wb2 = await (await api('watchBoard', { refresh: true })).json();
+      ok('Champ watch', 'the watch checks every project (red first); when a project gets worse it raises an alert (green → red), once', it(wb1, rc).rag === 'red' && it(wb1, gc).rag === 'green' && wb1.items.findIndex((x) => x.core === rc) < wb1.items.findIndex((x) => x.core === gc) && it(wb2, gc).rag === 'red' && (wb2.alerts || []).some((a) => a.core === gc && a.from === 'green' && a.to === 'red' && /Key supplier/.test(a.why)) && (wb2.alerts || []).filter((a) => a.core === gc).length === 1, JSON.stringify([it(wb1, rc).rag, it(wb1, gc).rag, it(wb2, gc).rag, (wb2.alerts || []).slice(0, 2)]));
+      await p.goto(`${BASE}/admin/#programs`); await p.reload(); await p.waitForSelector('#pgWatch .wt-r', { timeout: 15000 }).catch(() => {});
+      const pw = await p.textContent('#pgWatch').catch(() => ''), redRow = await p.$('#pgWatch .wt-r.wt-red[data-wtc="' + rc + '"]');
+      ok('Champ watch', 'Programs shows Champ\'s watch: counts, the red and amber projects with why, and what got worse', /Champ's watch/.test(pw) && /act now/.test(pw) && !!redRow && /Got worse/.test(pw) && /Watch green 🟢→🔴/.test(pw) && /Heads up: Watch red/.test(pw), pw.slice(0, 400));
+      global.WATCH_CALLS = 0; await p.click('#wtAi'); await p.waitForSelector('#pgWatch .wt-msg', { timeout: 60000 }).catch(() => {});
+      const pw2 = await p.textContent('#pgWatch').catch(() => '');
+      ok('Champ watch', '✨ Champ\'s review: Champ writes its view of every red and amber project that needs one (not the ones already done)', /Champ reviewed [1-9]/.test(pw2) && global.WATCH_CALLS >= 1 && /Heads up: Watch green/.test(pw2), JSON.stringify([global.WATCH_CALLS, pw2.slice(0, 300)]));
+      await p.goto(`${BASE}/admin/#portfolio/summary`); await p.waitForSelector('#csWatch .wt-r', { timeout: 15000 }).catch(() => {});
+      const sw = await p.textContent('#csWatch').catch(() => '');
+      process.env.ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || 'unit-test-secret';
+      const AL = await import(path.join(SITE, 'netlify/lib/admin-lib.mjs')); await AL.ensureSecret();
+      const rq = (t) => ({ headers: { get: (k) => (k === 'x-champ-cron' ? t : '') } }), good = AL.cronToken('2026-11-16');
+      const cron = AL.cronOk(rq('not-the-key'), ['2026-11-16']) === false && AL.cronOk(rq(''), ['2026-11-16']) === false && AL.cronOk(rq(good), ['2026-11-16']) === true && AL.cronOk(rq(good), ['2026-11-17']) === false ? 403 : 0;
+      ok('Champ watch', 'the Summary has the watch too; the morning run only works with the site\'s own signature', /Champ's watch/.test(sw) && /Watch red/.test(sw) && cron === 403, JSON.stringify([sw.slice(0, 120), cron]));
+      await api('planProjectDelete', { core: rc }); await api('planProjectDelete', { core: gc });
+    }
     // 🌳 WBS: the Gantt's rightmost button turns the plan into a Work Breakdown Structure (read only), saved as PNG or JPEG
     {
       const wc = (await (await api('planNewProject', { name: 'WBS check', client: 'Internal', program: 'Digital health' })).json()).core;
@@ -623,7 +686,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       if (process.env.DOC_ONLY) await p.screenshot({ path: '/tmp/wbsview.png', fullPage: false });
       await api('planProjectDelete', { core: wc });
     }
-    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins|Gantt|Knowledge|R2|Costing/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
+    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins|Gantt|Knowledge|R2|Costing|Champ watch/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
   }
   // ---- 🌐 language audit: with the console in Malay, every page and every project tab must show no English ----
   {

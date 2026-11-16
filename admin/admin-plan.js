@@ -585,6 +585,7 @@
       return api('planSave', { core: core, plan: plan, rev: S.rev, note: note || '' }).then(function (r) {
         S.busy = false;
         if (S.core !== core) return;
+        if (M.watchCheck) setTimeout(function () { M.watchCheck(true); }, 300);   // 🩺 Champ's colour follows the change
         S.rev = r.plan.rev; plan.rev = r.plan.rev;
         if (plan.tasks.some(function (t) { return matsOf(t).length; })) loadInv().then(function () { if (S.plan === plan && (S.tab === 'schedule' || S.tab === 'overview' || S.tab === 'bom') && !S.timer && !document.activeElement.closest('#planBody')) render(); });
         if (r.low && r.low.length && M.inv) M.inv.prompt(r.low);

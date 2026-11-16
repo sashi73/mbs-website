@@ -193,7 +193,104 @@
     if ($('#cgBtn') || !document.getElementById('app')) return;
     var b = document.createElement('button'); b.id = 'cgBtn'; b.type = 'button'; b.title = 'Ask Champ: how do I…?'; b.innerHTML = '<img src="../assets/gkh-globe.webp" alt=""><span>Ask Champ</span>';
     b.onclick = function () { if ($('#cgPanel') && !$('#cgPanel').hidden) closePanel(); else openPanel(); };
-    document.body.appendChild(b);
+    document.body.appendChild(b); watchCheck();
+  }
+  // 🩺 Champ watches the project you are in: the button takes its health colour (red, amber, green) and, when you open Champ
+  // in a project, the first thing it says is how the project is doing and what it would do about it
+  var W = { core: '', rag: '', at: 0, told: {} };
+  var RAGTXT = { red: '🔴 Act now', amber: '🟠 Watch closely', green: '🟢 On track', grey: '⚪ Not enough data yet' };
+  function watchBtn() {
+    var b = $('#cgBtn'), core = planHash(), on = core && W.core === core && W.rag;
+    if (b) {
+      ['red', 'amber', 'green', 'grey'].forEach(function (c) { b.classList.remove('cg-' + c); });
+      var sp = b.querySelector('span');
+      if (on) { b.classList.add('cg-' + W.rag); b.title = 'Champ is watching this project: ' + (RAGTXT[W.rag] || '').replace(/^\S+ /, '') + '. Tap for Champ\'s view.'; if (sp) sp.textContent = W.rag === 'red' ? 'Champ: act now' : W.rag === 'amber' ? 'Champ: watch' : W.rag === 'green' ? 'Champ: on track' : 'Ask Champ'; }
+      else { b.title = 'Ask Champ: how do I…?'; if (sp) sp.textContent = 'Ask Champ'; }
+    }
+    var p = $('#cgPanel'); if (p) { ['red', 'amber', 'green', 'grey'].forEach(function (c) { p.classList.remove('cg-' + c); }); if (on) p.classList.add('cg-' + W.rag); }
+  }
+  function watchCheck(force) {
+    var core = planHash();
+    if (!core) { W.core = ''; W.rag = ''; watchBtn(); return Promise.resolve(null); }
+    if (!force && W.core === core && Date.now() - W.at < 90000) { watchBtn(); return Promise.resolve(W); }
+    return api('planWatchGet', { core: core, quick: true }).then(function (r) { if (planHash() !== core) return null; W.core = core; W.rag = r.rag; W.at = Date.now(); watchBtn(); return W; }).catch(function () { return null; });
+  }
+  window.addEventListener('hashchange', function () { setTimeout(function () { watchCheck(); }, 400); });
+  setInterval(function () { if (planHash() && !document.hidden) watchCheck(true); }, 120000);
+  M.watchCheck = watchCheck;
+  // 🩺 Champ's watch across every project (Programs and Summary): red / amber / green, what changed since yesterday, the alerts
+  var DOT = { red: '🔴', amber: '🟠', green: '🟢', grey: '⚪' }, WORD = { red: 'Act now', amber: 'Watch closely', green: 'On track', grey: 'No data yet' }, ORD = { red: 0, amber: 1, green: 2, grey: 3 };
+  M.watchPanel = function (host, only) {
+    if (!host) return; host.innerHTML = '<div class="wt card"><div class="wt-h"><b>🩺 Champ\'s watch</b><small class="muted">Checking every project…</small></div></div>';
+    var draw = function (d, msg) {
+      var items = (d.items || []).filter(function (x) { return !only || only(x); }), C = { red: 0, amber: 0, green: 0, grey: 0 }; items.forEach(function (x) { C[x.rag]++; });
+      var AL = {}; (d.alerts || []).forEach(function (a) { if (Date.now() - a.at < 864e5 && !AL[a.core]) AL[a.core] = a; });
+      items.forEach(function (x) { var a = AL[x.core]; if (!x.was && a && a.to === x.rag) x.was = a.from; });
+      var worse = items.filter(function (x) { return x.was && ORD[x.rag] < ORD[x.was]; }), better = items.filter(function (x) { return x.was && ORD[x.rag] > ORD[x.was] && x.rag !== 'grey'; });
+      var when = function (t) { return t ? new Date(t).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : ''; };
+      var edit = M.allowed && M.allowed('projects', 'edit') && !(M.me && M.me.scope);
+      var row = function (x) { var ch = x.was && x.was !== x.rag ? '<span class="wt-ch ' + (ORD[x.rag] < ORD[x.was] ? 'down' : 'up') + '" title="Yesterday: ' + WORD[x.was] + '">' + (ORD[x.rag] < ORD[x.was] ? '▼ was ' : '▲ was ') + DOT[x.was] + '</span>' : '';
+        return '<a class="wt-r wt-' + x.rag + '" href="#plan/' + esc(x.core) + '/overview" data-wtc="' + esc(x.core) + '"><i class="wt-d"></i><span class="wt-n"><b>' + esc(x.name) + '</b>' + ch + '<small>' + esc(x.program || '') + (x.since && x.rag !== 'green' ? ' · ' + WORD[x.rag].toLowerCase() + ' since ' + esc(x.since.slice(8) + '/' + x.since.slice(5, 7)) : '') + '</small></span>' +
+          '<span class="wt-why">' + esc(x.headline || (x.reasons || [])[0] || (x.rag === 'green' ? 'On schedule and within budget.' : '')) + '</span>' +
+          '<span class="wt-k">' + (x.SPI != null ? 'SPI <b>' + x.SPI.toFixed(2) + '</b>' : '') + (x.CPI != null ? ' CPI <b>' + x.CPI.toFixed(2) + '</b>' : '') + (x.slip > 0 ? '<br>' + x.slip + ' days late' : '') + '</span></a>'; };
+      var act = items.filter(function (x) { return x.rag === 'red' || x.rag === 'amber'; }), ok = items.filter(function (x) { return x.rag === 'green' || x.rag === 'grey'; });
+      host.innerHTML = '<div class="wt card"><div class="wt-h"><b>🩺 Champ\'s watch</b>' +
+        '<span class="wt-c"><span class="wt-chip red">🔴 ' + C.red + ' act now</span><span class="wt-chip amber">🟠 ' + C.amber + ' watch</span><span class="wt-chip green">🟢 ' + C.green + ' on track</span></span><span class="sp"></span>' +
+        '<small class="muted">Checked ' + esc(when(d.at)) + ' · every morning at 7 am</small><button class="btn btn-sm" type="button" id="wtNow" title="Check every project again now (the health rules)">↻ Check now</button>' +
+        (edit ? '<button class="btn btn-sm btn-gold" type="button" id="wtAi" title="Champ reviews every red and amber project and writes what it would do">✨ Champ\'s review</button>' : '') + '</div>' +
+        (msg ? '<p class="wt-msg">' + esc(msg) + '</p>' : '') +
+        (worse.length || better.length ? '<div class="wt-al">' + (worse.length ? '<span>⚠ <b>Got worse</b>: ' + worse.map(function (x) { return esc(x.name) + ' ' + DOT[x.was] + '→' + DOT[x.rag]; }).join(' · ') + '</span>' : '') + (better.length ? '<span>✓ Better: ' + better.map(function (x) { return esc(x.name) + ' ' + DOT[x.was] + '→' + DOT[x.rag]; }).join(' · ') + '</span>' : '') + '</div>' : '') +
+        (act.length ? '<div class="wt-list">' + act.map(row).join('') + '</div>' : '<p class="muted" style="margin:6px 0">' + (items.length ? 'Every project is on track. Keep progress and costs up to date and Champ keeps watching.' : 'No projects in progress to watch yet.') + '</p>') +
+        (ok.length ? '<details class="wt-ok"><summary>🟢 ' + ok.length + ' on track</summary><div class="wt-list">' + ok.map(row).join('') + '</div></details>' : '') + '</div>';
+      var nb = host.querySelector('#wtNow'); if (nb) nb.onclick = function () { nb.disabled = true; nb.textContent = 'Checking…'; api('watchBoard', { refresh: true, lang: lang() }).then(function (r) { draw(r); }).catch(function (e) { nb.disabled = false; M.fail(e); }); };
+      var ab = host.querySelector('#wtAi'); if (ab) ab.onclick = function () {
+        ab.disabled = true; ab.textContent = '✨ Champ is reviewing…'; var id = 'watchall' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), n = 0;
+        fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': lang() }, body: JSON.stringify({ mode: 'watchAll', id: id, lang: lang() }) }).catch(function () {});
+        (function poll() { setTimeout(function () { api('planAiStatus', { id: id }).then(function (st) {
+          if (st.status === 'done') return api('watchBoard', { lang: lang() }).then(function (r) { draw(r, 'Champ reviewed ' + ((st.board || {}).briefs || 0) + ' project' + (((st.board || {}).briefs || 0) === 1 ? '' : 's') + ' that needed it. Open one and tap Champ for the full view.'); });
+          if (st.status === 'error' || ++n > 120) { ab.disabled = false; ab.textContent = '✨ Champ\'s review'; return; } poll(); }).catch(function () { if (++n <= 120) poll(); }); }, 3000); })();
+      };
+    };
+    api('watchBoard', { lang: lang() }).then(function (d) { draw(d); }).catch(function () { host.innerHTML = ''; });
+  };
+  // the brief: a card in the conversation
+  function briefCard(r, thinking) {
+    var L = $('#cgLog'); if (!L) return; var b = r.brief || {}, d = document.createElement('div'); d.className = 'cgp-m cgp-bot cgp-brief cg-' + r.rag;
+    d.innerHTML = '<div class="cgb-h"><b>' + esc(RAGTXT[r.rag] || '') + '</b><small>' + esc(r.name || '') + '</small></div>' +
+      '<p class="cgb-l">' + esc(b.headline || '') + '</p>' + (b.summary ? '<p>' + esc(b.summary) + '</p>' : '') +
+      (r.reasons && r.rag !== 'green' ? '<ul class="cgb-why">' + r.reasons.filter(function (x) { return x.lvl !== 'green'; }).slice(0, 5).map(function (x) { return '<li class="cgb-' + x.lvl + '">' + esc(x.text) + '</li>'; }).join('') + '</ul>' : '') +
+      ((b.actions || []).length ? '<p class="cgb-t">' + (r.rag === 'green' ? 'Keep doing' : 'If this were my project, I would:') + '</p><ol class="cgb-a">' + b.actions.map(function (a) { return '<li><b>' + esc(a.title) + '</b>' + (a.detail ? '<br><span>' + esc(a.detail) + '</span>' : '') + '</li>'; }).join('') + '</ol>' : '') +
+      ((b.watch || []).length ? '<p class="cgb-t">Keep an eye on</p><ul class="cgb-w">' + b.watch.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
+      (b.note ? '<p class="cgb-n">📚 ' + esc(b.note) + '</p>' : '') +
+      '<div class="cgb-go"><button type="button" data-cgbt="critical">⚡ Critical path</button><button type="button" data-cgbt="risks">⚠ Risks</button><button type="button" data-cgbt="budget">💰 Costing</button><button type="button" data-cgbr title="Champ looks again now">↻ Look again</button></div>' +
+      (thinking ? '<p class="cgb-think">💭 Champ is working out what it would do…</p>' : '') +
+      '<small class="cgb-at">' + (b.ai ? 'Champ\'s view' : 'From the health rules') + ' · ' + esc(new Date(r.at || Date.now()).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })) + '</small>';
+    L.appendChild(d); d.scrollIntoView({ block: 'start' });
+    d.querySelectorAll('[data-cgbt]').forEach(function (x) { x.onclick = function () { location.hash = '#plan/' + W.core + '/' + x.getAttribute('data-cgbt'); }; });
+    var rb = d.querySelector('[data-cgbr]'); if (rb) rb.onclick = function () { d.remove(); watchBrief(true); };
+    if (thinking) return d; if (b.ai) d.classList.add('cgb-ai');
+    var talk = (b.headline || '') + ((b.actions || [])[0] && r.rag !== 'green' ? ' First, ' + b.actions[0].title.replace(/\.$/, '') + '.' : ''); lastBot = talk; speak(talk);
+    return d;
+  }
+  function watchBrief(refresh) {
+    var core = planHash(); if (!core) return false;
+    W.told[core] = Date.now();
+    var wait = say('bot', refresh ? 'Looking at the project again…' : 'Checking this project…');
+    api('planWatchGet', { core: core, lang: lang() }).then(function (r) {
+      if (wait) wait.remove(); W.core = core; W.rag = r.rag; W.at = Date.now(); watchBtn();
+      if (!(r.stale || refresh)) return briefCard(r);
+      var card = briefCard(r, true);   // the rules' view straight away, then Champ's own view (the AI, in the background)
+      var id = 'watch' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': lang() }, body: JSON.stringify({ mode: 'watch', id: id, core: core, lang: lang() }) }).catch(function () {});
+      var n = 0; (function poll() { setTimeout(function () {
+        api('planAiStatus', { id: id }).then(function (st) {
+          if (st.status === 'done' && st.watch) { if (card && card.parentNode) card.remove(); W.rag = st.watch.rag; watchBtn(); briefCard(st.watch); return; }
+          if (st.status === 'error' || ++n > 45) { if (card) { var th = card.querySelector('.cgb-think'); if (th) th.remove(); } return; }
+          poll();
+        }).catch(function () { if (++n <= 45) poll(); });
+      }, n < 4 ? 1500 : 2500); })();
+    }).catch(function () { if (wait) wait.remove(); delete W.told[core]; greet(false); });
+    return true;
   }
   function openPanel() {
     var p = $('#cgPanel');
@@ -213,7 +310,10 @@
       $('#cgMic').onclick = mic; $('#cgMenuBtn').onclick = function () { menu(); };
       chipsFill(p);
     }
-    p.hidden = false; greet(false);
+    p.hidden = false; watchBtn();
+    var core = planHash();
+    if (core && !W.told[core]) watchBrief(false);   // in a project: Champ's view of it comes first
+    else greet(false);
   }
   // ☰ the menu: everything Champ can show you, in groups (tap ☰, or say / type "menu")
   var MENU = [['📂 Portfolio', ['programs', 'deps', 'summary', 'pipeline']], ['📁 In a project', ['backlog', 'sprint', 'charter', 'plandoc', 'bom', 'task', 'note', 'board', 'budget', 'risk', 'critical', 'change', 'intel']], ['🚀 Getting started', ['project', 'profile', 'language']], ['👥 Team and access', ['user', 'people', 'calendar']]];

@@ -847,6 +847,7 @@ export async function fitPlanAi({ core, finishBy }, by) {
 export const PHASES = { init: 'Initiation', plan: 'Planning', exec: 'Execution', monitor: 'Monitoring & Evaluation', close: 'Closing' };
 export function healthOf(c) {
   if (!c.hasPlan) return 'grey';
+  if (c.rag) return c.rag;   // 🩺 the same rules as Champ's watch (earned value, baseline, budget, late work, risks, issues)
   if ((c.SPI != null && c.SPI < 0.9) || (c.CPI != null && c.CPI < 0.9) || c.late >= 3 || c.highRisks >= 3) return 'red';
   if ((c.SPI != null && c.SPI < 1) || (c.CPI != null && c.CPI < 1) || c.late > 0 || c.highRisks > 0) return 'amber';
   return 'green';
@@ -856,13 +857,13 @@ export async function portfolio(day, only = null) {
   const jobs = Object.fromEntries(jobList.map((j) => [j.core, j])), pin = (pins && pins.map) || {};
   const auto = (r, j) => { if (j && j.stage === 'paid') return 'close'; if (!r) return 'init';   // Project Champ: only Signed off and closed closes it (invoices are milestone payments)
     if (r.total && r.done >= r.total) return 'close'; if (r.pct >= 80) return 'monitor'; if (r.pct > 0 || r.done > 0 || (r.start && r.start < day && r.total)) return 'exec'; return 'plan'; };
-  const cards = [], seen = new Set();
+  const cards = [], seen = new Set(), W = await import('./watch.mjs');
   for (const p of plans) {
     if (only && !only.includes(p.core)) continue;
     const j = jobs[p.core]; if (j && j.stage === 'lost') continue;
     const r = rollup(p, day), a = auto(r, j); seen.add(p.core);
     cards.push({ core: p.core, ref: j ? J.refFor(j) : p.core, name: p.name || (j ? jobTitle(j) : p.core), client: j ? j.name : '', site: j ? j.suburb || '' : '', program: (j && j.program) || '',
-      since: (j && j.created) || 0, updated: p.updated || 0, hasPlan: true, auto: a, phase: pin[p.core] || a, pinned: !!pin[p.core], ...r });
+      since: (j && j.created) || 0, updated: p.updated || 0, hasPlan: true, auto: a, phase: pin[p.core] || a, pinned: !!pin[p.core], ...r, rag: (() => { try { const h = W.check(p, day); return h.rag === 'grey' ? '' : h.rag; } catch (e) { return ''; } })() });
   }
   if (!only) for (const j of jobList) {
     if (seen.has(j.core) || j.stage === 'lost' || !(j.source === 'Project Champ' || J.OPEN.includes(j.stage))) continue;

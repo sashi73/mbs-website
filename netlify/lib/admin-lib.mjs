@@ -55,6 +55,9 @@ export function makeSession(user, now = Date.now(), extra = {}) {   // v86: extr
   const body = b64(JSON.stringify({ u: user, iat: now, exp: now + HOURS * 3600000, ...(extra.uid ? { uid: extra.uid, v: extra.v || 0 } : {}), ...(extra.pc ? { pc: extra.pc } : {}) }));   // v91: pc = the project a sub-contractor signed in to
   return body + '.' + sign(body);
 }
+// 🩺 the daily watch: the scheduled function asks the background function to run, signed with the site's key (no user session)
+export function cronToken(day) { return sign('champ-cron|' + day); }
+export function cronOk(req, days) { const t = String(req.headers.get('x-champ-cron') || ''); return !!t && adminReady() && days.some((d) => same(t, cronToken(d))); }
 export function readSession(req, now = Date.now()) {
   if (!adminReady()) return null;
   const m = String(req.headers.get('cookie') || '').match(new RegExp(`(?:^|;\\s*)${COOKIE}=([^;]+)`));

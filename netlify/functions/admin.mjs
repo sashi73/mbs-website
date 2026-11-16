@@ -378,6 +378,19 @@ async function handle(req, context) {
       }
 
       // ---------- GKH Project Champ: a new project without the CRM ----------
+      case 'watchBoard': {   // 🩺 Champ's watch across every project: red / amber / green, what changed since yesterday, the alerts
+        if (!(ctx.owner || ['view', 'edit'].includes((ctx.mods || {}).projects))) return bad('Projects access is needed.', 403);
+        const W = await import('../lib/watch.mjs'), b = await W.board({ refresh: !!body.refresh, lang: clean(body.lang, 5) || 'en' }), al = await W.alertsList(), run = await kv.get('watch:run').catch(() => null);
+        const mine = (x) => !ctx.scope || ctx.scope.includes(x.core), items = (b.items || []).filter(mine), counts = { red: 0, amber: 0, green: 0, grey: 0 }; items.forEach((x) => counts[x.rag]++);
+        return out(200, { day: b.day, at: b.at, prevDay: b.prevDay || '', counts, items, alerts: al.filter(mine).slice(0, 20), lastRun: run || null });
+      }
+      case 'planWatchGet': {   // 🩺 Champ's health check of one project (rules) and its brief (AI, kept until the numbers change)
+        const core = clean(body.core, 40), pl = core ? await getPlan(core) : null; if (!pl) return bad('Project not found', 404);
+        const W = await import('../lib/watch.mjs'), j = await J.find(core);
+        if (body.quick) { const h = W.check(pl); return out(200, { rag: h.rag, word: h.word, reasons: h.reasons, n: h.n }); }
+        const r = await W.brief(core, pl, { refresh: !!body.refresh, name: pl.name || (j && j.service) || '', lang: clean(body.lang, 5) || 'en' });
+        return out(200, { rag: r.rag, word: r.word, reasons: r.reasons, n: r.n, brief: r.brief, at: r.at, cached: !!r.cached, stale: !!r.stale, name: pl.name || '' });
+      }
       case 'guideAsk': {   // 🎙 Ask Champ (dashboard): which on-screen guide answers the question, and a short answer in the console's language
         const q = clean(body.q, 300), tours = (Array.isArray(body.tours) ? body.tours : []).slice(0, 40).map((t) => ({ id: clean(t.id, 20), t: clean(t.t, 80) })).filter((t) => t.id);
         if (!q) return bad('Ask a question');
@@ -401,11 +414,22 @@ async function handle(req, context) {
         const core = clean(body.core, 40);
         if (core && (!ctx.scope || ctx.scope.includes(core))) { try { const PL = await import('../lib/plan.mjs'); const pl = await getPlan(core);
           if (pl && Array.isArray(pl.tasks)) { const today = new Date(Date.now() + 11 * 3600000).toISOString().slice(0, 10), R = PL.rollup(pl, today);
-            project = { name: pl.name, start: R.start, finish: R.finish, finish_by: pl.finishBy || '', today, pct_complete: R.pct, tasks: R.total, late_tasks: R.late, SPI: R.SPI, CPI: R.CPI, budget_BAC: R.BAC, spent_AC: R.AC,
-              open_risks: (pl.risks || []).filter((x) => x.status !== 'Closed').length, open_issues: (pl.issues || []).filter((x) => x.status !== 'Closed').length }; } } catch (e) { project = null; } }
+            const jb = await J.find(core).catch(() => null), ch = pl.charter || {}, ph = Object.fromEntries((pl.phases || []).map((f) => [f.id, f.name]));
+            const W = await import('../lib/watch.mjs'), hc = W.check(pl, today), cut = (v, n) => String(v || '').slice(0, n);
+            // everything about the open project, so "who is the project manager?", "who is on the team?", "what is late?" get a straight answer
+            project = { name: pl.name, ref: jb ? J.refFor(jb) : core, client: (jb && jb.name) || ch.customer || '', program: (jb && jb.program) || '', project_manager: ch.manager || (jb && jb.manager) || '', sponsor: (jb && jb.sponsor) || '', site: (jb && jb.suburb) || '',
+              summary: cut((jb && jb.summary) || ch.background, 700), objective: cut(ch.objective, 400), in_scope: cut(ch.inScope, 500), out_of_scope: cut(ch.outScope, 300), deliverables: cut(ch.deliverables, 400), acceptance: cut(ch.acceptance, 200), assumptions: cut(ch.assumptions, 300),
+              approved_budget: Number(ch.budget) || 0, charter_status: ch.docStatus || '', health: hc.rag, health_reasons: hc.reasons.map((x) => x.text), forecast_cost_EAC: hc.n.EAC, baseline_finish: hc.n.baseline_finish, days_past_baseline: hc.n.slip_days,
+              start: R.start, finish: R.finish, finish_by: pl.finishBy || '', today, pct_complete: R.pct, tasks_total: R.total, tasks_done: R.done, late_tasks_count: R.late, SPI: R.SPI, CPI: R.CPI, budget_BAC: R.BAC, spent_AC: R.AC,
+              stakeholders: (pl.stakeholders || []).filter((x) => x.name || x.role).slice(0, 40).map((x) => ({ name: x.name, role: x.role, raci: x.raci, email: x.email || undefined, phone: x.phone || undefined })),
+              phases: (pl.phases || []).map((f) => f.name),
+              tasks: pl.tasks.slice(0, 90).map((t) => ({ n: cut(t.name, 90), phase: ph[t.phase] || '', start: t.es, finish: t.ef, days: t.dur, pct: t.pct || 0, status: t.status, people: (t.res || []).join(', ') || undefined, owner: t.owner || undefined, cost: Math.round(PL.taskCost(t)), actual: Number(t.actual) || undefined, milestone: t.dur === 0 || undefined })),
+              risks: (pl.risks || []).filter((x) => x.title).slice(0, 25).map((x) => ({ title: x.title, score: (x.p || 0) * (x.i || 0), response: x.response, action: cut(x.action, 160), owner: x.owner, status: x.status })),
+              issues: (pl.issues || []).filter((x) => x.title).slice(0, 25).map((x) => ({ title: x.title, priority: x.priority, owner: x.owner, due: x.due, status: x.status })) }; } } catch (e) { console.error('Ask Champ project facts: ' + e.message); project = null; } }
         const kbHits = await KB.search(q, 2500).catch(() => []), course_notes = kbHits.length ? KB.forPrompt(kbHits) : undefined;
         const r0 = await llmJson([{ role: 'system', content: 'You are Champ, the guide inside the GKH Project Champ project-management console. People ask how to do things in the console. ' +
           'If they ask HOW TO DO something in the console, pick the ONE guide from the list that shows them (its id), set how true, and say in 1-2 friendly sentences what you will show them. ' +
+          'If they ask about THE OPEN PROJECT ("this project": who is the project manager, the sponsor, the client, who is on the team or a stakeholder, a task, a date, the budget, a risk or issue, what is late, its health), answer straight from the project facts given, with the names, dates and numbers; set how false; do not send them to a tab for something the facts already answer (only say where to look, or that it is not recorded yet, when it is not in the facts). ' +
           'If they ask about what is in the console (their programs, projects, the dependencies between projects, the portfolio summary, the pipeline, the team), answer from the portfolio data given (and the open project, "this project" = the project facts): name the projects, the links (from → to, type, lag, status) and the numbers; set how false; say where to see it (e.g. Portfolio > Dependency board). If something is not in the data, say it is not recorded yet. ' +
           'If they ask a project question (e.g. "my project is running late, what can I do?", over budget, too many risks, a stakeholder problem), set how false and answer it like a seasoned PMP: ' +
           'name the right techniques (late: crashing with more crew or overtime at extra cost, fast-tracking critical tasks in parallel with more risk, re-sequencing, cutting or deferring scope with the sponsor, a change request, re-baselining; ' +
