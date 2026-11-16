@@ -87,7 +87,7 @@ async function registerBuild() {
 function signLog(req, context, e) {
   const g = VIS.geoOf(context, req);
   const p = VIS.logSignIn({ ...e, ip: A.clientIp(req), ...g, device: VIS.device(req.headers.get('user-agent')) }).catch((x) => console.log('sign-in log failed: ' + x.message));
-  return A.later ? A.later(p) : p;
+  return p;   // awaited: a write left running after the answer can be cut off
 }
 export default async (req, context) => {
   const t0 = Date.now(), first = served++ === 0;

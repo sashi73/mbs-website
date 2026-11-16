@@ -84,4 +84,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 73 | 1.0.73| 2026-11-15 22:52| GKH-Project-Champ| `b5d5a8e` | Champ: AI daily limit 500 questions by default (was 50) |
 | 74 | 1.0.74| 2026-11-16 11:18| GKH-Project-Champ| `7e7c173` | Champ: Knowledge base (Sashi's class material) used by Ask AI and Ask Champ, credited to Sashi |
 | 75 | 1.0.75| 2026-11-16 12:06| GKH-Project-Champ| `cc3dd02` | Champ: Super user named; project managers and directors run projects and add team logins; upgrade Google sign-ins |
-| 76 | 1.0.76 | 2026-11-16 12:36 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 76 | 1.0.76| 2026-11-16 12:36| GKH-Project-Champ| `c0413c2` | Champ: knowledge base is a second reference: the AI's own knowledge first, Sashi's notes only when clearly relevant |
+| 77 | 1.0.77 | 2026-11-16 13:25 | GKH-Project-Champ | _this commit_ | _see git log_ |

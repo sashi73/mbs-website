@@ -66,7 +66,11 @@
     noted: 'Great, the GKH team will send your welcome pack to {email} shortly.',
     thanksName: 'That\u2019s everything, {name}. Thank you! Ask me anything about Project Champ, or about running projects, programs and portfolios.',
     thanks: 'That\u2019s everything. Thank you! Ask me anything about Project Champ, or about running projects, programs and portfolios.',
-    back: 'Welcome back, {name}! How can I help you today?', forgot: 'Done. I have forgotten your details.' };
+    back: 'Welcome back, {name}! How can I help you today?', forgot: 'Done. I have forgotten your details.',
+    hi: 'Hi, I\u2019m Champ 👋', keep: 'We\u2019d love to keep in touch. Would you be comfortable sharing your details with us?', yesShare: 'Yes, happy to', noShare: 'No, thanks',
+    okNo: 'No problem at all. Here\u2019s what I can help you with.', thanksForm: 'Thanks, {name}! Here\u2019s what I can help you with.',
+    anyMore: 'Do you have any other questions?', yesMore: 'Yes, another question', menuGo: 'No, show me the main menu', goAhead: 'Go ahead: type or say your question.',
+    wantPack: 'Email me the Project Champ welcome pack' };
   var vis = {}; try { vis = JSON.parse(ls('champVisitor') || '{}') || {}; } catch (e) { vis = {}; }
   function newId() { var a = new Uint8Array(12); try { crypto.getRandomValues(a); } catch (e) { for (var i = 0; i < 12; i++) a[i] = Math.random() * 256; } return 'v' + Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
   if (!vis.id) vis.id = newId();
@@ -244,7 +248,7 @@
           var it = MENU[+b.getAttribute('data-mi')];
           if (it[1] === 'Change language') { sel.focus(); try { sel.showPicker(); } catch (e) {} return; }
           if (it[1] === 'Voice languages') { d.remove(); voiceLangsPanel(); return; }
-          if (it[1] === 'Introduce myself') { d.remove(); ss('champObPause', ''); vis.step = 'lang'; saveVis(); obPrompt(); return; }
+          if (it[1] === 'Introduce myself') { d.remove(); ss('champObPause', ''); vis.step = 'form'; saveVis(); obPrompt(); return; }
           d.remove(); ask(T(it[1]));
         };
       });
@@ -285,6 +289,7 @@
     function ask(q, spoken, after) {
       q = String(q || '').trim(); if (!q || busy) return;
       var menu = log.querySelector('.cc-menu'); if (menu) menu.remove();
+      log.querySelectorAll('.cc-fu, .cc-ahead').forEach(function (x) { x.remove(); });
       busy = true; msgs.push({ role: 'user', content: q }); ss('champChat', JSON.stringify(msgs.slice(-24)));
       bubble('user', '<p>' + esc(q) + '</p>'); ta.value = ''; ta.style.height = '';
       var wait = bubble('bot', '<span class="cc-dots"><i></i><i></i><i></i></span>', 'cc-wait');
@@ -300,7 +305,7 @@
           }
           var bb = bubble('bot', md(j.reply)), row = tools(bb, i);
           if (voiceOn || spoken) speak(j.reply, L, row.querySelector('.cc-say'), i, spoken ? listenNext : null);
-          if (after) setTimeout(after, 0);
+          if (after) setTimeout(after, 0); else if (!obActive()) followUp();
         })
         .catch(function (e) { log.querySelectorAll('.cc-wait').forEach(function (x) { x.remove(); }); msgs.pop(); ss('champChat', JSON.stringify(msgs)); bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err'); })
         .then(function () { busy = false; ta.focus(); });
@@ -329,7 +334,8 @@
     function obUser(t) { var m = log.querySelector('.cc-menu:not(.cc-obb)'); if (m) m.remove(); msgs.push({ role: 'user', content: t, ob: true }); ss('champChat', JSON.stringify(msgs.slice(-24))); bubble('user', '<p>' + esc(t) + '</p>'); ta.value = ''; ta.style.height = ''; }
     function obPrompt() {
       var st = vis.step;
-      if (st === 'lang') obSay(OB.greet + '\n' + OB.switchTip + (handsFree() ? '' : '\n' + OB.micTip), 'en', OB.greet + ' ' + OB.sayLang);
+      if (st === 'consent') obSay(tr(OB.hi) + ' ' + tr(OB.keep));
+      else if (st === 'lang') obSay(OB.greet + '\n' + OB.switchTip + (handsFree() ? '' : '\n' + OB.micTip), 'en', OB.greet + ' ' + OB.sayLang);
       else if (st === 'form') obSay(tr(OB.formIntro) + ' ' + tr(OB.skipForm));
       else if (st === 'welcome') obSay(tr(vis.name ? OB.askWelcome : OB.askWelcomeNo) + ' ' + tr(OB.sayYesNo));
       obButtons();
@@ -341,6 +347,7 @@
       if (st === 'form') return obForm();
       if (st === 'lang') btns = LANGS.filter(function (l) { return l[0] !== 'auto'; }).map(function (l) { return ['L:' + l[0], l[1]]; });
       else if (st === 'welcome') btns = [['yes', '🎁 ' + T(OB.yesPlease)], ['no', T(OB.noThanks)]];
+      else if (st === 'consent') btns = [['cy', '✅ ' + T(OB.yesShare)], ['cn', T(OB.noShare)]];
       if (!handsFree()) btns.push(['mic', st === 'lang' ? OB.micOn : T(OB.micOn)]);
       var d = bubble('bot', '<div class="cc-ob-btns' + (st === 'lang' ? ' cc-ob-langs' : '') + '">' + btns.map(function (b) { return '<button type="button" data-ob="' + esc(b[0]) + '">' + esc(b[1]) + '</button>'; }).join('') + '</div>', 'cc-obb');
       d.querySelectorAll('[data-ob]').forEach(function (b) {
@@ -348,6 +355,7 @@
           var v = b.getAttribute('data-ob');
           if (v.indexOf('L:') === 0) { obUser(b.textContent); chooseLang(v.slice(2)); }
           else if (v === 'mic') micOn();
+          else if (v === 'cy' || v === 'cn') { obUser(b.textContent.replace(/^✅\s*/, '')); consent(v === 'cy'); }
           else { obUser(b.textContent.replace(/^🎁\s*/, '')); obAnswer(v === 'yes' ? 'yes' : 'no', false, '', true); }
         };
       });
@@ -369,6 +377,7 @@
         '<label class="cc-pf"><span>' + esc(T(OB.fMore)) + '</span><textarea name="more" rows="2" maxlength="400">' + esc(F.more || '') + '</textarea></label>' +
         '<input type="text" name="website" class="cc-hp" tabindex="-1" autocomplete="off" aria-hidden="true">' +
         '<div class="cc-pdpa"><b>' + esc(T(OB.pdpaTitle)) + '</b><p>' + esc(T(OB.pdpa)) + ' <a href="privacy.html#champ" target="_blank" rel="noopener">' + esc(T(OB.pdpaRead)) + '</a></p></div>' +
+        '<label class="cc-pc"><input type="checkbox" name="pack"' + (F.pack === false ? '' : ' checked') + '><span>🎁 ' + esc(T(OB.wantPack)) + '</span></label>' +
         '<label class="cc-pc"><input type="checkbox" name="consent"' + (F.consent ? ' checked' : '') + '><span>' + esc(T(OB.agree)) + '</span></label>' +
         '<p class="cc-perr" role="alert" hidden></p><button type="submit" class="cc-go">' + esc(T(OB.send)) + '</button></form>';
       log.appendChild(d); log.scrollTop = log.scrollHeight;
@@ -385,9 +394,11 @@
           .then(function (j) {
             busy = false;
             if (!j.ok) { go.disabled = false; go.textContent = T(OB.send); err.textContent = T(j.status === 422 ? (j.bad && j.bad[0] === 'phone' ? OB.errPhone : j.bad && j.bad[0] === 'email' ? OB.errEmail : OB.errName) : OB.errSave); err.hidden = false; return; }
-            vis.name = first; vis.email = email; vis.f = null; vis.step = 'welcome'; saveVis();
+            var pack = F.pack !== false;
+            vis.name = first; vis.email = email; vis.f = null; vis.step = 'done'; saveVis();
             d.remove(); obUser('✓ ' + first + ' ' + last + ' · ' + phone + ' · ' + email);
-            obPrompt();
+            var fin = function (j2) { obSay(tr(OB.thanksForm) + (pack ? ' ' + tr(j2 && j2.visitor && j2.visitor.welcomeStatus === 'sent' ? OB.sent : OB.noted) : '')); showMenu(); };
+            if (pack) { busy = true; obSave({ welcome: 'yes' }).then(function (j2) { busy = false; fin(j2); }); } else { obSave({ welcome: 'no' }); fin(null); }
           });
       };
       setTimeout(function () { var x = f.querySelector('input[name=first]'); if (x && !x.value) try { x.focus({ preventScroll: true }); } catch (e2) {} }, 200);
@@ -407,19 +418,25 @@
     }
     function obSkip(shown) {
       var st = vis.step; if (!shown) obUser(T(OB.skipWord));
+      if (st === 'consent') return consent(false);
       if (st === 'lang') { obSave({ skip: 'lang' }); chooseLang('en'); return; }
-      if (st === 'form') { obSave({ skip: 'form' }); vis.f = null; saveVis(); return obFinish(); }
+      if (st === 'form') return consent(false);
       if (st === 'welcome') { obSave({ welcome: 'no' }); return obFinish(); }
     }
     // true when the onboarding took the answer
     function obAnswer(text, spoken, heard, shown) {
       var st = vis.step, t = String(text || '').trim(); if (!t) return true;
-      if (isSkip(t) && st !== 'welcome') { if (!shown) obUser(t); obSkip(true); return true; }
+      if (isSkip(t) && st !== 'welcome' && st !== 'consent') { if (!shown) obUser(t); obSkip(true); return true; }
       if (st === 'lang') {
         if (!shown) obUser(t);
         var L = langFromText(t) || (heard && heard !== 'en' && LANGS.some(function (x) { return x[0] === heard; }) ? heard : '');
         if (!L) { obSay(OB.sorry, 'en'); L = 'en'; }
         chooseLang(L); return true;
+      }
+      if (st === 'consent') {
+        var cy = yesNo(t);
+        if (cy) { if (!shown) obUser(t); consent(cy === 'yes'); return true; }
+        ask(t, spoken, function () { if (obActive()) obButtons(); }); return true;   // a question first: answer it, the yes/no stays
       }
       if (st === 'form') { ask(t, spoken, function () { if (obActive()) obButtons(); }); return true; }   // a question while the form is open: answer it, keep the form
       if (st === 'welcome') {
@@ -453,14 +470,28 @@
       ask(t, spoken);
     }
     // a question from the page (the home "Ask Champ" box): answer it first; the welcome questions follow
+    // a question from the page (the home "Ask Champ" box): straight to the answer, no questions first; then "any other questions?"
     function askNow(q) {
       q = String(q || '').trim(); if (!q) return;
       var fresh = where === 'site' && !vis.step;
-      if (fresh) { vis.step = 'lang'; saveVis(); }
-      var held = obActive();
-      if (held) ss('champObPause', '1');
+      if (fresh) { vis.step = 'consent'; saveVis(); }
+      if (obActive()) ss('champObPause', '1');   // the "keep in touch" question waits for the next visit
       if (box.hidden) open(true); else draw();
-      ask(q, false, function () { if (held) { ss('champObPause', ''); if (obActive()) obPrompt(); } });
+      var o = log.querySelector('.cc-obb'); if (o) o.remove();
+      ask(q, false);
+    }
+    // yes: the form; no: straight to the main menu
+    function consent(yes) {
+      if (yes) { vis.step = 'form'; saveVis(); obPrompt(); return; }
+      obSave({ skip: 'form' }); vis.step = 'done'; vis.f = null; saveVis(); obSay(tr(OB.okNo)); showMenu();
+    }
+    // after an answer: "Do you have any other questions?" yes (type or say it) / no (the main menu)
+    function followUp() {
+      var old = log.querySelector('.cc-fu'); if (old) old.remove();
+      var d = bubble('bot', '<p>' + esc(T(OB.anyMore)) + '</p><div class="cc-ob-btns"><button type="button" data-fu="y">💬 ' + esc(T(OB.yesMore)) + '</button><button type="button" data-fu="n">☰ ' + esc(T(OB.menuGo)) + '</button></div>', 'cc-fu');
+      d.querySelector('[data-fu=y]').onclick = function () { d.remove(); bubble('bot', '<p>' + esc(T(OB.goAhead)) + '</p>', 'cc-ahead'); ta.focus(); };
+      d.querySelector('[data-fu=n]').onclick = function () { d.remove(); showMenu(); };
+      log.scrollTop = log.scrollHeight;
     }
     function menuNow() {   // ☰ during the welcome questions: skip the rest
       if (obActive()) { ss('champObPause', '1'); var o = log.querySelector('.cc-obb'); if (o) o.remove(); }   // asked again on the next visit
@@ -635,13 +666,13 @@
         if (where === 'site' && vis.step === 'done' && !vis.name && !vis.email && !vis.phone && !ss('champObAsked')) { vis.step = ''; msgs = []; ss('champChat', '[]'); }   // shared nothing last time: greet again on a new visit
         if (where === 'site') ss('champObAsked', '1');
         var fresh = where === 'site' && !vis.step;
-        if (fresh) { vis.step = 'lang'; saveVis(); }
+        if (fresh) { vis.step = 'consent'; saveVis(); }
         if (where === 'site' && vis.saved && !ss('champVisit')) { ss('champVisit', '1'); obSave({ visit: true }); }
         draw(); setTimeout(function () { ta.focus(); }, 50);
         var picked = ls('champStartLang');
         if (fresh && picked && picked === lang && concrete(lang)) {   // chosen on the intro's start screen: greet in it and go straight to the name
-          vis.step = 'form'; vis.lang = lang; saveVis(); obSave({ lang: lang });
-          ensure(obStrs(), lang).then(function () { obSay(tr(OB.greetIn) + '\n' + tr(OB.switchTip)); obPrompt(); });
+          vis.step = 'consent'; vis.lang = lang; saveVis(); obSave({ lang: lang });
+          ensure(obStrs(), lang).then(function () { obSay(tr(OB.greetIn) + ' ' + tr(OB.keep)); obButtons(); });
         } else if (fresh || (obActive() && !msgs.some(function (m) { return m.ob; }))) obPrompt();
         if (concrete(lang)) ensure(Object.keys(UI).map(function (k) { return UI[k]; }).concat(MENU.map(function (x) { return x[1]; })).concat(where === 'site' ? obStrs() : []), lang).then(function () { if (!box.hidden) { labels(); var mm = log.querySelector('.cc-menu:not(.cc-obb)'); if (mm && !obActive()) showMenu(); } });
       }
@@ -653,7 +684,7 @@
       stopVoice(); msgs = []; ss('champChat', '[]');
       if (where === 'site' && !window.CHAMP_REMEMBER) {   // "New chat" = the next person: start the welcome again
         if (rec && rec.state === 'recording') { recNothing = true; recQuiet = true; stopRec(); }
-        vis = { id: newId(), step: 'lang' }; saveVis(); ss('champObPause', ''); try { localStorage.removeItem('champHandsFree'); } catch (e) {} wake.pause();
+        vis = { id: newId(), step: 'consent' }; saveVis(); ss('champObPause', ''); try { localStorage.removeItem('champHandsFree'); } catch (e) {} wake.pause();
         if (lang !== 'auto' && lang !== 'en') switchLang('en');
       }
       draw(); if (obActive()) obPrompt();
