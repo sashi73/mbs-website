@@ -313,7 +313,7 @@
     p.hidden = false; watchBtn();
     var core = planHash();
     if (core && !W.told[core]) watchBrief(false);   // in a project: Champ's view of it comes first
-    else greet(false);
+    else if (!core) greet(false);   // in a project, Champ's view of it is the hello
   }
   // ☰ the menu: everything Champ can show you, in groups (tap ☰, or say / type "menu")
   var MENU = [['📂 Portfolio', ['programs', 'deps', 'summary', 'pipeline']], ['📁 In a project', ['backlog', 'sprint', 'charter', 'plandoc', 'bom', 'task', 'note', 'board', 'budget', 'risk', 'critical', 'change', 'intel']], ['🚀 Getting started', ['project', 'profile', 'language']], ['👥 Team and access', ['user', 'people', 'calendar']]];

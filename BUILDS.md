@@ -90,4 +90,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 79 | 1.0.79| 2026-11-16 16:01| GKH-Project-Champ| `ab6d5ca` | Champ: WBS view on the Gantt (read only), saved as PNG or JPEG |
 | 80 | 1.0.80| 2026-11-16 16:01| GKH-Project-Champ| `24e2fb5` | Build 79: R2 storage for original files (KB, Ask AI, new-project documents, charters, contracts, transcripts), Excel reading; costing fix (n |
 | 81 | 1.0.81| 2026-11-16 18:18| GKH-Project-Champ| `24e2fb5` | Build 79: R2 storage for original files (KB, Ask AI, new-project documents, charters, contracts, transcripts), Excel reading; costing fix (n |
-| 82 | 1.0.82 | 2026-11-16 18:18 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 82 | 1.0.82| 2026-11-16 18:18| GKH-Project-Champ| `f3c60bb` | Builds 81-82: Champ's project watch. Red/amber/green health rules, Champ's brief first in a project (background AI), coloured Ask Champ butt |
+| 83 | 1.0.83 | 2026-11-16 18:27 | GKH-Project-Champ | _this commit_ | _see git log_ |
