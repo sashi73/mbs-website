@@ -976,11 +976,12 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       ok('Backlog', 'story points are picked from 1, 2, 3, 5, 8, 13; ✨ Fill it in with AI writes the description, stories with points (snapped to the scale, adding up to the item), urgency and days, and leaves the owner to you', chips === '1,2,3,5,8,13,?' && /Book the venue/.test(af[0]) && /3 pts/.test(af[1]) && af[2] === 'High' && af[3] === '4' && af[4] === '', JSON.stringify([chips, af]));
       const sts = await p.$$eval('#agSt [data-stn]', (i) => i.map((x) => x.value).join('|'));
       ok('Backlog', 'the AI also suggests stories with points (an item with none gets them)', sts === 'Shortlist three venues|Pay the deposit', sts);
-      await p.click('#agF [data-close]').catch(() => {}); await sleep(300);
+      await p.click('#agF [data-close]').catch(() => {}); await p.waitForSelector('#agF', { state: 'detached', timeout: 5000 }).catch(() => {}); await sleep(500);
       await p.click('#agNew').catch(() => {}); await p.waitForSelector('#agF', { timeout: 5000 }).catch(() => {});
       await p.fill('#agF [name=name]', 'Venue booking'); await p.fill('#agF [name=desc]', 'Book the hall for 120 guests; done when the deposit is paid'); await p.click('#agF [data-pt="5"]'); await p.selectOption('#agF [name=prio]', 'High'); await p.fill('#agF [name=owner]', 'Priya Shah'); await p.fill('#agF [name=dur]', '3');
       await p.click('#agF [type=submit]').catch(() => {}); await sleep(2000);
-      const vb = (await nT()).find((t) => t.name === 'Venue booking') || {}; const vRow = await p.textContent(`.ag-row[data-tid="${vb.id}"]`).catch(() => '');
+      const vb = (await nT()).find((t) => t.name === 'Venue booking') || {};
+      if (!vb.id) { console.log('VBDBG', JSON.stringify(await p.evaluate(() => [document.querySelectorAll('#agF').length, (document.querySelector('#modal') || {}).textContent && document.querySelector('#modal').textContent.slice(0, 300), [...document.querySelectorAll('.toast,[class*=toast]')].map((x) => x.textContent).join('|'), location.hash]))); await p.screenshot({ path: '/tmp/vb.png' }); } const vRow = await p.textContent(`.ag-row[data-tid="${vb.id}"]`).catch(() => '');
       const partial = await p.textContent('.ag-row:not(.ok) .dor').catch(() => '');
       ok('Backlog', '＋ Item adds a Gantt task; description + points + urgency + owner = ✅ DOR ready (others show DOR partial or %)', vb.points === 5 && vb.priority === 'High' && vb.dur === 3 && /Venue booking/.test(vb.name) && /DOR ready/.test(vRow) && /DOR/.test(partial), JSON.stringify({ vb: [vb.points, vb.priority, vb.owner, vb.dur], vRow: vRow.slice(0, 80), partial }));
       const snet0 = vb.snet || '';
@@ -1061,7 +1062,24 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       const pl = await (await post('planList')).json(); const other = await post('planGet', { core: (pl.plans || [])[0] ? 'nope' : 'nope' });
       const mk = await post('userCreate', { user: { email: 'x@example.com', password: 'Welcome2026x', role: 'Project manager' } });
       ok('Users', 'the contractor signs in with that password, sees only their project, and cannot make logins', li.status() === 200 && (pl.plans || []).length === 1 && pl.plans[0].core === cc && mk.status() === 403, `login=${li.status()} plans=${(pl.plans || []).length} make=${mk.status()}`);
-      await c2.close(); }
+      await c2.close();
+      // ⭐ the super user's row, and a project manager: Projects, People, Ask AI & reports, Users & access (adds contractors and personnel only); no customers, activity log or builds
+      const uh = await p.textContent('.us-owner').catch(() => '');
+      ok('Users', 'the super user is named (Sashi Sivam, ⭐ Super user)', /Sashi Sivam/.test(uh) && /Super user/.test(uh), uh.slice(0, 120));
+      await api('userCreate', { user: { email: 'nina.pm@example.com', name: 'Nina PM', password: 'Welcome2026x', role: 'Project manager' } });
+      await api('userCreate', { user: { email: 'omar.pd@example.com', name: 'Omar PD', password: 'Welcome2026x', role: 'Project director' } });
+      const omar = ((await (await api('userList')).json()).users || []).find((u) => u.username === 'omar.pd@example.com') || {}, aisha = ((await (await api('userList')).json()).users || []).find((u) => u.username === 'aisha.contractor@example.com') || {};
+      const c5 = await b.newContext({ viewport: { width: 1366, height: 900 } }); const p5 = await c5.newPage(), post5 = (action, data = {}) => c5.request.post(`${BASE}/.netlify/functions/admin`, { data: { action, ...data }, headers: { 'X-MBS-Admin': '1', 'X-Forwarded-For': '203.0.113.61' } });
+      const l5 = await post5('login', { username: 'nina.pm@example.com', password: 'Welcome2026x' }), me5 = await (await post5('me')).json();
+      const mkC = await post5('userCreate', { user: { email: 'kim.crew@example.com', name: 'Kim Crew', password: 'Welcome2026x', role: 'Contractor' } }), mkD = await post5('userCreate', { user: { email: 'zed@example.com', password: 'Welcome2026x', role: 'Project director' } });
+      const edA = await post5('userSetPw', { id: aisha.id, password: 'Another2026x' }), edO = await post5('userSetPw', { id: omar.id, password: 'Another2026x' }), upA = await post5('userSave', { user: { id: aisha.id, role: 'Project director' } });
+      const deny = await Promise.all(['visitorList', 'enquiryList', 'log', 'kbList', 'buildList'].map(async (a) => a + ':' + (await post5(a)).status()));
+      await p5.goto(`${BASE}/admin/`); await p5.waitForSelector('.side-nav', { timeout: 10000 }).catch(() => {}); await sleep(1500);
+      const menu5 = await p5.$$eval('.side-nav a[data-nav]:not([hidden])', (a) => a.map((x) => x.textContent.trim()));
+      ok('Users', 'a project manager: Projects, People, Ask AI & reports, Users & access; adds contractors and personnel only; no customers, activity log, builds or knowledge base', l5.status() === 200 && me5.role === 'Project manager' && me5.mods.crm === 'none' && me5.mods.users === 'edit' && me5.mods.people === 'edit' && me5.mods.data === 'edit' &&
+        mkC.status() === 200 && mkD.status() === 403 && edA.status() === 200 && edO.status() === 403 && upA.status() === 403 && deny.every((x) => /:403$/.test(x)) &&
+        menu5.some((x) => /Users & access/.test(x)) && menu5.some((x) => /People/.test(x)) && !menu5.some((x) => /Enquiries|Visitors|Activity log|Builds|Knowledge/.test(x)), JSON.stringify([l5.status(), me5.role, me5.mods, mkC.status(), mkD.status(), edA.status(), edO.status(), upA.status(), deny, menu5]));
+      await c5.close(); }
     // 👥 People: two groups, credentials, rate, resume; only the PM adds people; everyone keeps My profile; calendar and workload
     { await p.goto(`${BASE}/admin/#people`); await p.waitForSelector('#ppNew', { timeout: 8000 }).catch(() => {});
       const nav = await p.textContent('.side-nav').catch(() => '');
@@ -1467,6 +1485,18 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Delete', 'view-only user cannot delete projects', r.status() === 403, r.status());
   r = await api('buildList');
   ok('Build', 'the build registry is owner only', r.status() === 403, r.status());
+  { // ⬆ the super user upgrades the Google sign-in to project manager: it keeps signing in with Google and gets the role
+    const c6 = await b.newContext(); const post6 = (action, data = {}) => c6.request.post(`${BASE}/.netlify/functions/admin`, { data: { action, ...data }, headers: { 'X-MBS-Admin': '1', 'X-Forwarded-For': '203.0.113.62' } });
+    await post6('login', { username: 'sashi73', password: 'sashi98' });
+    const gu = ((await (await post6('userList')).json()).users || []).find((u) => u.kind === 'google') || {};
+    const upg = await post6('userUpgrade', { id: gu.id, role: 'Project manager' }), ul = ((await (await post6('userList')).json()).users || []).find((u) => u.id === gu.id) || {};
+    const stale = await api('me');
+    await api('loginGoogle', { credential: 'aaa.bbb.ccc' }); const meG = await (await api('me')).json(), np = await api('planNewProject', { name: 'Upgraded check', client: 'Y', program: 'Digital health' });
+    const deny = await post6('userUpgrade', { id: gu.id, role: 'view' }).then(() => 0);
+    ok('Users', '⬆ the super user upgrades a Google sign-in to project manager: they keep Google sign-in and can now edit (only the super user can upgrade)', upg.status() === 200 && ul.upgraded && ul.role === 'Project manager' && stale.status() === 401 && meG.kind === 'google' && meG.role === 'Project manager' && np.status() === 200, JSON.stringify([upg.status(), ul.role, stale.status(), meG.role, np.status()]));
+    const npj = np.status() === 200 ? (await np.json()).core : ''; if (npj) await post6('planProjectDelete', { core: npj });
+    await c6.close();
+  }
 
   // ---- skins and layout ----
   await p.goto(`${BASE}/index.html`);

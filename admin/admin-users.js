@@ -12,15 +12,18 @@
   var V = function () { return M.view(); };
   var S = { data: null, plans: [] };
   var MODS = [['projects', 'Projects', 'Programs, projects, plans, Gantt, Board, costing, risks, change control, Ask AI'], ['people', 'People', 'The team register, credentials, calendar and workload (only the project manager adds people)'], ['crm', 'Enquiries & visitors', 'Enquiries and website visitors'],
-    ['data', 'Ask AI & data', 'Ask AI, SQL wizard and reports, activity log'], ['users', 'Users & access', 'This page (only the super user can change it)']];
+    ['data', 'Ask AI & reports', 'Ask AI, SQL wizard and reports (the activity log is the super user\'s)'], ['users', 'Users & access', 'This page: project managers and directors add contractors and project personnel; only the super user makes managers and upgrades people']];
   var KIND = {
-    'Project director': { ic: '🎯', cls: 'pm', about: 'Runs projects: every project and module; can look at People and Users & access. Only the project manager (super user) changes access.' },
-    'Project manager': { ic: '🧭', cls: 'pm', about: 'Admin: every module and every project (older login: the project manager is now the super user).' },
+    'Project manager': { ic: '🧭', cls: 'pm', about: 'Runs projects: every project, People, Ask AI & reports, and Users & access (adds contractors and project personnel). No customers, activity log or builds.' },
+    'Project director': { ic: '🎯', cls: 'pm', about: 'Runs projects: every project, People, Ask AI & reports, and Users & access (adds contractors and project personnel). No customers, activity log or builds.' },
     Contractor: { ic: '🛠', cls: 'ct', about: 'Limited: Projects only, and only the projects you tick.' },
     'Project personnel': { ic: '👥', cls: 'pp', about: 'Limited: Projects and Ask AI, on all projects or only the ones you tick.' },
     Custom: { ic: '⚙', cls: 'cu', about: 'You set each module yourself.' } };
   var LVI = { none: 'No access', view: '👁 View', edit: '✎ Edit' };
   var isSuper = function () { return !!(M.me || {}).owner; };
+  var isTeam = function () { return !!(S.data && S.data.team); };   // a project manager or director: adds and looks after contractors and project personnel
+  var canTouch = function (u) { return isSuper() || (isTeam() && u.kind === 'email' && (u.role === 'Contractor' || u.role === 'Project personnel') && u.id !== (M.me || {}).uid); };
+  var pickRoles = function () { return isSuper() ? ['Project manager', 'Project director', 'Contractor', 'Project personnel'] : ['Contractor', 'Project personnel']; };
   var when = function (t) { return t ? new Date(t).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Never'; };
   var roleMods = function (r) { var x = (S.data.roles || []).filter(function (y) { return y.name === r; })[0]; return Object.assign({}, x && x.mods); };
   var lv = function (v) { return '<span class="us-lv ' + (v || 'none') + '" title="' + esc(LVI[v || 'none']) + '">' + (v === 'edit' ? '✎' : v === 'view' ? '👁' : '–') + '</span>'; };
@@ -29,39 +32,41 @@
   function load() { return Promise.all([api('userList'), api('planList', {}).catch(function () { return { plans: [] }; })]).then(function (r) { S.data = r[0]; S.plans = r[1].plans || []; }); }
   function page() { return load().then(draw); }
   function projText(u) {
-    if (u.kind === 'google') return 'All (view only)';
+    if (u.kind === 'google' && !u.upgraded) return 'All (view only)';
     if (u.role === 'Project manager' || u.role === 'Project director' || u.projAll || u.kind === 'person') return 'All projects';
     var L = (u.projects || []).map(function (c) { var p = S.plans.filter(function (x) { return x.core === c; })[0]; return p ? p.name : c; });
     return L.length ? L.slice(0, 3).join(', ') + (L.length > 3 ? ' +' + (L.length - 3) : '') : '<span class="bad">None yet</span>';
   }
   function badge(u) {
-    if (u.kind === 'google') return '<span class="us-role us-r-g">G Google · view only</span>';
+    if (u.kind === 'google' && !u.upgraded) return '<span class="us-role us-r-g">G Google · view only</span>';
+    if (u.kind === 'google') { var kg = KIND[u.role]; return '<span class="us-role us-r-' + (kg ? kg.cls : 'old') + '">' + (kg ? kg.ic + ' ' : '') + esc(u.role) + '</span> <small class="muted">signs in with Google</small>'; }
     var k = KIND[u.role]; return '<span class="us-role us-r-' + (k ? k.cls : 'old') + '">' + (k ? k.ic + ' ' : '') + esc(u.role) + '</span>' + (u.kind === 'subbie' || u.kind === 'person' ? ' <small class="muted" title="Made before the new Users & access: open Permissions to move it over">(older login)</small>' : '');
   }
 
   function draw() {
     var d = S.data, U = d.users, me = M.me || {};
-    var count = function (r) { return U.filter(function (u) { return u.kind === 'google' ? r === 'g' : u.role === r; }).length; };
-    V().innerHTML = '<div class="row us-head"><div><h2 style="margin:0">🔐 Users &amp; access</h2><p class="muted" style="margin:2px 0 0;font-size:13px">' + (isSuper() ? 'You are the <b>super user</b>: you make each login with the person\'s email and a password you choose, then set what they can use.' : 'Who can sign in and what each person can use. Only the super user can change it.') + '</p></div><span class="sp"></span>' +
-        (isSuper() ? '<button class="btn btn-gold" id="usNew" type="button">＋ New user</button>' : '<span class="us-role us-r-pm">View only</span>') + '</div>' +
-      '<div class="us-kpis">' + [['⭐', 'Project manager (super user)', 1], ['🎯', 'Project directors', count('Project director')], ['🛠', 'Contractors', count('Contractor')], ['👥', 'Project personnel', count('Project personnel')], ['G', 'Google (view only)', count('g')]].map(function (k) { return '<div class="us-kpi"><span>' + k[0] + '</span><b>' + k[2] + '</b><small>' + k[1] + '</small></div>'; }).join('') + '</div>' +
+    var count = function (r) { return U.filter(function (u) { return u.kind === 'google' && !u.upgraded ? r === 'g' : u.role === r; }).length; };
+    V().innerHTML = '<div class="row us-head"><div><h2 style="margin:0">🔐 Users &amp; access</h2><p class="muted" style="margin:2px 0 0;font-size:13px">' + (isSuper() ? 'You are the <b>super user</b>: you make each login with the person\'s email and a password you choose, set what they can use, and upgrade people (⬆).' : isTeam() ? 'You can add <b>contractors</b> and <b>project personnel</b> and look after their logins. Only the super user makes project managers and directors, and upgrades people.' : 'Who can sign in and what each person can use. Only the super user can change it.') + '</p></div><span class="sp"></span>' +
+        (isSuper() || isTeam() ? '<button class="btn btn-gold" id="usNew" type="button">＋ New user</button>' : '<span class="us-role us-r-pm">View only</span>') + '</div>' +
+      '<div class="us-kpis">' + [['⭐', 'Super user', 1], ['🧭', 'Project managers', count('Project manager')], ['🎯', 'Project directors', count('Project director')], ['🛠', 'Contractors', count('Contractor')], ['👥', 'Project personnel', count('Project personnel')], ['G', 'Google (view only)', count('g')]].map(function (k) { return '<div class="us-kpi"><span>' + k[0] + '</span><b>' + k[2] + '</b><small>' + k[1] + '</small></div>'; }).join('') + '</div>' +
       '<div class="card"><div class="table-wrap"><table class="sc-table us-table"><thead><tr><th>Person</th><th>Role</th><th>Projects</th>' + MODS.map(function (m) { return '<th class="us-m" title="' + esc(m[1] + ': ' + m[2]) + '">' + esc(m[1]) + '</th>'; }).join('') + '<th>Last sign-in</th><th></th></tr></thead><tbody>' +
-        '<tr class="us-owner"><td><b>Project manager</b><br><small class="muted">' + (me.owner ? esc(me.user) + ' · ' : '') + 'the Netlify login (ADMIN_USERNAME)</small></td><td><span class="us-role owner">⭐ Project manager · super user</span></td><td>All projects</td>' + MODS.map(function () { return '<td class="us-m">' + lv('edit') + '</td>'; }).join('') + '<td class="muted">–</td><td></td></tr>' +
+        '<tr class="us-owner"><td><b>' + esc(d.superName || 'Super user') + '</b><br><small class="muted">' + (me.owner ? esc(me.user) + ' · ' : '') + 'the Netlify login (ADMIN_USERNAME)</small></td><td><span class="us-role owner">⭐ Super user</span></td><td>All projects</td>' + MODS.map(function () { return '<td class="us-m">' + lv('edit') + '</td>'; }).join('') + '<td class="muted">–</td><td></td></tr>' +
         U.map(function (u) {
           return '<tr data-uid="' + esc(u.id) + '" class="' + (u.active ? '' : 'tdone') + '"><td><b>' + esc(u.name) + '</b>' + (u.active ? '' : ' <span class="bad" style="font-size:11.5px">· switched off</span>') + '<br><small class="muted">' + esc(u.username) + (u.mustChange2 ? ' · sets own password at first sign-in' : '') + '</small></td>' +
             '<td>' + badge(u) + '</td><td class="us-pj">' + projText(u) + '</td>' + MODS.map(function (m) { return '<td class="us-m">' + lv((u.mods || {})[m[0]]) + '</td>'; }).join('') +
-            '<td class="nowrap muted" style="font-size:12.5px">' + esc(when(u.lastLogin)) + '</td><td class="nowrap">' + (isSuper() ? '<button class="btn btn-sm" data-uperm type="button">' + (u.kind === 'google' ? 'On / off' : '⚙ Permissions') + '</button>' + (u.kind === 'google' ? '' : ' <button class="btn btn-sm" data-upw type="button" title="Set a new password">🔑</button>') + ' <button class="btn btn-sm us-del" data-udel type="button" title="Delete this login">🗑</button>' : '') + '</td></tr>';
+            '<td class="nowrap muted" style="font-size:12.5px">' + esc(when(u.lastLogin)) + '</td><td class="nowrap">' + (canTouch(u) ? (isSuper() && u.kind === 'google' ? '<button class="btn btn-sm btn-gold" data-uup type="button" title="Give them a role (they keep signing in with Google)">⬆ ' + (u.upgraded ? 'Role' : 'Upgrade') + '</button> ' : '') + '<button class="btn btn-sm" data-uperm type="button">' + (u.kind === 'google' ? 'On / off' : '⚙ Permissions') + '</button>' + (u.kind === 'google' ? '' : ' <button class="btn btn-sm" data-upw type="button" title="Set a new password">🔑</button>') + ' <button class="btn btn-sm us-del" data-udel type="button" title="Delete this login">🗑</button>' : '') + '</td></tr>';
         }).join('') +
         (U.length ? '' : '<tr><td colspan="9"><div class="empty">No logins yet: only the super user can sign in.' + (isSuper() ? ' Press <b>＋ New user</b>.' : '') + '</div></td></tr>') +
         '</tbody></table></div><p class="muted" style="font-size:12.5px;margin:10px 0 0">✎ Edit · 👁 View · – No access (hidden from their menu). Changing someone\'s permissions, switching them off or setting a new password signs them out straight away.</p></div>' +
       '<div class="card" style="margin-top:14px"><h2>Who gets what</h2><div class="us-kinds">' +
-        '<div class="us-k"><b>⭐ Project manager (super user)</b><span>The username and password set in Netlify. Everything, always: makes logins, sets passwords and permissions. Nobody can lock it out.</span></div>' +
-        ['Project director', 'Contractor', 'Project personnel'].map(function (r) { var m = roleMods(r); return '<div class="us-k"><b>' + KIND[r].ic + ' ' + esc(r) + '</b><span>' + esc(KIND[r].about) + '</span><div class="us-k-m">' + MODS.map(function (x) { return '<i>' + lv(m[x[0]]) + ' ' + esc(x[1]) + '</i>'; }).join('') + '</div></div>'; }).join('') +
-        '<div class="us-k"><b>G Google sign-in</b><span>Anyone who signs in with Google gets <b>view only</b> on everything (never Users &amp; access). You can switch each one off.</span></div></div></div>';
+        '<div class="us-k"><b>⭐ Super user (' + esc(d.superName || '') + ')</b><span>The username and password set in Netlify. Everything, always: makes any login, sets passwords and permissions, upgrades people, and alone sees customers, the activity log and builds. Nobody can lock it out.</span></div>' +
+        ['Project manager', 'Project director', 'Contractor', 'Project personnel'].map(function (r) { var m = roleMods(r); return '<div class="us-k"><b>' + KIND[r].ic + ' ' + esc(r) + '</b><span>' + esc(KIND[r].about) + '</span><div class="us-k-m">' + MODS.map(function (x) { return '<i>' + lv(m[x[0]]) + ' ' + esc(x[1]) + '</i>'; }).join('') + '</div></div>'; }).join('') +
+        '<div class="us-k"><b>G Google sign-in</b><span>Anyone who signs in with Google gets <b>view only</b> on everything (never Users &amp; access). The super user can switch each one off, or <b>⬆ upgrade</b> them to a role: they keep signing in with Google.</span></div></div></div>';
     var n = $('#usNew'); if (n) n.onclick = function () { newUser(); };
     V().querySelectorAll('tr[data-uid]').forEach(function (tr) {
       var u = S.data.users.filter(function (y) { return y.id === tr.getAttribute('data-uid'); })[0]; if (!u) return;
       var b = tr.querySelector('[data-uperm]'); if (b) b.onclick = function () { if (u.kind === 'google') editGoogle(u); else perms(u); };
+      var up = tr.querySelector('[data-uup]'); if (up) up.onclick = function () { upgrade(u); };
       var w = tr.querySelector('[data-upw]'); if (w) w.onclick = function () { setPw(u); };
       var x = tr.querySelector('[data-udel]'); if (x) x.onclick = function () {
         M.confirmBox('Delete the login for ' + u.name + '?', u.username + ' can no longer sign in. Their work on the projects stays.', 'Delete the login').then(function (y) { if (y) api('userDelete', { id: u.id }).then(function () { toast('Login deleted'); return load().then(draw); }).catch(fail); });
@@ -76,7 +81,7 @@
     M.modal('<h2>＋ New user</h2>' + steps(1) +
       '<form class="form" id="nuF" autocomplete="off"><label>Email (their username)<input name="email" type="email" required maxlength="160" value="' + esc(f.email) + '" placeholder="name@company.com"></label>' +
       '<label>Full name<input name="name" maxlength="100" value="' + esc(f.name) + '" placeholder="e.g. Aisha Rahman"></label>' +
-      '<div class="full"><b>Role</b><div class="us-rpick">' + ['Project director', 'Contractor', 'Project personnel'].map(function (r) { return '<label class="us-rcard"><input type="radio" name="role" value="' + esc(r) + '"' + (f.role === r ? ' checked' : '') + '><span><b>' + KIND[r].ic + ' ' + esc(r) + '</b><small>' + esc(KIND[r].about) + '</small></span></label>'; }).join('') + '</div></div>' +
+      '<div class="full"><b>Role</b><div class="us-rpick">' + pickRoles().map(function (r) { return '<label class="us-rcard"><input type="radio" name="role" value="' + esc(r) + '"' + (f.role === r ? ' checked' : '') + '><span><b>' + KIND[r].ic + ' ' + esc(r) + '</b><small>' + esc(KIND[r].about) + '</small></span></label>'; }).join('') + '</div></div>' +
       '<label>Password (you choose it)<span class="us-pwrow"><input name="pw" type="password" required minlength="10" autocomplete="new-password" value="' + esc(f.pw) + '"><button class="btn btn-sm" type="button" id="nuShow">Show</button></span><small class="muted">At least 10 characters, with letters and a number</small></label>' +
       '<label>Password again<input name="pw2" type="password" required autocomplete="new-password" value="' + esc(f.pw) + '"></label>' +
       '<label class="full us-chk"><input type="checkbox" name="must"' + (f.must ? ' checked' : '') + '> <span>Ask them to choose their own password the first time they sign in</span></label>' +
@@ -101,7 +106,7 @@
       '<table class="pp-kv us-confirm"><tbody><tr><td class="muted">Name</td><td><b>' + esc(o.name || o.email) + '</b></td></tr><tr><td class="muted">Username (email)</td><td><b>' + esc(o.email) + '</b></td></tr>' +
       '<tr><td class="muted">Role</td><td>' + KIND[o.role].ic + ' <b>' + esc(o.role) + '</b><br><small class="muted">' + esc(KIND[o.role].about) + '</small></td></tr>' +
       '<tr><td class="muted">Password</td><td><code id="cnPw">••••••••••</code> <button class="btn btn-sm" type="button" id="cnShow">Show</button>' + (o.must ? '<br><small class="muted">They choose their own at first sign-in</small>' : '') + '</td></tr>' +
-      '<tr><td class="muted">Starts with</td><td>' + MODS.map(function (x) { return lv(m[x[0]]) + ' ' + esc(x[1]); }).join(' · ') + '<br><small class="muted">' + (o.role === 'Project director' ? 'All projects' : o.role === 'Contractor' ? 'No projects until you tick them on the next step' : 'All projects (you can limit it on the next step)') + '</small></td></tr></tbody></table>' +
+      '<tr><td class="muted">Starts with</td><td>' + MODS.map(function (x) { return lv(m[x[0]]) + ' ' + esc(x[1]); }).join(' · ') + '<br><small class="muted">' + (o.role === 'Project director' || o.role === 'Project manager' ? 'All projects' : o.role === 'Contractor' ? 'No projects until you tick them on the next step' : 'All projects (you can limit it on the next step)') + '</small></td></tr></tbody></table>' +
       '<div class="actions" style="justify-content:space-between;margin-top:12px"><button class="btn" type="button" id="cnBack">← Back</button><span><button class="btn" data-close type="button">Cancel</button> <button class="btn btn-gold" type="button" id="cnGo">✓ Confirm and create</button></span></div>');
     $('#cnShow').onclick = function () { var c = $('#cnPw'); var sh = c.textContent.indexOf('•') === 0; c.textContent = sh ? o.pw : '••••••••••'; this.textContent = sh ? 'Hide' : 'Show'; };
     $('#cnBack').onclick = function () { newUser(o); };
@@ -121,9 +126,9 @@
     var projs = function () { return S.plans.length ? S.plans.map(function (p) { return '<label><input type="checkbox" value="' + esc(p.core) + '"' + (mine.indexOf(p.core) >= 0 ? ' checked' : '') + '> <span><b>' + esc(p.name) + '</b><br><small class="muted">' + esc(p.ref || p.core) + '</small></span></label>'; }).join('') : '<div class="empty">No projects yet.</div>'; };
     M.modal('<h2>⚙ ' + esc(u.name) + '</h2>' + (isNew ? steps(3) + '<p class="ok" style="margin:0 0 8px">✓ The login for <b>' + esc(u.username) + '</b> is made. Now set what they can use.</p>' : '<p class="muted" style="margin:-4px 0 10px">' + esc(u.username) + '</p>') +
       '<div class="form"><label class="full">Display name<input id="pmName" maxlength="100" value="' + esc(u.name) + '"></label>' +
-      '<div class="full"><b>Role</b><div class="us-rpick" id="pmRoles">' + ['Project director', 'Contractor', 'Project personnel', 'Custom'].map(function (r) { return '<label class="us-rcard"><input type="radio" name="pmRole" value="' + esc(r) + '"' + (role === r ? ' checked' : '') + '><span><b>' + KIND[r].ic + ' ' + esc(r) + '</b><small>' + esc(KIND[r].about) + '</small></span></label>'; }).join('') + '</div></div>' +
+      '<div class="full"><b>Role</b><div class="us-rpick" id="pmRoles">' + (isSuper() ? pickRoles().concat(['Custom']) : pickRoles()).map(function (r) { return '<label class="us-rcard"><input type="radio" name="pmRole" value="' + esc(r) + '"' + (role === r ? ' checked' : '') + '><span><b>' + KIND[r].ic + ' ' + esc(r) + '</b><small>' + esc(KIND[r].about) + '</small></span></label>'; }).join('') + '</div></div>' +
       '<div class="full table-wrap"><table class="sc-table us-matrix"><thead><tr><th>Module</th><th class="us-m">No access</th><th class="us-m">View</th><th class="us-m">Edit</th></tr></thead><tbody id="pmMx">' + matrix() + '</tbody></table></div>' +
-      '<div class="full"><b>Projects</b><label class="us-chk" style="margin:6px 0"><input type="checkbox" id="pmAll"' + (all ? ' checked' : '') + '> <span><b>All projects</b> <small class="muted">(a project director always has all of them)</small></span></label><div class="us-projs" id="pmProjs"' + (all ? ' hidden' : '') + '>' + projs() + '</div></div>' +
+      '<div class="full"><b>Projects</b><label class="us-chk" style="margin:6px 0"><input type="checkbox" id="pmAll"' + (all ? ' checked' : '') + '> <span><b>All projects</b> <small class="muted">(a project manager or director always has all of them)</small></span></label><div class="us-projs" id="pmProjs"' + (all ? ' hidden' : '') + '>' + projs() + '</div></div>' +
       '<label class="full us-chk"><input type="checkbox" id="pmOn"' + (u.active !== false ? ' checked' : '') + '> <span><b>Can sign in</b> <small class="muted">Untick to switch the login off (they are signed out straight away)</small></span></label></div>' +
       '<div class="actions"><button class="btn" data-close type="button">' + (isNew ? 'Later' : 'Cancel') + '</button><button class="btn btn-gold" id="pmSave" type="button">Save permissions</button></div>');
     $('#modal .modal-card').classList.add('sc-wide');
@@ -161,6 +166,24 @@
       '<label class="us-chk"><input type="checkbox" id="usActive"' + (u.active ? ' checked' : '') + '> <span><b>Can sign in</b> <small class="muted">Untick to stop this Google account signing in</small></span></label>' +
       '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="usSave" type="button">Save</button></div>');
     $('#usSave').onclick = function () { api('userSave', { user: { id: u.id, active: $('#usActive').checked } }).then(function (r) { M.closeModal(); toast(r.user.active ? 'Google sign-in on' : 'Google sign-in switched off'); return load().then(draw); }).catch(fail); };
+  }
+
+  // ⬆ the super user upgrades a Google sign-in to a role (they keep signing in with Google), or takes them back to view only
+  function upgrade(u) {
+    var cur = u.upgraded ? u.role : 'view', mine = (u.projects || []).slice();
+    var opts = [['view', 'G', 'View only (Google)', 'View on everything, never Users & access']].concat(['Project manager', 'Project director', 'Contractor', 'Project personnel'].map(function (r) { return [r, KIND[r].ic, r, KIND[r].about]; }));
+    M.modal('<h2>⬆ Upgrade ' + esc(u.name) + '</h2><p class="muted" style="margin:-4px 0 10px">' + esc(u.username) + ' signs in with Google. Give them a role: they keep signing in with Google and get that role\'s access straight away (they are signed out once so it takes effect).</p>' +
+      '<div class="us-rpick" id="upR">' + opts.map(function (o) { return '<label class="us-rcard"><input type="radio" name="upRole" value="' + esc(o[0]) + '"' + (cur === o[0] ? ' checked' : '') + '><span><b>' + o[1] + ' ' + esc(o[2]) + '</b><small>' + esc(o[3]) + '</small></span></label>'; }).join('') + '</div>' +
+      '<div id="upP" hidden style="margin-top:10px"><b>Projects</b><label class="us-chk" style="margin:6px 0"><input type="checkbox" id="upAll"' + (u.projAll ? ' checked' : '') + '> <span><b>All projects</b></span></label><div class="us-projs" id="upProjs">' + S.plans.map(function (p) { return '<label><input type="checkbox" value="' + esc(p.core) + '"' + (mine.indexOf(p.core) >= 0 ? ' checked' : '') + '> <span><b>' + esc(p.name) + '</b></span></label>'; }).join('') + '</div></div>' +
+      '<div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="upGo" type="button">Save</button></div>');
+    $('#modal .modal-card').classList.add('sc-wide');
+    var sync = function () { var r = (document.querySelector('[name=upRole]:checked') || {}).value, lim = r === 'Contractor' || r === 'Project personnel'; $('#upP').hidden = !lim; $('#upProjs').hidden = $('#upAll').checked; };
+    document.querySelectorAll('[name=upRole]').forEach(function (x) { x.onchange = sync; }); $('#upAll').onchange = sync; sync();
+    $('#upGo').onclick = function () {
+      var r = (document.querySelector('[name=upRole]:checked') || {}).value; if (!r) return;
+      api('userUpgrade', { id: u.id, role: r, projAll: $('#upAll').checked, projects: Array.prototype.map.call(document.querySelectorAll('#upProjs input:checked'), function (x) { return x.value; }) })
+        .then(function (x) { M.closeModal(); toast(r === 'view' ? u.name + ' is back to view only' : u.name + ' is now ' + r); return load().then(draw); }).catch(fail);
+    };
   }
 
   // your own password (and the first sign-in when the super user asked them to choose one)

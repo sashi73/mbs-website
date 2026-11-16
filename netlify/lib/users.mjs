@@ -33,8 +33,10 @@ const all = (lv) => Object.fromEntries(MOD_KEYS.map((k) => [k, lv]));
 //   Project manager (admin: everything, all projects), Contractor and Project personnel (limited: their projects),
 //   and Google sign-ins (view only). The older roles below stay only so logins made before keep working.
 export const ROLES = {
-  'Project director': { ...all('edit'), people: 'view', users: 'view' },   // GKH Project Champ: runs projects; People and Users & access to look at
-  'Project manager': { ...all('edit'), users: 'view' },
+  // GKH Project Champ: a project director or manager runs projects: Projects, People, Ask AI & reports and Users & access
+  // (they add contractors and project personnel); no customers (enquiries, visitors), and only the super user sees the activity log and builds
+  'Project director': { ...all('edit'), crm: 'none' },
+  'Project manager': { ...all('edit'), crm: 'none' },
   Contractor: { ...all('none'), projects: 'edit' },
   'Project personnel': { ...all('none'), projects: 'edit', data: 'view' },
   Administrator: { ...all('edit') },
@@ -45,7 +47,8 @@ export const ROLES = {
   'Sub-contractor': { ...all('none'), projects: 'edit' },   // v91: a subbie: only their own project(s), nothing else
   Custom: null };
 export const ROLE_KEYS = Object.keys(ROLES);
-export const PICK_ROLES = ['Project director', 'Contractor', 'Project personnel', 'Custom'];   // the project manager is the super user   // what the super user picks from
+export const PICK_ROLES = ['Project manager', 'Project director', 'Contractor', 'Project personnel', 'Custom'];
+export const TEAM_ROLES = ['Contractor', 'Project personnel'];   // what a project director or manager may make and look after   // the project manager is the super user   // what the super user picks from
 const ALL_PROJECTS = (u) => u.role === 'Project manager' || u.role === 'Project director' || u.projAll === true;
 export const OWNER_MODS = all('edit');
 
@@ -113,7 +116,7 @@ export function tempPassword() {   // easy to read out: no 0/O, 1/l
 // ---------- users ----------
 const cleanMods = (m, role) => { const base = ROLES[role] || null, o = {}; for (const k of MOD_KEYS) { const v = (m || {})[k]; o[k] = LEVELS.includes(v) ? v : base ? base[k] : 'none'; } return o; };
 const summary = (u) => ({ id: u.id, personId: u.personId, name: u.name, username: u.username, email: u.email, role: u.role, mods: u.mods, active: u.active, mustChange: !!u.mustChange, lastLogin: u.lastLogin || 0, created: u.created,
-  kind: u.kind || 'person', subId: u.subId || '', projects: u.projects || [], projAll: !!u.projAll, mustChange2: !!u.mustChange });
+  kind: u.kind || 'person', subId: u.subId || '', projects: u.projects || [], projAll: !!u.projAll, mustChange2: !!u.mustChange, upgraded: !!u.upgraded, by: u.by || '' });
 // v91: a sub-contractor login: Projects only (view or edit), and only the projects it was given
 const subMods = (lv) => ({ ...all('none'), projects: lv === 'view' ? 'view' : 'edit' });
 // v97: "Sign in with Google" (test site): anyone with a verified Google account gets View on every module, nothing in Users & access
@@ -148,10 +151,11 @@ async function put(u) { await kv.set('user:' + u.id, u); await kv.update('user-i
 // the signed-in user's access (or null when the login no longer works: disabled, password reset, removed from People)
 export async function context(session, ownerName, personOk) {
   if (!session) return null;
-  if (!session.uid) return { owner: true, who: session.u, uid: '', role: 'Super user', mods: OWNER_MODS, name: session.u };
+  if (!session.uid) return { owner: true, who: session.u, uid: '', role: 'Super user', mods: OWNER_MODS, name: process.env.OWNER_NAME || 'Sashi Sivam' };
   const u = await get(session.uid);
   if (!u || !u.active || (u.ver || 0) !== (session.v || 0)) return null;
   if (personOk && !(await personOk(u.personId, u))) return null;
+  if (u.kind === 'google' && u.upgraded && ROLES[u.role]) return { owner: false, who: u.username, uid: u.id, role: u.role, mods: cleanMods(u.mods, u.role), name: u.name, mustChange: false, personId: '', kind: 'google', scope: ALL_PROJECTS(u) ? null : (u.projects || []).slice() };   // ⬆ upgraded by the super user: signs in with Google, works with the role
   if (u.kind === 'google') return { owner: false, who: u.username, uid: u.id, role: 'Google (view only)', mods: { ...GOOGLE_MODS }, name: u.name, mustChange: false, personId: '', kind: 'google' };   // v97
   if (u.kind === 'subbie') {   // v91: signed in to one of their projects; nothing else
     if (!session.pc || !(u.projects || []).includes(session.pc)) return null;
@@ -181,18 +185,40 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 async function projectList(arr, project) { const projects = []; for (const c of (Array.isArray(arr) ? arr : []).slice(0, 60)) { const pj = project ? await project(str(c, 30)) : null; if (pj && !projects.includes(pj.core)) projects.push(pj.core); } return projects; }
 export async function userPost(action, body, { ctx, audit, person, sub, project, addPerson }) {
   const log = (t) => (audit ? audit(ctx.who, t) : null);
-  // only the super user makes logins, sets passwords and gives permissions
-  if (!['userList', 'userPassword'].includes(action) && !ctx.owner) return out(403, { error: 'Only the super user can change logins and permissions.' });
+  // the super user makes any login, sets roles and upgrades people; a project director or manager with Users & access (edit) makes and looks after
+  // contractor and project personnel logins only (never their own, another manager's, a Google sign-in's, and never a role above those)
+  const team = !ctx.owner && (ctx.mods || {}).users === 'edit' && ['Project manager', 'Project director'].includes(ctx.role);
+  const teamOk = async (id) => { const u = await get(str(id, 10)); return u && u.id !== ctx.uid && u.kind === 'email' && TEAM_ROLES.includes(u.role) ? u : null; };
+  if (!['userList', 'userPassword'].includes(action) && !ctx.owner) {
+    if (!team || !['userCreate', 'userSave', 'userSetPw', 'userReset', 'userDelete'].includes(action)) return out(403, { error: 'Only the super user can change this.' });
+    if (action === 'userCreate' && !TEAM_ROLES.includes((body.user || {}).role)) return out(403, { error: 'You can add contractors and project personnel. Only the super user makes project managers and directors.' });
+    if (action !== 'userCreate' && !(await teamOk(action === 'userSave' ? (body.user || {}).id : body.id))) return out(403, { error: 'You can look after the contractor and project personnel logins only. Ask the super user.' });
+    if (action === 'userSave' && !TEAM_ROLES.includes((body.user || {}).role)) return out(403, { error: 'Only the super user can upgrade someone to project manager or director.' });
+  }
   switch (action) {
-    case 'userList': return out(200, { users: await list(), mods: MODS.map((m) => ({ key: m[0], name: m[1], about: m[2] })), roles: ROLE_KEYS.map((r) => ({ name: r, mods: ROLES[r] })), pick: PICK_ROLES, levels: LEVELS, super: ctx.owner ? ctx.who : '' });
+    case 'userList': return out(200, { users: await list(), mods: MODS.map((m) => ({ key: m[0], name: m[1], about: m[2] })), roles: ROLE_KEYS.map((r) => ({ name: r, mods: ROLES[r] })), pick: ctx.owner ? PICK_ROLES : team ? TEAM_ROLES : [], levels: LEVELS, super: ctx.owner ? ctx.who : '', superName: process.env.OWNER_NAME || 'Sashi Sivam', team });
+    case 'userUpgrade': {   // ⬆ the super user: give a Google sign-in a role (it keeps signing in with Google), or take it back to view only
+      if (!ctx.owner) return out(403, { error: 'Only the super user can upgrade a user.' });
+      const u = await get(str(body.id, 10)); if (!u || u.kind !== 'google') return out(404, { error: 'Google sign-in not found' });
+      const role = str(body.role, 40);
+      if (role === 'view') { Object.assign(u, { upgraded: false, role: 'Read only', mods: { ...GOOGLE_MODS }, projAll: false, projects: [] }); }
+      else {
+        if (!['Project manager', 'Project director', 'Contractor', 'Project personnel'].includes(role)) return out(400, { error: 'Pick a role' });
+        const projAll = role === 'Project manager' || role === 'Project director' ? true : body.projAll === true;
+        Object.assign(u, { upgraded: true, role, mods: cleanMods(ROLES[role], role), projAll, projects: projAll ? [] : await projectList(body.projects, project) });
+      }
+      u.ver = (u.ver || 0) + 1; u.updated = Date.now(); u.upgradedBy = ctx.who; await put(u);
+      await log(role === 'view' ? `Google sign-in back to view only: ${u.username}` : `Upgraded ${u.username} (Google) to ${role}`);
+      return out(200, { user: summary(u) });
+    }
     case 'userCreate': {   // the super user: email, name, a password they choose, the role; permissions come next (userSave)
       const f = body.user || {}, email = str(f.email, 160).toLowerCase(), name = str(f.name, 100) || email;
       if (!EMAIL.test(email)) return out(400, { error: 'Type their email address (it is their username).' });
       if ((await list()).some((x) => x.username === email || (x.email || '').toLowerCase() === email)) return out(400, { error: email + ' already has a login.' });
       const bad = pwProblem(f.password); if (bad) return out(400, { error: bad });
-      const role = PICK_ROLES.includes(f.role) && f.role !== 'Custom' ? f.role : 'Project personnel';
+      const role = (ctx.owner ? PICK_ROLES : TEAM_ROLES).includes(f.role) && f.role !== 'Custom' ? f.role : 'Project personnel';
       const n = await kv.update('user-seq', (x) => ({ n: ((x && x.n) || 0) + 1 }), () => ({ n: 0 }));
-      const u = { id: 'U-' + String(n.n).padStart(3, '0'), kind: 'email', personId: '', name, email, username: email, role, mods: cleanMods(ROLES[role], role), projects: [], projAll: role === 'Project personnel',
+      const u = { id: 'U-' + String(n.n).padStart(3, '0'), kind: 'email', personId: '', name, email, username: email, role, mods: cleanMods(ROLES[role], role), projects: [], projAll: role === 'Project personnel' || role === 'Project manager' || role === 'Project director',
         active: true, mustChange: f.mustChange === true, ver: 1, created: Date.now(), by: ctx.who, ...hashPw(f.password) };
       await put(u); await log(`Login made: ${email} (${name}), ${role}`);
       if (addPerson) { try { await addPerson(u); } catch (e) { console.error('People record for the new login failed:', e.message); } }

@@ -316,7 +316,7 @@ async function handle(req, context) {
       // ---------- GKH Project Champ: visitors / potential customers who introduced themselves to Champ ----------
       case 'visitorList': {
         if (ctx.scope) return bad('Sub-contractor logins cannot see visitors.', 403);
-        if (!ctx.owner && !(ctx.mods && ctx.mods.crm)) return bad('You need access to Jobs & customers to see visitors.', 403);
+        if (!ctx.owner && !(ctx.mods && ['view', 'edit'].includes(ctx.mods.crm))) return bad('You need access to Customers to see visitors.', 403);
         return out(200, { list: await VIS.list(), email: !!env('RESEND_API_KEY'), counter: VIS.counterSummary(await VIS.counter()), signins: ctx.owner ? await VIS.signIns() : null });
       }
       case 'signInClear': {   // only the super user sees and clears the sign-in log
@@ -336,7 +336,7 @@ async function handle(req, context) {
       // ---------- GKH Project Champ: enquiries from the contact page ----------
       case 'enquiryList': {
         if (ctx.scope) return bad('Sub-contractor logins cannot see enquiries.', 403);
-        if (!ctx.owner && !(ctx.mods && ctx.mods.crm)) return bad('You need access to Jobs & customers to see enquiries.', 403);
+        if (!ctx.owner && !(ctx.mods && ['view', 'edit'].includes(ctx.mods.crm))) return bad('You need access to Customers to see enquiries.', 403);
         return out(200, { list: ((await kv.get('champ-enquiries').catch(() => null)) || { list: [] }).list, email: !!env('RESEND_API_KEY') });
       }
       case 'enquirySet': {
@@ -494,7 +494,7 @@ async function handle(req, context) {
         await A.audit(who, `Rebuilt the job list of ${body.store} (${n} jobs)`);
         return out(200, { jobs: n });
       }
-      case 'log': return out(200, { log: await A.auditLog() });
+      case 'log': if (!ctx.owner) return bad('Only the super user sees the activity log.', 403); return out(200, { log: await A.auditLog() });
       default: {
         const a = (await acctPost(action, body, { who, by })) || (await sqlPost(action, body, { who, by })) || (await planPost(action, body, { who, by, audit: A.audit })) || (await invPost(action, body, { who, by, audit: A.audit })) || (await custPost(action, body, { who, by, audit: A.audit })) || (await planQuotePost(action, body, { who, by, audit: A.audit })) || (await subPost(action, body, { who, by, audit: A.audit })) || (await intelPost(action, body, { who, by, audit: A.audit })) || (await swmsPost(action, body, { who, by, audit: A.audit })) || (await commsPost(action, body, { who, by, audit: A.audit })) || (await reportPost(action, body, { who, by, audit: A.audit })) || (await PPL.pplPost(action, body, { who, by, audit: A.audit, unlogin: U.removeForPerson, ctx })) || (await bomPost(action, body, { who, by, audit: A.audit })) || (await prlPost(action, body, { who, by, audit: A.audit, A: ACC, SUB })) || (await lvPost(action, body, { who, by, audit: A.audit, ctx })) || (await U.userPost(action, action === 'userGuestLoad' ? { ...body, test: PPL.isTest() } : body, { ctx, audit: A.audit, person: PPL.get, sub: SUB.getSub, project: projectOf, addPerson: (u) => PPL.selfMake(u, by) }));
         return a || bad('Unknown action');
