@@ -513,3 +513,9 @@ input.pp-auto,select.pp-auto,textarea.pp-auto{background:#FFFBEB!important;borde
 .kb-doc{display:flex;gap:10px;align-items:center;border:1px solid #EFE7D2;border-radius:12px;padding:9px 12px;margin-bottom:8px;background:#fff}.kb-doc>div{flex:1}.kb-doc.off{opacity:.55}
 .kb-hit{border-left:3px solid #C9A227;background:#FFFDF7;border-radius:8px;padding:7px 10px;margin:8px 0;font-size:13px}.kb-hit p{margin:3px 0 0;white-space:pre-wrap}
 .cgp-kb{display:block;margin-top:6px;font-size:11px;opacity:.75}
+/* 🌳 WBS view */
+.pv-wbs .tab{font-weight:700;background:linear-gradient(135deg,#FFF8E1,#F3ECFF)}
+.wbs-bar{gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap}.wbs-bar .pviews{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.wbs-wrap{overflow:auto;border:1px solid #EFE7D2;border-radius:14px;background:#FBF9F4;max-height:78vh}
+.wbs-wrap svg{display:block}.wbs-wrap.fit svg{width:100%;height:auto}
+.wbs-leg{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:12px;color:#6B665A;margin-top:8px}.wbs-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:-8px}

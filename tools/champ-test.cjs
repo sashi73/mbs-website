@@ -543,6 +543,27 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       ok('Knowledge base', 'Ask AI in a project gets the class notes too, and lists them as a source', /Sashi Sivam's class notes: PM Masterclass, slide 2/.test(irs) && /COURSE NOTES/.test(global.INTEL_SYS || '') && (global.INTEL_CTX.course_notes || []).length > 0, fr + ' ' + irs.slice(0, 300));
       await api('planProjectDelete', { core: kc });
     }
+    // 🌳 WBS: the Gantt's rightmost button turns the plan into a Work Breakdown Structure (read only), saved as PNG or JPEG
+    {
+      const wc = (await (await api('planNewProject', { name: 'WBS check', client: 'Internal', program: 'Digital health' })).json()).core;
+      await api('planSave', { core: wc, plan: { name: 'Office fit-out', start: new Date().toISOString().slice(0, 10), phases: [{ id: 'ph1', name: 'Work' }], tasks: [
+        { id: 'a', phase: 'ph1', name: 'Project initiation and team onboarding', dur: 3, pred: [], res: [], pct: 100, status: 'done', subs: [{ id: 's1', name: 'Kickoff meeting', owner: '', off: 0, dur: 1, status: 'done' }, { id: 's2', name: 'Team onboarding', owner: '', off: 1, dur: 2, status: 'todo' }] },
+        { id: 'b', phase: 'ph1', name: 'Design', dur: 5, pred: ['a'], res: [], pct: 40, status: 'doing' }, { id: 'c', phase: 'ph1', name: 'Handover', dur: 0, pred: ['b'], res: [], pct: 0, status: 'todo' }] } });
+      await p.goto(`${BASE}/admin/#plan/${wc}/schedule`); await p.reload(); await p.waitForSelector('[data-wbs]', { timeout: 10000 }).catch(() => {});
+      const last = await p.$$eval('.pviews > *', (x) => x.length ? x[x.length - 1].textContent : '');
+      await p.click('[data-wbs]'); await p.waitForSelector('#wbsWrap svg', { timeout: 8000 }).catch(() => {});
+      const st = await p.$$eval('#wbsWrap svg text', (t) => t.map((x) => x.textContent).join('|')).catch(() => '');
+      const editable = await p.$$('#wbsWrap input, #wbsWrap textarea, #wbsWrap [contenteditable]');
+      const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 15000 }).catch(() => null), p.click('#wbsPng')]);
+      const fn = dl ? dl.suggestedFilename() : ''; let png = false; if (dl) { await dl.saveAs('/tmp/wbs.png'); png = fs.readFileSync('/tmp/wbs.png').slice(1, 4).toString() === 'PNG'; }
+      const [dj] = await Promise.all([p.waitForEvent('download', { timeout: 15000 }).catch(() => null), p.click('#wbsJpg')]);
+      const jpg = dj ? /\.jpg$/.test(dj.suggestedFilename()) : false;
+      await p.click('#planBody [data-wbs]'); await sleep(500);
+      const back = (await p.$$('#planBody .gt')).length > 0;
+      ok('Gantt', '🌳 WBS (rightmost view button): the plan as a Work Breakdown Structure (project, work packages, sub-tasks), read only; saved as PNG or JPEG; back to the Gantt', /WBS/.test(last) && /Office fit-out/.test(st) && /Project initiation and/.test(st) && /1\.1/.test(st) && /Kickoff meeting/.test(st) && /milestone/.test(st) && editable.length === 0 && png && fn === 'WBS - Office fit-out.png' && jpg && back, JSON.stringify([last, st.slice(0, 200), editable.length, fn, png, jpg, back]));
+      if (process.env.DOC_ONLY) await p.screenshot({ path: '/tmp/wbsview.png', fullPage: false });
+      await api('planProjectDelete', { core: wc });
+    }
     if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins|Gantt|Knowledge/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
   }
   // ---- 🌐 language audit: with the console in Malay, every page and every project tab must show no English ----

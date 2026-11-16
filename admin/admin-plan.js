@@ -1462,7 +1462,7 @@
         p.baseline = { at: Date.now(), finish: R.finish, BAC: R.BAC, tasks: tasks }; saveNow('baseline set'); toast('Baseline set'); render();
       });
     };
-    ({ overview: overview, schedule: function (R2) { return phone() && !S.phoneGantt ? phoneSchedule(R2) : scheduleTab(R2); }, budget: budgetTab, critical: criticalTab, board: agileView, bom: bomTab, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, change: changeTab, intel: intelTab }[S.tab] || scheduleTab)(R);
+    ({ overview: overview, schedule: function (R2) { return S.wbs ? wbsTab(R2) : phone() && !S.phoneGantt ? phoneSchedule(R2) : scheduleTab(R2); }, budget: budgetTab, critical: criticalTab, board: agileView, bom: bomTab, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, change: changeTab, intel: intelTab }[S.tab] || scheduleTab)(R);
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
@@ -1718,6 +1718,84 @@
     B.querySelectorAll('[data-pv]').forEach(function (b) { b.onclick = function () { var t = p.tasks.filter(function (x) { return x.id === b.closest('[data-tid]').getAttribute('data-tid'); })[0]; if (!t) return; var v = +b.getAttribute('data-pv');
       if ((t.subs || []).length) { setStatus(t, statusFromPct(v)); } t.pct = v; t.status = statusFromPct(v); dirty(t.name + ' ' + v + '%'); render(); }; });
   }
+  // ---------- 🌳 WBS view: the plan as a Work Breakdown Structure (read only), saved as PNG or JPEG ----------
+  function wbsSvg(R) {
+    var p = S.plan, rows = ordered().filter(function (r) { return !r.t.hidden; }), t0 = today();
+    var FONT = "'Manrope','Segoe UI',system-ui,-apple-system,sans-serif", cw = function (s, px) { return String(s).length * px * 0.56; };
+    var wrap = function (s, px, w, max) { var words = String(s || '').replace(/^[✓◆\s]+/, '').split(/\s+/), L = [], cur = ''; words.forEach(function (wd) { var t = cur ? cur + ' ' + wd : wd; if (cw(t, px) > w && cur) { L.push(cur); cur = wd; } else cur = t; }); if (cur) L.push(cur); if (L.length > max) { L = L.slice(0, max); L[max - 1] = L[max - 1].replace(/\s*\S*$/, '') + '…'; } return L; };
+    var X = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var tone = function (pct, late, mile) { return pct >= 100 ? '#16A34A' : late ? '#DC2626' : pct > 0 ? '#2563EB' : mile ? '#7C3AED' : '#94A3B8'; };
+    var BW = 214, GAP = 26, IND = 18, PAD = 30, per = Math.max(3, Math.min(7, Math.ceil(Math.sqrt(rows.length * 1.3)))), bands = [];
+    for (var i = 0; i < rows.length; i += per) bands.push(rows.slice(i, i + per));
+    var cols = Math.min(per, rows.length) || 1, W = PAD * 2 + cols * BW + (cols - 1) * GAP, out = [], y = PAD;
+    var box = function (x, y0, w, h, fill, stroke, r) { return '<rect x="' + x + '" y="' + y0 + '" width="' + w + '" height="' + h + '" rx="' + (r || 10) + '" fill="' + fill + '"' + (stroke ? ' stroke="' + stroke + '" stroke-width="1.2"' : '') + '/>'; };
+    var text = function (x, y0, s, px, fill, weight, anchor) { return '<text x="' + x + '" y="' + y0 + '" font-family="' + FONT + '" font-size="' + px + '" font-weight="' + (weight || 500) + '" fill="' + fill + '"' + (anchor ? ' text-anchor="' + anchor + '"' : '') + '>' + X(s) + '</text>'; };
+    var line = function (x1, y1, x2, y2) { return '<path d="M' + x1 + ' ' + y1 + ' L' + x2 + ' ' + y2 + '" stroke="#B8AE92" stroke-width="1.4" fill="none"/>'; };
+    // the root: the project
+    var sumL = (R.start ? pretty(R.start) + ' – ' + prettyY(R.finish) + ' · ' : '') + pl(rows.length, 'work package') + ' · ' + money(R.BAC || 0) + ' · ' + (R.pct || 0) + '% done';
+    var rootW = Math.min(W - PAD * 2, Math.max(320, cw(p.name || 'Project', 17) + 60, cw(sumL, 11) + 60)), rootX = (W - rootW) / 2, rootH = 80;
+    out.push(box(rootX, y, rootW, rootH, '#1F1D18', '', 14), '<rect x="' + (rootX + 14) + '" y="' + (y + rootH - 5) + '" width="' + (rootW - 28) + '" height="5" rx="2.5" fill="#C9A227"/>',
+      text(W / 2, y + 26, 'WBS 0 · PROJECT', 10.5, '#E8C04A', 800, 'middle'), text(W / 2, y + 48, wrap(p.name || 'Project', 17, rootW - 30, 1)[0], 17, '#FFFFFF', 800, 'middle'),
+      text(W / 2, y + 66, sumL, 11, '#D9D3C2', 500, 'middle'));
+    var rootBottom = y + rootH; y += rootH + 34;
+    bands.forEach(function (band, bi) {
+      var busY = y - 16, xs = band.map(function (r, k) { return PAD + k * (BW + GAP); }), cx = xs.map(function (x) { return x + BW / 2; });
+      // connectors: root → bus → each column (the bus of a later band hangs off a spine at the left)
+      if (bi === 0) out.push(line(W / 2, rootBottom, W / 2, busY));
+      else out.push(line(PAD - 12, rootBottom + 10, PAD - 12, busY), line(PAD - 12, busY, cx[0], busY));
+      if (bi === 0 && bands.length > 1) out.push(line(W / 2, rootBottom + 10, PAD - 12, rootBottom + 10));
+      out.push(line(Math.min(cx[0], W / 2), busY, Math.max(cx[cx.length - 1], bi === 0 ? W / 2 : cx[0]), busY));
+      var bandH = 0;
+      band.forEach(function (r, k) {
+        var t = r.t, x = xs[k], late = t.pct < 100 && t.ef && t.ef < t0, mile = t.dur === 0, L = wrap(t.name, 13, BW - 26, 3), h = 34 + L.length * 16 + 18, col = tone(t.pct, late, mile);
+        out.push(line(cx[k], busY, cx[k], y));
+        out.push(box(x, y, BW, h, '#FFF8E1', '#E3C76A', 10), '<rect x="' + x + '" y="' + y + '" width="5" height="' + h + '" rx="2" fill="' + col + '"/>');
+        out.push(text(x + 14, y + 19, String(r.n) + (mile ? '  ◆ milestone' : ''), 11, '#9A7A12', 800));
+        L.forEach(function (ln, j) { out.push(text(x + 14, y + 38 + j * 16, ln, 13, '#1F1D18', 700)); });
+        var meta = (mile ? pretty(t.es) : pl(t.dur, 'day') + (t.es ? ' · ' + pretty(t.es) + '–' + pretty(t.ef) : '')) + (cost(t) ? ' · ' + money(cost(t)) : '');
+        out.push(text(x + 14, y + h - 12, meta, 10.5, '#6B665A', 500));
+        out.push('<rect x="' + (x + BW - 46) + '" y="' + (y + 9) + '" width="36" height="15" rx="7.5" fill="' + col + '"/>', text(x + BW - 28, y + 20, t.pct + '%', 9.5, '#FFFFFF', 800, 'middle'));
+        // the work under it: sub-tasks (and their steps), indented with a spine
+        var cy = y + h + 10, spine = x + 10, prevY = y + h;
+        (t.subs || []).forEach(function (sb, si) {
+          var SL = wrap(sb.name, 12, BW - IND - 60, 2), sh = 12 + SL.length * 15 + ((sb.steps || []).length ? 12 : 4), sdone = sb.status === 'done', sc = sdone ? '#16A34A' : sb.status === 'doing' ? '#2563EB' : '#94A3B8';
+          out.push(line(spine, prevY, spine, cy + sh / 2), line(spine, cy + sh / 2, x + IND, cy + sh / 2)); prevY = cy + sh / 2;
+          out.push(box(x + IND, cy, BW - IND, sh, '#FFFFFF', '#DDD6C2', 8), '<circle cx="' + (x + IND + 11) + '" cy="' + (cy + 14) + '" r="4" fill="' + sc + '"/>');
+          out.push(text(x + IND + 20, cy + 17, r.n + '.' + (si + 1), 10, '#9A7A12', 800));
+          SL.forEach(function (ln, j) { out.push(text(x + IND + 20 + cw(r.n + '.' + (si + 1) + ' ', 10) + 4, cy + 17 + j * 15, ln, 12, sdone ? '#6B665A' : '#2B2820', 600)); });
+          var st = (sb.steps || []).length; if (st) out.push(text(x + BW - 8, cy + sh - 6, (sb.steps.filter(function (q) { return q.done; }).length) + '/' + st + ' steps', 9.5, '#8A8577', 500, 'end'));
+          cy += sh + 8;
+        });
+        bandH = Math.max(bandH, cy - y);
+      });
+      y += bandH + 50;
+    });
+    var H = y - 20 + PAD;
+    out.push(text(PAD, H - 12, 'Work Breakdown Structure · ' + (p.name || '') + ' · ' + pretty(t0) + ' · GKH Project Champ', 10, '#8A8577', 500));
+    return { svg: '<svg xmlns="http://www.w3.org/2000/svg" width="' + Math.ceil(W) + '" height="' + Math.ceil(H) + '" viewBox="0 0 ' + Math.ceil(W) + ' ' + Math.ceil(H) + '"><rect width="100%" height="100%" fill="#FBF9F4"/>' + out.join('') + '</svg>', w: Math.ceil(W), h: Math.ceil(H) };
+  }
+  function wbsTab(R) {
+    var g = wbsSvg(R), n = ordered().length, subs = S.plan.tasks.reduce(function (a, t) { return a + (t.subs || []).length; }, 0);
+    $('#planBody').innerHTML = '<div class="card" style="padding:12px"><div class="row wbs-bar"><div><h3 style="margin:0">🌳 Work Breakdown Structure</h3><small class="muted">' + pl(n, 'work package') + (subs ? ' · ' + pl(subs, 'sub-task') : '') + ' · read only: change the work on the Gantt</small></div><span class="sp"></span>' +
+      '<div class="pviews"><div class="tabs" style="margin:0"><button class="tab" data-wbsfit="1"' + (S.wbsFit !== false ? ' disabled' : '') + '>Fit to screen</button><button class="tab" data-wbsfit="0"' + (S.wbsFit === false ? ' disabled' : '') + '>Actual size</button></div>' +
+      '<button class="btn btn-sm" id="wbsPng" type="button">⬇ PNG</button><button class="btn btn-sm" id="wbsJpg" type="button">⬇ JPEG</button>' +
+      '<div class="tabs" style="margin:0"><button class="tab on" data-wbs title="Back to the Gantt chart">🌳 WBS ✕</button></div></div></div>' +
+      '<div class="wbs-wrap' + (S.wbsFit !== false ? ' fit' : '') + '" id="wbsWrap">' + g.svg + '</div>' +
+      '<div class="wbs-leg"><i style="background:#94A3B8"></i>Not started <i style="background:#2563EB"></i>In progress <i style="background:#16A34A"></i>Done <i style="background:#DC2626"></i>Late <i style="background:#7C3AED"></i>Milestone</div></div>';
+    var B = $('#planBody');
+    B.querySelector('[data-wbs]').onclick = function () { S.wbs = false; render(); };
+    B.querySelectorAll('[data-wbsfit]').forEach(function (b) { b.onclick = function () { S.wbsFit = b.getAttribute('data-wbsfit') === '1'; render(); }; });
+    var save = function (type) {
+      var img = new Image(), scale = Math.max(1, Math.min(2, 14000 / Math.max(g.w, g.h))), url = URL.createObjectURL(new Blob([g.svg], { type: 'image/svg+xml' }));
+      img.onload = function () {
+        var c = document.createElement('canvas'); c.width = Math.round(g.w * scale); c.height = Math.round(g.h * scale);
+        var x = c.getContext('2d'); x.fillStyle = '#FBF9F4'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        c.toBlob(function (bl) { var a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = 'WBS - ' + String(S.plan.name || 'project').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 80) + (type === 'image/png' ? '.png' : '.jpg'); document.body.appendChild(a); a.click(); a.remove(); toast('WBS saved as ' + (type === 'image/png' ? 'PNG' : 'JPEG')); }, type, 0.93);
+      };
+      img.onerror = function () { toast('Could not make the picture', true); }; img.src = url;
+    };
+    $('#wbsPng').onclick = function () { save('image/png'); }; $('#wbsJpg').onclick = function () { save('image/jpeg'); };
+  }
   function scheduleTab(R) {
     var p = S.plan, rows = ordered(), num = {}, idOf = {};
     rows.forEach(function (r) { num[r.t.id] = r.n; idOf[r.n] = r.t.id; });
@@ -1757,7 +1835,8 @@
       '<label style="display:flex;gap:6px;align-items:center;font-weight:700" title="The date the customer needs it finished. If the plan finishes later, ✨ Fit to finish-by asks the AI how to bring it in.">Finish by<input type="date" id="pFinishBy" value="' + esc(p.finishBy || '') + '" min="' + esc(p.workStart && p.workStart > p.start ? p.workStart : nextWork(p.start)) + '" style="width:auto"></label>' +
       '</div><div class="pviews">' +
       '<div class="tabs" style="margin:0" title="Which columns to show"><button class="tab' + (S.cols === 's' ? ' on' : '') + '" data-cols="s">📅 Dates</button><button class="tab' + (S.cols === 'c' ? ' on' : '') + '" data-cols="c">$ Costs</button><button class="tab' + (S.cols === 'a' ? ' on' : '') + '" data-cols="a">All columns</button></div>' +
-      '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button></div></div></div>' +
+      '<div class="tabs" style="margin:0"><button class="tab' + (S.zoom === 'day' ? ' on' : '') + '" data-zoom="day">Days</button><button class="tab' + (S.zoom === 'week' ? ' on' : '') + '" data-zoom="week">Weeks</button></div>' +
+      '<div class="tabs pv-wbs" style="margin:0"><button class="tab" data-wbs title="See the plan as a Work Breakdown Structure (read only), and save it as a picture">🌳 WBS</button></div></div></div>' +
       '<div class="gsplit" id="gSplit"><div class="gpane gleft" id="gLeft"' + (S.split ? ' style="flex:0 0 ' + S.split + 'px;max-width:none"' : '') + '><table class="gt v-' + S.cols + '"><thead><tr><th>#</th><th title="Done">✓</th><th style="min-width:160px">Task <button type="button" class="gfz-chip" id="gFreezeBtn" title="Freeze columns (like Excel) and column widths">❄ ' + esc(gfzName()) + '</button></th><th style="min-width:136px">Resources <span class="muted" style="text-transform:none;letter-spacing:0">(★ lead)</span></th><th>Days</th><th>Start</th><th>Finish</th><th>After #</th><th title="Labour: people × hours (or days) each. Materials: quantity">People × Qty</th><th>Unit</th><th>Unit $</th><th>Cost</th><th>Actual $</th><th>Status</th><th>%</th><th></th></tr></thead><tbody>';
     var G = '';   // rows of the Gantt pane (kept the same height as the grid rows)
     rows.forEach(function (r) {
@@ -1827,6 +1906,7 @@
     $('#gFreezeBtn').onclick = function (e) { e.stopPropagation(); gFreezeMenu(this); };
     B.querySelectorAll('[data-cols]').forEach(function (b) { b.onclick = function () { S.cols = b.getAttribute('data-cols'); try { localStorage.setItem('mbsPlanCols', S.cols); } catch (e) {} render(); }; });
     B.querySelectorAll('[data-zoom]').forEach(function (b) { b.onclick = function () { S.zoom = b.getAttribute('data-zoom'); render(); }; });
+    B.querySelectorAll('[data-wbs]').forEach(function (b) { b.onclick = function () { S.wbs = true; render(); }; });
     $('#pStart').onchange = function () { if (this.value && p.finishBy && this.value > p.finishBy) { toast('The project can\'t start after your Finish by date (' + dmy(p.finishBy) + '). Move Finish by later first, or clear it.', true); render(); return; } if (this.value) { var f0 = rollup(p, today()).finish; p.start = this.value; dirty(); render(); afterDates(f0, 'the project start changed'); } };
     $('#pWork').onchange = function () { setWorkStart(this.value); };
     $('#pFinishBy').onchange = function () { var first = p.workStart && p.workStart > p.start ? p.workStart : p.start; if (this.value && this.value < first) { toast('Finish by can\'t be before the ' + (first === p.start ? 'project starts' : 'work starts') + ' (' + dmy(first) + ').', true); render(); return; } p.finishBy = this.value || ''; S.fitUndo = null; dirty('finish by ' + (p.finishBy || 'cleared')); render(); afterDates('', 'Finish by changed'); };
