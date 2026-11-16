@@ -22,6 +22,18 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   // a fake DeepSeek: says back which language and page the assistant was told to use
   const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
     const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
+    if (/senior project manager and business analyst \(PMP, BABOK\)/.test(sys)) {   // 📁 one document against the plan
+      const u = JSON.parse(j.messages[1].content); global.DMS_DOC = u.document; global.DMS_PROJECT = u.project;
+      const o = { type: 'BRD', summary: 'The BRD asks for card payments and a reporting dashboard by 30 June.', key_points: ['Go-live 30 June'], requirements: [{ item: 'Card payments through a payment gateway', in_plan: 'no', task: '', note: 'not planned' }, { item: 'Design of the screens', in_plan: 'yes', task: '1', note: '' }],
+        conflicts: [{ what: 'Go-live date', document: '30 June', plan: 'later', impact: 'High' }], gaps: ['No payment gateway integration task'], risks: [{ title: 'Payment gateway certification takes 8 weeks', cause: 'PCI DSS', p: 4, i: 4, action: 'Start certification early' }],
+        tasks: [{ name: 'Integrate the payment gateway', phase: 'Work', days: 10, why: 'BRD 4.2' }], actions: ['Agree the go-live date with the sponsor'], alignment: 'partly aligned', alignment_why: 'Payments are missing from the plan.' };
+      s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }], usage: { total_tokens: 1500 } }));
+    }
+    if (/PMO lead auditing a project's document repository/.test(sys)) {
+      const u = JSON.parse(j.messages[1].content); global.DMS_SET = u.documents;
+      const o = { summary: 'Requirements are covered; there is no test strategy.', coverage: [{ area: 'Requirements', status: 'good', note: 'BRD v2' }, { area: 'Testing', status: 'missing', note: 'none' }], missing: ['A test strategy'], conflicts: [{ between: 'BRD vs the plan', what: 'Go-live date differs', impact: 'High' }], stale: [], actions: ['Write a test strategy'] };
+      s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }], usage: { total_tokens: 900 } }));
+    }
     if (/senior project scheduler \(PMBOK precedence/.test(sys)) {   // 🔗 the dependencies: 2 and 3 can run side by side, 4 needs both
       const u = JSON.parse(j.messages[1].content); global.DEPS_USER = u;
       const o = { links: [{ n: 1, after: [], why: 'Starts the project' }, { n: 2, after: [1], why: 'Needs the design' }, { n: 3, after: [1], why: 'Needs the design, not the build' }, { n: 4, after: [2, 3], why: 'Needs the build and the content' }, { n: 4, after: [4], why: 'loop' }], summary: 'Build and content can run in parallel after the design.' };
@@ -675,6 +687,46 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       ok('Champ watch', 'the Summary has the watch too; the morning run only works with the site\'s own signature', /Champ's watch/.test(sw) && /Watch red/.test(sw) && cron === 403, JSON.stringify([sw.slice(0, 120), cron]));
       await api('planProjectDelete', { core: rc }); await api('planProjectDelete', { core: gc });
     }
+    // 📁 Documents: the project's repository in R2: filed by folder, versions, status, search, AI analysis against the plan, review of all
+    {
+      const mc = (await (await api('planNewProject', { name: 'Docs check', client: 'Internal', program: 'Digital health' })).json()).core;
+      await api('planSave', { core: mc, plan: { name: 'Payments portal', start: new Date().toISOString().slice(0, 10), phases: [{ id: 'ph1', name: 'Work' }], tasks: [{ id: 'a', phase: 'ph1', name: 'Design the screens', dur: 5, pred: [], res: [], pct: 0, status: 'todo' }] } });
+      fs.writeFileSync('/tmp/BRD Payments.txt', 'Business Requirements Document\n\n1. The portal shall take card payments through a payment gateway.\n\n2. Go-live is 30 June.\n\n' + 'The payment gateway must be PCI DSS compliant. '.repeat(5));
+      fs.writeFileSync('/tmp/Minutes 12 Oct.txt', 'Minutes of the steering committee meeting\n\nAttendees: the sponsor, the PM.\n\nDecisions: approve the BRD.');
+      fs.copyFileSync(path.join(SITE, 'tools/test-data/depot-requirements.xlsx'), '/tmp/Budget.xlsx');
+      const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'); fs.writeFileSync('/tmp/Site photo.png', png);
+      const before = global.R2S.size;
+      await p.goto(`${BASE}/admin/#plan/${mc}/docs`); await p.reload(); await p.waitForSelector('#dmFile', { state: 'attached', timeout: 10000 }).catch(() => {});
+      await p.setInputFiles('#dmFile', ['/tmp/BRD Payments.txt', '/tmp/Minutes 12 Oct.txt', '/tmp/Site photo.png', '/tmp/Budget.xlsx']);
+      await p.waitForFunction(() => document.querySelectorAll('.dm-tbl tbody tr').length >= 4, null, { timeout: 30000 }).catch(() => {});
+      let L = await (await api('intelDmsList', { core: mc })).json(); const by = (n) => L.docs.find((d) => d.name === n) || {};
+      ok('Documents', 'upload several files at once: each is stored in R2 under the project and filed in the right folder (BRD → Requirements, minutes → Meeting minutes); a picture with no text is kept too', L.docs.length === 4 && by('BRD Payments.txt').folder === 'requirements' && by('Minutes 12 Oct.txt').folder === 'meetings' && by('Site photo.png').hasFile && !by('Site photo.png').words && L.docs.every((d) => d.r2 && d.r2.startsWith('projects/' + mc + '/')) && global.R2S.size - before === 4 && by('BRD Payments.txt').status === 'Draft' && by('BRD Payments.txt').version === 1, JSON.stringify(L.docs.map((d) => [d.name, d.folder, d.status, d.version, !!d.r2, d.words])));
+      const brd = by('BRD Payments.txt').id;
+      await p.selectOption(`[data-dms="${brd}"]`, 'Approved'); await sleep(1200);
+      await p.click('[data-dmfo="requirements"]'); await sleep(400); const reqRows = await p.$$eval('.dm-tbl tbody tr', (r) => r.length);
+      fs.writeFileSync('/tmp/BRD Payments v2.txt', 'Business Requirements Document version 2\n\n1. The portal shall take card payments through a payment gateway.\n\n2. Go-live is 30 June.\n\n3. A reporting dashboard is needed.');
+      const [fc] = await Promise.all([p.waitForEvent('filechooser', { timeout: 8000 }).catch(() => null), p.click(`[data-dmnv="${brd}"]`)]);
+      if (fc) await fc.setFiles('/tmp/BRD Payments v2.txt'); else console.log('no file chooser');
+      for (let i = 0; i < 40; i++) { await sleep(500); const l2 = await (await api('intelDmsList', { core: mc })).json(); if (l2.docs.some((d) => d.name === 'BRD Payments v2.txt')) break; } await sleep(1500);
+      L = await (await api('intelDmsList', { core: mc })).json(); const v1 = L.docs.find((d) => d.id === brd), v2 = L.docs.find((d) => d.name === 'BRD Payments v2.txt') || {};
+      ok('Documents', 'status (Approved), folders as filters, and a new version: v2 is current (Draft), v1 is kept as Superseded (only the current version goes to Ask AI)', reqRows === 1 && v1.status === 'Superseded' && v1.superseded === v2.id && v2.version === 2 && v2.group === brd && v2.folder === 'requirements' && v2.status === 'Draft', JSON.stringify([reqRows, v1 && [v1.status, v1.superseded], [v2.version, v2.group, v2.folder, v2.status]]));
+      await p.fill('#dmQ', 'reporting dashboard'); await p.waitForSelector('.dm-hit', { timeout: 8000 }).catch(() => {}); const hit = await p.textContent('#dmHits').catch(() => '');
+      await p.fill('#dmQ', ''); await sleep(500);
+      await p.click(`[data-dmai="${v2.id}"]`); await p.waitForSelector('#dmApply', { timeout: 40000 }).catch(() => {});
+      const an = await p.textContent('#dmA').catch(() => '');
+      await p.click('#dmApply').catch(() => {}); await sleep(2500);
+      const pl = (await (await api('planGet', { core: mc })).json()).plan;
+      ok('Documents', 'search finds words inside the documents; 🧠 analyses a document against the plan (requirements in or not in the plan, conflicts, gaps) and adds the ticked task and risk to the project', /BRD Payments v2/.test(hit) && /Partly aligned/.test(an) && /Card payments through a payment gateway/.test(an) && /Go-live date/.test(an) && pl.tasks.some((t) => t.name === 'Integrate the payment gateway' && t.pred.join() === 'a') && (pl.risks || []).some((r) => /certification takes 8 weeks/.test(r.title) && /BRD Payments/.test(r.cause)) && /reporting dashboard/.test(global.DMS_DOC.text) && global.DMS_PROJECT.tasks.length === 1, JSON.stringify([hit.slice(0, 80), an.slice(0, 120), pl.tasks.map((t) => t.name)]));
+      await p.click('#dmRev').catch(() => {}); await p.waitForSelector('.dm-cov', { timeout: 40000 }).catch(() => {});
+      const rv = await p.textContent('#dmR').catch(() => '');
+      ok('Documents', '🧠 Review all against the plan: coverage, missing documents, conflicts and next steps (current versions only; analysed ones by their analysis)', /no test strategy/.test(rv) && /Testing/.test(rv) && /A test strategy/.test(rv) && global.DMS_SET.length === 4 && global.DMS_SET.some((d) => d.analysis && d.analysis.alignment === 'partly aligned') && !global.DMS_SET.some((d) => d.name === 'BRD Payments.txt'), JSON.stringify([rv.slice(0, 120), (global.DMS_SET || []).map((d) => d.name)]));
+      await p.click('[data-close]').catch(() => {});
+      p.once('dialog', (dg) => dg.accept()); await p.click(`[data-dmx="${v2.id}"]`).catch(() => {}); await sleep(2500);
+      L = await (await api('intelDmsList', { core: mc })).json(); const back = L.docs.find((d) => d.id === brd) || {};
+      const gone = ![...global.R2S.keys()].some((k) => k === v2.r2);
+      ok('Documents', 'deleting the current version removes its file from R2 and brings the version before back (Approved again)', !L.docs.some((d) => d.id === v2.id) && !back.superseded && back.status === 'Approved' && gone, JSON.stringify([back.status, back.superseded, gone]));
+      await api('planProjectDelete', { core: mc });
+    }
     // 🔗 the AI works out the dependencies; the PM reviews them (and the new finish), applies them, sees the arrows, can undo
     {
       const dc = (await (await api('planNewProject', { name: 'Deps check', client: 'Internal', program: 'Digital health' })).json()).core;
@@ -717,7 +769,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       if (process.env.DOC_ONLY) await p.screenshot({ path: '/tmp/wbsview.png', fullPage: false });
       await api('planProjectDelete', { core: wc });
     }
-    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins|Gantt|Knowledge|R2|Costing|Champ watch/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
+    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins|Gantt|Knowledge|R2|Costing|Champ watch|Documents/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
   }
   // ---- 🌐 language audit: with the console in Malay, every page and every project tab must show no English ----
   {

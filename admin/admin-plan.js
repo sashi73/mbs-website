@@ -1397,7 +1397,7 @@
   function renderNow() {
     var p = S.plan, R = rollup(p, today());
     $('#title').textContent = 'Project plan';
-    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Gantt'], ['budget', '💰 Costing'], ['critical', '⚡ Critical path'], ['board', '📋 Backlog & Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Ask AI']]);
+    var tabs = [['overview', '◎ Overview'], ['schedule', '▤ Gantt'], ['budget', '💰 Costing'], ['critical', '⚡ Critical path'], ['board', '📋 Backlog & Board'], ['bom', '🧱 BOM']].concat([['stake', '👥 Stakeholders'], ['scope', '🎯 Scope'], ['risks', '⚠ Risks'], ['issues', '❗ Issues'], ['contracts', '📜 Contracts'], ['docs', '📁 Documents'], ['comms', '📞 Comms'], ['reports', '📊 Reports'], ['swms', '🦺 SWMS'], ['change', '🔁 Change control'], ['intel', '🧠 Ask AI']]);
     var MODS = S.mods || {}; tabs = tabs.filter(function (t) { return MODS[t[0]] !== false; });   // GKH Project Champ: optional modules switched off
     if (MODS[S.tab] === false) S.tab = 'overview';
     var sub = !!(M.me && M.me.scope), hide = sub ? ' style="display:none"' : '';   // v91: a sub-contractor signed in to this project
@@ -1462,7 +1462,7 @@
         p.baseline = { at: Date.now(), finish: R.finish, BAC: R.BAC, tasks: tasks }; saveNow('baseline set'); toast('Baseline set'); render();
       });
     };
-    ({ overview: overview, schedule: function (R2) { return S.wbs ? wbsTab(R2) : phone() && !S.phoneGantt ? phoneSchedule(R2) : scheduleTab(R2); }, budget: budgetTab, critical: criticalTab, board: agileView, bom: bomTab, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, change: changeTab, intel: intelTab }[S.tab] || scheduleTab)(R);
+    ({ overview: overview, schedule: function (R2) { return S.wbs ? wbsTab(R2) : phone() && !S.phoneGantt ? phoneSchedule(R2) : scheduleTab(R2); }, budget: budgetTab, critical: criticalTab, board: agileView, bom: bomTab, scope: scope, risks: risks, issues: issues, stake: stakeholders, contracts: contractsTab, docs: docsTab, comms: commsTab, reports: reportsTab, swms: swmsTab, change: changeTab, intel: intelTab }[S.tab] || scheduleTab)(R);
   }
   function timePct(R) { var t = today(); if (!R.start || t < R.start) return 0; if (t >= R.finish) return 100; return Math.round(workBetween(R.start, t) / Math.max(1, workBetween(R.start, R.finish)) * 100); }
   function varDays(base, now) { var d = workBetween(base, now) - 1; if (now <= base) { d = -(workBetween(now, base) - 1); } return d === 0 ? 'on baseline' : d > 0 ? d + ' days behind baseline' : (-d) + ' days ahead of baseline'; }
@@ -6086,6 +6086,151 @@
     return Promise.reject(new Error('“' + f.name + '” is not a PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx) or text file.'));
   }
   M.readDoc = piExtract;   // People: read a resume (PDF or Word) in the browser
+  /* ---------- 📁 Documents: the project's own repository (files in Cloudflare R2, text for the AI), organised, versioned, analysed against the plan ---------- */
+  function fsize(n) { n = Number(n) || 0; return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? Math.round(n / 1024) + ' KB' : n ? n + ' B' : ''; }
+  function docsTab() {
+    var core = S.core, D = S.dms;
+    if (!D || D.core !== core) {
+      $('#planBody').innerHTML = '<div class="empty">Loading the project documents…</div>';
+      api('intelDmsList', { core: core }).then(function (d) { S.dms = { core: core, d: d, folder: (S.dms && S.dms.core === core && S.dms.folder) || 'all', old: false, q: '' }; if (S.tab === 'docs' && S.core === core) docsTab(); }).catch(fail);
+      return;
+    }
+    var d = D.d, F = {}; d.folders.forEach(function (f) { F[f.key] = f; });
+    var cur = d.docs.filter(function (x) { return !x.superseded; }), count = {}; cur.forEach(function (x) { count[x.folder] = (count[x.folder] || 0) + 1; });
+    var shown = d.docs.filter(function (x) { return (D.old ? true : !x.superseded) && (D.folder === 'all' || x.folder === D.folder); }).sort(function (a, b) { return (a.superseded ? 1 : 0) - (b.superseded ? 1 : 0) || b.at - a.at; });
+    var vers = {}; d.docs.forEach(function (x) { vers[x.group] = (vers[x.group] || 0) + 1; });
+    var ro = !(M.allowed && M.allowed('projects', 'edit')), ai = (M.me || {}).ai !== false;
+    var verdict = function (x) { return x.verdict ? '<span class="dm-v dm-' + x.verdict.replace(/ /g, '-') + '" title="AI: against the plan">' + ({ 'aligned': '✓ aligned', 'partly aligned': '◐ partly aligned', 'not aligned': '✕ not aligned' }[x.verdict] || '') + '</span>' : ''; };
+    var row = function (x) {
+      return '<tr class="' + (x.superseded ? 'dm-old' : '') + '"><td><b class="dm-n">' + esc(x.title || x.name) + '</b>' + (x.title ? '<small class="muted"> · ' + esc(x.name) + '</small>' : '') +
+        '<div class="dm-sub">' + (x.tags || []).map(function (t) { return '<span class="dm-tag">#' + esc(t) + '</span>'; }).join('') + verdict(x) + (!x.words ? '<span class="dm-tag" title="No readable text: the AI cannot read it">no text</span>' : '') + '</div></td>' +
+        '<td>' + (ro || x.superseded ? esc((F[x.folder] || {}).name || '') : '<select data-dmf="' + esc(x.id) + '">' + d.folders.map(function (f) { return '<option value="' + f.key + '"' + (f.key === x.folder ? ' selected' : '') + '>' + esc(f.name) + '</option>'; }).join('') + '</select>') + '</td>' +
+        '<td class="nowrap">v' + (x.version || 1) + (vers[x.group] > 1 ? ' <small class="muted">of ' + vers[x.group] + '</small>' : '') + '</td>' +
+        '<td>' + (ro || x.superseded ? '<span class="dm-s dm-s-' + esc(x.status).replace(/ /g, '-') + '">' + esc(x.status) + '</span>' : '<select class="dm-s dm-s-' + esc(x.status).replace(/ /g, '-') + '" data-dms="' + esc(x.id) + '">' + ['Draft', 'In review', 'Approved', 'Archived'].map(function (s0) { return '<option' + (s0 === x.status ? ' selected' : '') + '>' + s0 + '</option>'; }).join('') + '</select>') + '</td>' +
+        '<td>' + esc(x.owner || '') + '</td><td class="nowrap"><small>' + esc(dmy(new Date(x.at).toISOString().slice(0, 10))) + '<br>' + esc(fsize(x.size)) + (x.pages ? ' · ' + x.pages + ' p' : '') + (x.r2 ? ' · ☁️' : '') + '</small></td>' +
+        '<td class="nowrap dm-act">' + (x.hasFile ? '<button class="btn btn-sm" data-dmdl="' + esc(x.id) + '" title="Download the original">⬇</button>' : '') +
+        (ai && x.words && !x.superseded ? '<button class="btn btn-sm" data-dmai="' + esc(x.id) + '" title="' + (x.analysed ? 'See the AI analysis against the plan' : 'The AI reads it against the plan (scope, tasks, dates, budget, risks)') + '">🧠' + (x.analysed ? ' ✓' : '') + '</button>' : '') +
+        (ro || x.superseded ? '' : '<button class="btn btn-sm" data-dmnv="' + esc(x.id) + '" title="Upload a new version (the old one is kept as superseded)">⬆ v' + ((x.version || 1) + 1) + '</button><button class="btn btn-sm" data-dmed="' + esc(x.id) + '" title="Title, owner, tags, note">✎</button><button class="btn btn-sm" data-dmx="' + esc(x.id) + '" title="Delete">🗑</button>') + '</td></tr>';
+    };
+    var recs = (d.records || []);
+    var R = d.review;
+    $('#planBody').innerHTML =
+      '<div class="card dm-top"><div class="dm-h"><div><h3 style="margin:0">📁 Project documents</h3><p class="muted" style="margin:2px 0 0;font-size:12.5px">This project\'s own repository: charter, plans, BRD, FSD, requirements, design, contracts, minutes, reports and more. Files are kept privately in Cloudflare R2 storage; Ask AI reads the current version of each.</p></div><span class="sp"></span>' +
+        '<input id="dmQ" type="search" placeholder="🔎 Search inside every document…" value="' + esc(D.q || '') + '">' +
+        (ro ? '' : '<label class="btn btn-gold btn-sm" style="cursor:pointer">⬆ Upload documents<input type="file" id="dmFile" multiple accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.png,.jpg,.jpeg" hidden></label>') +
+        (ai && cur.length ? '<button class="btn btn-sm" id="dmRev" type="button" title="The AI checks all the documents against the plan: what is covered, missing, in conflict or out of date">🧠 Review all against the plan</button>' : '') + '</div>' +
+        '<div class="dm-stat"><span>📄 <b>' + cur.length + '</b> document' + (cur.length === 1 ? '' : 's') + (d.docs.length > cur.length ? ' · ' + (d.docs.length - cur.length) + ' older version' + (d.docs.length - cur.length === 1 ? '' : 's') : '') + '</span><span>☁️ ' + fsize(d.r2bytes) + ' in R2</span><span>✓ ' + cur.filter(function (x) { return x.status === 'Approved'; }).length + ' approved</span><span>🧠 ' + cur.filter(function (x) { return x.analysed; }).length + ' analysed</span>' + (R ? '<button class="dm-link" id="dmRevOpen" type="button">Last review ' + esc(dmy(new Date(R.at).toISOString().slice(0, 10))) + ' ›</button>' : '') + '</div>' +
+        '<div id="dmUp"></div><div id="dmHits"></div></div>' +
+      '<div class="dm-grid"><nav class="dm-folders"><button data-dmfo="all" class="' + (D.folder === 'all' ? 'on' : '') + '">🗂 All documents <b>' + cur.length + '</b></button>' +
+        d.folders.map(function (f) { return '<button data-dmfo="' + f.key + '" class="' + (D.folder === f.key ? 'on' : '') + '" title="' + esc(f.hint) + '">' + esc(f.name) + ' <b>' + (count[f.key] || 0) + (f.key === 'changes' && recs.length ? ' + ' + recs.length : '') + '</b></button>'; }).join('') +
+        '<label class="qchk" style="margin:10px 6px 0;font-size:12px"><input type="checkbox" id="dmOld"' + (D.old ? ' checked' : '') + '> Show older versions</label></nav>' +
+      '<div class="dm-main">' + (D.folder !== 'all' ? '<p class="muted dm-hint">' + esc((F[D.folder] || {}).hint || '') + '</p>' : '') +
+        (shown.length ? '<div class="table-wrap"><table class="rt dm-tbl"><thead><tr><th>Document</th><th>Folder</th><th>Version</th><th>Status</th><th>Owner</th><th>Added</th><th></th></tr></thead><tbody>' + shown.map(row).join('') + '</tbody></table></div>'
+          : '<div class="dm-empty">' + (ro ? 'No documents here yet.' : 'No documents here yet. Drop files anywhere on this page, or use ⬆ Upload documents' + (D.folder !== 'all' ? ': they go into ' + esc((F[D.folder] || {}).name) : ': Champ files each one in the right folder') + '.') + '</div>') +
+        ((D.folder === 'all' || D.folder === 'changes') && recs.length ? '<h4 style="margin:16px 0 6px">🔁 Change request records (signed decisions)</h4><div class="table-wrap"><table class="rt dm-tbl"><tbody>' + recs.map(function (r) { return '<tr><td><b>' + esc(r.cr) + '</b> ' + esc(r.title) + '</td><td>' + esc(r.outcome) + ' by ' + esc(r.by) + '</td><td><small>' + esc(dmy(new Date(r.at).toISOString().slice(0, 10))) + '</small></td><td>' + (r.hasPdf ? '<button class="btn btn-sm" data-dmcr="' + esc(r.key) + '">⬇ PDF</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
+      '</div></div>';
+    var B = $('#planBody');
+    B.querySelectorAll('[data-dmfo]').forEach(function (b) { b.onclick = function () { D.folder = b.getAttribute('data-dmfo'); docsTab(); }; });
+    $('#dmOld').onchange = function () { D.old = this.checked; docsTab(); };
+    B.querySelectorAll('[data-dmdl]').forEach(function (b) { b.onclick = function () { docDownload(core, b.getAttribute('data-dmdl')); }; });
+    B.querySelectorAll('[data-dmcr]').forEach(function (b) { b.onclick = function () { api('intelCrGet', { core: core, key: b.getAttribute('data-dmcr') }).then(function (r) { var bin = atob(r.file), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' })); a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); }).catch(fail); }; });
+    var set = function (id, x, msg) { var doc = d.docs.find(function (y) { return y.id === id; }); return api('intelDmsUpdate', { core: core, id: id, set: x }).then(function () { Object.assign(doc, x); docsTab(); if (msg) toast(msg); }).catch(fail); };
+    B.querySelectorAll('[data-dmf]').forEach(function (s0) { s0.onchange = function () { set(s0.getAttribute('data-dmf'), { folder: s0.value }, 'Moved to ' + F[s0.value].name); }; });
+    B.querySelectorAll('[data-dms]').forEach(function (s0) { s0.onchange = function () { set(s0.getAttribute('data-dms'), { status: s0.value }, 'Marked ' + s0.value); }; });
+    B.querySelectorAll('[data-dmx]').forEach(function (b) { b.onclick = function () { var x = d.docs.find(function (y) { return y.id === b.getAttribute('data-dmx'); }); if (!x || !confirmBox('Delete “' + (x.title || x.name) + '” (version ' + (x.version || 1) + ')? The file is removed from storage.' + (x.version > 1 ? ' The version before comes back as the current one.' : ''))) return;
+      api('intelDocDelete', { core: core, id: x.id }).then(function () { S.dms = null; if (S.intel && S.intel.core === core) S.intel.docs = S.intel.docs.filter(function (y) { return y.id !== x.id; }); docsTab(); toast('Deleted'); }).catch(fail); }; });
+    B.querySelectorAll('[data-dmed]').forEach(function (b) { b.onclick = function () { var x = d.docs.find(function (y) { return y.id === b.getAttribute('data-dmed'); });
+      M.modal('<h2>✎ ' + esc(x.name) + '</h2><div class="form-grid"><label>Title<input id="dmT" maxlength="160" value="' + esc(x.title || '') + '" placeholder="e.g. Business Requirements Document v2"></label><label>Owner<input id="dmO" maxlength="80" value="' + esc(x.owner || '') + '"></label><label>Tags (comma separated)<input id="dmG" maxlength="200" value="' + esc((x.tags || []).join(', ')) + '" placeholder="e.g. payments, phase 2"></label><label>Note<textarea id="dmN" rows="3" maxlength="600">' + esc(x.note || '') + '</textarea></label></div><div class="actions"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-gold" id="dmSave" type="button">Save</button></div>');
+      $('#dmSave').onclick = function () { M.closeModal(); set(x.id, { title: $('#dmT').value, owner: $('#dmO').value, tags: $('#dmG').value.split(',').map(function (t) { return t.trim(); }).filter(Boolean), note: $('#dmN').value }, 'Saved'); }; }; });
+    B.querySelectorAll('[data-dmai]').forEach(function (b) { b.onclick = function () { dmAnalyse(b.getAttribute('data-dmai')); }; });
+    B.querySelectorAll('[data-dmnv]').forEach(function (b) { b.onclick = function () { var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.png,.jpg,.jpeg'; inp.onchange = function () { if (inp.files[0]) dmUpload([inp.files[0]], b.getAttribute('data-dmnv')); }; inp.click(); }; });
+    var fi = $('#dmFile'); if (fi) fi.onchange = function () { dmUpload([].slice.call(fi.files)); fi.value = ''; };
+    var rv = $('#dmRev'); if (rv) rv.onclick = dmReview; var ro2 = $('#dmRevOpen'); if (ro2) ro2.onclick = function () { api('intelDmsReviewGet', { core: core }).then(function (r) { if (r.review) dmReviewShow(r.review); }).catch(fail); };
+    var q = $('#dmQ'), tq; q.oninput = function () { clearTimeout(tq); D.q = q.value; tq = setTimeout(function () { dmSearch(q.value); }, 400); }; if (D.q) dmSearch(D.q);
+    if (!ro) { var pb = B; pb.ondragover = function (e) { e.preventDefault(); pb.classList.add('dm-drop'); }; pb.ondragleave = function () { pb.classList.remove('dm-drop'); }; pb.ondrop = function (e) { e.preventDefault(); pb.classList.remove('dm-drop'); if (e.dataTransfer.files.length) dmUpload([].slice.call(e.dataTransfer.files)); }; }
+  }
+  function confirmBox(msg) { return window.confirm(msg); }
+  function dmSearch(q) {
+    var core = S.core, box = $('#dmHits'); if (!box) return; if (String(q).trim().length < 3) { box.innerHTML = ''; return; }
+    api('intelDmsSearchGet', { core: core, q: q }).then(function (r) { if (!$('#dmHits') || S.core !== core) return;
+      box.innerHTML = r.hits.length ? '<div class="dm-hits">' + r.hits.slice(0, 12).map(function (h) { return '<div class="dm-hit"><b>' + esc(h.name) + '</b>' + (h.page ? ' <small class="muted">page ' + h.page + '</small>' : '') + '<p>' + esc(h.text) + '</p></div>'; }).join('') + '</div>' : '<p class="muted" style="margin:6px 0">Nothing found for “' + esc(q) + '”.</p>'; }).catch(function () {});
+  }
+  function dmUpload(files, replaces) {
+    var core = S.core, D = S.dms, box = $('#dmUp'), done = 0, bad = [];
+    var folder = !replaces && D && D.folder !== 'all' ? D.folder : '';
+    var one = function (f) {
+      if (box) box.innerHTML = '<p class="ask-think" style="margin:8px 0 0">Reading and storing “' + esc(f.name) + '”' + (files.length > 1 ? ' (' + (done + 1) + ' of ' + files.length + ')' : '') + '…</p>';
+      var img = /\.(png|jpe?g)$/i.test(f.name);
+      return (img ? Promise.resolve({ text: '', pages: 1 }) : piExtract(f).catch(function () { return { text: '', pages: 0 }; })).then(function (x) {
+        var txt = x.text && x.text.replace(/\[page \d+\]/g, '').trim().length >= 20 ? x.text : '';
+        return storeFile(f, 'project', core).then(function (ff) {
+          if (!txt && !ff.r2Key) throw new Error('“' + f.name + '” has no readable text and could not be stored.');
+          return api('intelUpload', { core: core, name: f.name, type: f.type, size: f.size, pages: x.pages, text: txt, file: ff.file || '', r2Key: ff.r2Key || '', allowEmpty: !txt, folder: folder, replaces: replaces || '' });
+        });
+      }).then(function (r) { done++; if (S.intel && S.intel.core === core) S.intel.docs.push(r.doc); }).catch(function (e) { bad.push(e.message); });
+    };
+    files.reduce(function (c, f) { return c.then(function () { return one(f); }); }, Promise.resolve()).then(function () {
+      if (box) box.innerHTML = ''; S.dms = Object.assign({}, D, { core: '' }); var keep = D;
+      api('intelDmsList', { core: core }).then(function (d) { S.dms = { core: core, d: d, folder: keep.folder, old: keep.old, q: keep.q }; if (S.tab === 'docs' && S.core === core) docsTab(); });
+      if (done) toast((replaces ? 'New version added' : done + ' document' + (done === 1 ? '' : 's') + ' added') + (bad.length ? ' · ' + bad.length + ' could not be added' : ''));
+      if (bad.length) toast(bad[0], true);
+    });
+  }
+  function dmPoll(id, onDone, onErr) { var n = 0; (function poll() { setTimeout(function () { api('planAiStatus', { id: id }).then(function (st) { if (st.status === 'done') return onDone(st.result); if (st.status === 'error' || ++n > 120) return onErr(st.error || 'The AI took too long. Try again.'); poll(); }).catch(function () { if (++n <= 120) poll(); }); }, n < 3 ? 2000 : 3000); })(); }
+  function dmBg(body) { var id = 'dms' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); return fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': (window.ChampI18n && window.ChampI18n.get()) || 'en' }, body: JSON.stringify(Object.assign({ id: id }, body)) }).then(function (r) { if (r.status === 401 || r.status === 403) throw new Error('Your session has ended, or you can view this project only.'); return id; }); }
+  function dmAnalyse(id, fresh) {
+    var core = S.core, x = S.dms.d.docs.find(function (y) { return y.id === id; }); if (!x) return;
+    M.modal('<h2>🧠 ' + esc(x.title || x.name) + '</h2><p class="muted" style="margin:-4px 0 10px">The document read against this project\'s plan: scope, tasks and dates, budget, risks and issues.</p><div id="dmA"><p class="cr-wait">Loading…</p></div>');
+    var run = function () { $('#dmA').innerHTML = '<p class="cr-wait">✨ The AI is reading “' + esc(x.name) + '” against the plan… (a long document takes a minute or two)</p>';
+      dmBg({ mode: 'docAnalyse', core: core, docId: id }).then(function (job) { dmPoll(job, function (a) { x.analysed = a.at; x.verdict = a.data.alignment; if ($('#dmA')) dmAnalysisShow(x, a, run); }, function (e) { if ($('#dmA')) $('#dmA').innerHTML = '<p class="cr-wait" style="color:#B42318">' + esc(e) + '</p>'; }); }).catch(function (e) { M.closeModal(); fail(e); }); };
+    if (fresh) return run();
+    api('intelDmsAnalysisGet', { core: core, id: id }).then(function (r) { if (!$('#dmA')) return; if (r.analysis) dmAnalysisShow(x, r.analysis, run); else run(); }).catch(function () { run(); });
+  }
+  function dmAnalysisShow(x, a, again) {
+    var A = a.data, p = S.plan, ro = !(M.allowed && M.allowed('projects', 'edit'));
+    var li = function (arr) { return '<ul>' + arr.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>'; };
+    var inn = { yes: '✓', partly: '◐', no: '✕' };
+    $('#dmA').innerHTML = '<div class="dm-ali dm-' + A.alignment.replace(/ /g, '-') + '"><b>' + ({ 'aligned': '✓ Aligned with the plan', 'partly aligned': '◐ Partly aligned with the plan', 'not aligned': '✕ Not aligned with the plan' }[A.alignment]) + '</b>' + (A.alignment_why ? ': ' + esc(A.alignment_why) : '') + '</div>' +
+      (A.type ? '<p class="muted" style="margin:6px 0 0">' + esc(A.type) + ' · analysed ' + esc(dmy(new Date(a.at).toISOString().slice(0, 10))) + (a.version ? ' (version ' + a.version + ')' : '') + '</p>' : '') +
+      '<p>' + esc(A.summary) + '</p>' + (A.key_points.length ? '<h4>Key points</h4>' + li(A.key_points) : '') +
+      (A.requirements.length ? '<h4>Requirements and deliverables vs the plan</h4><div class="table-wrap"><table class="rt dm-req"><tbody>' + A.requirements.map(function (r) { return '<tr><td class="dm-in dm-in-' + r.in_plan + '">' + inn[r.in_plan] + '</td><td>' + esc(r.item) + (r.note ? '<br><small class="muted">' + esc(r.note) + '</small>' : '') + '</td><td class="nowrap"><small>' + (r.task ? 'task ' + esc(r.task) : r.in_plan === 'no' ? 'not in the plan' : '') + '</small></td></tr>'; }).join('') + '</tbody></table></div>' : '') +
+      (A.conflicts.length ? '<h4>⚠ Conflicts with the plan</h4>' + A.conflicts.map(function (c) { return '<div class="dm-cf dm-' + c.impact + '"><b>' + esc(c.what) + '</b> <span class="badge-soft">' + esc(c.impact) + '</span><br><small>Document: ' + esc(c.document) + '<br>Plan: ' + esc(c.plan) + '</small></div>'; }).join('') : '') +
+      (A.gaps.length ? '<h4>Gaps in the plan</h4>' + li(A.gaps) : '') +
+      (A.actions.length ? '<h4>What to do next</h4>' + li(A.actions) : '') +
+      (!ro && (A.tasks.length || A.risks.length) ? '<h4>Add to the project</h4>' +
+        A.tasks.map(function (t, i) { return '<label class="qchk dm-add"><input type="checkbox" data-dmt="' + i + '" checked> ＋ Task: <b>' + esc(t.name) + '</b> <small class="muted">(' + t.days + ' days · ' + esc(t.phase || 'new phase') + ') ' + esc(t.why) + '</small></label>'; }).join('') +
+        A.risks.map(function (r, i) { return '<label class="qchk dm-add"><input type="checkbox" data-dmr="' + i + '" checked> ⚠ Risk: <b>' + esc(r.title) + '</b> <small class="muted">(score ' + r.p * r.i + ') ' + esc(r.action) + '</small></label>'; }).join('') : '') +
+      '<div class="actions"><button class="btn" type="button" id="dmAgain">↻ Analyse again</button><button class="btn" data-close type="button">Close</button>' + (!ro && (A.tasks.length || A.risks.length) ? '<button class="btn btn-gold" type="button" id="dmApply">＋ Add the ticked items</button>' : '') + '</div>';
+    $('#dmAgain').onclick = again;
+    var ap = $('#dmApply'); if (ap) ap.onclick = function () {
+      var nt = 0, nr = 0, tag = ' (from ' + (x.title || x.name) + ')';
+      $('#dmA').querySelectorAll('[data-dmt]:checked').forEach(function (c) { var t = A.tasks[+c.getAttribute('data-dmt')];
+        var ph = (p.phases || []).find(function (f) { return f.name.toLowerCase() === String(t.phase || '').toLowerCase(); });
+        if (!ph) { ph = { id: 'ph' + Date.now().toString(36) + nt, name: t.phase || 'From the documents' }; p.phases.push(ph); }
+        var inPh = p.tasks.filter(function (y) { return y.phase === ph.id; }), last = inPh[inPh.length - 1] || p.tasks[p.tasks.length - 1];
+        p.tasks.push({ id: 't' + Date.now().toString(36) + 'd' + nt, phase: ph.id, name: t.name, dur: t.days, pred: last ? [last.id] : [], res: [], lead: '', resource: '', qty: 0, unit: '', rate: 0, actual: 0, pct: 0, status: 'todo', note: t.why + tag }); nt++; });
+      $('#dmA').querySelectorAll('[data-dmr]:checked').forEach(function (c) { var r = A.risks[+c.getAttribute('data-dmr')]; p.risks = p.risks || [];
+        p.risks.push({ id: 'r' + Date.now().toString(36) + 'd' + nr, title: r.title, cause: r.cause + tag, p: r.p, i: r.i, response: 'Mitigate', action: r.action, owner: (p.charter || {}).manager || '', review: '', status: 'Open', raised: today() }); nr++; });
+      if (!nt && !nr) return toast('Tick what to add', true);
+      M.closeModal(); dirty('from the documents: ' + nt + ' task(s), ' + nr + ' risk(s)'); toast('Added ' + (nt ? nt + ' task' + (nt === 1 ? '' : 's') + (nr ? ' and ' : '') : '') + (nr ? nr + ' risk' + (nr === 1 ? '' : 's') : '') + ' from “' + (x.title || x.name) + '”');
+      if (S.tab === 'docs') docsTab();
+    };
+  }
+  function dmReview() {
+    var core = S.core;
+    M.modal('<h2>🧠 Review all documents against the plan</h2><div id="dmR"><p class="cr-wait">✨ The AI is reading the repository against the plan… (a minute or two)</p></div>');
+    dmBg({ mode: 'docReview', core: core }).then(function (job) { dmPoll(job, function (r) { if ($('#dmR')) dmReviewShow(r, true); if (S.dms && S.dms.core === core) S.dms.d.review = { at: r.at, by: r.by }; }, function (e) { if ($('#dmR')) $('#dmR').innerHTML = '<p class="cr-wait" style="color:#B42318">' + esc(e) + '</p>'; }); }).catch(function (e) { M.closeModal(); fail(e); });
+  }
+  function dmReviewShow(r, inModal) {
+    var A = r.data, li = function (arr) { return '<ul>' + arr.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>'; };
+    var html = '<p class="muted" style="margin:-4px 0 8px">' + r.docs + ' documents · ' + esc(dmy(new Date(r.at).toISOString().slice(0, 10))) + '</p><p>' + esc(A.summary) + '</p>' +
+      (A.coverage.length ? '<div class="dm-cov">' + A.coverage.map(function (c) { return '<span class="dm-c dm-c-' + c.status + '" title="' + esc(c.note) + '">' + ({ good: '✓', thin: '◐', missing: '✕' }[c.status]) + ' ' + esc(c.area) + '</span>'; }).join('') + '</div>' : '') +
+      (A.missing.length ? '<h4>Missing documents</h4>' + li(A.missing) : '') + (A.conflicts.length ? '<h4>⚠ Conflicts</h4>' + A.conflicts.map(function (c) { return '<div class="dm-cf dm-' + c.impact + '"><b>' + esc(c.between) + '</b> <span class="badge-soft">' + esc(c.impact) + '</span><br><small>' + esc(c.what) + '</small></div>'; }).join('') : '') +
+      (A.stale.length ? '<h4>Out of date or not yet approved</h4>' + li(A.stale) : '') + (A.actions.length ? '<h4>What to do next</h4>' + li(A.actions) : '') +
+      '<div class="actions"><button class="btn" type="button" id="dmRAgain">↻ Review again</button><button class="btn btn-gold" data-close type="button">Close</button></div>';
+    if (inModal && $('#dmR')) $('#dmR').innerHTML = html; else M.modal('<h2>🧠 Document review</h2><div id="dmR">' + html + '</div>');
+    $('#dmRAgain').onclick = function () { M.closeModal(); dmReview(); };
+  }
   function piUpload(files) {
     var box = $('#piUp'), I = S.intel, core = S.core;
     var one = function (f) {

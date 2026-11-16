@@ -18,7 +18,7 @@ import * as PG from './programs.mjs';
 const str = (s, max = 300) => String(s ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
 const H = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
 const out = (status, body) => new Response(JSON.stringify(body), { status, headers: H });
-const MAX_TEXT = 400000, MAX_FILE = 3.5 * 1024 * 1024, MAX_DOCS = 30, CONTEXT_CHARS = 36000;
+const MAX_TEXT = 400000, MAX_FILE = 3.5 * 1024 * 1024, MAX_DOCS = Math.max(30, Number(process.env.DMS_MAX_DOCS || 300) || 300), CONTEXT_CHARS = 36000;
 
 // ---------- change control records (signed decisions, kept for good) ----------
 //   champ-cr-records           one row per decision: who approved, when, the effect, the plan's CR number (all projects)
@@ -42,13 +42,14 @@ async function crSave(job, body, who) {
 }
 
 // ---------- documents ----------
-async function docList(core) { return ((await kv.get('pdocs:' + core)) || { docs: [] }).docs; }
+export async function docList(core) { return ((await kv.get('pdocs:' + core)) || { docs: [] }).docs; }
 export async function upload(core, f, by) {   // the text for Ask AI; the original file in R2 (r2Key, sent there by the browser) or, without R2, here up to 3.5 MB
   const job = await J.find(core); if (!job) return { error: 'Job not found' };
   const name = str(f.name, 160).replace(/[\\/]/g, '-') || 'document.txt', text = String(f.text || '').replace(/\u0000/g, '').slice(0, MAX_TEXT);
-  if (!text.trim()) return { error: 'No text could be read from "' + name + '". If it is a scanned PDF (a picture of the pages), save it as a text PDF or Word file first.' };
+  if (!text.trim() && !(f.allowEmpty && f.r2Key)) return { error: 'No text could be read from "' + name + '". If it is a scanned PDF (a picture of the pages), save it as a text PDF or Word file first.' };
   const docs = await docList(job.core);
   if (docs.length >= MAX_DOCS) return { error: `A project can hold ${MAX_DOCS} documents. Delete one first.` };
+  const old = f.replaces ? docs.find((x) => x.id === str(f.replaces, 20)) : null;   // 📁 a new version of a document already here
   const id = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   let hasFile = false, r2 = '';
   if (f.r2Key) { const R2 = await import('./r2.mjs'); if (R2.ready() && R2.keyOk(String(f.r2Key), `projects/${job.core}/`)) { r2 = String(f.r2Key); hasFile = true; } }
@@ -56,10 +57,17 @@ export async function upload(core, f, by) {   // the text for Ask AI; the origin
     const buf = Buffer.from(String(f.file), 'base64');
     if (buf.length && buf.length <= MAX_FILE) { await kv.putFile(`pdocfile:${job.core}:${id}`, buf, { name, type: str(f.type, 100) }); hasFile = true; }
   }
+  if (!text.trim() && !hasFile) return { error: 'No text could be read from "' + name + '" and the file could not be kept.' };
   await kv.set(`pdoctext:${job.core}:${id}`, { text });
   const d = { id, name, type: str(f.type, 100), size: Math.max(0, Number(f.size) || 0), pages: Math.max(0, Math.round(Number(f.pages) || 0)), chars: text.length, words: text.split(/\s+/).filter(Boolean).length,
-    kind: str(f.kind, 40) || guessKind(name, text), at: Date.now(), by: str(by, 60), hasFile, r2: r2 || undefined, contractId: str(f.contractId, 30) };
-  await kv.update('pdocs:' + job.core, (x) => { x.docs = (x.docs || []).concat([d]); return x; }, () => ({ docs: [] }));
+    kind: str(f.kind, 40) || (old && old.kind) || guessKind(name, text), at: Date.now(), by: str(by, 60), hasFile, r2: r2 || undefined, contractId: str(f.contractId, 30) || (old && old.contractId) || undefined };
+  const DMS = await import('./dms.mjs');
+  d.folder = DMS.folderOk(f.folder) || (old && old.folder) || DMS.classify(name, text, d.kind);
+  d.status = DMS.statusOk(f.status) || (old ? 'Draft' : DMS.statusOk(f.status) || 'Draft');
+  d.owner = str(f.owner, 80) || (old && old.owner) || str(by, 60); d.title = str(f.title, 160) || (old && old.title) || '';
+  d.tags = (Array.isArray(f.tags) ? f.tags : String(f.tags || '').split(',')).map((x) => str(x, 30)).filter(Boolean).slice(0, 8);
+  if (old) { d.group = old.group || old.id; d.version = (old.version || 1) + 1; } else { d.group = id; d.version = 1; }
+  await kv.update('pdocs:' + job.core, (x) => { x.docs = (x.docs || []).map((y) => (old && y.id === old.id ? Object.assign({}, y, { superseded: d.id, prevStatus: y.status, status: 'Superseded' }) : y)).concat([d]); return x; }, () => ({ docs: [] }));
   return { doc: d, truncated: String(f.text || '').length > MAX_TEXT };
 }
 function guessKind(name, text) {
@@ -70,8 +78,8 @@ function guessKind(name, text) {
 }
 export async function remove(core, id) {
   const d = (await docList(core)).find((x) => x.id === id); if (d && d.r2) { const R2 = await import('./r2.mjs'); await R2.del(d.r2); }
-  await kv.update('pdocs:' + core, (x) => { x.docs = (x.docs || []).filter((d) => d.id !== id); return x; }, () => ({ docs: [] }));
-  await Promise.all([kv.del(`pdoctext:${core}:${id}`), kv.del(`pdocfile:${core}:${id}`)].map((p) => p.catch(() => {})));
+  await kv.update('pdocs:' + core, (x) => { x.docs = (x.docs || []).filter((d) => d.id !== id).map((y) => (y.superseded === id ? Object.assign({}, y, { superseded: undefined, status: y.prevStatus || 'Draft', prevStatus: undefined }) : y)); return x; }, () => ({ docs: [] }));   // the version before comes back
+  await Promise.all([kv.del(`pdoctext:${core}:${id}`), kv.del(`pdocfile:${core}:${id}`), kv.del(`pdocai:${core}:${id}`)].map((p) => p.catch(() => {})));
   return { ok: true };
 }
 
@@ -139,12 +147,12 @@ export async function context(job, plan, question) {
     change_records: [],
     documents: []
   };
-  const docs = await docList(job.core);
+  const docs = (await docList(job.core)).filter((d) => !d.superseded);   // 📁 the current version of each document
   const texts = await kv.getMany(docs.map((d) => `pdoctext:${job.core}:${d.id}`));
   const all = [];
   docs.forEach((d, i) => { const t = texts[i] && texts[i].text; if (t) all.push(...chunks(d, scrub(t, job, people))); });
   const pick = pickChunks(all, question);
-  ctx.documents = docs.map((d) => ({ name: d.name, kind: d.kind, pages: d.pages, words: d.words }));
+  ctx.documents = docs.map((d) => ({ name: d.name, kind: d.kind, folder: d.folder || '', status: d.status || '', version: d.version || 1, pages: d.pages, words: d.words }));
   const sw = await kv.get('swms:' + job.core);   // v57: the SWMS, so questions about it can be answered
   if (sw) ctx.swms = { version: sw.version, status: sw.status, high_risk_work: sw.hrcw.map((k) => (SWMS.HRCW.find((h) => h[0] === k) || [])[1]), steps: sw.steps.map((s) => ({ step: s.step, hazards: s.hazards, risk: s.risk, controls: s.controls, risk_after: s.residual, who: s.who })), ppe: sw.ppe, plant: sw.plant, licences: sw.quals };
   // which uploaded document is which contract
@@ -334,6 +342,16 @@ export async function intelPost(action, body, { who, by, audit }) {
       const t = await kv.get(`pdoctext:${core}:${id}`); if (!t) return out(404, { error: 'Document not found' });
       return out(200, { name: ((await docList(core)).find((d) => d.id === id) || {}).name + '.txt', type: 'text/plain', file: Buffer.from(t.text).toString('base64') });
     }
+    // 📁 the project's document repository
+    case 'intelDmsList': { const D = await import('./dms.mjs'); return out(200, await D.list(core)); }
+    case 'intelDmsUpdate': {
+      const D = await import('./dms.mjs'), r = await D.update(core, str(body.id, 20), Object.assign({}, body.set || {}, { by: by || who })); if (r.error) return out(404, r);
+      if (audit && body.set && body.set.status) await audit(who, `Project ${core}: document ${str(body.id, 20)} marked ${str(body.set.status, 20)}`);
+      return out(200, r);
+    }
+    case 'intelDmsSearchGet': { const D = await import('./dms.mjs'); return out(200, await D.search(core, str(body.q, 200))); }
+    case 'intelDmsAnalysisGet': { const D = await import('./dms.mjs'); return out(200, { analysis: await D.analysis(core, str(body.id, 20)) }); }
+    case 'intelDmsReviewGet': { const D = await import('./dms.mjs'); return out(200, { review: await D.reviewGet(core) }); }
     case 'intelClear': {
       // one answer (at), everything older than the newest `keep`, or all of it
       const at = Number(body.at) || 0, keep = Math.max(0, Math.min(30, Number(body.keep) || 0));
