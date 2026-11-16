@@ -9,6 +9,7 @@ export default async () => {
     await A.ensureSecret();
     const W = await import('../lib/watch.mjs'), r = await W.sweep({ ai: false });
     const site = String(process.env.URL || process.env.DEPLOY_PRIME_URL || '').replace(/\/+$/, '');
+    await W.voiceCheck(site, { force: true }).catch(() => {});   // 🔊 and Champ's voice
     if (site) await fetch(site + '/.netlify/functions/planai-background', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Cron': A.cronToken(sydToday()) }, body: JSON.stringify({ mode: 'watchCron', id: 'cron' + Date.now() }) }).catch(() => {});
     console.log(`Champ watch: ${r.items.length} projects (red ${r.counts.red}, amber ${r.counts.amber}, green ${r.counts.green}), ${(r.alerts || []).length} alerts`);
   } catch (e) { console.error('Champ watch: ' + e.message); }

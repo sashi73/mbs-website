@@ -96,7 +96,7 @@
 
   // ---------- 🔊 Champ's voice (Azure, the same voice as the website): reads replies and every step aloud ----------
   var V = { audio: null, n: 0, on: (function () { try { return localStorage.getItem('cgVoice') !== 'off'; } catch (e) { return true; } })() };
-  function hush() { V.n++; if (V.audio) { try { V.audio.pause(); } catch (e) {} V.audio = null; } }
+  function hush() { V.n++; if (V.audio) { try { V.audio.pause(); } catch (e) {} V.audio = null; } if (window.ChampVoice) window.ChampVoice.stop(); }
   // phones (iPhone above all) only let a page play sound that starts from a tap: one player, woken by the first tap, then reused
   var SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
   function unlock() { if (V.el) return; try { V.el = new Audio(); V.el.setAttribute('playsinline', ''); V.el.src = SILENT; var pr = V.el.play(); if (pr && pr.catch) pr.catch(function () {}); } catch (e) { V.el = null; } }
@@ -114,9 +114,11 @@
     var get = function (i) { if (got[i]) return got[i]; return (got[i] = fetch('/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: list[i], lang: lang(), clear: !!clear }) })
       .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(j.error || 'Champ’s voice is not available right now.'); }); return r.blob(); })); };
     var done = function () { if (el) el.classList.remove('talk'); };
+    var CV = window.ChampVoice, backup = function (i) { if (n !== V.n) return done(); if (el) el.classList.add('talk'); if (!CV || !CV.say(list.slice(i).join(' '), lang(), done, clear)) done(); };   // Azure did not answer: the browser's own voice
+    if (CV && CV.azureDown()) return backup(0);
     var play = function (i) {
       if (n !== V.n || i >= list.length) return done();
-      return get(i).then(function (bl) {
+      return get(i).catch(function (e) { if (CV && CV.can()) { CV.markDown(e && e.message); backup(i); return null; } throw e; }).then(function (bl) { if (!bl) return;
         if (n !== V.n) return; if (i + 1 < list.length) get(i + 1).catch(function () {});   // the next part, while this one plays
         var a = V.el || new Audio(); a.volume = 1; a.src = URL.createObjectURL(bl); V.audio = a; if (el) el.classList.add('talk');
         a.onended = function () { if (n === V.n) play(i + 1); else done(); };
@@ -256,10 +258,11 @@
         '<small class="muted">Checked ' + esc(when(d.at)) + ' · every morning at 7 am</small><button class="btn btn-sm" type="button" id="wtNow" title="Check every project again now (the health rules)">↻ Check now</button>' +
         (edit ? '<button class="btn btn-sm btn-gold" type="button" id="wtAi" title="Champ reviews every red and amber project and writes what it would do">✨ Champ\'s review</button>' : '') + '</div>' +
         (msg ? '<p class="wt-msg">' + esc(msg) + '</p>' : '') +
+        (d.voice ? '<p class="wt-voice">🔇 <b>Champ\'s voice is down</b>: ' + esc(d.voice.why) + ' Champ uses the browser\'s voice until then.</p>' : '') +
         (worse.length || better.length ? '<div class="wt-al">' + (worse.length ? '<span>⚠ <b>Got worse</b>: ' + worse.map(function (x) { return esc(x.name) + ' ' + DOT[x.was] + '→' + DOT[x.rag]; }).join(' · ') + '</span>' : '') + (better.length ? '<span>✓ Better: ' + better.map(function (x) { return esc(x.name) + ' ' + DOT[x.was] + '→' + DOT[x.rag]; }).join(' · ') + '</span>' : '') + '</div>' : '') +
         (act.length ? '<div class="wt-list">' + act.map(row).join('') + '</div>' : '<p class="muted" style="margin:6px 0">' + (items.length ? 'Every project is on track. Keep progress and costs up to date and Champ keeps watching.' : 'No projects in progress to watch yet.') + '</p>') +
         (ok.length ? '<details class="wt-ok"><summary>🟢 ' + ok.length + ' on track</summary><div class="wt-list">' + ok.map(row).join('') + '</div></details>' : '') + '</div>';
-      var nb = host.querySelector('#wtNow'); if (nb) nb.onclick = function () { nb.disabled = true; nb.textContent = 'Checking…'; api('watchBoard', { refresh: true, lang: lang() }).then(function (r) { draw(r); }).catch(function (e) { nb.disabled = false; M.fail(e); }); };
+      var nb = host.querySelector('#wtNow'); if (nb) nb.onclick = function () { nb.disabled = true; nb.textContent = 'Checking…'; api('watchBoard', { refresh: true, voice: true, lang: lang() }).then(function (r) { draw(r); }).catch(function (e) { nb.disabled = false; M.fail(e); }); };
       var ab = host.querySelector('#wtAi'); if (ab) ab.onclick = function () {
         ab.disabled = true; ab.textContent = '✨ Champ is reviewing…'; var id = 'watchall' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), n = 0;
         fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1', 'X-Champ-Lang': lang() }, body: JSON.stringify({ mode: 'watchAll', id: id, lang: lang() }) }).catch(function () {});

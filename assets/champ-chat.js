@@ -207,7 +207,7 @@
       box.querySelector('.cc-clear').textContent = T(UI.newchat); box.querySelector('.cc-voice').textContent = T(UI.voice);
       box.querySelector('.cc-menubtn').title = T(UI.menu).replace('☰ ', '');
     }
-    function stopVoice() { if (audio) { try { audio.pause(); } catch (e) {} audio = null; } speakingIdx = -1; if (speakingBtn) { speakingBtn.classList.remove('on'); speakingBtn.textContent = T(UI.listen); speakingBtn = null; } }
+    function stopVoice() { if (window.ChampVoice) window.ChampVoice.stop(); if (audio) { try { audio.pause(); } catch (e) {} audio = null; } speakingIdx = -1; if (speakingBtn) { speakingBtn.classList.remove('on'); speakingBtn.textContent = T(UI.listen); speakingBtn = null; } }
     function sayable(t) {   // what the voice reads: no emoji, icons or markdown symbols
       return String(t || '').replace(/[\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D\u20E3]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDFFF]/g, '').replace(/[*_#`>|~]+/g, ' ').replace(/[ \t]{2,}/g, ' ').trim();
     }
@@ -219,10 +219,13 @@
       stopVoice(); text = sayable(text); if (!voiceOk || NOVOICE[L] || !text) { if (done) done(); return; }
       speakingIdx = idx == null ? -1 : idx;
       if (b) { speakingBtn = b; b.classList.add('on'); b.textContent = T(UI.stop); }
+      var CV = window.ChampVoice, backup = function () { if (b) { speakingBtn = b; b.classList.add('on'); b.textContent = T(UI.stop); } CV.say(text, L, function () { stopVoice(); if (done) done(); }); };   // Azure did not answer: the browser's own voice
+      if (CV && CV.can() && CV.azureDown()) return backup();
       fetch('/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text, lang: L }) })
-        .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { if (r.status === 503) { voiceOk = false; log.querySelectorAll('.cc-say').forEach(function (x) { x.remove(); }); box.querySelector('.cc-voice').hidden = true; } throw new Error(j.error || 'Voice unavailable'); }); return r.blob(); })
+        .then(function (r) { if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { if (r.status === 503) { voiceOk = false; log.querySelectorAll('.cc-say').forEach(function (x) { x.remove(); }); box.querySelector('.cc-voice').hidden = true; } if (CV && CV.can()) { CV.markDown((j.reason || r.status) + ''); var bk = new Error('backup'); bk.backup = true; throw bk; } throw new Error(j.error || 'Voice unavailable'); }); return r.blob(); })
         .then(function (bl) { if (b && speakingBtn !== b) return; audio = player || new Audio(); audio.src = URL.createObjectURL(bl); audio.onended = function () { stopVoice(); if (done) done(); }; return audio.play(); })
         .catch(function (e) {
+          if (e && e.backup) { stopVoice(); return backup(); }
           stopVoice(); if (done) done();
           if (e && (e.name === 'NotAllowedError' || e.name === 'NotSupportedError' || e.name === 'AbortError')) return;   // the browser wants a tap first (the 🔊 Listen button is there for that), or the sound was cut off: no error box
           bubble('bot', '<p>' + esc(e.message) + '</p>', 'cc-err');

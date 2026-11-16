@@ -382,7 +382,8 @@ async function handle(req, context) {
         if (!(ctx.owner || ['view', 'edit'].includes((ctx.mods || {}).projects))) return bad('Projects access is needed.', 403);
         const W = await import('../lib/watch.mjs'), b = await W.board({ refresh: !!body.refresh, lang: clean(body.lang, 5) || 'en' }), al = await W.alertsList(), run = await kv.get('watch:run').catch(() => null);
         const mine = (x) => !ctx.scope || ctx.scope.includes(x.core), items = (b.items || []).filter(mine), counts = { red: 0, amber: 0, green: 0, grey: 0 }; items.forEach((x) => counts[x.rag]++);
-        return out(200, { day: b.day, at: b.at, prevDay: b.prevDay || '', counts, items, alerts: al.filter(mine).slice(0, 20), lastRun: run || null });
+        const voice = await W.voiceCheck(new URL(req.url).origin, { force: !!body.refresh && !!body.voice }).catch(() => null);
+        return out(200, { day: b.day, at: b.at, prevDay: b.prevDay || '', counts, items, alerts: al.filter(mine).slice(0, 20), lastRun: run || null, voice: voice && !voice.ok ? { why: voice.why, since: voice.since, at: voice.at } : null });
       }
       case 'planWatchGet': {   // 🩺 Champ's health check of one project (rules) and its brief (AI, kept until the numbers change)
         const core = clean(body.core, 40), pl = core ? await getPlan(core) : null; if (!pl) return bad('Project not found', 404);

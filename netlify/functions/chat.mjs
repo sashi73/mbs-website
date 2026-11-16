@@ -57,6 +57,8 @@ export default async (req, context) => {
   }
   while (keep.length && keep[0].role !== 'user') keep.shift();   // start on a question
   messages.splice(0, messages.length, ...keep);
+  // the answer gets what is left of the budget (450 at most, 300 at least), so a question never goes over it
+  const answerMax = Math.max(300, Math.min(ANSWER, BUDGET - tokensOf(sys) - messages.reduce((n, m) => n + tokensOf(m.content), 0)));
 
   const apiKey = env('LLM_API_KEY');
   if (!apiKey) {
@@ -72,7 +74,7 @@ export default async (req, context) => {
     const r = await fetch(`${base}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, temperature: 0.4, max_tokens: ANSWER, stream: false, messages: [{ role: 'system', content: sys }, ...messages] })
+      body: JSON.stringify({ model, temperature: 0.4, max_tokens: answerMax, stream: false, messages: [{ role: 'system', content: sys }, ...messages] })
     });
     if (!r.ok) {
       const text = await r.text().catch(() => '');

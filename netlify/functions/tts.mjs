@@ -3,14 +3,26 @@
 // The text is already in the right language (Champ answers in it), so there is no translation step here.
 import { env, cors, json, clean } from '../lib/shared.mjs';
 
-// Champ's voice in each language (Azure neural voices). Kinyarwanda has no Azure voice yet.
-export const VOICES = {
+// Champ's voice in each language (Azure neural voices): a mix of male and female by default (VOICE_GENDER=male or
+// female in Netlify for all one or the other). Kinyarwanda has no Azure voice yet.
+const MALE = {
+  en: ['en-AU', 'en-AU-WilliamNeural'], ms: ['ms-MY', 'ms-MY-OsmanNeural'], id: ['id-ID', 'id-ID-ArdiNeural'], ta: ['ta-MY', 'ta-MY-SuryaNeural'],
+  zh: ['zh-CN', 'zh-CN-YunxiNeural'], hi: ['hi-IN', 'hi-IN-MadhurNeural'], ar: ['ar-AE', 'ar-AE-HamdanNeural'], fa: ['fa-IR', 'fa-IR-FaridNeural'],
+  vi: ['vi-VN', 'vi-VN-NamMinhNeural'], th: ['th-TH', 'th-TH-NiwatNeural'], tl: ['fil-PH', 'fil-PH-AngeloNeural'], ja: ['ja-JP', 'ja-JP-KeitaNeural'],
+  ko: ['ko-KR', 'ko-KR-InJoonNeural'], es: ['es-ES', 'es-ES-AlvaroNeural'], fr: ['fr-FR', 'fr-FR-HenriNeural'], de: ['de-DE', 'de-DE-ConradNeural'],
+  pt: ['pt-BR', 'pt-BR-AntonioNeural'], sw: ['sw-KE', 'sw-KE-RafikiNeural'], km: ['km-KH', 'km-KH-PisethNeural']
+};
+const FEMALE = {
   en: ['en-AU', 'en-AU-NatashaNeural'], ms: ['ms-MY', 'ms-MY-YasminNeural'], id: ['id-ID', 'id-ID-GadisNeural'], ta: ['ta-MY', 'ta-MY-KaniNeural'],
   zh: ['zh-CN', 'zh-CN-XiaoxiaoNeural'], hi: ['hi-IN', 'hi-IN-SwaraNeural'], ar: ['ar-AE', 'ar-AE-FatimaNeural'], fa: ['fa-IR', 'fa-IR-DilaraNeural'],
   vi: ['vi-VN', 'vi-VN-HoaiMyNeural'], th: ['th-TH', 'th-TH-PremwadeeNeural'], tl: ['fil-PH', 'fil-PH-BlessicaNeural'], ja: ['ja-JP', 'ja-JP-NanamiNeural'],
   ko: ['ko-KR', 'ko-KR-SunHiNeural'], es: ['es-ES', 'es-ES-ElviraNeural'], fr: ['fr-FR', 'fr-FR-DeniseNeural'], de: ['de-DE', 'de-DE-KatjaNeural'],
   pt: ['pt-BR', 'pt-BR-FranciscaNeural'], sw: ['sw-KE', 'sw-KE-ZuriNeural'], km: ['km-KH', 'km-KH-SreymomNeural']
 };
+// the mix Champ uses: English keeps Natasha, the clear voice already approved; the other languages alternate male and female
+const MIX = { en: 'f', ms: 'm', id: 'f', ta: 'm', zh: 'm', hi: 'f', ar: 'm', fa: 'f', vi: 'f', th: 'm', tl: 'f', ja: 'm', ko: 'f', es: 'm', fr: 'f', de: 'm', pt: 'f', sw: 'm', km: 'f' };
+const G = String(process.env.VOICE_GENDER || 'mix').toLowerCase();   // mix (default), male or female
+export const VOICES = G === 'female' ? FEMALE : G === 'male' ? MALE : Object.fromEntries(Object.keys(MALE).map((k) => [k, MIX[k] === 'm' ? MALE[k] : FEMALE[k]]));
 const xml = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
 // what to say: no markdown symbols, links read as their name
 const speakable = (t) => String(t).replace(/\*\*?|__|`/g, '').replace(/^\s*[-•]\s+/gm, '').replace(/https?:\/\/\S+/g, 'the link').replace(/\[\[lang:[a-z]+\]\]/gi, '').replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}]/gu, '').replace(/[ \t]{2,}/g, ' ').trim();   // never read emoji aloud
@@ -31,12 +43,13 @@ export default async (req, context) => {
   if (limited(ip)) return json(429, { error: 'Lots of voice requests. Please wait a few minutes.' });
   let body; try { body = await req.json(); } catch { return json(400, { error: 'Invalid JSON' }); }
   const lang = String(body?.lang || 'en'), v = VOICES[lang];
+  const clear = !!body?.clear || lang === 'en';   // English is always the slower, louder, clearer voice
   const text = speakable(clean(body?.text, 1600));
   if (!v) return json(400, { error: 'No voice for this language yet.' });
   if (!text) return json(400, { error: 'Nothing to read.' });
   const region = env('AZURE_SPEECH_REGION', 'australiaeast');
   const base = env('AZURE_SPEECH_BASE', `https://${region}.tts.speech.microsoft.com`);
-  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${v[0]}"><voice name="${v[1]}"><prosody rate="${xml(body?.clear ? env('VOICE_RATE_CLEAR', '-2%') : env('VOICE_RATE', '+5%'))}" volume="${xml(body?.clear ? env('VOICE_VOLUME_CLEAR', 'loud') : 'default')}">${xml(text)}</prosody></voice></speak>`;
+  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${v[0]}"><voice name="${v[1]}"><prosody rate="${xml(clear ? env('VOICE_RATE_CLEAR', '-2%') : env('VOICE_RATE', '+5%'))}" volume="${xml(clear ? env('VOICE_VOLUME_CLEAR', 'loud') : 'default')}">${xml(text)}</prosody></voice></speak>`;
   try {
     const r = await fetch(`${base}/cognitiveservices/v1`, { method: 'POST', headers: { 'Ocp-Apim-Subscription-Key': key, 'Content-Type': 'application/ssml+xml', 'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3', 'User-Agent': 'GKH-Project-Champ' }, body: ssml });
     if (!r.ok) {

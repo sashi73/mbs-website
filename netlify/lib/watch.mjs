@@ -170,3 +170,27 @@ export async function board({ refresh = false, maxAgeMs = 10 * 60000, lang = 'en
   return sweep({ ai: false, lang });
 }
 export async function alertsList() { return ((await kv.get('watch:alerts').catch(() => null)) || { list: [] }).list || []; }
+
+// 🔊 is Champ's voice working? A tiny test with Azure (a dozen characters), kept for 6 hours; when it fails the watch says
+// why (a changed key, a lapsed subscription…) and, the first time, sends an alert, while the console uses the browser's voice.
+export async function voiceCheck(site, { force = false } = {}) {
+  const old = await kv.get('voice:health').catch(() => null);
+  if (!force && old && Date.now() - old.at < 6 * 3600e3) return old;
+  if (!site) return old;
+  let ok = false, reason = '';
+  try {
+    const r = await fetch(String(site).replace(/\/+$/, '') + '/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'Champ check.', lang: 'en' }), signal: AbortSignal.timeout(12000) });
+    ok = r.ok; if (!ok) { const j = await r.json().catch(() => ({})); reason = j.reason || j.error || 'HTTP ' + r.status; }
+  } catch (e) { reason = e.message; }
+  const why = ok ? '' : /401|403/.test(reason) ? 'Azure turned down the key (Azure ' + (reason.match(/\d{3}/) || [''])[0] + '): the key was changed, the region does not match, or the Speech subscription lapsed. Update AZURE_SPEECH_KEY / AZURE_SPEECH_REGION in Netlify.'
+    : /429/.test(reason) ? 'Azure says the monthly free voice allowance is used up (Azure 429). It resets next month, or move the Speech resource to Standard (S0).'
+    : /not set up|503/.test(reason) ? 'The voice is not set up: add AZURE_SPEECH_KEY and AZURE_SPEECH_REGION in Netlify.' : 'The voice service did not answer (' + reason + ').';
+  const rec = { ok, reason: String(reason).slice(0, 120), why, at: Date.now(), since: ok ? 0 : (old && !old.ok && old.since) || Date.now() };
+  await kv.set('voice:health', rec).catch(() => {});
+  if (!ok && (!old || old.ok)) await telegramText('🔇 <b>Champ\'s voice is down</b>\n' + why.replace(/[<&>]/g, '') + '\nChamp uses the browser\'s voice until it is fixed.').catch(() => {});
+  return rec;
+}
+async function telegramText(text) {
+  const chat = String(process.env.TELEGRAM_CHAT_ID || '').trim(); if (!chat || !String(process.env.TELEGRAM_BOT_TOKEN || '').trim()) return;
+  const B = await import('./bot.mjs'); await B.send(chat, text);
+}

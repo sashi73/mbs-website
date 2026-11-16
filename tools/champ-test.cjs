@@ -133,6 +133,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     if (/speechtotext/.test(q.url) && global.STT_SLOW) return setTimeout(() => { try { s3.end('{}'); } catch (e) {} }, 9500);
     if (/speechtotext/.test(q.url)) { global.STT_DEF = (/name="definition"\r?\n\r?\n([^\r\n]+)/.exec(b) || [])[1] || ''; global.STT_KEY = q.headers['ocp-apim-subscription-key'];
       s3.setHeader('Content-Type', 'application/json'); return s3.end(JSON.stringify({ combinedPhrases: [{ text: 'எனது திட்டங்கள் எப்படி உள்ளன?' }], phrases: [{ locale: 'ta-IN', durationMilliseconds: 1800, text: 'எனது திட்டங்கள் எப்படி உள்ளன?' }] })); }
+    if (global.AZ_FAIL) { s3.statusCode = global.AZ_FAIL; return s3.end(''); }   // 🔇 Azure turning the key down
     global.LAST_SSML = b; global.ALL_SSML = (global.ALL_SSML || []).concat(b).slice(-40); global.AZ_KEY = q.headers['ocp-apim-subscription-key']; s3.setHeader('Content-Type', 'audio/mpeg'); s3.end(Buffer.from('ID3fakeaudio')); }); }).listen(0);
   // ☁️ a stand-in for Cloudflare R2 (S3 API): signed PUT/GET/HEAD/DELETE and list-type=2, with CORS for the browser
   global.R2S = new Map(); global.R2_UNSIGNED = 0;
@@ -295,7 +296,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   global.LAST_SSML = '';
   await p.check('.cc-form [name=consent]'); await p.click('.cc-go'); await sleep(2200);
   lgw = await p.textContent('.cc-log');
-  ok('Welcome', 'sent: thanks by first name, the welcome pack is on its way, and the main menu (spoken in Tamil)', /\[Tamil\] Thanks, சசி! Here’s what I can help you with\./.test(lgw) && /welcome pack to sashi@example\.com/.test(lgw) && (await p.$$('.cc-form')).length === 0 && (await p.$$('.cc-menu .cc-menu-list button')).length === 10 && /ta-MY-KaniNeural/.test(global.LAST_SSML || ''), lgw.slice(-260));
+  ok('Welcome', 'sent: thanks by first name, the welcome pack is on its way, and the main menu (spoken in Tamil)', /\[Tamil\] Thanks, சசி! Here’s what I can help you with\./.test(lgw) && /welcome pack to sashi@example\.com/.test(lgw) && (await p.$$('.cc-form')).length === 0 && (await p.$$('.cc-menu .cc-menu-list button')).length === 10 && /ta-MY-SuryaNeural/.test(global.LAST_SSML || ''), lgw.slice(-260));
   const VID = await p.evaluate(() => window.ChampChat.visitor().id);
   await p.fill('.cc-f textarea', 'What is a Gantt chart'); await p.keyboard.press('Enter'); await sleep(1500);
   ok('Welcome', 'Champ is told the visitor’s first name for its answers', /called சசி\./.test(global.CHAT_SYS || ''));
@@ -378,7 +379,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Ears', 'speech goes to Azure with the voice languages (en, ta, ms, fa) and the key stays on the server', /"ta-IN"/.test(global.STT_DEF || '') && /"en-AU"/.test(global.STT_DEF || '') && global.STT_KEY === 'az-test', global.STT_DEF);
   ok('Ears', 'Tamil heard: the chat switches to Tamil', (await p.inputValue('.cc-lang')) === 'ta');
   ok('Ears', 'the spoken Tamil question is asked', (await p.textContent('.cc-log')).includes('எனது திட்டங்கள் எப்படி உள்ளன?'));
-  ok('Ears', 'a spoken question is answered aloud in the Tamil voice', /ta-MY-KaniNeural/.test(global.LAST_SSML || ''), (global.LAST_SSML || '').slice(0, 120));
+  ok('Ears', 'a spoken question is answered aloud in the Tamil voice', /ta-MY-SuryaNeural/.test(global.LAST_SSML || ''), (global.LAST_SSML || '').slice(0, 120));
   await p.evaluate(() => { localStorage.setItem('champSttMode', 'any'); });
   await p.evaluate(() => window.ChampEars.send(new Blob([new Uint8Array(6000)], { type: 'audio/webm' }), 'audio/webm')); await sleep(2500);
   ok('Ears', '"Any language" mode sends no language list to Azure', global.STT_DEF && !/locales/.test(global.STT_DEF), global.STT_DEF);
@@ -389,7 +390,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   r0 = await p.request.post(`${BASE}/.netlify/functions/chat`, { data: { messages: longHist, lang: 'en', where: 'site' } });
   const est = (t) => { let a = 0, o = 0; for (const ch of String(t)) { if (ch.charCodeAt(0) < 0x250) a++; else o++; } return Math.ceil(a / 4 + o * 0.9) + 4; };
   const used = est(global.CHAT_SYS) + (global.CHAT_MSGS || []).filter((m) => m.role !== 'system').reduce((n, m) => n + est(m.content), 0) + (global.CHAT_MAX || 0);
-  ok('Chat', 'each question stays within 2000 tokens (instructions + recent conversation + answer)', r0.ok() && used <= 2000 && global.CHAT_MAX === 450 && /critical path/.test(JSON.stringify(global.CHAT_MSGS.slice(-1))) && global.CHAT_MSGS.filter((m) => m.role !== 'system').length < longHist.length && global.CHAT_MSGS.filter((m) => m.role !== 'system')[0].role === 'user', 'used ~' + used + ' tokens, ' + (global.CHAT_MSGS || []).length + ' messages');
+  ok('Chat', 'each question stays within 2000 tokens (instructions + recent conversation + answer)', r0.ok() && used <= 2000 && global.CHAT_MAX >= 300 && global.CHAT_MAX <= 450 && /critical path/.test(JSON.stringify(global.CHAT_MSGS.slice(-1))) && global.CHAT_MSGS.filter((m) => m.role !== 'system').length < longHist.length && global.CHAT_MSGS.filter((m) => m.role !== 'system')[0].role === 'user', 'used ~' + used + ' tokens, ' + (global.CHAT_MSGS || []).length + ' messages');
   global.STT_422 = true; global.STT_DEFS = [];
   r0 = await p.request.post(`${BASE}/.netlify/functions/stt?langs=en,ta,ms,fa&prefer=ta`, { data: Buffer.alloc(6000), headers: { 'Content-Type': 'audio/webm' } });
   const j422 = await r0.json().catch(() => ({}));
@@ -414,7 +415,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Chat', 'the reply language tag is removed from the answer', !(await p.textContent('.cc-log')).includes('[[lang'));
   r0 = await p.request.post(`${BASE}/.netlify/functions/tts`, { data: { text: 'Hello **there**\n- one', lang: 'ms' } });
   ok('Voice', 'Champ speaks (Azure returns audio)', r0.status() === 200 && /audio\/mpeg/.test(r0.headers()['content-type'] || ''));
-  ok('Voice', 'Malay answer uses the Malaysian voice, markdown removed', /ms-MY-YasminNeural/.test(global.LAST_SSML || '') && !/\*\*/.test(global.LAST_SSML || ''));
+  ok('Voice', 'Malay answer uses the Malaysian voice, markdown removed', /ms-MY-OsmanNeural/.test(global.LAST_SSML || '') && !/\*\*/.test(global.LAST_SSML || ''));
   ok('Voice', 'the Azure key is sent from the server only', global.AZ_KEY === 'az-test');
   r0 = await p.request.post(`${BASE}/.netlify/functions/tts`, { data: { text: 'x', lang: 'rw' } });
   ok('Voice', 'no voice for Kinyarwanda gives a clear refusal', r0.status() === 400);
@@ -643,7 +644,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       await p.goto(`${BASE}/admin/#plan/${rc}/overview`); await p.reload(); await p.evaluate(() => { try { sessionStorage.clear(); } catch (e) {} });
       await p.waitForSelector('#cgBtn.cg-red', { timeout: 10000 }).catch(() => {});
       const bt = await p.textContent('#cgBtn').catch(() => '');
-      global.WATCH_CALLS = 0; await p.click('#cgBtn'); await p.waitForSelector('.cgp-brief', { timeout: 15000 }).catch(() => {});
+      global.ALL_SSML = []; global.WATCH_CALLS = 0; await p.click('#cgBtn'); await p.waitForSelector('.cgp-brief', { timeout: 15000 }).catch(() => {});
       const quickCard = await p.textContent('.cgp-brief').catch(() => ''); await p.waitForSelector('.cgp-brief.cgb-ai', { timeout: 30000 }).catch(() => {});
       const br = await p.textContent('.cgp-brief').catch(() => ''), first = await p.$eval('#cgLog', (l) => l.firstElementChild && l.firstElementChild.className).catch(() => '');
       const pc = await p.$eval('#cgPanel', (x) => x.className).catch(() => '');
@@ -652,7 +653,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       const c2 = await (await api('planWatchGet', { core: rc })).json();
       await p.click('[data-cgbr]'); await sleep(800); await p.waitForSelector('.cgp-brief.cgb-ai', { timeout: 30000 }).catch(() => {}); await sleep(500);
       ok('Champ watch', 'the brief is kept until the numbers change (no second AI call); ↻ Look again asks Champ afresh', c2.cached === true && global.WATCH_CALLS === 2, JSON.stringify([c2.cached, global.WATCH_CALLS]));
-      const ssml = (global.ALL_SSML || []).slice(-12).filter((x) => /volume="loud"/.test(x)).join(' '); await p.click('.cgp-x').catch(() => {}); const cleared = await p.$eval('#cgLog', (l) => l.children.length).catch(() => -1);
+      const ssml = (global.ALL_SSML || []).filter((x) => /volume="loud"/.test(x)).join(' '); await p.click('.cgp-x').catch(() => {}); const cleared = await p.$eval('#cgLog', (l) => l.children.length).catch(() => -1);
       let ttsN2 = 0; const onT = (rq) => { if (/functions\/tts/.test(rq.url())) ttsN2++; }; p.on('request', onT);
       await p.click('#cgBtn'); await p.waitForSelector('.cgp-brief.cgb-ai', { timeout: 15000 }).catch(() => {}); await sleep(1500); p.off('request', onT);
       const again = await p.$$eval('#cgLog .cgp-brief', (x) => x.length).catch(() => 0);
@@ -726,6 +727,21 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       const gone = ![...global.R2S.keys()].some((k) => k === v2.r2);
       ok('Documents', 'deleting the current version removes its file from R2 and brings the version before back (Approved again)', !L.docs.some((d) => d.id === v2.id) && !back.superseded && back.status === 'Approved' && gone, JSON.stringify([back.status, back.superseded, gone]));
       await api('planProjectDelete', { core: mc });
+    }
+    // 🔇 when Azure turns the key down, Champ speaks with the browser's own voice, and the watch says why (once checked)
+    {
+      global.AZ_FAIL = 401;
+      const vc = (await (await api('planNewProject', { name: 'Voice check', client: 'Internal', program: 'Digital health' })).json()).core;
+      await api('planSave', { core: vc, plan: { name: 'Voice', start: '2026-01-05', phases: [{ id: 'ph1', name: 'Work' }], tasks: [{ id: 'a', phase: 'ph1', name: 'Late work', dur: 20, pred: [], res: [], pct: 10, status: 'doing' }], issues: [{ id: 'i1', title: 'Blocked', priority: 'Critical', status: 'Open' }] } });
+      await p.goto(`${BASE}/admin/#plan/${vc}/overview`); await p.reload(); await p.waitForSelector('#cgBtn', { timeout: 10000 }).catch(() => {});
+      await p.evaluate(() => { window.__said = []; try { sessionStorage.removeItem('cgSaid'); } catch (e) {} if (window.speechSynthesis) { const o = window.speechSynthesis.speak.bind(window.speechSynthesis); window.speechSynthesis.speak = (u) => { window.__said.push(u.text); setTimeout(() => u.onend && u.onend(), 30); }; } });
+      await p.click('#cgBtn'); await p.waitForSelector('.cgp-brief.cgb-ai', { timeout: 30000 }).catch(() => {}); await sleep(3000);
+      const said = await p.evaluate(() => (window.__said || []).join(' '));
+      await p.click('.cgp-x').catch(() => {});
+      const wb = await (await api('watchBoard', { refresh: true, voice: true })).json();
+      global.AZ_FAIL = 0; const wb2 = await (await api('watchBoard', { refresh: true, voice: true })).json();
+      ok('Champ watch', '🔇 if Azure turns the voice key down, Champ still speaks (the browser\'s own voice) and Champ\'s watch says why and how to fix it; it clears once the voice works again', /Heads up/.test(said) && /If this were my project/.test(said) && wb.voice && /AZURE_SPEECH_KEY/.test(wb.voice.why) && !wb2.voice, JSON.stringify([said.slice(0, 120), wb.voice, wb2.voice]));
+      await api('planProjectDelete', { core: vc });
     }
     // 🔗 the AI works out the dependencies; the PM reviews them (and the new finish), applies them, sees the arrows, can undo
     {
