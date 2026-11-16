@@ -4157,7 +4157,6 @@
     $('#planBody').innerHTML = '<div class="card"><div class="card-h"><h2>Stakeholder list</h2><span class="sp"></span>' +
         (S.job && !haveCust ? '<button class="btn btn-sm" id="skCust">＋ Add the customer</button> ' : '') + (!haveMgr ? '<button class="btn btn-sm" id="skMgr">＋ Add the project manager</button> ' : '') +
         (pplAll().length ? '<select id="skPpl" style="width:auto;max-width:240px"><option value="">🧑‍🔧 Add from People…</option>' + pplPick() + '</select> ' : '') +
-        (M.subs ? '<select id="skSub" style="width:auto;max-width:240px"><option value="">👷 Add a subbie…</option>' + subOpts() + '</select> ' : '') +
         '<button class="btn btn-sm" id="raciOpen" title="Who is R, A, C or I for each activity: a grid of activities and people">🧭 RACI map</button> <button class="btn btn-sm btn-gold" id="addStake">＋ Add stakeholder</button></div>' +
       '<p class="muted" style="margin:-4px 0 10px">Everyone with a part in this job and what they do, using <b>RACI</b>: ' +
         Object.keys(RACI).map(function (k) { return '<span class="raci raci-' + k + '">' + k + '</span> ' + RACI[k][0] + ' (' + RACI[k][1] + ')'; }).join(' · ') + '.</p>' +
@@ -4202,7 +4201,6 @@
       if (pe.comp && pe.comp.worst === 'expired') toast('Heads up: ' + pe.name + ' has expired tickets (' + pe.comp.problems.join(', ') + ')');
     };
     pplLoad();
-    if (M.subs && !S.subsLoaded) { S.subsLoaded = true; M.subs.load().then(function () { if (S.tab === 'stake' && $('#skSub')) render(); }).catch(function () {}); }
     if ($('#skMgr')) $('#skMgr').onclick = function () { add({ name: mgr, role: 'Project manager', raci: 'A' }); };
   }
 
@@ -4220,7 +4218,7 @@
     var subs = (p.stakeholders || []).filter(function (x) { return x.sub; }), ty = S.ctType || 'Customer', docs = S.intel.docs;
     var who = ty === 'Customer' ? '<input value="' + esc(S.job.name || 'Customer') + '" disabled>'
       : ty === 'Sub-contractor' ? (subs.length ? '<select id="ctWho"><option value="">Choose the sub-contractor…</option>' + subs.map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.name) + (x.role ? ' · ' + esc(x.role) : '') + '</option>'; }).join('') + '</select>'
-        : '<input disabled value="No sub-contractors yet: add them on the Stakeholders tab (👷 Add a subbie)">')
+        : '<input disabled value="No sub-contractors yet: add one on the Stakeholders tab (＋ Add stakeholder)">')
       : '<input id="ctWho" placeholder="' + (ty === 'Supply' ? 'Supplier name, e.g. Western Tiles Direct' : 'Consultant, e.g. Hills Certifiers') + '" maxlength="120">';
     var row = function (c) {
       var d = docs.filter(function (x) { return x.id === (c.docs || [])[0]; })[0], T = CT_TYPES.filter(function (x) { return x[0] === c.type; })[0] || CT_TYPES[3];
