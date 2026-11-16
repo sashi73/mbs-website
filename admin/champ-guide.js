@@ -278,13 +278,18 @@
     if (S0[k]) return false; S0[k] = 1; try { sessionStorage.setItem('cgSaid', JSON.stringify(S0)); } catch (e) {} return true;
   }
   // 🔊 what Champ reads out: the headline, why, and what it would do (the titles, in order)
-  function briefTalk(r) {   // the headline, the summary, then "If this were my project, I would:" with each step (its title and short summary), then "Keep an eye on"
+  function briefTalk(r) {   // short on purpose (the voice is paid per character): headline, the summary in one line, the steps by title, what to watch, an offer to help
     var b = r.brief || {}, end = function (x) { x = String(x || '').trim(); return x && !/[.!?]$/.test(x) ? x + '.' : x; };
-    var t = [end(b.headline), end(b.summary)], A = (b.actions || []).filter(function (a) { return a && a.title; });
-    if (A.length) { t.push(r.rag === 'green' ? 'Keep doing this:' : 'If this were my project, I would:'); A.forEach(function (a, i) { t.push((i + 1) + '. ' + end(a.title) + (a.detail ? ' ' + end(a.detail) : '')); }); }
-    var Wt = (b.watch || []).filter(Boolean); if (Wt.length) t.push('Keep an eye on: ' + Wt.map(function (x) { return String(x).replace(/[.!?]$/, ''); }).join('; ') + '.');
+    // one short line: the first sentence, cut at its first natural break (a colon, dash or comma) when it is long
+    var brief1 = function (x, max) { x = String(x || '').replace(/\s*\([^)]*\)/g, '').trim(); var f = (x.match(/^.*?[.!?](\s|$)/) || [x])[0].trim().replace(/[.!?]$/, '');
+      if (f.length > max) { var m = f.slice(20).search(/[:;—–]| - |, /); if (m >= 0 && m + 20 <= max) f = f.slice(0, m + 20); else { f = f.slice(0, max); f = f.slice(0, f.lastIndexOf(' ')); } } return end(f); };
+    var t = [end(b.headline), b.say ? end(b.say) : brief1(b.summary, 110)], A = (b.actions || []).filter(function (a) { return a && a.title; }).slice(0, 5);
+    if (A.length) t.push((r.rag === 'green' ? 'Keep doing this: ' : 'If this were my project, I would: ') + A.map(function (a, i) { return (i + 1) + ', ' + String(a.title).replace(/[.!?]$/, ''); }).join('. ') + '.');
+    var Wt = (b.watch || []).filter(Boolean).slice(0, 3); if (Wt.length) t.push('Keep an eye on: ' + Wt.map(function (x) { return brief1(x, 70).replace(/[.!?]$/, ''); }).join('; ') + '.');
+    t.push('If you need help with any of this, just ask me.');
     return t.filter(Boolean).join(' ');
   }
+
 
   function briefCard(r, thinking) {
     var L = $('#cgLog'); if (!L) return; var b = r.brief || {}, d = document.createElement('div'); d.className = 'cgp-m cgp-bot cgp-brief cg-' + r.rag;

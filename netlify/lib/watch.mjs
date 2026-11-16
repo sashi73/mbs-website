@@ -84,13 +84,13 @@ export async function brief(core, plan, { refresh = false, name = '', ai = false
         'Write the brief from the numbers, the late tasks, risks and issues given (name them; use the real figures, dates and owners). ' +
         'headline: one short sentence that leads with the colour in plain words (e.g. "Heads up: this project is 55 days late and 23% over budget."). summary: 2-3 sentences on what is going wrong and why. ' +
         'actions: 3 to 5 things you would do if you were the project manager, most important first, each {title (imperative, under 9 words), detail (1-2 sentences, specific to this project: which tasks, which risk, who)}. Use real PM techniques where they fit (crashing, fast-tracking, re-sequencing the critical path, de-scoping with the sponsor, a change request and re-baseline, EVM and EAC, value engineering, escalation, risk response). ' +
-        'For green keep it to 1-2 light actions. watch: 1-3 short things to keep an eye on next. No markdown. ' +
+        'For green keep it to 1-2 light actions. watch: 1-3 short things to keep an eye on next (each under 8 words). say: the summary in ONE short spoken sentence, under 20 words, for Champ to read aloud. No markdown. ' +
         (notes ? KB.RULE + ' Here add at most one short line in "class_note", e.g. "Sashi also covers project recovery in his training class: ...", only if a note is clearly about this situation; otherwise empty. ' : '') +
-        'JSON only: {"headline":"","summary":"","actions":[{"title":"","detail":""}],"watch":[""],"class_note":""}';
+        'JSON only: {"headline":"","summary":"","say":"","actions":[{"title":"","detail":""}],"watch":[""],"class_note":""}';
       const r = await llmJson([{ role: 'system', content: sys }, { role: 'user', content: JSON.stringify({ project: name || plan.name, health: h.rag, reasons: h.reasons.map((x) => x.text), numbers: h.n, course_notes: notes }) }], { maxTokens: 1400, temperature: 0.3, timeoutMs: 90000 });
       const d = r && r.data;
       if (d && d.headline) {
-        out = { headline: String(d.headline).slice(0, 300), summary: String(d.summary || '').slice(0, 900),
+        out = { headline: String(d.headline).slice(0, 300), summary: String(d.summary || '').slice(0, 900), say: String(d.say || '').slice(0, 200),
           actions: (Array.isArray(d.actions) ? d.actions : []).slice(0, 5).map((x) => ({ title: String((x && x.title) || '').slice(0, 120), detail: String((x && x.detail) || '').slice(0, 400) })).filter((x) => x.title),
           watch: (Array.isArray(d.watch) ? d.watch : []).slice(0, 3).map((x) => String(x).slice(0, 200)).filter(Boolean),
           note: notes && d.class_note && /Sashi/i.test(d.class_note) ? String(d.class_note).slice(0, 300) : '', sources: notes && d.class_note && /Sashi/i.test(d.class_note) ? KB.sourcesOf(hits) : [], ai: true };
