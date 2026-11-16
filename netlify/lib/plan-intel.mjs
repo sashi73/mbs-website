@@ -232,7 +232,7 @@ export async function ask({ core, question, history }, by) {
   try { await checkLimit(); } catch (e) { return { error: e.message }; }
   const { ctx, stakeholders } = await context(job, plan, q);
   const earlier = (Array.isArray(history) ? history : []).slice(-3).map((h) => ({ q: str(h.q, 300), a: str(h.a, 600) }));
-  const KB = await import('./kb.mjs'), kbHits = await KB.search(q, Number(process.env.KB_CHARS) || 7000).catch(() => []);   // 📚 Sashi's class notes for the method
+  const KB = await import('./kb.mjs'), kbHits = await KB.search(q, Number(process.env.KB_CHARS) || 3500).catch(() => []);   // 📚 Sashi's class notes: a second reference, after the AI's own knowledge
   const user = { question: scrub(q, job, stakeholders), earlier, ...ctx };
   if (kbHits.length) user.course_notes = KB.forPrompt(kbHits);
   let o, used;

@@ -62,7 +62,7 @@ async function load() {
   return cache;
 }
 // the class material closest to a question: [{ title, credit, slides: [n], text }], at most maxChars of text
-export async function search(q, maxChars = 6000, { min = 0.06, k = 8 } = {}) {
+export async function search(q, maxChars = 3500, { min = 0.12, k = 4 } = {}) {   // only clearly related slides, a few of them: the notes are a second reference
   const C = await load(); if (!C.vec || !String(q || '').trim()) return [];
   const qv = C.vec.embed(String(q)), sc = C.vec.vecs.map((v, i) => [i, cos(v, qv)]).filter((x) => x[1] >= min).sort((a, b) => b[1] - a[1]).slice(0, 40);
   const pick = [], used = new Set(); let chars = 0;
@@ -80,10 +80,12 @@ export async function search(q, maxChars = 6000, { min = 0.06, k = 8 } = {}) {
 export function forPrompt(hits) {
   return hits.map((h) => ({ from: `${h.title}${h.page ? ', ' + h.kind + ' ' + h.page : ''}`, text: h.text }));
 }
-export const RULE = ' COURSE NOTES: "course_notes" are extracts from the project management classes taught by Sashi Sivam (PMP, PMI-ACP, CSM, CSPO, LSSGB; 20+ years leading programmes internationally). ' +
-  'When they bear on the question, treat them as the authority on method and good practice: build the answer on them, keep their terms, frameworks and steps, and credit them naturally in the answer, ' +
-  'e.g. "As Sashi teaches in his project management classes, ..." or "Sashi\'s class notes (<deck>, slide 42) put it this way: ...", once or twice, not on every line. ' +
-  'Do not invent what the notes do not say; the project\'s own data still decides the facts about this project. List the notes you used in "sources" as "Sashi Sivam\'s class notes: <deck>, slide <n>".';
+export const RULE = ' COURSE NOTES (second reference only): answer FIRST from your own broad project management knowledge (PMBOK, PRINCE2, Agile, Scrum, Kanban, SAFe, ' +
+  'EVM, risk, stakeholders, governance, and so on): that is always the main source. "course_notes" are a few extracts from the training classes Sashi Sivam runs (PMP, PMI-ACP, CSM, CSPO); they are a small, ' +
+  'secondary reference. Only if an extract is clearly about the same thing as the question, add a short, friendly touch such as "Sashi also covers this in his training class: <the point in one or two lines>" ' +
+  'or "In Sashi\'s class he puts it simply: ...", once, after your own answer. If the extracts are only loosely related, ignore them and do not mention Sashi or the notes at all. Never let them narrow or ' +
+  'replace a fuller answer, never invent what they do not say, and the project\'s own data still decides the facts about this project. Keep the tone simple, warm and conversational. ' +
+  'Only when you did use them, add "Sashi Sivam\'s class notes: <deck>, slide <n>" to "sources".';
 export function sourcesOf(hits) {
   const by = {}; hits.forEach((h) => { const k = h.title; (by[k] = by[k] || { kind: h.kind, p: [] }).p.push(h.page); });
   return Object.entries(by).map(([t, x]) => `Sashi Sivam's class notes: ${t}${x.p.filter(Boolean).length ? ', ' + x.kind + (x.p.length > 1 ? 's ' : ' ') + [...new Set(x.p.filter(Boolean))].join(', ') : ''}`);

@@ -977,7 +977,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       const sts = await p.$$eval('#agSt [data-stn]', (i) => i.map((x) => x.value).join('|'));
       ok('Backlog', 'the AI also suggests stories with points (an item with none gets them)', sts === 'Shortlist three venues|Pay the deposit', sts);
       await p.click('#agF [data-close]').catch(() => {}); await p.waitForSelector('#agF', { state: 'detached', timeout: 5000 }).catch(() => {}); await sleep(500);
-      await p.click('#agNew').catch(() => {}); await p.waitForSelector('#agF', { timeout: 5000 }).catch(() => {});
+      for (let k = 0; k < 4 && !(await p.$('#agF')); k++) { await p.click('#agNew').catch(() => {}); await p.waitForSelector('#agF', { timeout: 3000 }).catch(() => {}); }
       await p.fill('#agF [name=name]', 'Venue booking'); await p.fill('#agF [name=desc]', 'Book the hall for 120 guests; done when the deposit is paid'); await p.click('#agF [data-pt="5"]'); await p.selectOption('#agF [name=prio]', 'High'); await p.fill('#agF [name=owner]', 'Priya Shah'); await p.fill('#agF [name=dur]', '3');
       await p.click('#agF [type=submit]').catch(() => {}); await sleep(2000);
       const vb = (await nT()).find((t) => t.name === 'Venue booking') || {};
