@@ -22,6 +22,7 @@ import { planQuotePost } from '../lib/plan-quote.mjs';
 import { subPost } from '../lib/subbies.mjs';
 import { intelPost, upload as intelUpload } from '../lib/plan-intel.mjs';
 import * as DOCI from '../lib/docingest.mjs';
+import * as KB from '../lib/kb.mjs';
 import { swmsPost } from '../lib/swms.mjs';
 import { commsPost } from '../lib/comms.mjs';
 import { reportPost } from '../lib/reports.mjs';
@@ -401,6 +402,7 @@ async function handle(req, context) {
           if (pl && Array.isArray(pl.tasks)) { const today = new Date(Date.now() + 11 * 3600000).toISOString().slice(0, 10), R = PL.rollup(pl, today);
             project = { name: pl.name, start: R.start, finish: R.finish, finish_by: pl.finishBy || '', today, pct_complete: R.pct, tasks: R.total, late_tasks: R.late, SPI: R.SPI, CPI: R.CPI, budget_BAC: R.BAC, spent_AC: R.AC,
               open_risks: (pl.risks || []).filter((x) => x.status !== 'Closed').length, open_issues: (pl.issues || []).filter((x) => x.status !== 'Closed').length }; } } catch (e) { project = null; } }
+        const kbHits = await KB.search(q, 4500).catch(() => []), course_notes = kbHits.length ? KB.forPrompt(kbHits) : undefined;
         const r0 = await llmJson([{ role: 'system', content: 'You are Champ, the guide inside the GKH Project Champ project-management console. People ask how to do things in the console. ' +
           'If they ask HOW TO DO something in the console, pick the ONE guide from the list that shows them (its id), set how true, and say in 1-2 friendly sentences what you will show them. ' +
           'If they ask about what is in the console (their programs, projects, the dependencies between projects, the portfolio summary, the pipeline, the team), answer from the portfolio data given (and the open project, "this project" = the project facts): name the projects, the links (from → to, type, lag, status) and the numbers; set how false; say where to see it (e.g. Portfolio > Dependency board). If something is not in the data, say it is not recorded yet. ' +
@@ -409,9 +411,9 @@ async function handle(req, context) {
           'over budget: EVM, CPI and EAC, value engineering, scope trade-offs, contingency), use the project facts given (finish vs finish_by, SPI, CPI, late tasks) when there are any, and you may add the guide id that helps act on it (e.g. critical). ' +
           'If no guide fits, tour is "" and you answer the question yourself: project management questions (PMBOK, PRINCE2, Agile, Scrum, risks, critical path, EVM, stakeholders, change control, budgets, charters, lessons learned ...) ' +
           'get a clear, practical answer in up to 5 short sentences, like an experienced project manager would give. Warm, plain words, no markdown. Do not invent screens or buttons of the console: the console map below is the truth. If they use an old name (see RENAMED), tell them the new name and where it is. ' +
-          'JSON only: {"tour":"id or empty","how":true|false,"answer":"..."}' }, { role: 'user', content: JSON.stringify({ question: q, on_page: clean(body.page, 60), project, open_project_core: core || '', portfolio, guides: tours }) }].map((m, i) => (i === 0 ? { ...m, content: m.content + '\n\n' + SKILL } : m)), { maxTokens: 1200 }).catch(() => null), r = r0 && r0.data;
+          (course_notes ? KB.RULE + ' (In Ask Champ, a short credit like "As Sashi teaches in his classes, ..." is enough.) ' : '') + 'JSON only: {"tour":"id or empty","how":true|false,"answer":"..."}' }, { role: 'user', content: JSON.stringify({ question: q, on_page: clean(body.page, 60), project, open_project_core: core || '', portfolio, guides: tours, course_notes }) }].map((m, i) => (i === 0 ? { ...m, content: m.content + '\n\n' + SKILL } : m)), { maxTokens: 1200 }).catch(() => null), r = r0 && r0.data;
         const tour = r && tours.some((t) => t.id === r.tour) ? r.tour : '';
-        return out(200, { tour, how: !!(r && r.how), answer: clean(r && r.answer, 1500) });
+        return out(200, { tour, how: !!(r && r.how), answer: clean(r && r.answer, 1500), notes: kbHits.length && !(r && r.how) ? KB.sourcesOf(kbHits) : [] });
       }
       case 'planNewProject': {
         const pname = clean(body.name, 120), client = clean(body.client, 120);
@@ -437,6 +439,16 @@ async function handle(req, context) {
         await A.audit(who, `${J.refFor(job)}: project created (${pname})`);
         return out(200, { core, ref: J.refFor(job), docId });
       }
+      case 'kbList': { if (!ctx.owner) return bad('Only the super user manages the knowledge base.', 403); return out(200, { docs: await KB.list(), credit: KB.DEFAULT_CREDIT }); }
+      case 'kbAdd': {
+        if (!ctx.owner) return bad('Only the super user manages the knowledge base.', 403);
+        const r = await KB.add({ name: body.name, title: body.title, credit: body.credit, pages: body.pages, text: body.text }, who); if (r.error) return bad(r.error);
+        await A.audit(who, `Knowledge base: added "${r.doc.title}" (${r.doc.pages} pages/slides, ${r.doc.chunks} chunks)`);
+        return out(200, r);
+      }
+      case 'kbChange': { if (!ctx.owner) return bad('Only the super user manages the knowledge base.', 403); const r = await KB.change(clean(body.id, 30), { on: body.on, title: body.title, credit: body.credit }); return r.error ? bad(r.error, 404) : out(200, r); }
+      case 'kbDelete': { if (!ctx.owner) return bad('Only the super user manages the knowledge base.', 403); const r = await KB.remove(clean(body.id, 30)); await A.audit(who, 'Knowledge base: removed a document'); return out(200, r); }
+      case 'kbTry': { if (!ctx.owner) return bad('Only the super user manages the knowledge base.', 403); return out(200, { hits: await KB.search(clean(body.q, 300), 6000) }); }
       case 'planDocStage': {   // 📄 a document for a new project: its text, staged for the AI to read (RAG)
         const r = await DOCI.stage({ name: body.name, pages: body.pages, text: body.text, kind: body.kind }, who);
         if (r.error) return bad(r.error);

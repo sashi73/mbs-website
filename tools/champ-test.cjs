@@ -64,6 +64,8 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     }
     if (j.response_format && /You are Champ, the guide/.test(sys)) {   // 🎙 Ask Champ in the dashboard
       let u = {}; try { u = JSON.parse((j.messages.filter((m) => m.role === 'user').pop() || {}).content || '{}'); } catch (e) {} global.GUIDE_CTX = u;
+      if (u.course_notes && /scope creep/i.test(u.question || '')) { const o5 = { tour: '', how: false, answer: 'As Sashi teaches in his classes: ' + (u.course_notes.map((x) => x.text).join('\n').split('\n').find((l) => /change control/.test(l)) || '') };
+        s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o5) } }] })); }
       if (/dependenc/i.test(u.question || '')) { const D = ((u.portfolio || {}).dependencies || []).filter((x) => !u.open_project_core || x.from_core === u.open_project_core || x.to_core === u.open_project_core);
         const o3 = { tour: 'deps', how: false, answer: D.length ? D.map((x) => x.from + ' → ' + x.to + ' (' + x.type + ', ' + x.status + ')').join('; ') : 'No dependencies recorded.' };
         s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o3) } }] })); }
@@ -75,6 +77,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     }
     if (j.response_format && /project intelligence assistant/i.test(sys)) {
       global.INTEL_Q = JSON.parse(j.messages[1].content).question; global.INTEL_CTX = JSON.parse(j.messages[1].content);
+      if (global.INTEL_CTX.course_notes && /scope creep/i.test(global.INTEL_Q)) { global.INTEL_SYS = sys; s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ answer: 'As Sashi teaches in his project management classes, every change goes through the change control board.', risks: [], stakeholders: [], meeting: null, sources: [], follow_ups: [] }) } }], usage: { total_tokens: 500 } })); }
       s2.setHeader('Content-Type', 'application/json');
       return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ answer: '## Re-plan\nStretch the work and add review gates.', replan: null,
         risks: [{ title: 'Client sign-off delays at review gates', cause: 'Slow approvals', p: 4, i: 4, response: 'Mitigate', action: 'Agree sign-off SLAs', owner: '', critical: true },
@@ -521,7 +524,27 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       ok('Gantt', 'labour costs people × hours each × rate: the people come from the Resources column (2 here), or are typed (4 × 16 h × $500 = $32,000)', crew2 === '2' && /2 × 16 h × \$500/.test(c2) && /4 × 16 h × \$500/.test(c4) && t4.crew === 4 && t4.crewSet === true, JSON.stringify([crew2, c2, c4, t4.crew, t4.crewSet]));
       await api('planProjectDelete', { core: rc2 });
     }
-    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins|Gantt/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
+    // 📚 the knowledge base: Sashi's class deck, read slide by slide, used by Ask Champ and Ask AI with the credit
+    {
+      await p.goto(`${BASE}/admin/#knowledge`); await p.reload(); await p.waitForSelector('#kbFile', { state: 'attached', timeout: 10000 }).catch(() => {});
+      await p.setInputFiles('#kbFile', path.join(SITE, 'tools/test-data/pm-masterclass.pptx')); await p.waitForSelector('#kbGo:not([disabled])', { timeout: 20000 }).catch(() => {});
+      await p.fill('#kbF [name=title]', 'PM Masterclass'); await p.click('#kbGo'); await p.waitForSelector('.kb-doc', { timeout: 15000 }).catch(() => {});
+      const kd = await p.textContent('#kbList').catch(() => '');
+      await p.fill('#kbQ', 'How do I control scope creep?'); await p.click('#kbAsk'); await p.waitForSelector('.kb-hit', { timeout: 10000 }).catch(() => {});
+      const kh = await p.$$eval('.kb-hit b', (b) => b.map((x) => x.textContent));
+      ok('Knowledge base', 'the super user adds a slide deck (6 slides, with speaker notes); a question finds the right slide', /PM Masterclass/.test(kd) && /6 slides/.test(kd) && /Sashi Sivam/.test(kd) && kh[0] === 'PM Masterclass, slide 2', JSON.stringify([kd.slice(0, 160), kh]));
+      const ga = await (await api('guideAsk', { q: 'How should I deal with scope creep on my project?', tours: [] })).json();
+      ok('Knowledge base', 'Ask Champ answers project management questions from the class notes, credited to Sashi with the slide', /As Sashi teaches/.test(ga.answer) && /change control board/.test(ga.answer) && (ga.notes || []).some((n) => /Sashi Sivam's class notes: PM Masterclass, slide 2/.test(n)) && ((global.GUIDE_CTX || {}).course_notes || []).length > 0, JSON.stringify([ga, (global.GUIDE_CTX || {}).course_notes]));
+      const kc = (await (await api('planNewProject', { name: 'KB check', client: 'Internal', program: 'Digital health' })).json()).core;
+      await api('planSave', { core: kc, plan: { name: 'KB check', start: new Date().toISOString().slice(0, 10), phases: [{ id: 'ph1', name: 'Work' }], tasks: [{ id: 't1', phase: 'ph1', name: 'Design', dur: 3, pred: [], res: [], pct: 0, status: 'todo' }] } });
+      const iid = 'kbtest' + Date.now().toString(36) + 'x1';
+      const fr = await p.evaluate(([core, id]) => fetch('/.netlify/functions/planai-background', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-MBS-Admin': '1' }, body: JSON.stringify({ mode: 'intel', id, core, question: 'The client keeps adding features: how do we stop scope creep?' }) }).then((r) => r.status), [kc, iid]);
+      let ir = null; for (let i = 0; i < 120; i++) { await sleep(500); const st = await (await api('planAiStatus', { id: iid })).json(); if (st.status === 'done') { ir = st.result || st.intel || st; break; } if (st.status === 'error') { ir = { err: st.error }; break; } if (i === 119) ir = { last: st }; }
+      const irs = JSON.stringify(ir || {});
+      ok('Knowledge base', 'Ask AI in a project gets the class notes too, and lists them as a source', /Sashi Sivam's class notes: PM Masterclass, slide 2/.test(irs) && /COURSE NOTES/.test(global.INTEL_SYS || '') && (global.INTEL_CTX.course_notes || []).length > 0, fr + ' ' + irs.slice(0, 300));
+      await api('planProjectDelete', { core: kc });
+    }
+    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins|Gantt|Knowledge/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
   }
   // ---- 🌐 language audit: with the console in Malay, every page and every project tab must show no English ----
   {
@@ -577,7 +600,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
     await p.goto(`${BASE}/admin/#programs`); await p.reload(); await p.waitForSelector('#app:not([hidden])', { timeout: 10000 }).catch(() => {}); await sleep(800);
   }
   const menu = await p.$$eval('.side-nav a:not([hidden])', (as) => as.map((a) => a.textContent.trim()));
-  ok('Console', 'menu shows only the project element (+ admin)', JSON.stringify(menu) === JSON.stringify(['🗂Programs', '🔗Dependency board', '📊Summary', '▦Pipeline board', '📅All projects', '＋New project', '👥People', '📅Team calendar', '📊Workload', '🙋My profile', '📨Enquiries', '👋Visitors & leads', '✨Ask AI', '📈Reports & data', '🔐Users & access', '🕘Activity log', '🏷Builds']), menu.join(' | '));
+  ok('Console', 'menu shows only the project element (+ admin)', JSON.stringify(menu) === JSON.stringify(['🗂Programs', '🔗Dependency board', '📊Summary', '▦Pipeline board', '📅All projects', '＋New project', '👥People', '📅Team calendar', '📊Workload', '🙋My profile', '📨Enquiries', '👋Visitors & leads', '✨Ask AI', '📈Reports & data', '🔐Users & access', '📚Knowledge base', '🕘Activity log', '🏷Builds']), menu.join(' | '));
   ok('Console', 'branded GKH Project Champ', (await p.textContent('.gkh-bar')).includes('GKH Project Champ') && (await p.title()).includes('Project Champ'));
   await p.waitForSelector('.pg-grid, .cs-tiles', { timeout: 8000 }).catch(() => {});
   ok('Programs', 'the console opens on Programs', /Programs/.test(await p.textContent('#view')) && (await p.$$('.cs-tabs .btn.on')).length === 1);

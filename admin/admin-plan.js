@@ -5864,11 +5864,16 @@
   }
   function xmlText(x) { var parts = x.replace(/<\/a:p>/g, '\u0001').replace(/<a:br\/>/g, '\u0001').match(/<a:t(?:\s[^>]*)?>[^<]*<\/a:t>|\u0001/g) || [];
     return parts.map(function (q) { return q === '\u0001' ? '\n' : q.replace(/^<a:t[^>]*>/, '').replace(/<\/a:t>$/, ''); }).join('').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, function (m, d) { return String.fromCharCode(+d); }).replace(/&amp;/g, '&').replace(/\n{2,}/g, '\n').trim(); }
-  function pptxText(f) {
-    return f.arrayBuffer().then(function (buf) { return unzipEntries(buf, function (n) { return /^ppt\/(slides\/slide|notesSlides\/notesSlide)\d+\.xml$/.test(n); }); }).then(function (L) {
-      var S2 = {}, N = {}; L.forEach(function (x) { var m = x.name.match(/(\d+)\.xml$/); (/notesSlide/.test(x.name) ? N : S2)[+m[1]] = xmlText(x.text); });
-      var nums = Object.keys(S2).map(Number).sort(function (a, b) { return a - b; });
-      return { text: nums.map(function (k) { return '[slide ' + k + ']\n' + S2[k] + (N[k] && N[k].replace(/^\d+$/, '').trim() ? '\n\nSpeaker notes: ' + N[k] : ''); }).join('\n\n'), pages: nums.length };
+  function pptxText(f) {   // slides in the deck's own order (presentation.xml), each with the speaker notes it links to
+    return f.arrayBuffer().then(function (buf) { return unzipEntries(buf, function (n) { return /^ppt\/(slides\/slide\d+\.xml|notesSlides\/notesSlide\d+\.xml|slides\/_rels\/slide\d+\.xml\.rels|presentation\.xml|_rels\/presentation\.xml\.rels)$/.test(n); }); }).then(function (L) {
+      var F = {}; L.forEach(function (x) { F[x.name] = x.text; });
+      var rid = {}, order = [];
+      (F['ppt/_rels/presentation.xml.rels'] || '').replace(/<Relationship\b[^>]*>/g, function (r) { var id = (r.match(/Id="([^"]+)"/) || [])[1], t = (r.match(/Target="([^"]+)"/) || [])[1]; if (id && t && /slides\/slide\d+\.xml$/.test(t)) rid[id] = 'ppt/' + t.replace(/^\/?(ppt\/)?/, ''); return r; });
+      (F['ppt/presentation.xml'] || '').replace(/<p:sldId\b[^>]*r:id="([^"]+)"/g, function (m, id) { if (rid[id]) order.push(rid[id]); return m; });
+      if (!order.length) order = Object.keys(F).filter(function (n) { return /^ppt\/slides\/slide\d+\.xml$/.test(n); }).sort(function (a, b) { return +a.match(/(\d+)\.xml$/)[1] - +b.match(/(\d+)\.xml$/)[1]; });
+      order = order.filter(function (n) { return F[n] != null; });
+      var notesOf = function (n) { var rel = F[n.replace(/slides\/(slide\d+\.xml)$/, 'slides/_rels/$1.rels')] || '', t = (rel.match(/Target="\.\.\/notesSlides\/(notesSlide\d+\.xml)"/) || [])[1]; return t && F['ppt/notesSlides/' + t] ? xmlText(F['ppt/notesSlides/' + t]).replace(/^\d+$/m, '').trim() : ''; };
+      return { text: order.map(function (n, k) { var nt = notesOf(n); return '[slide ' + (k + 1) + ']\n' + xmlText(F[n]) + (nt ? '\n\nSpeaker notes: ' + nt : ''); }).join('\n\n'), pages: order.length };
     });
   }
   function withPages(t, per) {   // Word has no pages in its text: mark about every 3,000 characters, at a paragraph break (for "p." references)

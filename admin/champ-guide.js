@@ -258,6 +258,7 @@
       if (wait) wait.remove();
       var t = T.filter(function (x) { return x.id === r.tour; })[0];
       if (r.answer) { var d = say('bot', r.answer); lastBot = r.answer; if (!(t && r.how)) speak(r.answer);
+        if (r.notes && r.notes.length) { var nt = document.createElement('small'); nt.className = 'cgp-kb'; nt.textContent = '📚 ' + r.notes.join(' · '); d.appendChild(nt); }
         if (t && !r.how) tr(['▶ Show me: ' + t.t]).then(function (x) { var b = document.createElement('button'); b.type = 'button'; b.className = 'cgp-show'; b.textContent = x[0]; b.onclick = function () { start(t); }; d.appendChild(b); }); }
       if (t && (r.how || !r.answer)) setTimeout(function () { start(t); }, r.answer ? 900 : 0);
       else if (!r.answer) reply('I can show you how to: ' + T.slice(0, 8).map(function (x) { return x.t.toLowerCase(); }).join(', ') + '. Which one?');

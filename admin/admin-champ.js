@@ -444,6 +444,48 @@
   }
   M.addView('visitors', 'Visitors', visitors);
 
+  /* ---------------- Admin > 📚 Knowledge base: Sashi's class material, used by Ask AI and Ask Champ (RAG) ---------------- */
+  function knowledge() {
+    var el = M.$('#view');
+    el.innerHTML = '<div class="empty">Loading the knowledge base…</div>';
+    var dt = function (t) { return t ? new Date(t).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }) : ''; };
+    api('kbList').then(function (d) {
+      var docs = d.docs || [], on = docs.filter(function (x) { return x.on; });
+      el.innerHTML = '<div class="card"><div class="card-h"><h2>📚 Knowledge base</h2></div>' +
+        '<p class="muted" style="margin:0 0 12px">Your class material (slide decks, notes, guides). <b>Ask AI</b> in a project and <b>Ask Champ</b> look up the slides closest to each project-management question (retrieval over vectors of every slide) and answer from them, ' +
+        'crediting them as <i>taught by Sashi Sivam in his project management classes</i>, with the deck and slide numbers. Only you see this page.</p>' +
+        '<div class="kb-tiles"><div class="cs-tile cs-green"><span>In use</span><b>' + on.length + '</b><small>document' + (on.length === 1 ? '' : 's') + '</small></div><div class="cs-tile"><span>Slides / pages</span><b>' + on.reduce(function (a, x) { return a + (x.pages || 0); }, 0) + '</b><small>read</small></div><div class="cs-tile"><span>Chunks</span><b>' + on.reduce(function (a, x) { return a + (x.chunks || 0); }, 0) + '</b><small>searchable pieces</small></div></div>' +
+        '<form class="kb-add" id="kbF"><h3>＋ Add a document</h3><div class="kb-row"><label class="btn btn-gold kb-pick">Choose a file (PowerPoint, PDF, Word)<input type="file" id="kbFile" accept=".pptx,.pdf,.docx,.txt,.md" hidden></label><span class="muted" id="kbName">PowerPoint .pptx is read slide by slide, with the speaker notes.</span></div>' +
+        '<label>Title <input name="title" maxlength="160" placeholder="e.g. Project Management Masterclass"></label>' +
+        '<label>Credit (how the AI names the source) <input name="credit" maxlength="200" value="' + esc(d.credit || '') + '"></label>' +
+        '<div class="kb-row"><button class="btn btn-gold" type="submit" id="kbGo" disabled>Add to the knowledge base</button><span id="kbMsg" class="muted"></span></div></form>' +
+        '<h3 style="margin-top:18px">Documents</h3><div id="kbList">' + (docs.length ? docs.map(function (x) {
+          return '<div class="kb-doc' + (x.on ? '' : ' off') + '"><div><b>' + esc(x.title) + '</b> <small class="muted">' + esc(x.name) + ' · ' + (x.pages || 0) + (/\.pptx$/i.test(x.name) ? ' slides' : ' pages') + ' · ' + x.chunks + ' chunks · added ' + dt(x.at) + '</small><br><small>Credit: ' + esc(x.credit) + '</small></div>' +
+            '<label class="qchk"><input type="checkbox" data-kbon="' + esc(x.id) + '"' + (x.on ? ' checked' : '') + '> In use</label><button class="btn btn-sm" data-kbx="' + esc(x.id) + '" type="button">🗑</button></div>'; }).join('') : '<div class="empty">Nothing yet: add your first deck above.</div>') + '</div>' +
+        '<h3 style="margin-top:18px">🔎 Try a question</h3><p class="muted" style="margin:0 0 6px">See which slides the AI would use for a question.</p><div class="kb-row"><input id="kbQ" placeholder="e.g. How do I handle scope creep?" style="flex:1"><button class="btn" id="kbAsk" type="button">Find</button></div><div id="kbHits"></div></div>';
+      var F = $('#kbF'), file = null, X = null;
+      $('#kbFile').onchange = function () {
+        file = this.files[0]; this.value = ''; if (!file) return; X = null; $('#kbGo').disabled = true;
+        if (!F.title.value) F.title.value = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
+        $('#kbName').textContent = file.name; $('#kbMsg').textContent = 'Reading…';
+        (M.readDoc ? M.readDoc(file, function (k, n) { $('#kbMsg').textContent = 'Reading page ' + k + ' of ' + n + '…'; }) : Promise.reject(new Error('The document reader is not loaded'))).then(function (x) {
+          X = x; $('#kbMsg').textContent = (x.pages || 0) + (/\.pptx$/i.test(file.name) ? ' slides' : ' pages') + ', ' + Math.round(x.text.length / 1000) + 'k characters read. Add it when ready.'; $('#kbGo').disabled = false;
+        }).catch(function (e) { $('#kbMsg').textContent = ''; fail(e); });
+      };
+      F.onsubmit = function (e) {
+        e.preventDefault(); if (!X) return; var b = $('#kbGo'); b.disabled = true; b.textContent = 'Indexing…';
+        api('kbAdd', { name: file.name, title: F.title.value, credit: F.credit.value, pages: X.pages, text: X.text }).then(function (r) { toast('Added: ' + r.doc.title + ' (' + r.doc.chunks + ' chunks)'); knowledge(); })
+          .catch(function (e2) { b.disabled = false; b.textContent = 'Add to the knowledge base'; fail(e2); });
+      };
+      el.querySelectorAll('[data-kbon]').forEach(function (c) { c.onchange = function () { api('kbChange', { id: c.getAttribute('data-kbon'), on: c.checked }).then(function () { toast(c.checked ? 'In use' : 'Not used'); knowledge(); }).catch(fail); }; });
+      el.querySelectorAll('[data-kbx]').forEach(function (b) { b.onclick = function () { M.confirmBox('Remove this document?', 'Ask AI and Ask Champ stop using it. <b>This can\'t be undone</b> (you can add the file again).', '🗑 Remove', true).then(function (y) { if (y) api('kbDelete', { id: b.getAttribute('data-kbx') }).then(function () { toast('Removed'); knowledge(); }).catch(fail); }); }; });
+      var ask = function () { var q = $('#kbQ').value.trim(); if (!q) return; $('#kbHits').innerHTML = '<p class="muted">Searching…</p>';
+        api('kbTry', { q: q }).then(function (r) { $('#kbHits').innerHTML = r.hits.length ? r.hits.map(function (h) { return '<div class="kb-hit"><b>' + esc(h.title) + (h.page ? ', ' + h.kind + ' ' + h.page : '') + '</b><p>' + esc(h.text.slice(0, 500)) + (h.text.length > 500 ? '…' : '') + '</p></div>'; }).join('') : '<p class="muted">Nothing in the knowledge base matches that closely.</p>'; }).catch(fail); };
+      $('#kbAsk').onclick = ask; $('#kbQ').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); ask(); } };
+    }).catch(fail);
+  }
+  M.addView('knowledge', 'Knowledge base', knowledge);
+
   /* ---------------- Customers > Enquiries: the contact page form, for the team to action ---------------- */
   var EQ = { q: '', st: 'open' };
   var ESTAT = { new: ['New', 'pf-amber'], progress: ['In progress', 'pf-blue'], done: ['Done', 'pf-green'] };

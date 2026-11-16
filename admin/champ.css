@@ -505,3 +505,11 @@ input.pp-auto,select.pp-auto,textarea.pp-auto{background:#FFFBEB!important;borde
 .crewq input{width:44px!important;text-align:center;font-weight:700;background:#F5F0FF;border-color:#DDD6FE}
 .crewq b{color:#8A8577;font-weight:600}
 .crewx{font-size:11px;white-space:nowrap}
+/* 📚 knowledge base */
+.kb-tiles{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.kb-tiles .cs-tile{flex:1;min-width:140px}
+.kb-add{border:2px dashed #E3D7B5;border-radius:14px;padding:12px 14px;background:linear-gradient(135deg,#FFFCF2,#F7F3FF);display:flex;flex-direction:column;gap:8px}
+.kb-add h3{margin:0}.kb-add label{display:flex;flex-direction:column;gap:3px;font-size:13px;font-weight:600}
+.kb-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.kb-pick{cursor:pointer}
+.kb-doc{display:flex;gap:10px;align-items:center;border:1px solid #EFE7D2;border-radius:12px;padding:9px 12px;margin-bottom:8px;background:#fff}.kb-doc>div{flex:1}.kb-doc.off{opacity:.55}
+.kb-hit{border-left:3px solid #C9A227;background:#FFFDF7;border-radius:8px;padding:7px 10px;margin:8px 0;font-size:13px}.kb-hit p{margin:3px 0 0;white-space:pre-wrap}
+.cgp-kb{display:block;margin-top:6px;font-size:11px;opacity:.75}

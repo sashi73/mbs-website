@@ -81,4 +81,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 70 | 1.0.70| 2026-11-15 18:07| GKH-Project-Champ| `c1b9c67` | Champ: sign-in log in Visitors (name, email, IP, location, device; failed tries too) |
 | 71 | 1.0.71| 2026-11-15 18:55| GKH-Project-Champ| `bfcea87` | Champ: start a new project from a document (requirements, feasibility study, RFP) with RAG, and plan from it |
 | 72 | 1.0.72| 2026-11-15 22:05| GKH-Project-Champ| `3531c8c` | Champ: labour costed as people x hours x rate; Gantt resources use the Stakeholder register |
-| 73 | 1.0.73 | 2026-11-15 22:52 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 73 | 1.0.73| 2026-11-15 22:52| GKH-Project-Champ| `b5d5a8e` | Champ: AI daily limit 500 questions by default (was 50) |
+| 74 | 1.0.74 | 2026-11-16 11:18 | GKH-Project-Champ | _this commit_ | _see git log_ |

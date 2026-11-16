@@ -232,9 +232,11 @@ export async function ask({ core, question, history }, by) {
   try { await checkLimit(); } catch (e) { return { error: e.message }; }
   const { ctx, stakeholders } = await context(job, plan, q);
   const earlier = (Array.isArray(history) ? history : []).slice(-3).map((h) => ({ q: str(h.q, 300), a: str(h.a, 600) }));
+  const KB = await import('./kb.mjs'), kbHits = await KB.search(q, Number(process.env.KB_CHARS) || 7000).catch(() => []);   // 📚 Sashi's class notes for the method
   const user = { question: scrub(q, job, stakeholders), earlier, ...ctx };
+  if (kbHits.length) user.course_notes = KB.forPrompt(kbHits);
   let o, used;
-  try { ({ data: o, used } = await llmJson([{ role: 'system', content: SYSTEM }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: capOut(), timeoutMs: 120000, temperature: 0.2 })); }
+  try { ({ data: o, used } = await llmJson([{ role: 'system', content: SYSTEM + (kbHits.length ? KB.RULE : '') }, { role: 'user', content: JSON.stringify(user) }], { maxTokens: capOut(), timeoutMs: 120000, temperature: 0.2 })); }
   catch (e) { return { error: e.message }; }
   const todayUse = await usage(true, used);
   const refs = Object.fromEntries(stakeholders.map((x, i) => ['S' + (i + 1), x.id]));
@@ -246,7 +248,7 @@ export async function ask({ core, question, history }, by) {
     stakeholders: (Array.isArray(o.stakeholders) ? o.stakeholders : []).slice(0, 15).map((x) => ({ id: refs[str(x.ref, 6).toUpperCase()] || '', name: str(x.name, 120), role: str(x.role, 120), raci: ['R', 'A', 'C', 'I'].includes(x.raci) ? x.raci : 'I',
       interest: lvl(x.interest), influence: lvl(x.influence), engagement: str(x.engagement, 300) })).filter((x) => x.name || x.role),
     meeting: null,
-    sources: (Array.isArray(o.sources) ? o.sources : []).map((s) => str(s, 160)).slice(0, 10),
+    sources: [...new Set((Array.isArray(o.sources) ? o.sources : []).map((s) => str(s, 160)).filter((s) => !/class notes/i.test(s)).concat(kbHits.length && /Sashi|class/i.test(String(o.answer || '')) ? KB.sourcesOf(kbHits) : []))].slice(0, 12),
     follow_ups: (Array.isArray(o.follow_ups) ? o.follow_ups : []).map((s) => str(s, 160)).filter(Boolean).slice(0, 3),
     tokens: used, today: todayUse, partial: ctx.extracts_are_partial, docs: ctx.documents.length
   };
