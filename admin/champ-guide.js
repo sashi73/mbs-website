@@ -286,7 +286,9 @@
     var t = [end(b.headline), b.say ? end(b.say) : brief1(b.summary, 110)], A = (b.actions || []).filter(function (a) { return a && a.title; }).slice(0, 5);
     if (A.length) t.push((r.rag === 'green' ? 'Keep doing this: ' : 'If this were my project, I would: ') + A.map(function (a, i) { return (i + 1) + ', ' + String(a.title).replace(/[.!?]$/, ''); }).join('. ') + '.');
     var Wt = (b.watch || []).filter(Boolean).slice(0, 3); if (Wt.length) t.push('Keep an eye on: ' + Wt.map(function (x) { return brief1(x, 70).replace(/[.!?]$/, ''); }).join('; ') + '.');
-    t.push('If you need help with any of this, just ask me.');
+    var BYE = r.rag === 'green' ? ['Nice work so far. Give me a shout if anything changes.', 'All good for now. I\'m here if you need me.', 'Keep it up. Ask me anything, any time.']
+      : ['If you need a hand with any of this, just ask.', 'Want help with any of these? Just ask me.', 'I\'m right here if you want to work through it together.', 'Happy to help you plan the next move. Just ask.', 'Ask me anything about it. I\'m happy to help.'];
+    t.push(BYE[Math.floor(Math.random() * BYE.length)]);   // a different sign-off each time, so Champ doesn't sound like a recording
     return t.filter(Boolean).join(' ');
   }
 
