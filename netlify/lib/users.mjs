@@ -91,7 +91,7 @@ export function allows(ctx, action) {
 export function allowsBg(ctx, mode) {
   if (!ctx) return false; if (ctx.owner) return true;
   const lv = LV[(ctx.mods || {}).projects] || 0;
-  return mode === 'intel' || mode === 'watch' || mode === 'docAnalyse' || mode === 'docReview' ? lv >= 1 : lv >= 2;
+  return mode === 'intel' || mode === 'watch' || mode === 'docAnalyse' || mode === 'docReview' || mode === 'lessonsReport' ? lv >= 1 : lv >= 2;
 }
 
 // ---------- passwords ----------

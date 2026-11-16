@@ -97,4 +97,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 86 | 1.0.86| 2026-11-16 20:45| GKH-Project-Champ| `72593e7` | Champ reads a short brief: headline, the summary in one line, the steps by title, what to watch, an offer to help |
 | 87 | 1.0.87| 2026-11-16 20:49| GKH-Project-Champ| `73ee6cc` | Champ: a different friendly sign-off each time it reads a brief |
 | 88 | 1.0.88| 2026-11-17 00:26| GKH-Project-Champ| `85e1a28` | Project documents: each project's own repository in R2 (folders, auto-filing, status, owner, tags, versions, search), AI analysis of a docum |
-| 89 | 1.0.89 | 2026-11-17 01:42 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 89 | 1.0.89| 2026-11-17 01:42| GKH-Project-Champ| `070e4ca` | Voice: a mix of male and female Azure voices (VOICE_GENDER=male or female to change), English always the clear slower and louder voice; back |
+| 90 | 1.0.90 | 2026-11-17 03:21 | GKH-Project-Champ | _this commit_ | _see git log_ |

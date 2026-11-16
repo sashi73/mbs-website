@@ -204,6 +204,11 @@ function clean(p, core) {
       doc: str(m.doc, 30), analysed: Number(m.analysed) || 0, applied: Number(m.applied) || 0, notes: str(m.notes, 1000), cr: str(m.cr, 20) })),
     // v82: 🔁 change control: change requests (CR-001 ...): raised, assessed, reviewed (change control meeting), approved / rejected / deferred, implemented
     changes: (Array.isArray(p.changes) ? p.changes : []).slice(0, 200).map(crClean).filter(Boolean),
+    // 📘 lessons learned: the living log (reusable ones go into the library other projects draw on)
+    lessons: (Array.isArray(p.lessons) ? p.lessons : []).slice(0, 200).map((l) => (l && typeof l === 'object' ? { id: uid(l.id, 'l'), title: str(l.title, 200), category: str(l.category, 40), phase: str(l.phase, 80),
+      impact: l.impact === 'positive' ? 'positive' : 'negative', what: str(l.what, 1500), cause: str(l.cause, 800), rec: str(l.rec, 800), status: ['Draft', 'Agreed'].includes(l.status) ? l.status : 'Draft',
+      reuse: l.reuse !== false, source: l.source === 'ai' ? 'ai' : l.source === 'library' ? 'library' : 'manual', from: str(l.from, 120), by: str(l.by, 80), at: Number(l.at) || Date.now() } : null)).filter((l) => l && (l.title || l.what)),
+    lessonsUsed: (Array.isArray(p.lessonsUsed) ? p.lessonsUsed : []).slice(0, 300).map((x) => str(x, 60)).filter(Boolean),   // library lessons already applied or dismissed here
     dataLang: /^[a-z]{2}$/.test(p.dataLang || '') ? p.dataLang : undefined,
     dataSrcLang: /^[a-z]{2}$/.test(p.dataSrcLang || '') ? p.dataSrcLang : undefined,   // the language the data was first written in
     dataMap: p.dataMap && typeof p.dataMap === 'object' && p.dataLang ? Object.fromEntries(Object.entries(p.dataMap).filter(([k, v]) => typeof v === 'string').slice(0, 3000).map(([k, v]) => [String(k).slice(0, 3000), v.slice(0, 3000)])) : undefined,   // translated text → the original   // the language the project data (task names ...) is written in

@@ -426,7 +426,9 @@ async function handle(req, context) {
               phases: (pl.phases || []).map((f) => f.name),
               tasks: pl.tasks.slice(0, 90).map((t) => ({ n: cut(t.name, 90), phase: ph[t.phase] || '', start: t.es, finish: t.ef, days: t.dur, pct: t.pct || 0, status: t.status, people: (t.res || []).join(', ') || undefined, owner: t.owner || undefined, cost: Math.round(PL.taskCost(t)), actual: Number(t.actual) || undefined, milestone: t.dur === 0 || undefined })),
               risks: (pl.risks || []).filter((x) => x.title).slice(0, 25).map((x) => ({ title: x.title, score: (x.p || 0) * (x.i || 0), response: x.response, action: cut(x.action, 160), owner: x.owner, status: x.status })),
-              issues: (pl.issues || []).filter((x) => x.title).slice(0, 25).map((x) => ({ title: x.title, priority: x.priority, owner: x.owner, due: x.due, status: x.status })) }; } } catch (e) { console.error('Ask Champ project facts: ' + e.message); project = null; } }
+              issues: (pl.issues || []).filter((x) => x.title).slice(0, 25).map((x) => ({ title: x.title, priority: x.priority, owner: x.owner, due: x.due, status: x.status })),
+              lessons_logged: (pl.lessons || []).slice(0, 20).map((l) => ({ title: l.title, impact: l.impact, recommendation: cut(l.rec, 200) })),
+              lessons_from_past_projects: ((await (await import('../lib/lessons.mjs')).library({ forCore: core, limit: 4 }).catch(() => ({ lessons: [] }))).lessons || []).map((l) => ({ lesson: l.title, from: l.project, recommendation: cut(l.rec, 200) })) }; } } catch (e) { console.error('Ask Champ project facts: ' + e.message); project = null; } }
         const kbHits = await KB.search(q, 2500).catch(() => []), course_notes = kbHits.length ? KB.forPrompt(kbHits) : undefined;
         const r0 = await llmJson([{ role: 'system', content: 'You are Champ, the guide inside the GKH Project Champ project-management console. People ask how to do things in the console. ' +
           'If they ask HOW TO DO something in the console, pick the ONE guide from the list that shows them (its id), set how true, and say in 1-2 friendly sentences what you will show them. ' +

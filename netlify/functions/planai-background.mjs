@@ -73,6 +73,13 @@ async function run(req) {
       if (!r.error) await A.audit(session.u, `AI wrote the project management plan for ${String(body.core || '').slice(0, 20)} (${r.tokens || 0} tokens)`);
       return ok();
     }
+    if (body.mode === 'lessonsSuggest' || body.mode === 'lessonsReport') {   // 📘 lessons from the project's history, or the 4-page report and the video script
+      const L = await import('../lib/lessons.mjs'), core = String(body.core || '').slice(0, 40);
+      const r = body.mode === 'lessonsSuggest' ? await L.suggest(core) : await L.report(core, `Admin (${session.u})`);
+      await kv.set('aiplan:' + id, { result: r.error ? null : (r.lessons ? { lessons: r.lessons } : r.report), error: r.error, status: r.error ? 'error' : 'done', at: Date.now() });
+      if (!r.error) await A.audit(session.u, `AI ${body.mode === 'lessonsSuggest' ? 'suggested lessons' : 'wrote the lessons-learned report'} for ${core} (${r.tokens || 0} tokens)`);
+      return ok();
+    }
     if (body.mode === 'docAnalyse' || body.mode === 'docReview') {   // 📁 one document, or the whole repository, against the plan
       const D = await import('../lib/dms.mjs'), core = String(body.core || '').slice(0, 40);
       const r = body.mode === 'docAnalyse' ? await D.analyse(core, String(body.docId || '').slice(0, 20), `Admin (${session.u})`) : await D.review(core, `Admin (${session.u})`);

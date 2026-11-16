@@ -22,6 +22,19 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   // a fake DeepSeek: says back which language and page the assistant was told to use
   const llm = http.createServer((q, s2) => { let b = ''; q.on('data', (d) => (b += d)); q.on('end', () => {
     const j = JSON.parse(b || '{}'), sys = ((j.messages || [])[0] || {}).content || '';
+    if (/PMO lead running a lessons-learned review/.test(sys)) {   // 📘 lessons from the project's history
+      const u = JSON.parse(j.messages[1].content); global.LL_FACTS = u.facts;
+      const o = { lessons: [{ title: 'Lock the vendor adapter date before the build', category: 'Vendors and procurement', phase: 'Build', impact: 'negative', what: 'The build finished 12 days late.', cause: 'No penalty clause', rec: 'Agree delivery dates with penalties', evidence: 'Build phase' }, { title: 'Daily stand-ups kept design on time', category: 'Communication', phase: 'Design', impact: 'positive', what: 'Design finished on the baseline.', cause: 'Short feedback loops', rec: 'Keep daily stand-ups', evidence: 'Design phase' }] };
+      s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }], usage: { total_tokens: 1200 } }));
+    }
+    if (/senior PMO consultant writing a lessons-learned report/.test(sys)) {
+      const u = JSON.parse(j.messages[1].content); global.LL_REP = u;
+      const o = { title: 'Payments portal: lessons learned', subtitle: 'What the portal taught us', headline: 'Delivered late because the vendor adapter slipped.', story: ['We set out to build a portal.', 'The build slipped.', 'It is now in testing.'],
+        went_well: [{ title: 'Design on time', detail: 'Daily stand-ups.', icon: 'check' }], went_wrong: [{ title: 'Vendor adapter late', detail: '12 days late.', cause: 'No penalty clause', cause_category: 'Vendors', icon: 'warning' }],
+        recommendations: [{ title: 'Put penalties in vendor contracts', detail: 'Tie payments to dates.', owner: 'PMO', when: 'At procurement', applies_to: 'Integration projects' }], reuse: ['Check vendor delivery dates'], quote: 'Dates without consequences are wishes.',
+        video: { title: 'The late adapter', scenes: [{ icon: 'calendar', caption: 'The plan', say: 'We planned twelve weeks.' }, { icon: 'warning', caption: 'The adapter slipped', say: 'The vendor was late.' }, { icon: 'idea', caption: 'The lesson', say: 'Agree dates with penalties.' }] } };
+      s2.setHeader('Content-Type', 'application/json'); return s2.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(o) } }], usage: { total_tokens: 5000 } }));
+    }
     if (/senior project manager and business analyst \(PMP, BABOK\)/.test(sys)) {   // 📁 one document against the plan
       const u = JSON.parse(j.messages[1].content); global.DMS_DOC = u.document; global.DMS_PROJECT = u.project;
       const o = { type: 'BRD', summary: 'The BRD asks for card payments and a reporting dashboard by 30 June.', key_points: ['Go-live 30 June'], requirements: [{ item: 'Card payments through a payment gateway', in_plan: 'no', task: '', note: 'not planned' }, { item: 'Design of the screens', in_plan: 'yes', task: '1', note: '' }],
@@ -688,6 +701,47 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       ok('Champ watch', 'the Summary has the watch too; the morning run only works with the site\'s own signature', /Champ's watch/.test(sw) && /Watch red/.test(sw) && cron === 403, JSON.stringify([sw.slice(0, 120), cron]));
       await api('planProjectDelete', { core: rc }); await api('planProjectDelete', { core: gc });
     }
+    // 📘 Lessons learned: the log, AI-suggested lessons, the library from past projects, the 4-page report with graphics, Word, Documents, the 30-second video
+    {
+      const today = new Date().toISOString().slice(0, 10), back = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+      const oc = (await (await api('planNewProject', { name: 'Old payments project', client: 'Internal', program: 'Digital health' })).json()).core;
+      await api('planSave', { core: oc, plan: { name: 'Old payments project', start: back(200), phases: [{ id: 'ph1', name: 'Work' }], tasks: [{ id: 'a', phase: 'ph1', name: 'Payments integration', dur: 5, pred: [], res: [], pct: 100, status: 'done' }],
+        lessons: [{ id: 'l1', title: 'Vendor payments adapter arrived late', category: 'Vendors and procurement', impact: 'negative', what: 'The payments adapter from the vendor came six weeks late.', cause: 'No dates in the vendor contract', rec: 'Put delivery dates and penalties in the vendor contract', status: 'Agreed', reuse: true }] } });
+      const lc = (await (await api('planNewProject', { name: 'Payments portal', client: 'Internal', program: 'Digital health' })).json()).core;
+      await api('planSave', { core: lc, plan: { name: 'Payments portal', start: back(60), phases: [{ id: 'p1', name: 'Design' }, { id: 'p2', name: 'Build' }], tasks: [
+        { id: 'a', phase: 'p1', name: 'Design the payments screens', dur: 10, pred: [], res: [], pct: 100, status: 'done', qty: 80, unit: 'h', rate: 100 }, { id: 'b', phase: 'p2', name: 'Integrate the vendor payments adapter', dur: 30, pred: ['a'], res: [], pct: 40, status: 'doing', qty: 240, unit: 'h', rate: 100, actual: 15000 },
+        { id: 'm', phase: 'p2', name: 'Go-live', dur: 0, pred: ['b'], res: [], pct: 0, status: 'todo' }],
+        baseline: { at: Date.now() - 60 * 864e5, finish: back(5), BAC: 32000, tasks: { a: { es: back(60), ef: back(47), cost: 8000 }, b: { es: back(46), ef: back(6), cost: 24000 }, m: { es: back(5), ef: back(5), cost: 0 } } },
+        issues: [{ id: 'i1', title: 'Vendor adapter late', priority: 'Critical', status: 'Open' }], charter: { budget: 35000, objective: 'Card payments online' } } });
+      await api('intelUpload', { core: lc, name: 'Steering minutes.txt', type: 'text/plain', size: 100, pages: 1, text: 'Minutes. The vendor adapter is late and the build is blocked. Decision: escalate to the vendor.' });
+      await p.goto(`${BASE}/admin/#plan/${lc}/lessons`); await p.reload(); await p.waitForSelector('#llAdd', { timeout: 10000 }).catch(() => {});
+      await p.waitForSelector('[data-llrisk]', { timeout: 10000 }).catch(() => {});
+      const past = await p.textContent('.ll-past').catch(() => '');
+      await p.click('[data-llrisk]').catch(() => {}); await sleep(300);
+      await p.click('#llAdd'); await p.fill('.ll-form [data-llf="title"]', 'Book the test environment early'); await p.press('.ll-form [data-llf="title"]', 'Tab'); await sleep(300);
+      await p.selectOption('.ll-form [data-llf="status"]', 'Agreed'); await sleep(200);
+      await p.click('#llAi'); await p.waitForSelector('#llSGo', { timeout: 30000 }).catch(() => {}); await p.click('#llSGo').catch(() => {}); await sleep(2500);
+      let pl = (await (await api('planGet', { core: lc })).json()).plan;
+      ok('Lessons', 'the Lessons learned tab: a past project\'s lesson that fits is offered (and reused as a risk), lessons are added by hand and suggested by the AI from the project\'s history (plan vs baseline by phase)', /Vendor payments adapter arrived late/.test(past) && /Old payments project/.test(past) && (pl.risks || []).some((r) => /Vendor payments adapter/.test(r.title) && /Old payments project/.test(r.cause)) && pl.lessonsUsed.includes(oc + ':l1') && pl.lessons.some((l) => l.title === 'Book the test environment early' && l.status === 'Agreed' && l.source === 'manual') && pl.lessons.filter((l) => l.source === 'ai').length === 2 && global.LL_FACTS.phases.length === 2 && global.LL_FACTS.phases[1].slip_days > 0, JSON.stringify([past.slice(0, 80), pl.lessons.map((l) => [l.title, l.source, l.status]), (global.LL_FACTS || {}).phases]));
+      const charts1 = await p.$$eval('.ll-charts canvas', (c) => c.length).catch(() => 0);
+      await p.click('#llRep'); await p.waitForSelector('#llDoc .ll-pg', { timeout: 60000 }).catch(() => {}); await sleep(2500);
+      if (process.env.DOC_ONLY) { await p.setViewportSize({ width: 1400, height: 1000 }); await sleep(800); for (let i = 0; i < 4; i++) { const el = (await p.$$('#llDoc .ll-pg'))[i]; if (el) await el.screenshot({ path: `/tmp/llpg${i + 1}.png` }); } }
+      const pages = await p.$$eval('#llDoc .ll-pg', (x) => x.length).catch(() => 0), docT = await p.textContent('#llDoc').catch(() => '');
+      const gfx = await p.evaluate(() => ({ ph: !!document.querySelector('#rgPh') && document.querySelector('#rgPh').width > 0, cost: !!document.querySelector('#rgCost'), tl: !!document.querySelector('#rgTl svg'), fish: !!document.querySelector('#rgFish svg'), kpis: document.querySelectorAll('.ll-k').length }));
+      ok('Lessons', '📄 the AI writes a 4-page illustrated report from the whole project (facts, lessons log, documents; up to ~80,000 tokens): KPIs, planned vs actual by phase, the milestone timeline, root causes (fishbone), cost by phase, recommendations, the reuse checklist and the video storyboard', pages === 4 && /Delivered late because the vendor adapter slipped/.test(docT) && /Put penalties in vendor contracts/.test(docT) && /Check vendor delivery dates/.test(docT) && gfx.ph && gfx.cost && gfx.tl && gfx.fish && gfx.kpis === 4 && charts1 === 2 && (global.LL_REP.documents || []).some((d) => /escalate to the vendor/.test(d.text)) && global.LL_REP.lessons_log.length >= 3, JSON.stringify([pages, gfx, charts1, (global.LL_REP.documents || []).length]));
+      const [wd] = await Promise.all([p.waitForEvent('download', { timeout: 20000 }).catch(() => null), p.click('#llWord')]);
+      let wsize = 0; if (wd) { await wd.saveAs('/tmp/ll.docx'); wsize = fs.statSync('/tmp/ll.docx').size; }
+      await p.click('#llVid'); if (process.env.DOC_ONLY) { await sleep(6500); await p.$eval('#llCv', (c) => c.scrollIntoView()).catch(() => {}); const cvs = await p.$('#llCv'); if (cvs) await cvs.screenshot({ path: '/tmp/llvid.png' }); }
+      await p.waitForSelector('#llVo video', { timeout: 45000 }).catch(() => {});
+      const vs = await p.textContent('#llVs').catch(() => '');
+      await p.click('#llVKeep').catch((e) => console.log('llVKeep: ' + e.message.slice(0, 120))); await sleep(5000); console.log('LLTOAST ' + (await p.evaluate(() => [...document.querySelectorAll('.toast, #toast, [class*=toast]')].map((x) => x.textContent).join(' | '))));
+      const L2 = await (await api('intelDmsList', { core: lc })).json(), reps = L2.docs.filter((d) => d.folder === 'reports');
+      ok('Lessons', '⬇ Word, 🎬 the 30-second scribe video (drawn and recorded in the browser), and 💾 both saved to the project\'s Documents (Reports, in R2)', wsize > 5000 && /video is ready/.test(vs) && reps.some((d) => /\.docx$/.test(d.name) && d.r2) && reps.some((d) => /video\.webm$/.test(d.name) && d.r2 && d.size > 1000), JSON.stringify([wsize, vs, reps.map((d) => [d.name, d.size])]));
+      await p.click('#llVStop').catch(() => {}); await p.click('#llClose').catch(() => {});
+      await api('guideAsk', { q: 'What lessons apply here?', core: lc, tours: [] }); const gx = (global.GUIDE_CTX || {}).project || {};
+      ok('Lessons', 'Champ knows the project\'s lessons and the ones from past projects that fit', (gx.lessons_logged || []).length >= 3 && (gx.lessons_from_past_projects || []).some((l) => /adapter/.test(l.lesson) && l.from === 'Old payments project'), JSON.stringify([gx.lessons_logged, gx.lessons_from_past_projects]).slice(0, 300));
+      await api('planProjectDelete', { core: lc }); await api('planProjectDelete', { core: oc });
+    }
     // 📁 Documents: the project's repository in R2: filed by folder, versions, status, search, AI analysis against the plan, review of all
     {
       const mc = (await (await api('planNewProject', { name: 'Docs check', client: 'Internal', program: 'Digital health' })).json()).core;
@@ -785,7 +839,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       if (process.env.DOC_ONLY) await p.screenshot({ path: '/tmp/wbsview.png', fullPage: false });
       await api('planProjectDelete', { core: wc });
     }
-    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins|Gantt|Knowledge|R2|Costing|Champ watch|Documents/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
+    if (process.env.DOC_ONLY) { for (const x of results.filter((r) => /New project|Sign-ins|Gantt|Knowledge|R2|Costing|Champ watch|Documents|Lessons/.test(r.area) || !r.pass)) console.log(`${x.pass ? 'PASS' : 'FAIL'}  [${x.area}] ${x.name}${x.pass ? '' : '  → ' + x.detail}`); console.log(errors.join('\n')); try { srv.kill(); } catch (e) {} process.exit(0); }
   }
   // ---- 🌐 language audit: with the console in Malay, every page and every project tab must show no English ----
   {

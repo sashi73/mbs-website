@@ -352,6 +352,9 @@ export async function intelPost(action, body, { who, by, audit }) {
     case 'intelDmsSearchGet': { const D = await import('./dms.mjs'); return out(200, await D.search(core, str(body.q, 200))); }
     case 'intelDmsAnalysisGet': { const D = await import('./dms.mjs'); return out(200, { analysis: await D.analysis(core, str(body.id, 20)) }); }
     case 'intelDmsReviewGet': { const D = await import('./dms.mjs'); return out(200, { review: await D.reviewGet(core) }); }
+    // 📘 lessons learned: the report, and the library of lessons from every project (ranked for this one)
+    case 'intelLessonsReportGet': { const L = await import('./lessons.mjs'); return out(200, { report: await L.reportGet(core) }); }
+    case 'intelLessonsLibraryGet': { const L = await import('./lessons.mjs'); return out(200, await L.library({ q: str(body.q, 200), forCore: core, limit: Math.min(100, Math.max(5, Number(body.limit) || 40)) })); }
     case 'intelClear': {
       // one answer (at), everything older than the newest `keep`, or all of it
       const at = Number(body.at) || 0, keep = Math.max(0, Math.min(30, Number(body.keep) || 0));
