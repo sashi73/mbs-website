@@ -154,7 +154,7 @@
     var foot = function (n) { return '<div class="ll-foot"><span>' + esc(D.title) + ' · ' + esc(F.project) + '</span><span>Project Champ · page ' + n + ' of 4</span></div>'; };
     var cards = function (arr, cls) { return arr.map(function (x) { return '<div class="ll-rc ' + cls + '">' + icon(x.icon, 30) + '<div><b>' + esc(x.title) + '</b><p>' + esc(x.detail) + '</p>' + (x.cause ? '<p class="ll-cause"><b>Root cause:</b> ' + esc(x.cause) + '</p>' : '') + '</div></div>'; }).join(''); };
     var html = '<div id="llDoc" class="ll-doc"><div class="ll-bar"><b>📄 ' + esc(D.title) + '</b><span class="sp"></span>' +
-      '<button class="btn btn-sm" id="llVid" type="button">🎬 Play the 30-second video</button><button class="btn btn-sm" id="llPrint" type="button">🖨 Print or save as PDF</button><button class="btn btn-sm" id="llWord" type="button">⬇ Word</button>' + (canEdit() ? '<button class="btn btn-sm btn-gold" id="llKeep" type="button" title="Save the report (Word) and the video into this project\'s Documents (Reports folder, kept in R2)">💾 Save to Documents</button>' : '') + '<button class="btn btn-sm" id="llClose" type="button">✕ Close</button></div><div class="ll-pages">' +
+      '<button class="btn btn-sm" id="llVid" type="button">🎬 Play the 45-second video</button><button class="btn btn-sm" id="llPrint" type="button">🖨 Print or save as PDF</button><button class="btn btn-sm" id="llWord" type="button">⬇ Word</button>' + (canEdit() ? '<button class="btn btn-sm btn-gold" id="llKeep" type="button" title="Save the report (Word) and the video into this project\'s Documents (Reports folder, kept in R2)">💾 Save to Documents</button>' : '') + '<button class="btn btn-sm" id="llClose" type="button">✕ Close</button></div><div class="ll-pages">' +
       // page 1: the story at a glance
       '<section class="ll-pg"><div class="ll-cover"><small>LESSONS LEARNED · ' + esc((job.ref || '') + ' · ' + dmy(new Date(rep.at).toISOString().slice(0, 10))) + '</small><h1>' + esc(D.title) + '</h1><p>' + esc(D.subtitle) + '</p></div>' +
         '<p class="ll-head">' + esc(D.headline) + '</p><div class="ll-kpis">' + kpi('Finish', dmy(F.finish), F.baseline_finish ? (slip > 0 ? slip + ' days after the baseline (' + dmy(F.baseline_finish) + ')' : slip < 0 ? (-slip) + ' days early' : 'on the baseline') : 'no baseline set', slip > 21 ? 'bad' : slip > 0 ? 'warn' : 'good') +
@@ -167,7 +167,7 @@
       '<section class="ll-pg"><h2 class="ll-h2 bad">⚠ What didn\'t go well</h2><div class="ll-rcs">' + cards(D.went_wrong, 'bad') + '</div><div class="ll-two"><div class="ll-gr"><h4>Root causes</h4><div id="rgFish"></div></div><div class="ll-gr"><h4>Cost by phase: baseline, forecast, spent</h4><canvas id="rgCost" height="230"></canvas></div></div>' + foot(3) + '</section>' +
       // page 4: recommendations, reuse, the video
       '<section class="ll-pg"><h2 class="ll-h2">➜ Recommendations</h2><table class="ll-rec"><thead><tr><th>#</th><th>Recommendation</th><th>Owner</th><th>When</th><th>Applies to</th></tr></thead><tbody>' + D.recommendations.map(function (r, i) { return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(r.title) + '</b><br><small>' + esc(r.detail) + '</small></td><td>' + esc(r.owner) + '</td><td>' + esc(r.when) + '</td><td>' + esc(r.applies_to) + '</td></tr>'; }).join('') + '</tbody></table>' +
-        '<div class="ll-two"><div><h4>📚 Reuse checklist for future projects</h4><ul class="ll-chk">' + D.reuse.map(function (x) { return '<li>☐ ' + esc(x) + '</li>'; }).join('') + '</ul></div><div><h4>🎬 The story in 30 seconds</h4><div class="ll-story">' + D.video.scenes.map(function (s, i) { return '<div class="ll-sc">' + icon(s.icon, 34) + '<small>' + (i + 1) + '. ' + esc(s.caption) + '</small></div>'; }).join('') + '</div><p class="muted ll-noprint" style="font-size:12px">▶ Press “Play the 30-second video” above; save it to Documents to keep it with the project.</p></div></div>' +
+        '<div class="ll-two"><div><h4>📚 Reuse checklist for future projects</h4><ul class="ll-chk">' + D.reuse.map(function (x) { return '<li>☐ ' + esc(x) + '</li>'; }).join('') + '</ul></div><div><h4>🎬 The story in 45 seconds</h4><div class="ll-story">' + parts5(D).map(function (s, i) { return '<div class="ll-sc">' + icon(s.icon, 34) + '<small>' + (i + 1) + '. ' + esc(s.head) + '</small></div>'; }).join('') + '</div><p class="muted ll-noprint" style="font-size:12px">▶ Press “Play the 45-second video” above; save it to Documents to keep it with the project.</p></div></div>' +
         '<p class="muted" style="font-size:11px;margin-top:10px">Written by AI from the project\'s records (' + Math.round((rep.context || 0) / 1000) + 'k tokens read' + (rep.docs ? ', ' + rep.docs + ' documents' : '') + '). Check it before you share it.</p>' + foot(4) + '</section></div></div>';
     document.body.insertAdjacentHTML('beforeend', html); document.body.classList.add('ll-open');
     $('#llClose').onclick = function () { $('#llDoc').remove(); document.body.classList.remove('ll-open'); stopVideo(); };
@@ -225,70 +225,110 @@
         .concat([H('What didn\'t go well')]).concat([].concat.apply([], D.went_wrong.map(function (x) { return [P(x.title, { run: { bold: true } }), P(x.detail), P('Root cause: ' + x.cause, { run: { italics: true } })]; })))
         .concat([img('rgCost', 560, 240), H('Recommendations')].filter(Boolean)).concat(D.recommendations.map(function (r, i) { return P((i + 1) + '. ' + r.title + ': ' + r.detail + ' (' + [r.owner, r.when, r.applies_to].filter(Boolean).join(' · ') + ')'); }))
         .concat([H('Reuse checklist for future projects')]).concat(D.reuse.map(function (x) { return P('☐ ' + x); }))
-        .concat(D.quote ? [P('“' + D.quote + '”', { run: { italics: true } })] : []).concat([H('The 30-second story'), P(D.video.scenes.map(function (s, i) { return (i + 1) + '. ' + s.caption + ': ' + s.say; }).join('  '))]);
+        .concat(D.quote ? [P('“' + D.quote + '”', { run: { italics: true } })] : []).concat([H('The 45-second story'), P(parts5(D).map(function (s, i) { return (i + 1) + '. ' + s.say; }).join('  '))]);
       return X.Packer.toBlob(new X.Document({ creator: 'Project Champ', title: D.title, sections: [{ children: kids }] }));
     });
   }
   function reportText(rep) { var D = rep.data; return [D.title, D.subtitle, D.headline].concat(D.story).concat(['What went well']).concat(D.went_well.map(function (x) { return x.title + ': ' + x.detail; })).concat(['What did not go well']).concat(D.went_wrong.map(function (x) { return x.title + ': ' + x.detail + ' Root cause: ' + x.cause; })).concat(['Recommendations']).concat(D.recommendations.map(function (r) { return r.title + ': ' + r.detail; })).concat(D.reuse).join('\n\n'); }
   function keep(rep, btn) {
     var core = C.S.core; btn.disabled = true; btn.textContent = 'Saving…';
-    var up = function (blob, name, text, kind) { var f = new File([blob], name, { type: blob.type }); return C.storeFile(f, 'project', core).then(function (ff) { return api('intelUpload', { core: core, name: name, type: blob.type, size: blob.size, pages: 4, text: text, file: ff.file || '', r2Key: ff.r2Key || '', allowEmpty: !text, folder: 'reports', kind: kind, title: kind === 'Video' ? 'Lessons learned video (30 s)' : 'Lessons learned report' }); }); };
+    var up = function (blob, name, text, kind) { var f = new File([blob], name, { type: blob.type }); return C.storeFile(f, 'project', core).then(function (ff) { return api('intelUpload', { core: core, name: name, type: blob.type, size: blob.size, pages: 4, text: text, file: ff.file || '', r2Key: ff.r2Key || '', allowEmpty: !text, folder: 'reports', kind: kind, title: kind === 'Video' ? 'Lessons learned video (45 s)' : 'Lessons learned report' }); }); };
     word(rep).then(function (b) { return up(b, fileName(rep, 'docx'), reportText(rep), 'Lessons learned'); })
-      .then(function () { return L.videoBlob ? up(L.videoBlob, fileName(rep, 'webm').replace('.webm', ' - video.webm'), 'Lessons learned video script. ' + rep.data.video.scenes.map(function (s) { return s.caption + ': ' + s.say; }).join(' '), 'Video') : null; })
+      .then(function () { return L.videoBlob ? up(L.videoBlob, fileName(rep, 'webm').replace('.webm', ' - video.webm'), 'Lessons learned video script. ' + parts5(rep.data).map(function (s) { return s.say; }).join(' '), 'Video') : null; })
       .then(function () { btn.textContent = '✓ Saved to Documents'; if (C.S.dms) C.S.dms = null; toast('Saved to Documents › 📊 Reports and status' + (L.videoBlob ? ' (the report and the video)' : ' (play the video first to save it too)')); })
       .catch(function (e) { btn.disabled = false; btn.textContent = '💾 Save to Documents'; fail(e); });
   }
 
-  /* ---------------- 🎬 the 30-second scribe video ---------------- */
-  var V = null;
-  function stopVideo() { if (V) { V.stop = true; try { if (V.ac && V.ac.state !== 'closed') { var cp = V.ac.close(); if (cp && cp.catch) cp.catch(function () {}); } } catch (e) {} try { V.rec && V.rec.state !== 'inactive' && V.rec.stop(); } catch (e) {} } }
-  function pathLen(d) { var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); s.style.position = 'absolute'; s.style.width = '0'; s.style.height = '0'; p.setAttribute('d', d); s.appendChild(p); document.body.appendChild(s); var o = { el: p, len: p.getTotalLength(), s: s }; return o; }
+  /* ---------------- 🎬 the 45-second scribe video ----------------
+     Five parts, in this order: what this is about, what went well, what didn't go well, our key recommendations, the key
+     lessons we learned. Each part is sketched on a whiteboard (an ink drawing, the heading handwritten, the points written
+     one by one), spoken by Champ one part after another (never on top of each other), with no captions or highlights over
+     the picture. Recorded in the browser (picture and sound) as a video file. Built from the report itself. */
+  var V = null, FONT = null;
+  function stopVideo() { if (V) { V.stop = true; (V.srcs || []).forEach(function (s) { try { s.stop(); } catch (e) {} }); try { if (V.ac && V.ac.state !== 'closed') { var cp = V.ac.close(); if (cp && cp.catch) cp.catch(function () {}); } } catch (e) {} try { V.rec && V.rec.state !== 'inactive' && V.rec.stop(); } catch (e) {} } }
+  function pathLen(d) { var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); s.style.cssText = 'position:absolute;width:0;height:0'; p.setAttribute('d', d); s.appendChild(p); document.body.appendChild(s); return { el: p, len: p.getTotalLength() || 1, s: s }; }
+  function fonts() {
+    if (FONT) return FONT;
+    FONT = (window.FontFace && document.fonts ? Promise.all([['700', 'caveat-latin-700-normal'], ['400', 'caveat-latin-400-normal']].map(function (f) { var ff = new FontFace('ChampHand', 'url(vendor/fonts/' + f[1] + '.woff2)', { weight: f[0] }); return ff.load().then(function (x) { document.fonts.add(x); }); })) : Promise.resolve()).catch(function () {});
+    return FONT;
+  }
+  // the five parts, from the report: up to 3 short points each, and what Champ says (about 20 words a part)
+  function parts5(D) {
+    var short = function (x, n) { x = String(x || '').replace(/\s*\([^)]*\)/g, '').replace(/[.!?]+$/, '').trim(); var w = x.split(/\s+/); return w.length > n ? w.slice(0, n).join(' ') + '…' : x; };
+    var list = function (a, k) { return (a || []).slice(0, 3).map(function (x) { return short(typeof x === 'string' ? x : x[k || 'title'], 7); }).filter(Boolean); };
+    var join = function (a) { return a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a[0] || ''; };
+    var said = function (a) { return join(a.map(function (x) { return x.replace(/…$/, '').toLowerCase(); })); };
+    var about = [short(D.headline, 12)], ww = list(D.went_well), wr = list(D.went_wrong), rc = list(D.recommendations), ls = list(D.reuse && D.reuse.length ? D.reuse : [D.quote]);
+    return [
+      { key: 'about', icon: 'target', head: 'What this is about', pts: about.concat(D.story && D.story[0] ? [short(D.story[0], 12)] : []), mark: '•', say: 'What is this about? ' + short(D.headline, 22) + '.' },
+      { key: 'well', icon: 'check', head: 'What went well', pts: ww, mark: '✓', say: 'What went well: ' + said(ww) + '.' },
+      { key: 'wrong', icon: 'warning', head: 'What didn\'t go well', pts: wr, mark: '✗', say: 'What didn\'t go well: ' + said(wr) + '.' },
+      { key: 'recs', icon: 'idea', head: 'Our key recommendations', pts: rc, mark: '➜', say: 'Our key recommendations: ' + said(rc) + '.' },
+      { key: 'lessons', icon: 'flag', head: 'The key lessons we learned', pts: ls, mark: '★', say: 'The key lessons we learned: ' + said(ls) + '.' }
+    ].filter(function (s) { return s.pts.length; });
+  }
   function video(rep) {
-    stopVideo(); var D = rep.data, sc = D.video.scenes.slice(0, 5);
-    M.modal('<h2>🎬 ' + esc(D.video.title) + '</h2><canvas id="llCv" width="1280" height="720" class="ll-cv"></canvas><p class="muted" id="llVs" style="font-size:12.5px;margin:6px 0">Getting Champ\'s voice ready…</p><div id="llVo"></div><div class="actions"><button class="btn" id="llVStop" type="button">Close</button></div>');
+    stopVideo(); if (M.champHush) M.champHush(); if (window.ChampVoice) window.ChampVoice.stop();
+    var D = rep.data, F = rep.facts, sc = parts5(D);
+    M.modal('<h2>🎬 ' + esc(D.video && D.video.title || D.title) + '</h2><canvas id="llCv" width="1280" height="720" class="ll-cv"></canvas><p class="muted" id="llVs" style="font-size:12.5px;margin:6px 0">Getting Champ\'s voice ready…</p><div id="llVo"></div><div class="actions"><button class="btn" id="llVStop" type="button">Close</button></div>');
     $('#llVStop').onclick = function () { stopVideo(); M.closeModal(); };
     var cv = $('#llCv'), g = cv.getContext('2d'), lang = (window.ChampI18n && window.ChampI18n.get()) || 'en';
-    V = { stop: false }; var me = V;
-    // the narration for each scene (Champ's voice), decoded so it can be mixed into the recording
+    V = { stop: false, srcs: [] }; var me = V;
     var AC = window.AudioContext || window.webkitAudioContext, ac = AC ? new AC() : null; V.ac = ac;
     var dest = ac && ac.createMediaStreamDestination ? ac.createMediaStreamDestination() : null;
     var say = function (t) { if (!ac || !t) return Promise.resolve(null); return fetch('/.netlify/functions/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t, lang: lang, clear: true }) }).then(function (r) { if (!r.ok) throw new Error('voice'); return r.arrayBuffer(); }).then(function (b) { return new Promise(function (res) { var pr; try { pr = ac.decodeAudioData(b, res, function () { res(null); }); } catch (e) { res(null); } if (pr && pr.catch) pr.catch(function () { res(null); }); }); }).catch(function () { return null; }); };
-    Promise.all(sc.map(function (s) { return say(s.say); })).then(function (aud) { return (ac && ac.state === 'suspended' ? ac.resume().catch(function () {}) : Promise.resolve()).then(function () { return aud; }); }).then(function (aud) {
+    var HAND = "'ChampHand','Segoe Print','Bradley Hand',cursive", SANS = "'Poppins',system-ui,sans-serif", INK = '#1F1D18', SOFT = '#6B665A', COL = { about: INK, well: '#067647', wrong: '#B42318', recs: '#1D4ED8', lessons: '#6941C6' };
+    Promise.all([fonts()].concat(sc.map(function (s) { return say(s.say); }))).then(function (all) { var aud = all.slice(1); return (ac && ac.state === 'suspended' ? ac.resume().catch(function () {}) : Promise.resolve()).then(function () { return aud; }); }).then(function (aud) {
       if (me.stop) return; var withSound = !!(dest && ac && ac.state === 'running' && aud.some(Boolean));
-      // each scene lasts as long as its narration (4 to 6.5 seconds), the whole video at most 30 seconds with the title and the close
-      var dur = sc.map(function (s, i) { return Math.min(6.5, Math.max(4, aud[i] ? aud[i].duration + 0.5 : 5)); }), intro = 2.2, outro = 2.5, tot = intro + dur.reduce(function (a, b) { return a + b; }, 0) + outro;
-      if (tot > 30) { var k = (30 - intro - outro) / (tot - intro - outro); dur = dur.map(function (d) { return d * k; }); tot = 30; }
+      // timing: each part lasts as long as Champ takes to say it, plus a breath (so voices never overlap), at least 6
+      // seconds so the drawing can be read; the whole at most 45 seconds (the narration a little faster if needed, up to 15%)
+      var intro = 3, outro = 3.5, need = sc.map(function (s, i) { return Math.max(6, aud[i] ? aud[i].duration + 1 : s.say.split(' ').length * 0.4 + 1.2); });
+      var sum = need.reduce(function (a, b) { return a + b; }, 0), room = 45 - intro - outro, rate = Math.min(1.15, Math.max(1, sum / room)), dur = need.map(function (d) { return d / rate; });
+      var starts = [], acc = intro; dur.forEach(function (d) { starts.push(acc); acc += d; }); var tot = acc + outro;
       var stream = cv.captureStream ? cv.captureStream(30) : null, rec = null, chunks = [];
       if (stream && window.MediaRecorder) { if (withSound) dest.stream.getAudioTracks().forEach(function (t) { stream.addTrack(t); });
         var mime = (withSound ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'] : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']).find(function (m) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m); });
-        try { rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 2500000 } : undefined); rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); }; rec.start(250); me.rec = rec; } catch (e) { rec = null; } }
+        try { rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 3000000 } : undefined); rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); }; rec.start(250); me.rec = rec; } catch (e) { rec = null; } }
       var paths = sc.map(function (s) { return (IC[s.icon] || IC.idea).split(/(?=M)/).map(function (d) { return Object.assign({ d: d }, pathLen(d)); }); });
       var t0 = performance.now(), started = {};
       $('#llVs').textContent = rec ? '● Recording while it plays (' + Math.round(tot) + ' seconds)…' : 'Playing (' + Math.round(tot) + ' seconds)…';
-      var hand = "'Segoe Print','Bradley Hand','Comic Sans MS','Chalkboard SE',cursive";
-      var wrap = function (text, x, y, max, lh) { var w = String(text).split(' '), line = ''; w.forEach(function (word) { var tt = line ? line + ' ' + word : word; if (g.measureText(tt).width > max && line) { g.fillText(line, x, y); line = word; y += lh; } else line = tt; }); g.fillText(line, x, y); };
+      var ease = function (x) { x = Math.max(0, Math.min(1, x)); return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; };
+      var wrapLines = function (text, max, font) { g.font = font; var w = String(text || '').split(' '), out = [], line = ''; w.forEach(function (word) { var tt = line ? line + ' ' + word : word; if (g.measureText(tt).width > max && line) { out.push(line); line = word; } else line = tt; }); if (line) out.push(line); return out; };
+      var pencil = function (x, y) { g.save(); g.translate(x, y); g.rotate(-0.75); g.fillStyle = '#3A3A3A'; g.beginPath(); g.moveTo(0, 0); g.lineTo(9, -4); g.lineTo(9, 4); g.fill(); g.fillStyle = '#E8D3B5'; g.beginPath(); g.moveTo(9, -4); g.lineTo(24, -9); g.lineTo(24, 9); g.lineTo(9, 4); g.fill(); g.fillStyle = '#4A4537'; g.fillRect(24, -9, 90, 18); g.fillStyle = '#B9BEC6'; g.fillRect(114, -9, 10, 18); g.restore(); };
+      var paper = function () { g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, 1280, 720); };
+      var header = function (i) { g.fillStyle = SOFT; g.font = '600 20px ' + SANS; g.textAlign = 'left'; g.fillText('LESSONS LEARNED · ' + String(F.project || '').toUpperCase().slice(0, 50), 60, 56);
+        g.textAlign = 'right'; if (i != null && i < sc.length) g.fillText((i + 1) + ' / ' + sc.length, 1220, 56); };
+      var drawIcon = function (i, p, col) {   // the picture: sketched stroke by stroke in ink, inside a plain circle
+        var P = paths[i], total = P.reduce(function (x, q) { return x + q.len; }, 0), cx = 270, cy = 380, sz = 11, rem = ease(p / 0.35) * total, pen = null;
+        g.save(); g.strokeStyle = col; g.lineWidth = 4; g.lineCap = 'round'; g.beginPath(); g.arc(cx, cy, 150, -1.5, -1.5 + 6.3 * ease(p / 0.25)); g.stroke(); g.restore();
+        g.save(); g.translate(cx - 12 * sz, cy - 12 * sz); g.scale(sz, sz); g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 0.36; g.strokeStyle = col;
+        P.forEach(function (q) { if (rem <= 0) return; var part = Math.min(q.len, rem); rem -= q.len; g.setLineDash([part, q.len + 1]); g.stroke(new Path2D(q.d)); if (!pen && part < q.len) { var pt = q.el.getPointAtLength(part); pen = { x: cx - 12 * sz + pt.x * sz, y: cy - 12 * sz + pt.y * sz }; } });
+        g.restore(); g.setLineDash([]); return pen;
+      };
       function frame() {
-        if (me.stop) return; var t = (performance.now() - t0) / 1000;
-        g.fillStyle = '#FFFEFA'; g.fillRect(0, 0, 1280, 720); g.strokeStyle = '#EEE7D3'; g.lineWidth = 2; g.strokeRect(18, 18, 1244, 684);
-        g.fillStyle = '#9A8F6F'; g.font = "600 22px 'Poppins',sans-serif"; g.textAlign = 'left'; g.fillText('Lessons learned · ' + rep.facts.project.slice(0, 60), 50, 62);
-        if (t < intro) { var a = Math.min(1, t / 0.8); g.globalAlpha = a; g.fillStyle = '#151515'; g.textAlign = 'center'; g.font = "700 64px " + hand; wrap(D.video.title, 640, 340, 1000, 76); g.font = "28px " + hand; g.fillStyle = '#7A5C00'; g.fillText('by Champ', 640, 470); g.globalAlpha = 1; }
+        if (me.stop) return; var t = (performance.now() - t0) / 1000; paper();
+        if (t < intro) { header(null); var a = ease(t / 1.4), tl = wrapLines(D.title, 1040, '700 84px ' + HAND);
+          g.save(); g.beginPath(); g.rect(0, 0, 120 + 1040 * a, 720); g.clip(); g.textAlign = 'center'; g.fillStyle = INK; g.font = '700 84px ' + HAND; tl.forEach(function (l, k) { g.fillText(l, 640, 340 + k * 90 - (tl.length - 1) * 45); }); g.restore();
+          g.globalAlpha = ease((t - 1.3) / 0.8); g.textAlign = 'center'; g.font = '500 28px ' + SANS; g.fillStyle = SOFT; g.fillText(String(F.project || '') + ' · told by Champ', 640, 480); g.globalAlpha = 1; }
         else if (t < tot - outro) {
-          var acc = intro, i = 0; while (i < dur.length - 1 && t > acc + dur[i]) { acc += dur[i]; i++; }
-          var lt = (t - acc) / dur[i], s = sc[i];
-          if (!started[i]) { started[i] = 1; if (aud[i] && ac) { var src = ac.createBufferSource(); src.buffer = aud[i]; src.connect(ac.destination); if (dest) src.connect(dest); src.start(); } }
-          g.fillStyle = '#C9A227'; g.font = "700 26px 'Poppins',sans-serif"; g.textAlign = 'left'; g.fillText(String(i + 1) + ' / ' + sc.length, 50, 690);
-          // the icon, drawn stroke by stroke with the pen following the line
-          var P = paths[i], total = P.reduce(function (x, q) { return x + q.len; }, 0), drawn = Math.min(1, lt / 0.55) * total, pen = null;
-          g.save(); g.translate(170, 170); g.scale(14, 14); g.lineWidth = 0.24; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#151515';
-          P.forEach(function (q) { if (drawn <= 0) return; var part = Math.min(q.len, drawn); drawn -= q.len; g.setLineDash([part, q.len + 1]); g.stroke(new Path2D(q.d)); if (part < q.len || drawn <= 0 && !pen) { var pt = q.el.getPointAtLength(part); pen = { x: pt.x, y: pt.y }; } });
-          g.restore(); g.setLineDash([]);
-          if (pen && lt < 0.6) { var px = 170 + pen.x * 14, py = 170 + pen.y * 14; g.save(); g.translate(px, py); g.rotate(-0.5); g.fillStyle = '#C9A227'; g.fillRect(0, -7, 70, 14); g.fillStyle = '#151515'; g.beginPath(); g.moveTo(0, -7); g.lineTo(-16, 0); g.lineTo(0, 7); g.fill(); g.restore(); }
-          // the caption, written out, and the narration underneath
-          var cap = s.caption, n = Math.floor(Math.min(1, Math.max(0, (lt - 0.15) / 0.45)) * cap.length);
-          g.fillStyle = '#151515'; g.textAlign = 'left'; g.font = "700 58px " + hand; wrap(cap.slice(0, n), 600, 300, 620, 70);
-          if (lt > 0.35) { g.globalAlpha = Math.min(1, (lt - 0.35) / 0.2); g.fillStyle = '#4A4537'; g.font = "30px 'Poppins',sans-serif"; wrap(s.say, 600, 470, 620, 42); g.globalAlpha = 1; }
-          g.strokeStyle = '#C9A227'; g.lineWidth = 6; g.beginPath(); g.moveTo(600, 330 + 12); g.lineTo(600 + Math.min(1, lt / 0.6) * 380, 330 + 12); g.stroke();
-        } else { var b2 = Math.min(1, (t - (tot - outro)) / 0.6); g.globalAlpha = b2; g.fillStyle = '#151515'; g.textAlign = 'center'; g.font = "700 50px " + hand; wrap(D.quote || D.headline, 640, 320, 1050, 62); g.font = "600 26px 'Poppins',sans-serif"; g.fillStyle = '#7A5C00'; g.fillText('Project Champ · GKH', 640, 560); g.globalAlpha = 1; }
+          var i = 0; while (i < sc.length - 1 && t >= starts[i + 1]) i++;
+          var lt = (t - starts[i]) / dur[i], s = sc[i], col = COL[s.key] || INK, fade = i < sc.length - 1 ? 1 - ease((lt - 0.94) / 0.06) : 1;
+          if (!started[i] && ac) { started[i] = 1; (me.srcs || []).forEach(function (x) { try { x.stop(); } catch (e) {} }); me.srcs = []; if (aud[i]) { var src = ac.createBufferSource(); src.buffer = aud[i]; src.playbackRate.value = rate; src.connect(ac.destination); if (dest) src.connect(dest); src.start(); me.srcs.push(src); } }
+          header(i); g.save(); g.globalAlpha = fade;
+          var pen = drawIcon(i, lt, col);
+          // the heading, handwritten
+          var hn = Math.floor(ease((lt - 0.05) / 0.2) * s.head.length); g.textAlign = 'left'; g.fillStyle = col; g.font = '700 66px ' + HAND; g.fillText(s.head.slice(0, hn), 500, 210);
+          if (!pen && hn > 0 && hn < s.head.length) pen = { x: 500 + g.measureText(s.head.slice(0, hn)).width + 4, y: 196 };
+          g.strokeStyle = col; g.lineWidth = 3; g.beginPath(); g.moveTo(500, 232); g.lineTo(500 + 640 * ease((lt - 0.2) / 0.1), 232); g.stroke();
+          // the points, written one by one as Champ says them
+          var y = 300; s.pts.forEach(function (pt, k) { var from = 0.3 + k * (0.55 / s.pts.length), sh = ease((lt - from) / (0.5 / s.pts.length)); if (sh <= 0) return; var lines = wrapLines(pt, 640, '400 44px ' + HAND), chars = Math.floor(sh * pt.length), used = 0;
+            g.fillStyle = col; g.font = '700 44px ' + HAND; g.fillText(s.mark, 500, y); g.fillStyle = INK; g.font = '400 44px ' + HAND;
+            lines.forEach(function (l, j) { var show = Math.max(0, Math.min(l.length, chars - used)); used += l.length + 1; g.fillText(l.slice(0, show), 545, y + j * 50); if (!pen && show > 0 && show < l.length) pen = { x: 545 + g.measureText(l.slice(0, show)).width + 4, y: y + j * 50 - 12 }; });
+            y += lines.length * 50 + 26; });
+          if (pen) pencil(pen.x, pen.y); g.restore();
+        } else { header(sc.length); var b2 = ease((t - (tot - outro)) / 1); (me.srcs || []).forEach(function (x) { try { x.stop(); } catch (e) {} }); me.srcs = [];
+          g.globalAlpha = b2; g.textAlign = 'center'; g.fillStyle = INK; var ql = wrapLines('“' + (D.quote || D.headline) + '”', 1040, '700 62px ' + HAND); g.font = '700 62px ' + HAND; ql.forEach(function (l, k) { g.fillText(l, 640, 330 + k * 72 - (ql.length - 1) * 36); });
+          g.font = '600 26px ' + SANS; g.fillStyle = SOFT; g.fillText('Project Champ · GKH', 640, 580); g.globalAlpha = 1; }
         if (t < tot) requestAnimationFrame(frame); else finish();
       }
       function finish() {
@@ -300,7 +340,6 @@
           cv.remove(); var vk = $('#llVKeep'); if (vk) vk.onclick = function () { keep(rep, vk); }; };
         try { rec.stop(); } catch (e) {}
       }
-      if (ac && ac.state === 'suspended') ac.resume();
       requestAnimationFrame(frame);
     });
   }
