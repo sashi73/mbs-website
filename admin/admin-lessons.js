@@ -257,10 +257,10 @@
     var short = function (x, n) { x = String(x || '').replace(/\s*\([^)]*\)/g, '').replace(/[.!?]+$/, '').trim(); var w = x.split(/\s+/); return w.length > n ? w.slice(0, n).join(' ') + '…' : x; };
     var list = function (a, k) { return (a || []).slice(0, 3).map(function (x) { return short(typeof x === 'string' ? x : x[k || 'title'], 7); }).filter(Boolean); };
     var join = function (a) { return a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a[0] || ''; };
-    var said = function (a) { return join(a.map(function (x) { return x.replace(/…$/, '').toLowerCase(); })); };
+    var said = function (a) { var out = [], n = 0; a.forEach(function (x) { var w = x.replace(/…$/, '').toLowerCase(); if (n + w.split(' ').length <= 14) { out.push(w); n += w.split(' ').length; } }); return join(out.length ? out : [a[0].toLowerCase()]); };
     var about = [short(D.headline, 12)], ww = list(D.went_well), wr = list(D.went_wrong), rc = list(D.recommendations), ls = list(D.reuse && D.reuse.length ? D.reuse : [D.quote]);
     return [
-      { key: 'about', icon: 'target', head: 'What this is about', pts: about.concat(D.story && D.story[0] ? [short(D.story[0], 12)] : []), mark: '•', say: 'What is this about? ' + short(D.headline, 22) + '.' },
+      { key: 'about', icon: 'target', head: 'What this is about', pts: about.concat(D.story && D.story[0] ? [short(D.story[0], 12)] : []), mark: '•', say: 'What is this about? ' + short(D.headline, 16) + '.' },
       { key: 'well', icon: 'check', head: 'What went well', pts: ww, mark: '✓', say: 'What went well: ' + said(ww) + '.' },
       { key: 'wrong', icon: 'warning', head: 'What didn\'t go well', pts: wr, mark: '✗', say: 'What didn\'t go well: ' + said(wr) + '.' },
       { key: 'recs', icon: 'idea', head: 'Our key recommendations', pts: rc, mark: '➜', say: 'Our key recommendations: ' + said(rc) + '.' },
@@ -284,7 +284,9 @@
       // seconds so the drawing can be read; the whole at most 45 seconds (the narration a little faster if needed, up to 15%)
       var intro = 3, outro = 3.5, need = sc.map(function (s, i) { return Math.max(6, aud[i] ? aud[i].duration + 1 : s.say.split(' ').length * 0.4 + 1.2); });
       var sum = need.reduce(function (a, b) { return a + b; }, 0), room = 45 - intro - outro, rate = Math.min(1.15, Math.max(1, sum / room)), dur = need.map(function (d) { return d / rate; });
-      var starts = [], acc = intro; dur.forEach(function (d) { starts.push(acc); acc += d; }); var tot = acc + outro;
+      var fit = dur.reduce(function (a, b) { return a + b; }, 0); if (fit > room) dur = dur.map(function (d) { return d * room / fit; });   // never longer than 45 seconds in all
+      window.__llVideo = { parts: sc.map(function (s) { return s.head; }), seconds: 0 };
+      var starts = [], acc = intro; dur.forEach(function (d) { starts.push(acc); acc += d; }); var tot = acc + outro; window.__llVideo.seconds = Math.round(tot * 10) / 10;
       var stream = cv.captureStream ? cv.captureStream(30) : null, rec = null, chunks = [];
       if (stream && window.MediaRecorder) { if (withSound) dest.stream.getAudioTracks().forEach(function (t) { stream.addTrack(t); });
         var mime = (withSound ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'] : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']).find(function (m) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m); });

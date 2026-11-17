@@ -101,4 +101,5 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 90 | 1.0.90| 2026-11-17 03:21| GKH-Project-Champ| `2ef0f51` | Lessons learned tab: living log, AI-suggested lessons from the project's history, a reusable library across projects (suggested per project, |
 | 91 | 1.0.91| 2026-11-17 11:33| champ-review| `5ddbc40` | CodeRabbit AI review and the automated tests on every pull request into GKH-Project-Champ |
 | 92 | 1.0.92| 2026-11-17 11:50| champ-review| `60764c0` | Lessons video: 45 seconds in five parts (what this is about, what went well, what didn't, our key recommendations, the key lessons), clean i |
-| 93 | 1.0.93 | 2026-11-17 12:03 | champ-review | _this commit_ | _see git log_ |
+| 93 | 1.0.93| 2026-11-17 12:03| champ-review| `2a01198` | Tests: steadier on GitHub's slower runners (longer PDF downloads, wait for the video length), Pillow for the colour check |
+| 94 | 1.0.94 | 2026-11-17 12:24 | champ-review | _this commit_ | _see git log_ |

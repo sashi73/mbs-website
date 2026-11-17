@@ -8,6 +8,8 @@ on:
   pull_request:
     branches: [GKH-Project-Champ]
   workflow_dispatch:
+permissions:
+  contents: read
 concurrency:
   group: champ-ci-${{ github.ref }}
   cancel-in-progress: true
@@ -31,9 +33,13 @@ jobs:
         run: |
           for f in netlify/functions/*.mjs netlify/lib/*.mjs admin/*.js assets/*.js tools/*.cjs; do node --check "$f" || exit 1; done
       - name: End-to-end tests
-        run: node tools/champ-test.cjs . 2>&1 | tee champ-test.log
+        shell: bash
+        run: |
+          set -o pipefail
+          node tools/champ-test.cjs . 2>&1 | tee champ-test.log
       - name: Result
         if: always()
+        shell: bash
         run: |
           P=$(grep -c '^PASS' champ-test.log || true); F=$(grep -c '^FAIL' champ-test.log || true)
           echo "### Project Champ tests: $P passed, $F failed" >> "$GITHUB_STEP_SUMMARY"
