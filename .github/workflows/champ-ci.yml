@@ -1,0 +1,52 @@
+# GKH Project Champ: the automated tests on every pull request into GKH-Project-Champ (and on demand).
+# 1. every server and console file parses (node --check)
+# 2. the end-to-end suite (tools/champ-test.cjs, Playwright + Chromium against the local server, fake AI, fake R2,
+#    fake voice): about 450 checks of the website, the console, AI features, documents, lessons and the watch.
+# CodeRabbit reviews the same pull request (see .coderabbit.yaml).
+name: Champ tests
+on:
+  pull_request:
+    branches: [GKH-Project-Champ]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: champ-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: |
+          npm ci || npm install
+          npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+          sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils python3-pil   # pdfinfo, pdftotext, pdftoppm and Pillow: the tests read the PDFs Champ makes
+      - name: Every file parses
+        run: |
+          for f in netlify/functions/*.mjs netlify/lib/*.mjs admin/*.js assets/*.js tools/*.cjs; do node --check "$f" || exit 1; done
+      - name: End-to-end tests
+        shell: bash
+        run: |
+          set -o pipefail
+          node tools/champ-test.cjs . 2>&1 | tee champ-test.log
+      - name: Result
+        if: always()
+        shell: bash
+        run: |
+          P=$(grep -c '^PASS' champ-test.log || true); F=$(grep -c '^FAIL' champ-test.log || true)
+          echo "### Project Champ tests: $P passed, $F failed" >> "$GITHUB_STEP_SUMMARY"
+          grep '^FAIL\|CRASH' champ-test.log | head -40 | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY" || true
+          [ "$F" = "0" ] && ! grep -q CRASH champ-test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: champ-test-log
+          path: champ-test.log

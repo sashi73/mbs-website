@@ -98,4 +98,8 @@ Version = product version + build number (1.0.12 = version 1.0, build 12). Times
 | 87 | 1.0.87| 2026-11-16 20:49| GKH-Project-Champ| `73ee6cc` | Champ: a different friendly sign-off each time it reads a brief |
 | 88 | 1.0.88| 2026-11-17 00:26| GKH-Project-Champ| `85e1a28` | Project documents: each project's own repository in R2 (folders, auto-filing, status, owner, tags, versions, search), AI analysis of a docum |
 | 89 | 1.0.89| 2026-11-17 01:42| GKH-Project-Champ| `070e4ca` | Voice: a mix of male and female Azure voices (VOICE_GENDER=male or female to change), English always the clear slower and louder voice; back |
-| 90 | 1.0.90 | 2026-11-17 03:21 | GKH-Project-Champ | _this commit_ | _see git log_ |
+| 90 | 1.0.90| 2026-11-17 03:21| GKH-Project-Champ| `2ef0f51` | Lessons learned tab: living log, AI-suggested lessons from the project's history, a reusable library across projects (suggested per project, |
+| 91 | 1.0.91| 2026-11-17 11:33| champ-review| `5ddbc40` | CodeRabbit AI review and the automated tests on every pull request into GKH-Project-Champ |
+| 92 | 1.0.92| 2026-11-17 11:50| champ-review| `60764c0` | Lessons video: 45 seconds in five parts (what this is about, what went well, what didn't, our key recommendations, the key lessons), clean i |
+| 93 | 1.0.93| 2026-11-17 12:03| champ-review| `2a01198` | Tests: steadier on GitHub's slower runners (longer PDF downloads, wait for the video length), Pillow for the colour check |
+| 94 | 1.0.94 | 2026-11-17 12:24 | champ-review | _this commit_ | _see git log_ |

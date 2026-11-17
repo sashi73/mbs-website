@@ -1,0 +1,56 @@
+# CodeRabbit: AI code review for GKH Project Champ. It reviews every pull request into GKH-Project-Champ (the branch
+# Netlify deploys) before it goes live, alongside the automated tests (.github/workflows/champ-ci.yml).
+# Docs: https://docs.coderabbit.ai/getting-started/configure-coderabbit
+language: en-AU
+tone_instructions: "Plain English for a project manager who is not a programmer: say what could break for the user, then the fix."
+early_access: false
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "GKH-Project-Champ"
+  path_filters:
+    - "!vendor/**"
+    - "!**/*.min.js"
+    - "!tools/test-data/**"
+    - "!BUILDS.md"
+    - "!champ-build.json"
+    - "!netlify/lib/champ-skill*.mjs"
+    - "!**/*.png"
+    - "!**/*.jpg"
+    - "!**/*.webp"
+  path_instructions:
+    - path: "netlify/functions/**"
+      instructions: |
+        Netlify Functions (the server). Check: every admin action checks the session and the user's module access
+        (need()/scopeCheck) and contractors only reach their own projects; nothing secret (API keys, R2 keys, session
+        secrets) is logged or returned; user input is cleaned (clean()/str()) and size-limited; AI calls respect the
+        daily limit (checkLimit/usage) and token budgets; background jobs (planai-background) write their result to
+        aiplan:<id>; errors return JSON with a message a person can act on.
+    - path: "netlify/lib/**"
+      instructions: |
+        Server libraries. Check Netlify Blobs writes use kv.update (compare-and-set) when two people could save at once,
+        Cloudflare R2 keys stay under the project's own prefix (projects/<core>/ or kb/), signed links are short-lived,
+        and plan.mjs clean() keeps every field the console saves (a field missing there is silently lost).
+    - path: "admin/**/*.js"
+      instructions: |
+        The console (plain ES5-style JavaScript, no build step). Check: text from users, documents or the AI goes
+        through esc() before innerHTML (XSS); event handlers are re-wired after re-render; promises have .catch(fail);
+        nothing breaks on a phone (narrow screens) or when the AI or the voice is unavailable.
+    - path: "assets/**/*.js"
+      instructions: "The public website and the website chat. Same XSS rules; keep it fast and working without the AI."
+    - path: "tools/champ-test.cjs"
+      instructions: "The end-to-end test suite (Playwright). Flag tests that can pass without checking the behaviour they name."
+chat:
+  auto_reply: true
+knowledge_base:
+  learnings:
+    scope: local

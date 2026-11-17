@@ -236,7 +236,7 @@
   }
   window.addEventListener('hashchange', function () { setTimeout(function () { watchCheck(); }, 400); });
   setInterval(function () { if (planHash() && !document.hidden) watchCheck(true); }, 120000);
-  M.watchCheck = watchCheck;
+  M.watchCheck = watchCheck; M.champHush = hush;   // other features (the lessons video) quiet Champ before they speak
   // 🩺 Champ's watch across every project (Programs and Summary): red / amber / green, what changed since yesterday, the alerts
   var DOT = { red: '🔴', amber: '🟠', green: '🟢', grey: '⚪' }, WORD = { red: 'Act now', amber: 'Watch closely', green: 'On track', grey: 'No data yet' }, ORD = { red: 0, amber: 1, green: 2, grey: 3 };
   M.watchPanel = function (host, only) {

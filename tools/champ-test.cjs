@@ -178,6 +178,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await ctx.addInitScript(() => { if (!/intro=1/.test(location.search)) try { sessionStorage.setItem('champIntroSeen', '1'); } catch (e) {} });   // the intro has its own checks
   const p = await ctx.newPage();
   const errors = [];
+  global.CONSOLE = []; p.on('console', (m) => { global.CONSOLE.push(m.type() + ': ' + m.text().slice(0, 200)); if (global.CONSOLE.length > 40) global.CONSOLE.shift(); });
   p.on('pageerror', (e) => errors.push(p.url() + ' :: ' + e.message + ' @ ' + String(e.stack || '').split('\n').slice(1, 3).join(' | ')));
   const api = (action, data = {}, headers = { 'X-MBS-Admin': '1' }) => p.request.post(`${BASE}/.netlify/functions/admin`, { data: { action, ...data }, headers });
   // a project run as Kanban with every task on the board (for the tests of the board itself)
@@ -731,12 +732,12 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       ok('Lessons', '📄 the AI writes a 4-page illustrated report from the whole project (facts, lessons log, documents; up to ~80,000 tokens): KPIs, planned vs actual by phase, the milestone timeline, root causes (fishbone), cost by phase, recommendations, the reuse checklist and the video storyboard', pages === 4 && /Delivered late because the vendor adapter slipped/.test(docT) && /Put penalties in vendor contracts/.test(docT) && /Check vendor delivery dates/.test(docT) && gfx.ph && gfx.cost && gfx.tl && gfx.fish && gfx.kpis === 4 && charts1 === 2 && (global.LL_REP.documents || []).some((d) => /escalate to the vendor/.test(d.text)) && global.LL_REP.lessons_log.length >= 3, JSON.stringify([pages, gfx, charts1, (global.LL_REP.documents || []).length]));
       const [wd] = await Promise.all([p.waitForEvent('download', { timeout: 20000 }).catch(() => null), p.click('#llWord')]);
       let wsize = 0; if (wd) { await wd.saveAs('/tmp/ll.docx'); wsize = fs.statSync('/tmp/ll.docx').size; }
-      await p.click('#llVid'); if (process.env.DOC_ONLY) { await sleep(6500); await p.$eval('#llCv', (c) => c.scrollIntoView()).catch(() => {}); const cvs = await p.$('#llCv'); if (cvs) await cvs.screenshot({ path: '/tmp/llvid.png' }); }
-      await p.waitForSelector('#llVo video', { timeout: 45000 }).catch(() => {});
+      await p.click('#llVid'); await p.waitForFunction(() => window.__llVideo && window.__llVideo.seconds > 0, null, { timeout: 60000 }).catch(() => {}); const vinfo = await p.evaluate(() => window.__llVideo || {}); if (process.env.DOC_ONLY) { for (const [k, ms] of [[1, 2000], [2, 6500], [3, 6000], [4, 6000], [5, 6000], [6, 6000]]) { await sleep(ms); const cvs = await p.$('#llCv'); if (cvs) await cvs.screenshot({ path: `/tmp/llvid${k}.png` }).catch(() => {}); } }
+ await p.waitForSelector('#llVo video', { timeout: 80000 }).catch(() => {});
       const vs = await p.textContent('#llVs').catch(() => '');
       await p.click('#llVKeep').catch((e) => console.log('llVKeep: ' + e.message.slice(0, 120))); await sleep(5000); console.log('LLTOAST ' + (await p.evaluate(() => [...document.querySelectorAll('.toast, #toast, [class*=toast]')].map((x) => x.textContent).join(' | '))));
       const L2 = await (await api('intelDmsList', { core: lc })).json(), reps = L2.docs.filter((d) => d.folder === 'reports');
-      ok('Lessons', '⬇ Word, 🎬 the 30-second scribe video (drawn and recorded in the browser), and 💾 both saved to the project\'s Documents (Reports, in R2)', wsize > 5000 && /video is ready/.test(vs) && reps.some((d) => /\.docx$/.test(d.name) && d.r2) && reps.some((d) => /video\.webm$/.test(d.name) && d.r2 && d.size > 1000), JSON.stringify([wsize, vs, reps.map((d) => [d.name, d.size])]));
+      ok('Lessons', '⬇ Word, 🎬 the 45-second scribe video in five parts (about, went well, what did not, recommendations, lessons; drawn and recorded in the browser), and 💾 both saved to the project\'s Documents (Reports, in R2)', wsize > 5000 && /video is ready/.test(vs) && vinfo.seconds > 20 && vinfo.seconds <= 45 && JSON.stringify(vinfo.parts) === JSON.stringify(['What this is about', 'What went well', 'What didn\'t go well', 'Our key recommendations', 'The key lessons we learned']) && reps.some((d) => /\.docx$/.test(d.name) && d.r2) && reps.some((d) => /video\.webm$/.test(d.name) && d.r2 && d.size > 1000), JSON.stringify([wsize, vs, vinfo, reps.map((d) => [d.name, d.size])]));
       await p.click('#llVStop').catch(() => {}); await p.click('#llClose').catch(() => {});
       await api('guideAsk', { q: 'What lessons apply here?', core: lc, tours: [] }); const gx = (global.GUIDE_CTX || {}).project || {};
       ok('Lessons', 'Champ knows the project\'s lessons and the ones from past projects that fit', (gx.lessons_logged || []).length >= 3 && (gx.lessons_from_past_projects || []).some((l) => /adapter/.test(l.lesson) && l.from === 'Old payments project'), JSON.stringify([gx.lessons_logged, gx.lessons_from_past_projects]).slice(0, 300));
@@ -1161,7 +1162,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.click('#bdSet'); await p.waitForSelector('#bdF', { timeout: 5000 }).catch(() => {}); await p.fill('#bdF [name=sig]', 'Sashi Kumar Sivam').catch(() => {}); await p.click('#bdF [type=submit]').catch(() => {}); await sleep(2000);
   gp = (await (await api('planGet', { core: esg })).json()).plan;
   ok('Budget', 'the budget is approved with a sign-off: the charter budget follows (base + 20% + 5%), with who signed', gp.budgetCfg && gp.budgetCfg.setSig === 'Sashi Kumar Sivam' && !!gp.budgetCfg.setRole && gp.budgetCfg.cont === 20 && Math.abs(gp.charter.budget - Math.round(R1x.BAC * 1.25 * 100) / 100) < 2, JSON.stringify([gp.charter.budget, R1x.BAC]));
-  const dl = async (sel, file) => { const [d] = await Promise.all([p.waitForEvent('download', { timeout: 60000 }), p.click(sel)]); await d.saveAs(file); return file; };
+  const dl = async (sel, file) => { const [d] = await Promise.all([p.waitForEvent('download', { timeout: process.env.CI ? 180000 : 60000 }), p.click(sel)]); await d.saveAs(file); return file; };
   await p.click('[data-dact=charter]'); await p.waitForSelector('#chPdf', { timeout: 5000 }).catch(() => {});
   const chf = await dl('#chPdf', '/tmp/champ-charter.pdf').catch((e) => (console.log('charter dl: ' + e.message), ''));
   ok('Documents', 'the designed project charter downloads as a PDF of at most 4 pages', chf && pagesOf(chf) >= 1 && pagesOf(chf) <= 4, pagesOf(chf) + ' pages');
@@ -1177,7 +1178,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   ok('Documents', 'the project plan downloads as Word', plw && fsx.statSync(plw).size > 30000, plw && fsx.statSync(plw).size);
   await p.selectOption('#pdLang', 'ms'); await p.click('#pdAi'); await sleep(500); await p.waitForFunction(() => /Bahasa Melayu/.test((document.querySelector('#pdState') || {}).textContent || ''), null, { timeout: 60000 }).catch(() => {});
   ok('Documents', 'in Bahasa Melayu the AI writes the narrative in Malay', /Bahasa Melayu/.test(global.PLANDOC_SYS || ''));
-  const plm = await dl('#pdPdf', '/tmp/champ-plan-ms.pdf').catch((e) => (console.log('plan ms dl: ' + e.message), ''));
+  const plm = await dl('#pdPdf', '/tmp/champ-plan-ms.pdf').catch(async (e) => { console.log('plan ms dl: ' + e.message.split('\n')[0]); console.log('  state: ' + (await p.textContent('#pdState').catch(() => '')) + ' | toasts: ' + (await p.evaluate(() => [...document.querySelectorAll('.toast,[class*=toast]')].map((x) => x.textContent).join(' / ')).catch(() => '')) + '\n  console: ' + global.CONSOLE.slice(-15).join('\n    ')); return ''; });
   let msTxt = ''; try { msTxt = execSync('pdftotext -l 6 /tmp/champ-plan-ms.pdf -').toString(); } catch (e) {}
   ok('Documents', 'the Malay plan has the Malay narrative and translated headings', /Pasukan projek/.test(msTxt) && /\[Bahas/.test(msTxt), msTxt.slice(0, 200).replace(/\s+/g, ' '));
   ok('Documents', 'no English left: "Contents", "Inside this plan" and the dates are in Malay too', /\[Bahas\] Contents/.test(msTxt) && /\[BAHAS\] INSIDE THIS PLAN/i.test(msTxt) && !/(^|[^\]] )Contents/m.test(msTxt.replace(/\[Bahas\] Contents/g, '')), (msTxt.match(/.{0,30}Contents.{0,10}/g) || []).join(' | '));
