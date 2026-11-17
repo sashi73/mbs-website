@@ -732,7 +732,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
       const [wd] = await Promise.all([p.waitForEvent('download', { timeout: 20000 }).catch(() => null), p.click('#llWord')]);
       let wsize = 0; if (wd) { await wd.saveAs('/tmp/ll.docx'); wsize = fs.statSync('/tmp/ll.docx').size; }
       await p.click('#llVid'); if (process.env.DOC_ONLY) { for (const [k, ms] of [[1, 2000], [2, 6500], [3, 6000], [4, 6000], [5, 6000], [6, 6000]]) { await sleep(ms); const cvs = await p.$('#llCv'); if (cvs) await cvs.screenshot({ path: `/tmp/llvid${k}.png` }).catch(() => {}); } }
-      const vlen = await p.textContent('#llVs').catch(() => ''); await p.waitForSelector('#llVo video', { timeout: 80000 }).catch(() => {});
+      await p.waitForFunction(() => /seconds\)/.test((document.querySelector('#llVs') || {}).textContent || ''), null, { timeout: 60000 }).catch(() => {}); const vlen = await p.textContent('#llVs').catch(() => ''); await p.waitForSelector('#llVo video', { timeout: 80000 }).catch(() => {});
       const vs = await p.textContent('#llVs').catch(() => '');
       await p.click('#llVKeep').catch((e) => console.log('llVKeep: ' + e.message.slice(0, 120))); await sleep(5000); console.log('LLTOAST ' + (await p.evaluate(() => [...document.querySelectorAll('.toast, #toast, [class*=toast]')].map((x) => x.textContent).join(' | '))));
       const L2 = await (await api('intelDmsList', { core: lc })).json(), reps = L2.docs.filter((d) => d.folder === 'reports');
@@ -1161,7 +1161,7 @@ const CLIENT = 'champ-test.apps.googleusercontent.com';
   await p.click('#bdSet'); await p.waitForSelector('#bdF', { timeout: 5000 }).catch(() => {}); await p.fill('#bdF [name=sig]', 'Sashi Kumar Sivam').catch(() => {}); await p.click('#bdF [type=submit]').catch(() => {}); await sleep(2000);
   gp = (await (await api('planGet', { core: esg })).json()).plan;
   ok('Budget', 'the budget is approved with a sign-off: the charter budget follows (base + 20% + 5%), with who signed', gp.budgetCfg && gp.budgetCfg.setSig === 'Sashi Kumar Sivam' && !!gp.budgetCfg.setRole && gp.budgetCfg.cont === 20 && Math.abs(gp.charter.budget - Math.round(R1x.BAC * 1.25 * 100) / 100) < 2, JSON.stringify([gp.charter.budget, R1x.BAC]));
-  const dl = async (sel, file) => { const [d] = await Promise.all([p.waitForEvent('download', { timeout: 60000 }), p.click(sel)]); await d.saveAs(file); return file; };
+  const dl = async (sel, file) => { const [d] = await Promise.all([p.waitForEvent('download', { timeout: process.env.CI ? 180000 : 60000 }), p.click(sel)]); await d.saveAs(file); return file; };
   await p.click('[data-dact=charter]'); await p.waitForSelector('#chPdf', { timeout: 5000 }).catch(() => {});
   const chf = await dl('#chPdf', '/tmp/champ-charter.pdf').catch((e) => (console.log('charter dl: ' + e.message), ''));
   ok('Documents', 'the designed project charter downloads as a PDF of at most 4 pages', chf && pagesOf(chf) >= 1 && pagesOf(chf) <= 4, pagesOf(chf) + ' pages');

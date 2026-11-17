@@ -26,7 +26,7 @@ jobs:
           npm ci || npm install
           npm install --no-save playwright@1.63.0
           npx playwright install --with-deps chromium
-          sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils   # pdfinfo, pdftotext, pdftoppm: the tests read the PDFs Champ makes
+          sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils python3-pil   # pdfinfo, pdftotext, pdftoppm and Pillow: the tests read the PDFs Champ makes
       - name: Every file parses
         run: |
           for f in netlify/functions/*.mjs netlify/lib/*.mjs admin/*.js assets/*.js tools/*.cjs; do node --check "$f" || exit 1; done
